@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, Switch } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
+import { Colors } from '@/constants/Colors';
 
 interface MangaDetails {
     title: string;
@@ -29,9 +30,10 @@ export default function MangaDetailScreen() {
     const [error, setError] = useState<string | null>(null);
     const [readChapters, setReadChapters] = useState<string[]>([]);
     const router = useRouter();
-    const { theme, toggleTheme, actualTheme } = useTheme();
+    const { theme } = useTheme();
+    const colors = Colors[theme as 'light' | 'dark'];
 
-    const styles = getStyles(actualTheme);
+    const styles = getStyles(colors);
 
     useEffect(() => {
         fetchMangaDetails();
@@ -162,7 +164,7 @@ export default function MangaDetailScreen() {
     if (isLoading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={theme === 'dark' ? '#FFFFFF' : '#0000FF'} />
+                <ActivityIndicator size="large" color={colors.primary} />
             </View>
         );
     }
@@ -193,9 +195,9 @@ export default function MangaDetailScreen() {
                 />
                 <View style={styles.overlay} />
                 <View style={styles.headerContent}>
-                <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={28} color={theme === 'dark' ? '#FFFFFF' : '#FFFFFF'} />
-                </TouchableOpacity>
+                    <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+                        <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+                    </TouchableOpacity>
                     <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
                         {mangaDetails.title}
                     </Text>
@@ -241,7 +243,7 @@ export default function MangaDetailScreen() {
                                 {isRead ? (
                                     <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
                                 ) : (
-                                    <Ionicons name="ellipse-outline" size={24} color={theme === 'dark' ? '#BDBDBD' : '#757575'} />
+                                    <Ionicons name="ellipse-outline" size={24} color={colors.tabIconDefault} />
                                 )}
                             </View>
                         </TouchableOpacity>
@@ -252,27 +254,27 @@ export default function MangaDetailScreen() {
     );
 }
 
-const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
+const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: theme === 'dark' ? '#121212' : '#f5f5f5',
+        backgroundColor: colors.background,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: theme === 'dark' ? '#121212' : '#f5f5f5',
+        backgroundColor: colors.background,
     },
     errorContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
-        backgroundColor: theme === 'dark' ? '#121212' : '#f5f5f5',
+        backgroundColor: colors.background,
     },
     errorText: {
         fontSize: 18,
-        color: theme === 'dark' ? '#FF6B6B' : '#B00020',
+        color: colors.notification,
         textAlign: 'center',
     },
     headerContainer: {
@@ -294,6 +296,9 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
         left: 20,
         right: 20,
     },
+    backButton: {
+        padding: 10,
+    },
     title: {
         fontSize: 28,
         fontWeight: 'bold',
@@ -312,7 +317,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
         textShadowRadius: 10,
     },
     statusContainer: {
-        backgroundColor: theme === 'dark' ? '#BB86FC' : '#6200ee',
+        backgroundColor: colors.primary,
         paddingHorizontal: 10,
         paddingVertical: 5,
         borderRadius: 20,
@@ -320,12 +325,12 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
         marginTop: 10,
     },
     statusText: {
-        color: theme === 'dark' ? '#000' : '#fff',
+        color: '#fff',
         fontWeight: 'bold',
     },
     infoContainer: {
         padding: 20,
-        backgroundColor: theme === 'dark' ? '#1E1E1E' : '#fff',
+        backgroundColor: colors.card,
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
         marginTop: -20,
@@ -334,18 +339,18 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
         fontSize: 22,
         fontWeight: 'bold',
         marginBottom: 10,
-        color: theme === 'dark' ? '#E1E1E1' : '#333',
+        color: colors.text,
     },
     description: {
         fontSize: 16,
         marginBottom: 20,
         lineHeight: 24,
-        color: theme === 'dark' ? '#B0B0B0' : '#444',
+        color: colors.text,
     },
     infoText: {
         fontSize: 16,
         marginBottom: 10,
-        color: theme === 'dark' ? '#B0B0B0' : '#555',
+        color: colors.text,
     },
     ratingContainer: {
         flexDirection: 'row',
@@ -355,19 +360,16 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     rating: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: theme === 'dark' ? '#BB86FC' : '#6200ee',
+        color: colors.primary,
     },
     ratingText: {
         fontSize: 16,
         marginLeft: 5,
-        color: theme === 'dark' ? '#B0B0B0' : '#666',
+        color: colors.text,
     },
     chaptersContainer: {
         padding: 20,
-        backgroundColor: theme === 'dark' ? '#1E1E1E' : '#fff',
-    },
-    chapterInfo: {
-        flex: 1,
+        backgroundColor: colors.card,
     },
     chapterItem: {
         flexDirection: 'row',
@@ -375,19 +377,19 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 15,
         borderBottomWidth: 1,
-        borderBottomColor: theme === 'dark' ? '#333' : '#e0e0e0',
+        borderBottomColor: colors.border,
     },
-    backButton: {
-        padding: 10,
+    chapterInfo: {
+        flex: 1,
     },
     chapterTitle: {
         fontSize: 16,
         fontWeight: '500',
-        color: theme === 'dark' ? '#E1E1E1' : '#333',
+        color: colors.text,
     },
     chapterDate: {
         fontSize: 14,
-        color: theme === 'dark' ? '#B0B0B0' : '#666',
+        color: colors.tabIconDefault,
         marginTop: 5,
     },
     chapterStatus: {
@@ -397,16 +399,4 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
         color: '#4CAF50',
         fontWeight: '600',
     },
-    readIndicator: {
-        backgroundColor: '#4CAF50',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 15,
-    },
-    readIndicatorText: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-
 });

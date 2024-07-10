@@ -4,8 +4,7 @@ import { Stack, useRouter } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-
-// MangaItem interface
+import { Ionicons } from '@expo/vector-icons';
 export interface MangaItem {
   id: string;
   title: string;
@@ -102,33 +101,57 @@ export default function MangaSearchScreen() {
       <Stack.Screen options={{
         title: 'Manga Search',
         headerStyle: {
-          backgroundColor: colors.card,
+          backgroundColor: colors.background,
         },
         headerTintColor: colors.text,
       }} />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <TextInput
-          style={[styles.searchBar, {
-            borderColor: colors.border,
-            color: colors.text,
-            backgroundColor: colors.card,
-          }]}
-          placeholder="Search manga"
-          placeholderTextColor={colors.tabIconDefault}
-          value={searchQuery}
-          onChangeText={onChangeSearch}
-        />
-        {isLoading && <Text style={{ color: colors.text }}>Loading...</Text>}
-        {error && <Text style={[styles.errorText, { color: colors.notification }]}>{error}</Text>}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={colors.text} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchBar, {
+              color: colors.text,
+              backgroundColor: colors.card,
+            }]}
+            placeholder="Search manga"
+            placeholderTextColor={colors.tabIconDefault}
+            value={searchQuery}
+            onChangeText={onChangeSearch}
+          />
+        </View>
+        {isLoading && (
+          <View style={styles.loadingContainer}>
+            <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>
+          </View>
+        )}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: colors.notification }]}>{error}</Text>
+          </View>
+        )}
+        {!isLoading && searchQuery.length <= 2 && (
+          <View style={styles.instructionContainer}>
+            <Text style={[styles.instructionText, { color: colors.text }]}>
+              Start searching for manga by entering a keyword in the search bar above.
+            </Text>
+            <Text style={[styles.instructionSubText, { color: colors.text }]}>
+              Enter at least 3 characters to start searching for manga
+            </Text>
+          </View>
+        )}
         <FlatList
           data={searchResults}
           renderItem={renderMangaCard}
           keyExtractor={keyExtractor}
           numColumns={2}
           columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.flatListContent}
           ListEmptyComponent={() =>
-            !isLoading && searchQuery.length > 2 ?
-              <Text style={{ color: colors.text }}>No results found</Text> : null
+            !isLoading && searchQuery.length > 2 ? (
+              <View style={styles.noResultsContainer}>
+                <Text style={[styles.noResultsText, { color: colors.text }]}>No results found</Text>
+              </View>
+            ) : null
           }
           extraData={searchResults}
         />
@@ -140,22 +163,65 @@ export default function MangaSearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 16,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    marginTop: 20,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  searchIcon: {
     padding: 10,
   },
   searchBar: {
-    height: 40,
-    borderWidth: 1,
-    borderRadius: 5,
+    flex: 1,
+    height: 50,
     paddingHorizontal: 10,
-    marginTop: 35,
-    marginBottom: 20,
+    fontSize: 16,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  loadingText: {
+    fontSize: 18,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    marginTop: 20,
   },
   errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  instructionContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  instructionText: {
+    fontSize: 18,
+    textAlign: 'center',
     marginBottom: 10,
   },
+  instructionSubText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  flatListContent: {
+    paddingTop: 10,
+  },
   row: {
-    flex: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 5,
+    marginBottom: 16,
+  },
+  noResultsContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  noResultsText: {
+    fontSize: 16,
   },
 });

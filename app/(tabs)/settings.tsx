@@ -2,11 +2,13 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, StatusBar } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/constants/Colors';
 
 export default function SettingsScreen() {
-  const { theme, setTheme, actualTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  const colors = Colors[theme as 'light' | 'dark'];
 
-  const styles = getStyles(actualTheme);
+  const styles = getStyles(colors);
 
   const themeOptions = [
     { label: 'Light', value: 'light', icon: 'sunny-outline' },
@@ -27,10 +29,16 @@ export default function SettingsScreen() {
               style={[styles.option, theme === option.value && styles.activeOption]}
               onPress={() => setTheme(option.value)}
             >
-              <Ionicons name={option.icon} size={24} color={theme === option.value ? styles.activeOptionText.color : styles.optionText.color} />
-              <Text style={[styles.optionText, theme === option.value && styles.activeOptionText]}>{option.label}</Text>
+              <Ionicons 
+                name={option.icon} 
+                size={24} 
+                color={theme === option.value ? colors.primary : colors.text} 
+              />
+              <Text style={[styles.optionText, theme === option.value && styles.activeOptionText]}>
+                {option.label}
+              </Text>
               {theme === option.value && (
-                <Ionicons name="checkmark" size={24} color={styles.activeOptionText.color} />
+                <Ionicons name="checkmark" size={24} color={colors.primary} />
               )}
             </TouchableOpacity>
           ))}
@@ -40,10 +48,10 @@ export default function SettingsScreen() {
   );
 }
 
-const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
+const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme === 'dark' ? '#121212' : '#F5F5F5',
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
@@ -54,7 +62,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 40,
     marginBottom: 20,
-    color: theme === 'dark' ? '#FFFFFF' : '#000000',
+    color: colors.text,
   },
   section: {
     marginBottom: 30,
@@ -63,26 +71,26 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 10,
-    color: theme === 'dark' ? '#E1E1E1' : '#333333',
+    color: colors.text,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: theme === 'dark' ? '#2C2C2C' : '#E0E0E0',
+    borderBottomColor: colors.border,
   },
   activeOption: {
-    backgroundColor: theme === 'dark' ? '#1E1E1E' : '#F0F0F0',
+    backgroundColor: colors.card,
   },
   optionText: {
     fontSize: 16,
     marginLeft: 15,
     flex: 1,
-    color: theme === 'dark' ? '#B0B0B0' : '#333333',
+    color: colors.text,
   },
   activeOptionText: {
-    color: theme === 'dark' ? '#BB86FC' : '#6200EE',
+    color: colors.primary,
     fontWeight: '600',
   },
 });

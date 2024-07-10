@@ -3,6 +3,7 @@ import { StyleSheet, View, Image, Text, TouchableOpacity, Dimensions, FlatList, 
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/constants/Colors';
 
 const { width } = Dimensions.get('window');
 
@@ -19,7 +20,8 @@ export default function HomeScreen() {
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const styles = getStyles(actualTheme);
+  const colors = Colors[actualTheme];
+  const styles = getStyles(colors);
 
   useEffect(() => {
     fetchMostViewedManga();
@@ -83,7 +85,7 @@ export default function HomeScreen() {
       <View style={styles.contentContainer}>
         <Text style={styles.sectionTitle}>Top 10 Most Viewed Manga</Text>
         {isLoading ? (
-          <ActivityIndicator size="large" color={actualTheme === 'dark' ? '#BB86FC' : '#6200ee'} />
+          <ActivityIndicator size="large" color={colors.primary} />
         ) : (
           <FlatList
             data={mostViewedManga}
@@ -103,10 +105,10 @@ export default function HomeScreen() {
   );
 }
 
-const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
+const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme === 'dark' ? '#121212' : '#f5f5f5',
+    backgroundColor: colors.background,
   },
   headerContainer: {
     height: 350,
@@ -123,7 +125,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     transform: [
       { rotate: '40deg' },
       { translateX: -150 },
-      { translateY: 50 }, 
+      { translateY: 50 },
     ],
   },
   overlay: {
@@ -154,7 +156,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    backgroundColor: theme === 'dark' ? '#1E1E1E' : '#fff',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     marginTop: -20,
@@ -164,7 +166,7 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 15,
-    color: theme === 'dark' ? '#E1E1E1' : '#333',
+    color: colors.text,
   },
   mangaList: {
     paddingBottom: 10,
@@ -194,11 +196,11 @@ const getStyles = (theme: 'light' | 'dark') => StyleSheet.create({
   mangaTitle: {
     marginTop: 8,
     fontSize: 14,
-    color: theme === 'dark' ? '#E1E1E1' : '#333',
+    color: colors.text,
     textAlign: 'center',
   },
   button: {
-    backgroundColor: theme === 'dark' ? '#BB86FC' : '#6200ee',
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
