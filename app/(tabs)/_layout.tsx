@@ -1,6 +1,6 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import React from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, View, StyleSheet } from 'react-native';
 import { TabBarIcon } from '@/components/navigation/TabBarIcon';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
@@ -10,28 +10,38 @@ export default function TabLayout() {
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
   const colors = Colors[colorScheme];
+  const pathname = usePathname();
 
+  const shouldShowTabBar = () => {
+    const allowedPaths = ['/', '/mangasearch', '/settings'];
+    return allowedPaths.includes(pathname) || pathname.match(/^\/manga\/[^\/]+$/);
+  };
   return (
     <Tabs
-      screenOptions={({ route }) => ({
+      screenOptions={{
         tabBarActiveTintColor: colors.tint,
         tabBarInactiveTintColor: colors.tabIconDefault,
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
-          display: ['index', 'mangasearch', 'settings'].includes(route.name) ? 'flex' : 'none',
+          height: 60,
+          paddingBottom: 5,
+          paddingTop: 5,
+          display: shouldShowTabBar() ? 'flex' : 'none',
+        },
+        tabBarItemStyle: {
+          paddingTop: 5,
         },
         tabBarLabelStyle: {
-          fontWeight: '600',
-          color: colors.text,
+          fontWeight: '500',
+          fontSize: 11,
         },
         headerStyle: {
           backgroundColor: colors.card,
         },
         headerTintColor: colors.text,
         headerShown: false,
-        tabBarButton: ['index', 'mangasearch', 'settings'].includes(route.name) ? undefined : () => null,
-      })}
+      }}
     >
       <Tabs.Screen
         name="index"
@@ -45,7 +55,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="mangasearch"
         options={{
-          title: 'Manga Search',
+          title: 'Search',
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon name={focused ? 'search' : 'search-outline'} color={color} />
           ),
@@ -64,6 +74,12 @@ export default function TabLayout() {
       {/* Hide all other routes */}
       <Tabs.Screen
         name="manga/[id]"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="manga/[id]/chapter/[chapterNumber]"
         options={{
           href: null,
         }}

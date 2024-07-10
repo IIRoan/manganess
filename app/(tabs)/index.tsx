@@ -156,7 +156,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    backgroundColor: colors.card,
+    backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     marginTop: -20,

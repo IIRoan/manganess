@@ -1,16 +1,18 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, StatusBar } from 'react-native';
-import { useTheme } from '@/constants/ThemeContext';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Image } from 'react-native';
+import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 
 export default function SettingsScreen() {
   const { theme, setTheme } = useTheme();
-  const colors = Colors[theme as 'light' | 'dark'];
+  const systemColorScheme = useColorScheme();
+  const colorScheme = theme === 'system' ? systemColorScheme : theme;
+  const colors = Colors[colorScheme as keyof typeof Colors] || Colors.light;
 
   const styles = getStyles(colors);
 
-  const themeOptions = [
+  const themeOptions: Array<{ label: string; value: Theme; icon: string }> = [
     { label: 'Light', value: 'light', icon: 'sunny-outline' },
     { label: 'Dark', value: 'dark', icon: 'moon-outline' },
     { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
@@ -30,7 +32,6 @@ export default function SettingsScreen() {
               onPress={() => setTheme(option.value)}
             >
               <Ionicons 
-                name={option.icon} 
                 size={24} 
                 color={theme === option.value ? colors.primary : colors.text} 
               />
@@ -44,6 +45,11 @@ export default function SettingsScreen() {
           ))}
         </View>
       </ScrollView>
+      <Image
+        source={require('@/assets/images/nessie.png')}
+        style={styles.nessieImage}
+        resizeMode="contain"
+      />
     </SafeAreaView>
   );
 }
@@ -92,5 +98,14 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   activeOptionText: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  nessieImage: {
+    position: 'absolute',
+    bottom: -20,
+    left: 20,
+    width: 80,
+    height: 80,
+    opacity: 0.8,
+    transform: [{ rotate: '-15deg' }],
   },
 });

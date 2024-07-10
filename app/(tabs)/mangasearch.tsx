@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, TextInput, FlatList, StyleSheet, Text, useColorScheme } from 'react-native';
+import { View, TextInput, FlatList, StyleSheet, Text, useColorScheme, Image } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
 import { Colors, ColorScheme } from '@/constants/Colors';
