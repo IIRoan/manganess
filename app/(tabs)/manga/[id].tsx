@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, useColorScheme } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
-import { Colors } from '@/constants/Colors';
+import { Colors, ColorScheme } from '@/constants/Colors';
+import { decode } from 'html-entities';
+import ExpandableText from '@/components/ExpandableText';
 
 interface MangaDetails {
     title: string;
@@ -31,7 +33,9 @@ export default function MangaDetailScreen() {
     const [readChapters, setReadChapters] = useState<string[]>([]);
     const router = useRouter();
     const { theme } = useTheme();
-    const colors = Colors[theme as 'light' | 'dark'];
+    const systemColorScheme = useColorScheme() as ColorScheme;
+    const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
+    const colors = Colors[colorScheme];
 
     const styles = getStyles(colors);
 
@@ -82,8 +86,10 @@ export default function MangaDetailScreen() {
         const title = html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title';
         const alternativeTitle = html.match(/<h6>(.*?)<\/h6>/)?.[1] || '';
         const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
-        const description = html.match(/<div class="description">(.*?)<\/div>/s)?.[1]?.replace(/<[^>]*>/g, '') || 'No description available';
-
+        const descriptionMatch = html.match(/<div class="description">(.*?)<\/div>/s);
+        const description = descriptionMatch
+            ? decode(descriptionMatch[1].replace(/<[^>]*>/g, ''))
+            : 'No description available';
         const authorMatch = html.match(/<span>Author:<\/span>.*?<span>(.*?)<\/span>/s);
         const authors = authorMatch ? authorMatch[1].match(/<a[^>]*>(.*?)<\/a>/g)?.map(a => a.replace(/<[^>]*>/g, '')) || [] : [];
 
@@ -108,6 +114,8 @@ export default function MangaDetailScreen() {
                 date: match[3],
             });
         }
+
+
 
         return {
             title,
@@ -159,7 +167,7 @@ export default function MangaDetailScreen() {
         router.push(`/mangasearch`);
     };
 
-    
+
 
     if (isLoading) {
         return (
@@ -196,15 +204,21 @@ export default function MangaDetailScreen() {
                 <View style={styles.overlay} />
                 <View style={styles.headerContent}>
                     <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={28} color="#FFFFFF" />
+                        <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
                     </TouchableOpacity>
                     <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
                         {mangaDetails.title}
                     </Text>
+
                     {mangaDetails.alternativeTitle && (
-                        <Text style={styles.alternativeTitle} numberOfLines={1} ellipsizeMode="tail">
-                            {mangaDetails.alternativeTitle}
-                        </Text>
+                        <View>
+                            <ExpandableText
+                                text={mangaDetails.alternativeTitle}
+                                initialLines={1}
+                                style={styles.alternativeTitle}
+                                expandTextStyle={[styles.expandText]}
+                            />
+                        </View>
                     )}
                     <View style={styles.statusContainer}>
                         <Text style={styles.statusText}>{mangaDetails.status}</Text>
@@ -213,7 +227,12 @@ export default function MangaDetailScreen() {
             </View>
             <View style={styles.infoContainer}>
                 <Text style={styles.sectionTitle}>Description</Text>
-                <Text style={styles.description}>{mangaDetails.description}</Text>
+                <ExpandableText
+                    text={mangaDetails.description}
+                    initialLines={3}
+                    style={styles.description}
+                    expandTextStyle={styles.expandText}
+                />
                 <Text style={styles.sectionTitle}>Details</Text>
                 <Text style={styles.infoText}>Author: {mangaDetails.author.join(', ')}</Text>
                 <Text style={styles.infoText}>Published: {mangaDetails.published}</Text>
@@ -398,5 +417,8 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     readChapterTitle: {
         color: '#4CAF50',
         fontWeight: '600',
+    },
+    expandText: {
+        color: colors.primary,
     },
 });

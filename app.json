@@ -14,9 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
+      "userInterfaceStyle": "automatic",
       "bundleIdentifier": "com.iroan.manganess"
     },
     "android": {
+      "userInterfaceStyle": "automatic",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"

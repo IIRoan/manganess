@@ -1,30 +1,31 @@
 // constants/Colors.ts
 
 export const Colors = {
-    light: {
-      primary: '#007AFF',
-      background: '#F2F2F7',
-      card: '#FFFFFF',
-      text: '#000000',
-      border: '#C7C7CC',
-      notification: '#FF3B30',
-      tint: '#007AFF',
-      tabIconDefault: '#C7C7CC',
-      tabIconSelected: '#007AFF',
-    },
-    dark: {
-      primary: '#0A84FF',
-      background: '#121212',
-      card: '#1C1C1E',
-      text: '#FFFFFF',
-      border: '#38383A',
-      notification: '#FF453A',
-      tint: '#0A84FF',
-      tabIconDefault: '#626262',
-      tabIconSelected: '#0A84FF',
-    },
-  };
-  
-  export type ColorScheme = keyof typeof Colors;
-  export type ThemeColors = typeof Colors.light & typeof Colors.dark;
-  
+  light: {
+    primary: '#2E8B57',
+    background: '#F5F5F5',
+    card: '#FFFFFF',
+    text: '#333333',
+    border: '#E0E0E0',
+    notification: '#FF6B6B',
+    tint: '#2E8B57',
+    tabIconDefault: '#BDBDBD',
+    tabIconSelected: '#2E8B57',
+    secondaryText: '#757575',
+  },
+  dark: {
+    primary: '#4CAF50',
+    background: '#121212',
+    card: '#1E1E1E',
+    text: '#E0E0E0',
+    border: '#333333',
+    notification: '#FF6B6B',
+    tint: '#4CAF50',
+    tabIconDefault: '#757575',
+    tabIconSelected: '#4CAF50',
+    secondaryText: '#BDBDBD',
+  },
+};
+
+export type ColorScheme = keyof typeof Colors;
+export type ThemeColors = typeof Colors.light & typeof Colors.dark;
