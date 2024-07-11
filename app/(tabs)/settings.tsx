@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Image, Alert } from 'react-native';
 import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingsScreen() {
   const { theme, setTheme } = useTheme();
@@ -18,6 +19,31 @@ export default function SettingsScreen() {
     { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
   ];
 
+  const clearAsyncStorage = async () => {
+    Alert.alert(
+      "Clear App Data",
+      "Are you sure you want to clear all app data? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        { 
+          text: "OK", 
+          onPress: async () => {
+            try {
+              await AsyncStorage.clear();
+              Alert.alert("Success", "All app data has been cleared.");
+            } catch (error) {
+              console.error('Error clearing AsyncStorage:', error);
+              Alert.alert("Error", "Failed to clear app data. Please try again.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
@@ -32,6 +58,7 @@ export default function SettingsScreen() {
               onPress={() => setTheme(option.value)}
             >
               <Ionicons 
+                name={option.icon as any}
                 size={24} 
                 color={theme === option.value ? colors.primary : colors.text} 
               />
@@ -43,6 +70,14 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Data Management</Text>
+          <TouchableOpacity style={styles.clearDataButton} onPress={clearAsyncStorage}>
+            <Ionicons name="trash-outline" size={24} color={colors.notification} />
+            <Text style={styles.clearDataText}>Clear App Data</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
       <Image
@@ -107,5 +142,19 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     height: 80,
     opacity: 0.8,
     transform: [{ rotate: '-15deg' }],
+  },
+  clearDataButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  clearDataText: {
+    fontSize: 16,
+    marginLeft: 15,
+    color: colors.notification,
+    fontWeight: '600',
   },
 });

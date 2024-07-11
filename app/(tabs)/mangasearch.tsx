@@ -74,7 +74,7 @@ export default function MangaSearchScreen() {
   }, []);
 
   const handleMangaPress = useCallback((item: MangaItem) => {
-    router.push({
+    router.navigate({
       pathname: `/manga/${item.id}`,
       params: {
         title: item.title,
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
-    marginTop: 20,
+    marginTop: 40,
     borderRadius: 10,
     overflow: 'hidden',
   },

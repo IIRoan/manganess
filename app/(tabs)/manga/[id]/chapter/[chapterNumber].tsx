@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, BackHandler, Platform, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { WebView, WebViewNavigation } from 'react-native-webview';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ReadChapterScreen() {
@@ -24,7 +24,7 @@ export default function ReadChapterScreen() {
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        router.push(`/manga/${id}`);
+        router.navigate(`/manga/${id}`);
         return true;
       };
 
@@ -39,7 +39,7 @@ export default function ReadChapterScreen() {
   };
 
   const handleBackPress = () => {
-    router.push(`/manga/${id}`);
+    router.navigate(`/manga/${id}`);
   };
 
   const handleError = () => {
@@ -50,11 +50,11 @@ export default function ReadChapterScreen() {
   const markChapterAsRead = async () => {
     try {
       const key = `manga_${id}_read_chapters`;
-      const readChapters = await SecureStore.getItemAsync(key) || '[]';
+      const readChapters = await AsyncStorage.getItem(key) || '[]';
       const chaptersArray = JSON.parse(readChapters);
       if (!chaptersArray.includes(chapterNumber)) {
         chaptersArray.push(chapterNumber);
-        await SecureStore.setItemAsync(key, JSON.stringify(chaptersArray));
+        await AsyncStorage.setItem(key, JSON.stringify(chaptersArray));
         console.log(`Marked chapter ${chapterNumber} as read for manga ${id}`);
       }
     } catch (error) {
@@ -226,7 +226,6 @@ export default function ReadChapterScreen() {
   })();
   `;
 
-
   return (
     <View style={styles.container}>
       {isLoading && (
@@ -265,6 +264,7 @@ export default function ReadChapterScreen() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
