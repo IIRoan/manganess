@@ -56,7 +56,7 @@ export default function HomeScreen() {
   };
 
   const handleMangaPress = (item: MangaItem) => {
-    router.push(`/manga/${item.id}`);
+    router.navigate(`/manga/${item.id}`);
   };
 
   const renderMangaItem = ({ item }: { item: MangaItem }) => (
@@ -96,7 +96,7 @@ export default function HomeScreen() {
             contentContainerStyle={styles.mangaList}
           />
         )}
-        <TouchableOpacity style={styles.button} onPress={() => router.push('/mangasearch')}>
+        <TouchableOpacity style={styles.button} onPress={() => router.navigate('/mangasearch')}>
           <Text style={styles.buttonText}>Explore More</Text>
           <Ionicons name="arrow-forward" size={24} color="#fff" style={styles.buttonIcon} />
         </TouchableOpacity>

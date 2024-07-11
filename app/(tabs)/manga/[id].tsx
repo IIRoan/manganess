@@ -2,12 +2,17 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, useColorScheme } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { decode } from 'html-entities';
 import ExpandableText from '@/components/ExpandableText';
+import Alert2 from '@/components/Alert';
+import { Alert } from 'react-native';
+
+type BookmarkStatus = "To Read" | "Reading" | "Read";
 
 interface MangaDetails {
     title: string;
@@ -36,7 +41,8 @@ export default function MangaDetailScreen() {
     const systemColorScheme = useColorScheme() as ColorScheme;
     const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
     const colors = Colors[colorScheme];
-
+    const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
+    const [isAlertVisible, setIsAlertVisible] = useState(false);
     const styles = getStyles(colors);
 
     useEffect(() => {
@@ -47,7 +53,7 @@ export default function MangaDetailScreen() {
     useFocusEffect(
         React.useCallback(() => {
             const onBackPress = () => {
-                router.push(`/mangasearch`);
+                router.navigate(`/mangasearch`);
                 return true;
             };
 
@@ -132,12 +138,95 @@ export default function MangaDetailScreen() {
         };
     };
 
+    useEffect(() => {
+        fetchBookmarkStatus();
+    }, [id]);
+
+    const fetchBookmarkStatus = async () => {
+        const status = await AsyncStorage.getItem(`bookmark_${id}`);
+        setBookmarkStatus(status);
+    };
+
+    const handleBookmark = () => {
+        if (bookmarkStatus) {
+            setIsAlertVisible(true);
+        } else {
+            setIsAlertVisible(true);
+        }
+    };
+
+    const saveBookmark = async (status: BookmarkStatus) => {
+        try {
+            await AsyncStorage.setItem(`bookmark_${id}`, status);
+            await AsyncStorage.setItem(`title_${id}`, mangaDetails.title);
+
+            // Update the list of bookmark keys
+            const keys = await AsyncStorage.getItem('bookmarkKeys');
+            const bookmarkKeys = keys ? JSON.parse(keys) : [];
+            if (!bookmarkKeys.includes(`bookmark_${id}`)) {
+                bookmarkKeys.push(`bookmark_${id}`);
+                await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
+            }
+
+            setBookmarkStatus(status);
+            setIsAlertVisible(false);
+
+            // If the status is "Read", show an alert to mark all chapters as read
+            if (status === "Read") {
+                Alert.alert(
+                    "Mark All Chapters as Read",
+                    "Do you want to mark all chapters as read?",
+                    [
+                        {
+                            text: "No",
+                            style: "cancel"
+                        },
+                        {
+                            text: "Yes",
+                            onPress: () => markAllChaptersAsRead()
+                        }
+                    ]
+                );
+            }
+        } catch (error) {
+            console.error('Error saving bookmark:', error);
+        }
+    };
+
+
+
+
+
+    const removeBookmark = async () => {
+        try {
+            // Remove the bookmark status
+            await AsyncStorage.removeItem(`bookmark_${id}`);
+    
+            // Remove the title
+            await AsyncStorage.removeItem(`title_${id}`);
+    
+            // Remove from the bookmarkKeys list
+            const keys = await AsyncStorage.getItem('bookmarkKeys');
+            if (keys) {
+                const bookmarkKeys = JSON.parse(keys);
+                const updatedKeys = bookmarkKeys.filter(key => key !== `bookmark_${id}`);
+                await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(updatedKeys));
+            }
+    
+            setBookmarkStatus(null);
+            setIsAlertVisible(false);
+        } catch (error) {
+            console.error('Error removing bookmark:', error);
+        }
+    };
+
+
 
 
     const fetchReadChapters = useCallback(async () => {
         try {
             const key = `manga_${id}_read_chapters`;
-            const storedChapters = await SecureStore.getItemAsync(key);
+            const storedChapters = await AsyncStorage.getItem(key);
             if (storedChapters) {
                 const parsedChapters = JSON.parse(storedChapters);
                 setReadChapters(parsedChapters);
@@ -160,12 +249,24 @@ export default function MangaDetailScreen() {
     );
 
     const handleChapterPress = (chapterNumber: string) => {
-        router.push(`/manga/${id}/chapter/${chapterNumber}`);
+        router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
     };
 
     const handleBackPress = () => {
-        router.push(`/mangasearch`);
+        router.navigate(`/mangasearch`);
     };
+
+    const markAllChaptersAsRead = async () => {
+        try {
+            const key = `manga_${id}_read_chapters`;
+            const allChapterNumbers = mangaDetails.chapters.map(chapter => chapter.number);
+            await AsyncStorage.setItem(key, JSON.stringify(allChapterNumbers));
+            setReadChapters(allChapterNumbers);
+        } catch (error) {
+            console.error('Error marking all chapters as read:', error);
+        }
+    };
+
 
 
 
@@ -209,6 +310,48 @@ export default function MangaDetailScreen() {
                     <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
                         {mangaDetails.title}
                     </Text>
+                    <TouchableOpacity onPress={handleBookmark} style={styles.bookmarkButton}>
+                        <Ionicons
+                            name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
+                            size={30}
+                            color={colors.primary}
+                        />
+                    </TouchableOpacity>
+
+                    <Alert2
+                        visible={isAlertVisible}
+                        title={bookmarkStatus ? "Update Bookmark" : "Bookmark Manga"}
+                        onClose={() => setIsAlertVisible(false)}
+                        options={
+                            bookmarkStatus
+                                ? [
+                                    { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
+                                    { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
+                                    {
+                                        text: "Read",
+                                        onPress: () => {
+                                            saveBookmark("Read");
+                                            // The option to mark all chapters as read will be shown after this
+                                        },
+                                        icon: "checkmark-circle-outline"
+                                    },
+                                    { text: "Unbookmark", onPress: () => removeBookmark(), icon: "close-circle-outline" },
+                                ]
+                                : [
+                                    { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
+                                    { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
+                                    {
+                                        text: "Read",
+                                        onPress: () => {
+                                            saveBookmark("Read");
+                                        },
+                                        icon: "checkmark-circle-outline"
+                                    },
+                                ]
+                        }
+                    />
+
+
 
                     {mangaDetails.alternativeTitle && (
                         <View>
@@ -421,4 +564,30 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     expandText: {
         color: colors.primary,
     },
+    bookmarkButton: {
+        position: 'absolute',
+        top: 40,
+        right: 10,
+        zIndex: 1000,
+        borderRadius: 20,
+        padding: 8,
+    },
+    actionButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 20,
+    },
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.card,
+        padding: 10,
+        borderRadius: 8,
+    },
+    actionButtonText: {
+        marginLeft: 8,
+        color: colors.text,
+        fontSize: 16,
+    },
+
 });
