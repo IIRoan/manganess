@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Image, Text, TouchableOpacity, Dimensions, FlatList, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Image, Text, TouchableOpacity, Dimensions, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ export default function HomeScreen() {
   const { actualTheme } = useTheme();
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
@@ -40,7 +41,21 @@ export default function HomeScreen() {
       const parsedManga = parseMostViewedManga(html);
       setMostViewedManga(parsedManga);
     } catch (error) {
-      console.error('Error fetching most viewed manga:', error);
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          setError(`Server error: ${error.response.status}`);
+        } else if (error.request) {
+          // The request was made but no response was received
+          setError('No response received from server');
+        } else {
+          // Something happened in setting up the request that triggered an Error
+          setError(`Error: ${error.message}`);
+        }
+      } else {
+        setError('An unexpected error occurred');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +85,18 @@ export default function HomeScreen() {
       <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
     </TouchableOpacity>
   );
+
+  useEffect(() => {
+    if (error) {
+      Alert.alert(
+        "Error",
+        error,
+        [
+          { text: "OK", onPress: () => setError(null) }
+        ]
+      );
+    }
+  }, [error]);
 
   return (
     <View style={styles.container}>
@@ -106,7 +133,6 @@ export default function HomeScreen() {
     </View>
   );
 }
-
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
