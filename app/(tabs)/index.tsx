@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
+import axios from 'axios';
 
 const { width } = Dimensions.get('window');
 
@@ -29,12 +30,13 @@ export default function HomeScreen() {
 
   const fetchMostViewedManga = async () => {
     try {
-      const response = await fetch('https://mangafire.to/home', {
+      const response = await axios.get('https://mangafire.to/home', {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
         },
+        timeout: 10000,
       });
-      const html = await response.text();
+      const html = response.data;
       const parsedManga = parseMostViewedManga(html);
       setMostViewedManga(parsedManga);
     } catch (error) {
