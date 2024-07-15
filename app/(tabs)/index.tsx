@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Image, Text, TouchableOpacity, Dimensions, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Image, Text, TouchableOpacity, Dimensions, FlatList, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,9 +20,6 @@ export default function HomeScreen() {
   const { actualTheme } = useTheme();
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>('');
-  const [scrapedHtml, setScrapedHtml] = useState<string>('');
 
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
@@ -33,45 +30,26 @@ export default function HomeScreen() {
 
   const fetchMostViewedManga = async () => {
     try {
-      setDebugInfo('Fetching data...');
       const response = await axios.get('https://mangafire.to/home', {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
         },
         timeout: 10000,
       });
-      setDebugInfo(prevInfo => prevInfo + '\nResponse received.');
       const html = response.data;
-      setScrapedHtml(html); 
-      setDebugInfo(prevInfo => prevInfo + '\nParsing manga data...');
       const parsedManga = parseMostViewedManga(html);
       setMostViewedManga(parsedManga);
-      setDebugInfo(prevInfo => prevInfo + `\nParsed ${parsedManga.length} manga items.`);
     } catch (error) {
-      let errorMessage = 'An unexpected error occurred';
-      if (axios.isAxiosError(error)) {
-        if (error.response) {
-          errorMessage = `Server error: ${error.response.status}`;
-          setDebugInfo(prevInfo => prevInfo + `\nServer responded with status ${error.response.status}`);
-        } else if (error.request) {
-          errorMessage = 'No response received from server';
-          setDebugInfo(prevInfo => prevInfo + '\nNo response received from server');
-        } else {
-          errorMessage = `Error: ${error.message}`;
-          setDebugInfo(prevInfo => prevInfo + `\nError: ${error.message}`);
-        }
-      }
-      setError(errorMessage);
+      console.error('Error fetching most viewed manga:', error);
     } finally {
       setIsLoading(false);
-      setDebugInfo(prevInfo => prevInfo + '\nFetch operation completed.');
     }
   };
+
 
   const parseMostViewedManga = (html: string): MangaItem[] => {
     const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
     const matches = [...html.matchAll(regex)];
-    setDebugInfo(prevInfo => prevInfo + `\nFound ${matches.length} matches in HTML.`);
     return matches.slice(0, 10).map(match => ({
       id: match[1],
       rank: parseInt(match[2]),
@@ -93,22 +71,6 @@ export default function HomeScreen() {
       <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
     </TouchableOpacity>
   );
-
-  useEffect(() => {
-    if (error || debugInfo) {
-      Alert.alert(
-        "Debug Information",
-        `Error: ${error}\n\nDebug Info:\n${debugInfo}\n\nScraped HTML (first 500 characters):\n${scrapedHtml.substring(0, 500)}...`,
-        [
-          { text: "OK", onPress: () => {
-            setError(null);
-            setDebugInfo('');
-            setScrapedHtml('');
-          }}
-        ]
-      );
-    }
-  }, [error, debugInfo]);
 
   return (
     <View style={styles.container}>
