@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [scrapedHtml, setScrapedHtml] = useState<string>('');
 
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
@@ -39,37 +40,38 @@ export default function HomeScreen() {
         },
         timeout: 10000,
       });
-      setDebugInfo(debugInfo + '\nResponse received.');
+      setDebugInfo(prevInfo => prevInfo + '\nResponse received.');
       const html = response.data;
-      setDebugInfo(debugInfo + '\nParsing manga data...');
+      setScrapedHtml(html); 
+      setDebugInfo(prevInfo => prevInfo + '\nParsing manga data...');
       const parsedManga = parseMostViewedManga(html);
       setMostViewedManga(parsedManga);
-      setDebugInfo(debugInfo + `\nParsed ${parsedManga.length} manga items.`);
+      setDebugInfo(prevInfo => prevInfo + `\nParsed ${parsedManga.length} manga items.`);
     } catch (error) {
       let errorMessage = 'An unexpected error occurred';
       if (axios.isAxiosError(error)) {
         if (error.response) {
           errorMessage = `Server error: ${error.response.status}`;
-          setDebugInfo(debugInfo + `\nServer responded with status ${error.response.status}`);
+          setDebugInfo(prevInfo => prevInfo + `\nServer responded with status ${error.response.status}`);
         } else if (error.request) {
           errorMessage = 'No response received from server';
-          setDebugInfo(debugInfo + '\nNo response received from server');
+          setDebugInfo(prevInfo => prevInfo + '\nNo response received from server');
         } else {
           errorMessage = `Error: ${error.message}`;
-          setDebugInfo(debugInfo + `\nError: ${error.message}`);
+          setDebugInfo(prevInfo => prevInfo + `\nError: ${error.message}`);
         }
       }
       setError(errorMessage);
     } finally {
       setIsLoading(false);
-      setDebugInfo(debugInfo + '\nFetch operation completed.');
+      setDebugInfo(prevInfo => prevInfo + '\nFetch operation completed.');
     }
   };
 
   const parseMostViewedManga = (html: string): MangaItem[] => {
     const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
     const matches = [...html.matchAll(regex)];
-    setDebugInfo(debugInfo + `\nFound ${matches.length} matches in HTML.`);
+    setDebugInfo(prevInfo => prevInfo + `\nFound ${matches.length} matches in HTML.`);
     return matches.slice(0, 10).map(match => ({
       id: match[1],
       rank: parseInt(match[2]),
@@ -96,11 +98,12 @@ export default function HomeScreen() {
     if (error || debugInfo) {
       Alert.alert(
         "Debug Information",
-        `Error: ${error}\n\nDebug Info:\n${debugInfo}`,
+        `Error: ${error}\n\nDebug Info:\n${debugInfo}\n\nScraped HTML (first 500 characters):\n${scrapedHtml.substring(0, 500)}...`,
         [
           { text: "OK", onPress: () => {
             setError(null);
             setDebugInfo('');
+            setScrapedHtml('');
           }}
         ]
       );
@@ -139,9 +142,10 @@ export default function HomeScreen() {
           <Ionicons name="arrow-forward" size={24} color="#fff" style={styles.buttonIcon} />
         </TouchableOpacity>
       </View>
-    </View> 
+    </View>
   );
 }
+
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
