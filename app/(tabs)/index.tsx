@@ -21,6 +21,7 @@ export default function HomeScreen() {
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
@@ -31,39 +32,44 @@ export default function HomeScreen() {
 
   const fetchMostViewedManga = async () => {
     try {
+      setDebugInfo('Fetching data...');
       const response = await axios.get('https://mangafire.to/home', {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
         },
         timeout: 10000,
       });
+      setDebugInfo(debugInfo + '\nResponse received.');
       const html = response.data;
+      setDebugInfo(debugInfo + '\nParsing manga data...');
       const parsedManga = parseMostViewedManga(html);
       setMostViewedManga(parsedManga);
+      setDebugInfo(debugInfo + `\nParsed ${parsedManga.length} manga items.`);
     } catch (error) {
+      let errorMessage = 'An unexpected error occurred';
       if (axios.isAxiosError(error)) {
         if (error.response) {
-          // The request was made and the server responded with a status code
-          // that falls out of the range of 2xx
-          setError(`Server error: ${error.response.status}`);
+          errorMessage = `Server error: ${error.response.status}`;
+          setDebugInfo(debugInfo + `\nServer responded with status ${error.response.status}`);
         } else if (error.request) {
-          // The request was made but no response was received
-          setError('No response received from server');
+          errorMessage = 'No response received from server';
+          setDebugInfo(debugInfo + '\nNo response received from server');
         } else {
-          // Something happened in setting up the request that triggered an Error
-          setError(`Error: ${error.message}`);
+          errorMessage = `Error: ${error.message}`;
+          setDebugInfo(debugInfo + `\nError: ${error.message}`);
         }
-      } else {
-        setError('An unexpected error occurred');
       }
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
+      setDebugInfo(debugInfo + '\nFetch operation completed.');
     }
   };
 
   const parseMostViewedManga = (html: string): MangaItem[] => {
     const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
     const matches = [...html.matchAll(regex)];
+    setDebugInfo(debugInfo + `\nFound ${matches.length} matches in HTML.`);
     return matches.slice(0, 10).map(match => ({
       id: match[1],
       rank: parseInt(match[2]),
@@ -87,16 +93,19 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
-    if (error) {
+    if (error || debugInfo) {
       Alert.alert(
-        "Error",
-        error,
+        "Debug Information",
+        `Error: ${error}\n\nDebug Info:\n${debugInfo}`,
         [
-          { text: "OK", onPress: () => setError(null) }
+          { text: "OK", onPress: () => {
+            setError(null);
+            setDebugInfo('');
+          }}
         ]
       );
     }
-  }, [error]);
+  }, [error, debugInfo]);
 
   return (
     <View style={styles.container}>
@@ -130,7 +139,7 @@ export default function HomeScreen() {
           <Ionicons name="arrow-forward" size={24} color="#fff" style={styles.buttonIcon} />
         </TouchableOpacity>
       </View>
-    </View>
+    </View> 
   );
 }
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
