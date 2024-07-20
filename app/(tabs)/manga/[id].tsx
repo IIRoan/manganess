@@ -219,10 +219,12 @@ export default function MangaDetailScreen() {
                         />
                     </TouchableOpacity>
 
+
                     <Alert2
                         visible={isAlertVisible}
                         title={bookmarkStatus ? "Update Bookmark" : "Bookmark Manga"}
                         onClose={() => setIsAlertVisible(false)}
+                        // @ts-ignore
                         options={
                             bookmarkStatus
                                 ? [
@@ -230,29 +232,22 @@ export default function MangaDetailScreen() {
                                     { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
                                     {
                                         text: "Read",
-                                        onPress: () => {
-                                            saveBookmark("Read");
-                                            // The option to mark all chapters as read will be shown after this
-                                        },
+                                        onPress: () => saveBookmark("Read"),
                                         icon: "checkmark-circle-outline"
                                     },
-                                    { text: "Unbookmark", onPress: () => removeBookmark(), icon: "close-circle-outline" },
+                                    { text: "Unbookmark", onPress: removeBookmark, icon: "close-circle-outline" },
                                 ]
                                 : [
                                     { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
                                     { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
                                     {
                                         text: "Read",
-                                        onPress: () => {
-                                            saveBookmark("Read");
-                                        },
+                                        onPress: () => saveBookmark("Read"),
                                         icon: "checkmark-circle-outline"
                                     },
                                 ]
                         }
                     />
-
-
 
                     {mangaDetails.alternativeTitle && (
                         <View>
@@ -269,49 +264,51 @@ export default function MangaDetailScreen() {
                     </View>
                 </View>
             </View>
-            <View style={styles.infoContainer}>
-                <Text style={styles.sectionTitle}>Description</Text>
-                <ExpandableText
-                    text={mangaDetails.description}
-                    initialLines={3}
-                    style={styles.description}
-                    expandTextStyle={styles.expandText}
-                />
-                <Text style={styles.sectionTitle}>Details</Text>
-                <Text style={styles.infoText}>Author: {mangaDetails.author.join(', ')}</Text>
-                <Text style={styles.infoText}>Published: {mangaDetails.published}</Text>
-                <Text style={styles.infoText}>Genres: {mangaDetails.genres.join(', ')}</Text>
-                <View style={styles.ratingContainer}>
-                    <Text style={styles.rating}>{mangaDetails.rating}</Text>
-                    <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
+            <View style={styles.contentContainer}>
+                <View style={styles.infoContainer}>
+                    <Text style={styles.sectionTitle}>Description</Text>
+                    <ExpandableText
+                        text={mangaDetails.description}
+                        initialLines={3}
+                        style={styles.description}
+                        expandTextStyle={styles.expandText}
+                    />
+                    <Text style={styles.sectionTitle}>Details</Text>
+                    <Text style={styles.infoText}>Author: {mangaDetails.author.join(', ')}</Text>
+                    <Text style={styles.infoText}>Published: {mangaDetails.published}</Text>
+                    <Text style={styles.infoText}>Genres: {mangaDetails.genres.join(', ')}</Text>
+                    <View style={styles.ratingContainer}>
+                        <Text style={styles.rating}>{mangaDetails.rating}</Text>
+                        <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
+                    </View>
                 </View>
-            </View>
-            <View style={styles.chaptersContainer}>
-                <Text style={styles.sectionTitle}>Chapters</Text>
-                {mangaDetails.chapters.map((chapter, index) => {
-                    const isRead = readChapters.includes(chapter.number);
-                    return (
-                        <TouchableOpacity
-                            key={index}
-                            style={styles.chapterItem}
-                            onPress={() => handleChapterPress(chapter.number)}
-                        >
-                            <View style={styles.chapterInfo}>
-                                <Text style={[styles.chapterTitle, isRead && styles.readChapterTitle]}>
-                                    {chapter.title}
-                                </Text>
-                                <Text style={styles.chapterDate}>{chapter.date}</Text>
-                            </View>
-                            <View style={styles.chapterStatus}>
-                                {isRead ? (
-                                    <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                                ) : (
-                                    <Ionicons name="ellipse-outline" size={24} color={colors.tabIconDefault} />
-                                )}
-                            </View>
-                        </TouchableOpacity>
-                    );
-                })}
+                <View style={styles.chaptersContainer}>
+                    <Text style={styles.sectionTitle}>Chapters</Text>
+                    {mangaDetails.chapters.map((chapter, index) => {
+                        const isRead = readChapters.includes(chapter.number);
+                        return (
+                            <TouchableOpacity
+                                key={index}
+                                style={styles.chapterItem}
+                                onPress={() => handleChapterPress(chapter.number)}
+                            >
+                                <View style={styles.chapterInfo}>
+                                    <Text style={[styles.chapterTitle, isRead && styles.readChapterTitle]}>
+                                        {chapter.title}
+                                    </Text>
+                                    <Text style={styles.chapterDate}>{chapter.date}</Text>
+                                </View>
+                                <View style={styles.chapterStatus}>
+                                    {isRead ? (
+                                        <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                                    ) : (
+                                        <Ionicons name="ellipse-outline" size={24} color={colors.tabIconDefault} />
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
             </View>
         </ScrollView>
     );
@@ -320,20 +317,27 @@ export default function MangaDetailScreen() {
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.background,
+        backgroundColor: colors.card,
+    },
+    contentContainer: {
+        backgroundColor: colors.card,
+        borderTopLeftRadius: 40,
+        borderTopRightRadius: 40,
+        marginTop: -20,
+        paddingTop: 20,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: colors.background,
+        backgroundColor: colors.card,
     },
     errorContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
-        backgroundColor: colors.background,
+        backgroundColor: colors.card,
     },
     errorText: {
         fontSize: 18,
@@ -343,11 +347,15 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     headerContainer: {
         height: 300,
         position: 'relative',
+        overflow: 'hidden',
     },
+
     bannerImage: {
         width: '100%',
         height: '100%',
         resizeMode: 'cover',
+        borderBottomLeftRadius: 40,
+        borderBottomRightRadius: 40,
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,
@@ -386,6 +394,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         borderRadius: 20,
         alignSelf: 'flex-start',
         marginTop: 10,
+        marginBottom: 20,
     },
     statusText: {
         color: '#fff',
@@ -394,19 +403,21 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     infoContainer: {
         padding: 20,
         backgroundColor: colors.card,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
+        borderTopLeftRadius: 40,
+        borderTopRightRadius: 40,
         marginTop: -20,
     },
+
     sectionTitle: {
         fontSize: 22,
         fontWeight: 'bold',
         marginBottom: 10,
         color: colors.text,
+        marginTop: 5,
+
     },
     description: {
         fontSize: 16,
-        marginBottom: 20,
         lineHeight: 24,
         color: colors.text,
     },

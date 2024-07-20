@@ -92,7 +92,7 @@ export default function SettingsScreen() {
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
   },
   scrollView: {
     flex: 1,
@@ -120,10 +120,9 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    
   },
-  activeOption: {
-    backgroundColor: colors.card,
-  },
+
   optionText: {
     fontSize: 16,
     marginLeft: 15,

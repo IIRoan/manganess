@@ -3,6 +3,7 @@ import { Link, Stack } from 'expo-router';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { Theme } from '@react-navigation/native';
 
 export default function NotFoundScreen() {
   const { colors } = useTheme();
@@ -27,10 +28,9 @@ export default function NotFoundScreen() {
   );
 }
 
-const getStyles = (colors) => StyleSheet.create({
-  container: {
+const getStyles = (colors: Theme['colors']) => StyleSheet.create({  container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
@@ -59,7 +59,7 @@ const getStyles = (colors) => StyleSheet.create({
     borderRadius: 5,
   },
   buttonText: {
-    color: colors.background,
+    color: colors.card,
     fontSize: 16,
     fontWeight: 'bold',
   },

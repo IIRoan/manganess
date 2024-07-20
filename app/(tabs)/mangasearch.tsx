@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, TextInput, FlatList, StyleSheet, Text, useColorScheme, Image } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, TextInput, FlatList, StyleSheet, Text, useColorScheme, TouchableOpacity } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
 import { Colors, ColorScheme } from '@/constants/Colors';
@@ -17,6 +17,8 @@ export default function MangaSearchScreen() {
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
   const colors = Colors[colorScheme];
+  const styles = getStyles(colors);
+  const inputRef = useRef<TextInput>(null);
 
   const onChangeSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
@@ -64,41 +66,45 @@ export default function MangaSearchScreen() {
     <>
       <Stack.Screen options={{
         title: 'Manga Search',
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
         headerTintColor: colors.text,
       }} />
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={colors.text} style={styles.searchIcon} />
+      <View style={styles.container}>
+        <TouchableOpacity 
+          style={styles.searchContainer}
+          onPress={() => inputRef.current?.focus()}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="search"
+            size={20}
+            color={colors.text}
+            style={styles.searchIcon}
+          />
           <TextInput
-            style={[styles.searchBar, {
-              color: colors.text,
-              backgroundColor: colors.card,
-            }]}
+            ref={inputRef}
+            style={styles.searchBar}
             placeholder="Search manga"
             placeholderTextColor={colors.tabIconDefault}
             value={searchQuery}
             onChangeText={onChangeSearch}
           />
-        </View>
+        </TouchableOpacity>
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>
+            <Text style={styles.loadingText}>Loading...</Text>
           </View>
         )}
         {error && (
           <View style={styles.errorContainer}>
-            <Text style={[styles.errorText, { color: colors.notification }]}>{error}</Text>
+            <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
         {!isLoading && searchQuery.length <= 2 && (
           <View style={styles.instructionContainer}>
-            <Text style={[styles.instructionText, { color: colors.text }]}>
+            <Text style={styles.instructionText}>
               Start searching for manga by entering a keyword in the search bar above.
             </Text>
-            <Text style={[styles.instructionSubText, { color: colors.text }]}>
+            <Text style={styles.instructionSubText}>
               Enter at least 3 characters to start searching for manga
             </Text>
           </View>
@@ -113,7 +119,7 @@ export default function MangaSearchScreen() {
           ListEmptyComponent={() =>
             !isLoading && searchQuery.length > 2 ? (
               <View style={styles.noResultsContainer}>
-                <Text style={[styles.noResultsText, { color: colors.text }]}>No results found</Text>
+                <Text style={styles.noResultsText}>No results found</Text>
               </View>
             ) : null
           }
@@ -124,27 +130,35 @@ export default function MangaSearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    backgroundColor: colors.card,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    marginTop: 40,
-    borderRadius: 10,
-    overflow: 'hidden',
+    marginVertical: 10,
+    borderRadius: 25,
+    marginTop: 25,
+    paddingHorizontal: 15,
+    height: 50,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 }, 
+
   },
   searchIcon: {
-    padding: 10,
+    marginRight: 10,
   },
   searchBar: {
     flex: 1,
-    height: 50,
-    paddingHorizontal: 10,
     fontSize: 16,
+    height: '100%',
+    color: colors.text,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -152,6 +166,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 18,
+    color: colors.text,
   },
   errorContainer: {
     alignItems: 'center',
@@ -160,6 +175,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     textAlign: 'center',
+    color: colors.notification,
   },
   instructionContainer: {
     alignItems: 'center',
@@ -169,10 +185,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 10,
+    color: colors.text,
   },
   instructionSubText: {
     fontSize: 14,
     textAlign: 'center',
+    color: colors.text,
   },
   flatListContent: {
     paddingTop: 10,
@@ -187,5 +205,6 @@ const styles = StyleSheet.create({
   },
   noResultsText: {
     fontSize: 16,
+    color: colors.text,
   },
 });

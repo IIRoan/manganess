@@ -150,13 +150,13 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
   },
   header: {
     fontSize: 28,
@@ -184,15 +184,18 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     paddingRight: 16,
   },
   bookmarkCard: {
-    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginRight: 12,
     width: 220,
-    shadowColor: colors.text,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 }, 
+
   },
   bookmarkInfo: {
     flex: 1,
