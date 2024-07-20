@@ -5,43 +5,7 @@ import MangaCard from '@/components/MangaCard';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-export interface MangaItem {
-  id: string;
-  title: string;
-  banner: string;
-  link: string;
-  type: string;
-}
-
-export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
-  try {
-    const response = await fetch(`https://mangafire.to/filter?keyword=${encodeURIComponent(keyword)}`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
-      },
-    });
-
-    const html = await response.text();
-    const mangaRegex = /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
-    const matches = [...html.matchAll(mangaRegex)];
-
-    return matches.map(match => {
-      const link = match[1];
-      const id = link.split('/').pop() || '';
-      return {
-        id,
-        link: `https://mangafire.to${link}`,
-        title: match[4].trim(),
-        banner: match[2],
-        type: match[3].trim(),
-      };
-    });
-  } catch (error) {
-    console.error('Error searching manga:', error);
-    return [];
-  }
-};
-
+import { searchManga, MangaItem } from '@/services/mangaFireService';
 
 export default function MangaSearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');

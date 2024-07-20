@@ -12,6 +12,8 @@ export const Colors = {
     tabIconDefault: '#BDBDBD',
     tabIconSelected: '#2E8B57',
     secondaryText: '#757575',
+    error: '#FF6B6B',
+
   },
   dark: {
     primary: '#4CAF50',
@@ -24,6 +26,7 @@ export const Colors = {
     tabIconDefault: '#757575',
     tabIconSelected: '#4CAF50',
     secondaryText: '#BDBDBD',
+    error: '#FF6B6B',
   },
 };
 

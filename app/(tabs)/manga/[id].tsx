@@ -1,34 +1,18 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, useColorScheme } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { decode } from 'html-entities';
 import ExpandableText from '@/components/ExpandableText';
 import Alert2 from '@/components/Alert';
 import { Alert } from 'react-native';
+import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
 
-interface MangaDetails {
-    title: string;
-    alternativeTitle: string;
-    status: string;
-    description: string;
-    author: string[];
-    published: string;
-    genres: string[];
-    rating: string;
-    reviewCount: string;
-    bannerImage: string;
-    chapters: Array<{ number: string; title: string; date: string; url: string }>;
-}
-
-const { width } = Dimensions.get('window');
 
 export default function MangaDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -46,7 +30,7 @@ export default function MangaDetailScreen() {
     const styles = getStyles(colors);
 
     useEffect(() => {
-        fetchMangaDetails();
+        fetchMangaDetailsData();
         fetchReadChapters();
     }, [id]);
 
@@ -63,22 +47,10 @@ export default function MangaDetailScreen() {
         }, [router])
     );
 
-    const fetchMangaDetails = async () => {
+    const fetchMangaDetailsData = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`https://mangafire.to/manga/${id}`, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                },
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch manga details');
-            }
-
-            const html = await response.text();
-            const details = parseMangaDetails(html);
+            const details = await fetchMangaDetails(id as string);
             setMangaDetails(details);
         } catch (err) {
             setError('Failed to load manga details. Please try again.');
@@ -86,56 +58,6 @@ export default function MangaDetailScreen() {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const parseMangaDetails = (html: string): MangaDetails => {
-        const title = html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title';
-        const alternativeTitle = html.match(/<h6>(.*?)<\/h6>/)?.[1] || '';
-        const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
-        const descriptionMatch = html.match(/<div class="description">(.*?)<\/div>/s);
-        const description = descriptionMatch
-            ? decode(descriptionMatch[1].replace(/<[^>]*>/g, ''))
-            : 'No description available';
-        const authorMatch = html.match(/<span>Author:<\/span>.*?<span>(.*?)<\/span>/s);
-        const authors = authorMatch ? authorMatch[1].match(/<a[^>]*>(.*?)<\/a>/g)?.map(a => a.replace(/<[^>]*>/g, '')) || [] : [];
-
-        const published = html.match(/<span>Published:<\/span>.*?<span>(.*?)<\/span>/s)?.[1] || 'Unknown';
-
-        const genresMatch = html.match(/<span>Genres:<\/span>.*?<span>(.*?)<\/span>/s);
-        const genres = genresMatch ? genresMatch[1].match(/<a[^>]*>(.*?)<\/a>/g)?.map(a => a.replace(/<[^>]*>/g, '')) || [] : [];
-
-        const rating = html.match(/<span class="live-score" itemprop="ratingValue">(.*?)<\/span>/)?.[1] || 'N/A';
-        const reviewCount = html.match(/<span itemprop="reviewCount".*?>(.*?)<\/span>/)?.[1] || '0';
-        const bannerImageMatch = html.match(/<div class="poster">.*?<img src="(.*?)" itemprop="image"/s);
-        const bannerImage = bannerImageMatch ? bannerImageMatch[1] : '';
-
-        const chaptersRegex = /<li class="item".*?<a href="(.*?)".*?<span>Chapter (\d+):.*?<\/span>.*?<span>(.*?)<\/span>/g;
-        const chapters = [];
-        let match;
-        while ((match = chaptersRegex.exec(html)) !== null) {
-            chapters.push({
-                url: match[1],
-                number: match[2],
-                title: `Chapter ${match[2]}`,
-                date: match[3],
-            });
-        }
-
-
-
-        return {
-            title,
-            alternativeTitle,
-            status,
-            description,
-            author: authors,
-            published,
-            genres,
-            rating,
-            reviewCount,
-            bannerImage,
-            chapters,
-        };
     };
 
     useEffect(() => {
@@ -158,9 +80,8 @@ export default function MangaDetailScreen() {
     const saveBookmark = async (status: BookmarkStatus) => {
         try {
             await AsyncStorage.setItem(`bookmark_${id}`, status);
-            await AsyncStorage.setItem(`title_${id}`, mangaDetails.title);
+            await AsyncStorage.setItem(`title_${id}`, mangaDetails?.title || '');
 
-            // Update the list of bookmark keys
             const keys = await AsyncStorage.getItem('bookmarkKeys');
             const bookmarkKeys = keys ? JSON.parse(keys) : [];
             if (!bookmarkKeys.includes(`bookmark_${id}`)) {
@@ -171,7 +92,6 @@ export default function MangaDetailScreen() {
             setBookmarkStatus(status);
             setIsAlertVisible(false);
 
-            // If the status is "Read", show an alert to mark all chapters as read
             if (status === "Read") {
                 Alert.alert(
                     "Mark All Chapters as Read",
@@ -193,35 +113,24 @@ export default function MangaDetailScreen() {
         }
     };
 
-
-
-
-
     const removeBookmark = async () => {
         try {
-            // Remove the bookmark status
             await AsyncStorage.removeItem(`bookmark_${id}`);
-    
-            // Remove the title
             await AsyncStorage.removeItem(`title_${id}`);
-    
-            // Remove from the bookmarkKeys list
+
             const keys = await AsyncStorage.getItem('bookmarkKeys');
             if (keys) {
                 const bookmarkKeys = JSON.parse(keys);
-                const updatedKeys = bookmarkKeys.filter(key => key !== `bookmark_${id}`);
+                const updatedKeys = bookmarkKeys.filter((key: string) => key !== `bookmark_${id}`);
                 await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(updatedKeys));
             }
-    
+
             setBookmarkStatus(null);
             setIsAlertVisible(false);
         } catch (error) {
             console.error('Error removing bookmark:', error);
         }
     };
-
-
-
 
     const fetchReadChapters = useCallback(async () => {
         try {
@@ -236,12 +145,6 @@ export default function MangaDetailScreen() {
         }
     }, [id]);
 
-    useEffect(() => {
-        setMangaDetails(null);
-        setIsLoading(true);
-        fetchMangaDetails();
-    }, [id]);
-
     useFocusEffect(
         useCallback(() => {
             fetchReadChapters();
@@ -249,6 +152,7 @@ export default function MangaDetailScreen() {
     );
 
     const handleChapterPress = (chapterNumber: string) => {
+        const chapterUrl = getChapterUrl(id as string, chapterNumber);
         router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
     };
 
@@ -259,16 +163,13 @@ export default function MangaDetailScreen() {
     const markAllChaptersAsRead = async () => {
         try {
             const key = `manga_${id}_read_chapters`;
-            const allChapterNumbers = mangaDetails.chapters.map(chapter => chapter.number);
+            const allChapterNumbers = mangaDetails?.chapters.map(chapter => chapter.number) || [];
             await AsyncStorage.setItem(key, JSON.stringify(allChapterNumbers));
             setReadChapters(allChapterNumbers);
         } catch (error) {
             console.error('Error marking all chapters as read:', error);
         }
     };
-
-
-
 
     if (isLoading) {
         return (

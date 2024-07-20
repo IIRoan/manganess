@@ -13,7 +13,7 @@ export default function TabLayout() {
   const pathname = usePathname();
 
   const shouldShowTabBar = () => {
-    const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks']; // Fixed typo here
+    const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
     return allowedPaths.includes(pathname) || pathname.match(/^\/manga\/[^\/]+$/);
   };
 
