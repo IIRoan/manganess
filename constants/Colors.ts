@@ -18,7 +18,7 @@ export const Colors = {
   dark: {
     primary: '#4CAF50',
     background: '#121212',
-    card: '#1f1f1d',
+    card: '#121212',
     text: '#E0E0E0',
     border: '#333333',
     notification: '#FF6B6B',
