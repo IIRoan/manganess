@@ -18,7 +18,7 @@ export default function TabLayout() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.card }}>
       <Tabs
         backBehavior="history"
         screenOptions={{
@@ -28,7 +28,7 @@ export default function TabLayout() {
             backgroundColor: colors.card,
             borderTopColor: colors.border,
             height: 60,
-            marginBottom: 25,
+            marginBottom: 20,
             paddingBottom: 5,
             paddingTop: 5,
             display: shouldShowTabBar() ? 'flex' : 'none',

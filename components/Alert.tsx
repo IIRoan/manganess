@@ -16,8 +16,9 @@ interface CustomAlertProps {
   visible: boolean;
   title: string;
   onClose: () => void;
-  options: Array<Option>;
+  options: Option[];
 }
+
 
 const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, options }) => {
   const { theme } = useTheme();
@@ -87,7 +88,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   },
   modalView: {
     margin: 20,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 25,
     alignItems: 'stretch',
@@ -109,7 +110,8 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     padding: 14,
     marginTop: 12,
     backgroundColor: colors.card,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   icon: {
     marginRight: 10,

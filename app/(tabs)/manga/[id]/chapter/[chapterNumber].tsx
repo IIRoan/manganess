@@ -5,6 +5,8 @@ import { WebView, WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { getChapterUrl, markChapterAsRead, getInjectedJavaScript } from '@/services/mangaFireService';
 import { BackHandler } from 'react-native';
+import { useTheme } from '@/constants/ThemeContext';
+import { Colors } from '@/constants/Colors';
 
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams();
@@ -14,6 +16,9 @@ export default function ReadChapterScreen() {
   const [webViewKey, setWebViewKey] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const [currentUrl, setCurrentUrl] = useState('');
+  const { actualTheme } = useTheme();
+  const colors = Colors[actualTheme];
+  const styles = getStyles(colors);
 
   const chapterUrl = getChapterUrl(id as string, chapterNumber as string);
 
@@ -67,7 +72,7 @@ export default function ReadChapterScreen() {
     <View style={styles.container}>
       {isLoading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0000ff" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       )}
       {error ? (
@@ -83,7 +88,7 @@ export default function ReadChapterScreen() {
             style={styles.webView}
             onLoadEnd={handleLoadEnd}
             onError={handleError}
-            injectedJavaScript={getInjectedJavaScript()}
+            injectedJavaScript={getInjectedJavaScript(colors.card)}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             originWhitelist={['*']}
@@ -94,7 +99,7 @@ export default function ReadChapterScreen() {
             allowsBackForwardNavigationGestures={Platform.OS === 'ios'} 
           />
           <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-            <Ionicons name="chevron-back" size={24} color="white" />
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
         </>
       )}
@@ -102,10 +107,10 @@ export default function ReadChapterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: 'transparent',
   },
   webView: {
     flex: 1,
@@ -118,7 +123,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
   errorContainer: {
     flex: 1,
@@ -128,15 +132,16 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
-    color: 'red',
     textAlign: 'center',
+    color: colors.error,
   },
   backButton: {
     position: 'absolute',
     top: 40,
     left: 10,
     zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    color: colors.text,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     borderRadius: 20,
     padding: 8,
   },

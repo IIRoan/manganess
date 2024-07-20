@@ -133,7 +133,7 @@ export default function HomeScreen() {
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
   },
   headerContainer: {
     height: 350,
@@ -181,7 +181,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    backgroundColor: colors.background,
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     marginTop: -20,
@@ -209,7 +209,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     position: 'absolute',
     top: 5,
     left: 5,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 5,
   },
