@@ -3,11 +3,11 @@
 MangaNess is a mobile application that allows users to read manga from MangaFire.to. It provides a clean, ad-free reading experience with smooth scrolling, dark mode support, and responsive design for various device sizes. It also allows users to browse and search for manga titles, track read chapters, and save favorite manga for future reading.
 
 ## Screenshots
-
-![2024-07-20_21-39](https://github.com/user-attachments/assets/4039321b-b32b-45a8-abd9-2c09b406e8cf)
-![2024-07-20_21-46](https://github.com/user-attachments/assets/330ef686-4902-44eb-8c23-1dfa2abe7784)
-![2024-07-20_21-47](https://github.com/user-attachments/assets/65f96544-4b67-43a4-b5df-1313f8d3ce1c)
-![2024-07-20_21-47_1](https://github.com/user-attachments/assets/83a54181-92ec-4a88-9009-9bfb11bbbab3)
+![Image1](https://github.com/user-attachments/assets/216c2b90-66e6-4a3c-a9e6-9b8e04234b71)
+![Image2](https://github.com/user-attachments/assets/6afb8bd0-a162-4819-aceb-50bbcd23b707)
+![Image3](https://github.com/user-attachments/assets/278bfaf9-84fa-4666-aff0-a2440dc9728c)
+![Image4](https://github.com/user-attachments/assets/9d9e3968-2e82-45fc-b83b-cd5346b54f44)
+![Image5](https://github.com/user-attachments/assets/0252d10b-6b6f-44a5-951f-a79f0047fff7)
 
 
 ## Features
