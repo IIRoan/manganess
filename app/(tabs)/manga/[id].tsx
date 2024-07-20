@@ -170,6 +170,14 @@ export default function MangaDetailScreen() {
             console.error('Error marking all chapters as read:', error);
         }
     };
+    
+// @ts-ignore
+    const GenreTag = ({ genre }) => (
+        <View style={styles.genreTag}>
+          <Text style={styles.genreText}>{genre}</Text>
+        </View>
+      );
+      
 
     if (isLoading) {
         return (
@@ -265,23 +273,42 @@ export default function MangaDetailScreen() {
                 </View>
             </View>
             <View style={styles.contentContainer}>
-                <View style={styles.infoContainer}>
-                    <Text style={styles.sectionTitle}>Description</Text>
-                    <ExpandableText
-                        text={mangaDetails.description}
-                        initialLines={3}
-                        style={styles.description}
-                        expandTextStyle={styles.expandText}
-                    />
-                    <Text style={styles.sectionTitle}>Details</Text>
-                    <Text style={styles.infoText}>Author: {mangaDetails.author.join(', ')}</Text>
-                    <Text style={styles.infoText}>Published: {mangaDetails.published}</Text>
-                    <Text style={styles.infoText}>Genres: {mangaDetails.genres.join(', ')}</Text>
-                    <View style={styles.ratingContainer}>
-                        <Text style={styles.rating}>{mangaDetails.rating}</Text>
-                        <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
-                    </View>
-                </View>
+            <View style={styles.infoContainer}>
+    <View style={styles.descriptionContainer}>
+        <Text style={styles.sectionTitle}>Description</Text>
+        <ExpandableText
+            text={mangaDetails.description}
+            initialLines={3}
+            style={styles.description}
+            expandTextStyle={styles.expandText}
+        />
+    </View>
+    <View style={styles.detailsContainer}>
+    <Text style={styles.sectionTitle}>Details</Text>
+    <View style={styles.detailRow}>
+        <Text style={styles.detailLabel}>Author</Text>
+        <Text style={styles.detailValue}>{mangaDetails.author.join(', ')}</Text>
+    </View>
+    <View style={styles.detailRow}>
+        <Text style={styles.detailLabel}>Published</Text>
+        <Text style={styles.detailValue}>{mangaDetails.published}</Text>
+    </View>
+    <View style={styles.detailRow}>
+        <Text style={styles.detailLabel}>Rating</Text>
+        <View style={styles.ratingContainer}>
+            <Text style={styles.rating}>{mangaDetails.rating}</Text>
+            <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
+        </View>
+    </View>
+    <Text style={[styles.detailLabel, { marginTop: 10 }]}>Genres</Text>
+    <View style={styles.genresContainer}>
+        {mangaDetails.genres.map((genre, index) => (
+            <GenreTag key={index} genre={genre} />
+        ))}
+    </View>
+</View>
+
+</View>
                 <View style={styles.chaptersContainer}>
                     <Text style={styles.sectionTitle}>Chapters</Text>
                     {mangaDetails.chapters.map((chapter, index) => {
@@ -405,8 +432,45 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         backgroundColor: colors.card,
         borderTopLeftRadius: 40,
         borderTopRightRadius: 40,
-        marginTop: -20,
+        marginTop: -40,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: -5,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        elevation: 5,
     },
+    descriptionContainer: {
+        backgroundColor: colors.card,
+        borderRadius: 15,
+        padding: 15,
+        marginBottom: 20,
+    },
+    detailsContainer: {
+        backgroundColor: colors.card,
+        borderRadius: 15,
+        padding: 15,
+    },
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    detailLabel: {
+        fontSize: 14,
+        color: colors.text,
+        opacity: 0.7,
+    },
+    detailValue: {
+        fontSize: 14,
+        color: colors.text,
+        fontWeight: '600',
+        textAlign: 'right',
+    },
+    
+    
 
     sectionTitle: {
         fontSize: 22,
@@ -428,19 +492,19 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     },
     ratingContainer: {
         flexDirection: 'row',
-        alignItems: 'baseline',
-        marginTop: 10,
+        alignItems: 'center',
     },
     rating: {
-        fontSize: 24,
+        fontSize: 18,
         fontWeight: 'bold',
         color: colors.primary,
+        marginRight: 5,
     },
     ratingText: {
-        fontSize: 16,
-        marginLeft: 5,
+        fontSize: 14,
         color: colors.text,
     },
+    
     chaptersContainer: {
         padding: 20,
         backgroundColor: colors.card,
@@ -468,6 +532,23 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     },
     chapterStatus: {
         marginLeft: 10,
+    },
+    genresContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginTop: 5,
+    },
+    genreTag: {
+        backgroundColor: colors.primary,
+        borderRadius: 15,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        margin: 2,
+    },
+    genreText: {
+        color: colors.card,
+        fontSize: 12,
+        fontWeight: '600',
     },
     readChapterTitle: {
         color: '#4CAF50',
