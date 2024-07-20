@@ -7,6 +7,7 @@ MangaNess is a mobile application that allows users to read manga from MangaFire
 ![2024-07-20_21-39](https://github.com/user-attachments/assets/4039321b-b32b-45a8-abd9-2c09b406e8cf)
 ![2024-07-20_21-46](https://github.com/user-attachments/assets/330ef686-4902-44eb-8c23-1dfa2abe7784)
 ![2024-07-20_21-47](https://github.com/user-attachments/assets/65f96544-4b67-43a4-b5df-1313f8d3ce1c)
+![2024-07-20_21-47_1](https://github.com/user-attachments/assets/83a54181-92ec-4a88-9009-9bfb11bbbab3)
 
 
 ## Features
