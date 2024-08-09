@@ -340,18 +340,10 @@ export default function MangaDetailScreen() {
         </ScrollView>
     );
 }
-
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.card,
-    },
-    contentContainer: {
-        backgroundColor: colors.card,
-        borderTopLeftRadius: 40,
-        borderTopRightRadius: 40,
-        marginTop: -20,
-        paddingTop: 20,
     },
     loadingContainer: {
         flex: 1,
@@ -376,13 +368,10 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         position: 'relative',
         overflow: 'hidden',
     },
-
     bannerImage: {
         width: '100%',
         height: '100%',
         resizeMode: 'cover',
-        borderBottomLeftRadius: 40,
-        borderBottomRightRadius: 40,
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,
@@ -427,6 +416,20 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         color: '#fff',
         fontWeight: 'bold',
     },
+    bookmarkButton: {
+        position: 'absolute',
+        top: 40,
+        right: 10,
+        zIndex: 1000,
+        borderRadius: 20,
+        padding: 8,
+    },
+    contentContainer: {
+        backgroundColor: colors.card,
+        borderTopLeftRadius: 40,
+        borderTopRightRadius: 40,
+        paddingTop: 20,
+    },
     infoContainer: {
         padding: 20,
         backgroundColor: colors.card,
@@ -469,16 +472,11 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         fontWeight: '600',
         textAlign: 'right',
     },
-    
-    
-
     sectionTitle: {
         fontSize: 22,
         fontWeight: 'bold',
         marginBottom: 10,
         color: colors.text,
-        marginTop: 5,
-
     },
     description: {
         fontSize: 16,
@@ -504,7 +502,23 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         fontSize: 14,
         color: colors.text,
     },
-    
+    genresContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginTop: 5,
+    },
+    genreTag: {
+        backgroundColor: colors.primary,
+        borderRadius: 15,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        margin: 2,
+    },
+    genreText: {
+        color: colors.card,
+        fontSize: 12,
+        fontWeight: '600',
+    },
     chaptersContainer: {
         padding: 20,
         backgroundColor: colors.card,
@@ -533,37 +547,12 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     chapterStatus: {
         marginLeft: 10,
     },
-    genresContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginTop: 5,
-    },
-    genreTag: {
-        backgroundColor: colors.primary,
-        borderRadius: 15,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        margin: 2,
-    },
-    genreText: {
-        color: colors.card,
-        fontSize: 12,
-        fontWeight: '600',
-    },
     readChapterTitle: {
         color: '#4CAF50',
         fontWeight: '600',
     },
     expandText: {
         color: colors.primary,
-    },
-    bookmarkButton: {
-        position: 'absolute',
-        top: 40,
-        right: 10,
-        zIndex: 1000,
-        borderRadius: 20,
-        padding: 8,
     },
     actionButtonsContainer: {
         flexDirection: 'row',
@@ -582,5 +571,4 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         color: colors.text,
         fontSize: 16,
     },
-
 });

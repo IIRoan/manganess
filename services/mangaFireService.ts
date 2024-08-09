@@ -2,6 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { decode } from 'html-entities';
+import puppeteer from 'puppeteer';
 
 export interface MangaItem {
   id: string;
@@ -59,18 +60,68 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
 };
 
 export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+
   try {
-    const response = await axios.get(`${BASE_URL}/manga/${id}`, {
-      headers: {
-        'User-Agent': USER_AGENT,
-      },
+    await page.goto(`${BASE_URL}/manga/${id}`, { waitUntil: 'networkidle0' });
+
+    // Click the "Read more +" link to open the modal
+    await page.click('a.readmore');
+
+    // Wait for the modal to appear
+    await page.waitForSelector('.modal-content', { visible: true });
+
+    const mangaDetails = await page.evaluate(() => {
+      const title = document.querySelector('h1[itemprop="name"]')?.textContent || 'Unknown Title';
+      const alternativeTitle = document.querySelector('h6')?.textContent || '';
+      const status = document.querySelector('p')?.textContent || 'Unknown Status';
+      
+      // Extract the full description from the modal
+      const descriptionModal = document.querySelector('.modal-content');
+      const description = descriptionModal
+        ? descriptionModal.textContent?.replace(/^\s*|\s*$/g, '').replace(/\s+/g, ' ') || 'No description available'
+        : 'No description available';
+
+      const authorElements = document.querySelectorAll('span:contains("Author:") + span a');
+      const authors = Array.from(authorElements).map(el => el.textContent || '');
+      const published = document.querySelector('span:contains("Published:") + span')?.textContent || 'Unknown';
+      const genreElements = document.querySelectorAll('span:contains("Genres:") + span a');
+      const genres = Array.from(genreElements).map(el => el.textContent || '');
+      const rating = document.querySelector('span.live-score[itemprop="ratingValue"]')?.textContent || 'N/A';
+      const reviewCount = document.querySelector('span[itemprop="reviewCount"]')?.textContent || '0';
+      const bannerImage = document.querySelector('.poster img[itemprop="image"]')?.getAttribute('src') || '';
+
+      const chapterElements = document.querySelectorAll('li.item');
+      const chapters = Array.from(chapterElements).map(el => {
+        const link = el.querySelector('a')?.getAttribute('href') || '';
+        const number = link.match(/chapter-(\d+)/)?.[1] || '';
+        const title = `Chapter ${number}`;
+        const date = el.querySelector('span:last-child')?.textContent || '';
+        return { number, title, date, url: link };
+      });
+
+      return {
+        title,
+        alternativeTitle,
+        status,
+        description,
+        author: authors,
+        published,
+        genres,
+        rating,
+        reviewCount,
+        bannerImage,
+        chapters,
+      };
     });
 
-    const html = response.data;
-    return parseMangaDetails(html);
+    return mangaDetails;
   } catch (error) {
     console.error('Error fetching manga details:', error);
     throw error;
+  } finally {
+    await browser.close();
   }
 };
 
