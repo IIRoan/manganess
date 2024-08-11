@@ -1,21 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { WebView, WebViewNavigation } from 'react-native-webview';
+import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { getChapterUrl, markChapterAsRead, getInjectedJavaScript } from '@/services/mangaFireService';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 
+
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [webViewKey, setWebViewKey] = useState(0);
   const webViewRef = useRef<WebView>(null);
-  const [currentUrl, setCurrentUrl] = useState('');
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
@@ -23,9 +22,9 @@ export default function ReadChapterScreen() {
   const chapterUrl = getChapterUrl(id as string, chapterNumber as string);
 
   useEffect(() => {
-    setWebViewKey(prevKey => prevKey + 1);
     markChapterAsRead(id as string, chapterNumber as string);
   }, [id, chapterNumber]);
+
 
   useFocusEffect(
     useCallback(() => {
@@ -35,33 +34,23 @@ export default function ReadChapterScreen() {
       };
 
       const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
       return () => backHandler.remove();
     }, [id, router])
   );
 
-  const handleLoadEnd = () => {
-    setIsLoading(false);
-  };
-
-  const handleBackPress = () => {
-    router.navigate(`/manga/${id}`);
-  };
-
+  const handleLoadEnd = () => setIsLoading(false);
+  const handleBackPress = () => router.navigate(`/manga/${id}`);
   const handleError = () => {
     setError('Failed to load chapter. Please try again.');
     setIsLoading(false);
   };
 
-  const handleNavigationStateChange = async (navState: WebViewNavigation) => {
-    console.log('Current URL:', navState.url);
-    setCurrentUrl(navState.url);
-
+  //@ts-ignore
+  const handleNavigationStateChange = async (navState: WebView.NavigationStateChangeEvent) => {
     if (navState.url !== chapterUrl) {
       const newChapterMatch = navState.url.match(/\/chapter-(\d+)/);
       if (newChapterMatch) {
         const newChapterNumber = newChapterMatch[1];
-        console.log('Navigating to new chapter:', newChapterNumber);
         await markChapterAsRead(id as string, chapterNumber as string);
         router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
       }
@@ -83,7 +72,6 @@ export default function ReadChapterScreen() {
         <>
           <WebView
             ref={webViewRef}
-            key={webViewKey}
             source={{ uri: chapterUrl }}
             style={styles.webView}
             onLoadEnd={handleLoadEnd}
@@ -93,10 +81,7 @@ export default function ReadChapterScreen() {
             domStorageEnabled={true}
             originWhitelist={['*']}
             onNavigationStateChange={handleNavigationStateChange}
-            onMessage={(event) => {
-              console.log('Message from WebView:', event.nativeEvent.data);
-            }}
-            allowsBackForwardNavigationGestures={Platform.OS === 'ios'} 
+            allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
           />
           <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />

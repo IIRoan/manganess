@@ -81,6 +81,8 @@ export default function MangaDetailScreen() {
         try {
             await AsyncStorage.setItem(`bookmark_${id}`, status);
             await AsyncStorage.setItem(`title_${id}`, mangaDetails?.title || '');
+            await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage|| '');
+
 
             const keys = await AsyncStorage.getItem('bookmarkKeys');
             const bookmarkKeys = keys ? JSON.parse(keys) : [];
@@ -170,14 +172,14 @@ export default function MangaDetailScreen() {
             console.error('Error marking all chapters as read:', error);
         }
     };
-    
-// @ts-ignore
-    const GenreTag = ({ genre }) => (
+
+
+    const GenreTag = ({ genre }: { genre: string }) => (
         <View style={styles.genreTag}>
-          <Text style={styles.genreText}>{genre}</Text>
+            <Text style={styles.genreText}>{genre}</Text>
         </View>
-      );
-      
+    );
+
 
     if (isLoading) {
         return (
@@ -273,50 +275,54 @@ export default function MangaDetailScreen() {
                 </View>
             </View>
             <View style={styles.contentContainer}>
-            <View style={styles.infoContainer}>
-    <View style={styles.descriptionContainer}>
-        <Text style={styles.sectionTitle}>Description</Text>
-        <ExpandableText
-            text={mangaDetails.description}
-            initialLines={3}
-            style={styles.description}
-            expandTextStyle={styles.expandText}
-        />
-    </View>
-    <View style={styles.detailsContainer}>
-    <Text style={styles.sectionTitle}>Details</Text>
-    <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Author</Text>
-        <Text style={styles.detailValue}>{mangaDetails.author.join(', ')}</Text>
-    </View>
-    <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Published</Text>
-        <Text style={styles.detailValue}>{mangaDetails.published}</Text>
-    </View>
-    <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Rating</Text>
-        <View style={styles.ratingContainer}>
-            <Text style={styles.rating}>{mangaDetails.rating}</Text>
-            <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
-        </View>
-    </View>
-    <Text style={[styles.detailLabel, { marginTop: 10 }]}>Genres</Text>
-    <View style={styles.genresContainer}>
-        {mangaDetails.genres.map((genre, index) => (
-            <GenreTag key={index} genre={genre} />
-        ))}
-    </View>
-</View>
+                <View style={styles.infoContainer}>
+                    <View style={styles.descriptionContainer}>
+                        <Text style={styles.sectionTitle}>Description</Text>
+                        <ExpandableText
+                            text={mangaDetails.description}
+                            initialLines={3}
+                            style={styles.description}
+                            expandTextStyle={styles.expandText}
+                        />
+                    </View>
+                    <View style={styles.detailsContainer}>
+                        <Text style={styles.sectionTitle}>Details</Text>
+                        <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Author</Text>
+                            <Text style={styles.detailValue}>{mangaDetails.author.join(', ')}</Text>
+                        </View>
+                        <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Published</Text>
+                            <Text style={styles.detailValue}>{mangaDetails.published}</Text>
+                        </View>
+                        <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>Rating</Text>
+                            <View style={styles.ratingContainer}>
+                                <Text style={styles.rating}>{mangaDetails.rating}</Text>
+                                <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
+                            </View>
+                        </View>
+                        <Text style={[styles.detailLabel, { marginTop: 10 }]}>Genres</Text>
+                        <View style={styles.genresContainer}>
+                            {mangaDetails.genres.map((genre, index) => (
+                                <GenreTag key={index} genre={genre} />
+                            ))}
+                        </View>
+                    </View>
 
-</View>
+                </View>
                 <View style={styles.chaptersContainer}>
                     <Text style={styles.sectionTitle}>Chapters</Text>
                     {mangaDetails.chapters.map((chapter, index) => {
                         const isRead = readChapters.includes(chapter.number);
+                        const isLastItem = index === mangaDetails.chapters.length - 1;
                         return (
                             <TouchableOpacity
                                 key={index}
-                                style={styles.chapterItem}
+                                style={[
+                                    styles.chapterItem,
+                                    isLastItem && styles.lastChapterItem
+                                ]}
                                 onPress={() => handleChapterPress(chapter.number)}
                             >
                                 <View style={styles.chapterInfo}>
@@ -530,6 +536,10 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         paddingVertical: 15,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
+    },
+    lastChapterItem: {
+        borderBottomWidth: 0,
+        marginBottom: 70,
     },
     chapterInfo: {
         flex: 1,

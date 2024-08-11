@@ -2,7 +2,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { decode } from 'html-entities';
-import puppeteer from 'puppeteer';
 
 export interface MangaItem {
   id: string;
@@ -38,7 +37,7 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       },
     });
 
-    const html = response.data;
+    const html = response.data as string;
     const mangaRegex = /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
     const matches = [...html.matchAll(mangaRegex)];
 
@@ -60,68 +59,18 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
 };
 
 export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-
   try {
-    await page.goto(`${BASE_URL}/manga/${id}`, { waitUntil: 'networkidle0' });
-
-    // Click the "Read more +" link to open the modal
-    await page.click('a.readmore');
-
-    // Wait for the modal to appear
-    await page.waitForSelector('.modal-content', { visible: true });
-
-    const mangaDetails = await page.evaluate(() => {
-      const title = document.querySelector('h1[itemprop="name"]')?.textContent || 'Unknown Title';
-      const alternativeTitle = document.querySelector('h6')?.textContent || '';
-      const status = document.querySelector('p')?.textContent || 'Unknown Status';
-      
-      // Extract the full description from the modal
-      const descriptionModal = document.querySelector('.modal-content');
-      const description = descriptionModal
-        ? descriptionModal.textContent?.replace(/^\s*|\s*$/g, '').replace(/\s+/g, ' ') || 'No description available'
-        : 'No description available';
-
-      const authorElements = document.querySelectorAll('span:contains("Author:") + span a');
-      const authors = Array.from(authorElements).map(el => el.textContent || '');
-      const published = document.querySelector('span:contains("Published:") + span')?.textContent || 'Unknown';
-      const genreElements = document.querySelectorAll('span:contains("Genres:") + span a');
-      const genres = Array.from(genreElements).map(el => el.textContent || '');
-      const rating = document.querySelector('span.live-score[itemprop="ratingValue"]')?.textContent || 'N/A';
-      const reviewCount = document.querySelector('span[itemprop="reviewCount"]')?.textContent || '0';
-      const bannerImage = document.querySelector('.poster img[itemprop="image"]')?.getAttribute('src') || '';
-
-      const chapterElements = document.querySelectorAll('li.item');
-      const chapters = Array.from(chapterElements).map(el => {
-        const link = el.querySelector('a')?.getAttribute('href') || '';
-        const number = link.match(/chapter-(\d+)/)?.[1] || '';
-        const title = `Chapter ${number}`;
-        const date = el.querySelector('span:last-child')?.textContent || '';
-        return { number, title, date, url: link };
-      });
-
-      return {
-        title,
-        alternativeTitle,
-        status,
-        description,
-        author: authors,
-        published,
-        genres,
-        rating,
-        reviewCount,
-        bannerImage,
-        chapters,
-      };
+    const response = await axios.get(`${BASE_URL}/manga/${id}`, {
+      headers: {
+        'User-Agent': USER_AGENT,
+      },
     });
 
-    return mangaDetails;
+    const html = response.data as string;
+    return parseMangaDetails(html);
   } catch (error) {
     console.error('Error fetching manga details:', error);
     throw error;
-  } finally {
-    await browser.close();
   }
 };
 
@@ -129,10 +78,16 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const title = html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title';
   const alternativeTitle = html.match(/<h6>(.*?)<\/h6>/)?.[1] || '';
   const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
-  const descriptionMatch = html.match(/<div class="description">(.*?)<\/div>/s);
+  
+  
+  const descriptionMatch = html.match(/<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/);
   const description = descriptionMatch
-    ? decode(descriptionMatch[1].replace(/<[^>]*>/g, ''))
+    ? decode(descriptionMatch[1].trim()) || 'No description available'
     : 'No description available';
+
+
+
+
   const authorMatch = html.match(/<span>Author:<\/span>.*?<span>(.*?)<\/span>/s);
   const authors = authorMatch ? authorMatch[1].match(/<a[^>]*>(.*?)<\/a>/g)?.map(a => a.replace(/<[^>]*>/g, '')) || [] : [];
 

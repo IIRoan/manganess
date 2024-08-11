@@ -24,15 +24,13 @@ export default function SettingsScreen() {
       "Clear App Data",
       "Are you sure you want to clear all app data? This action cannot be undone.",
       [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
+        { text: "Cancel", style: "cancel" },
         { 
           text: "OK", 
           onPress: async () => {
             try {
-              await AsyncStorage.clear();
+              const keys = await AsyncStorage.getAllKeys();
+              await AsyncStorage.multiRemove(keys);
               Alert.alert("Success", "All app data has been cleared.");
             } catch (error) {
               console.error('Error clearing AsyncStorage:', error);
@@ -123,6 +121,9 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     
   },
 
+  activeOption: {
+  },
+
   optionText: {
     fontSize: 16,
     marginLeft: 15,
@@ -135,7 +136,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   },
   nessieImage: {
     position: 'absolute',
-    bottom: -20,
+    bottom: 40,
     left: 20,
     width: 80,
     height: 80,

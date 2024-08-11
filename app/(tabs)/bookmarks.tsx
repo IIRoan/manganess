@@ -1,26 +1,62 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
+import { Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+// Types
 interface BookmarkItem {
   id: string;
   title: string;
   status: string;
   lastReadChapter: string;
+  imageUrl: string; 
 }
 
+interface BookmarkSection {
+  title: string;
+  data: BookmarkItem[];
+}
+
+// Helper functions
+const getLastReadChapter = async (mangaId: string): Promise<string> => {
+  try {
+    const key = `manga_${mangaId}_read_chapters`;
+    const readChapters = await AsyncStorage.getItem(key) || '[]';
+    const chaptersArray = JSON.parse(readChapters);
+    
+    const sortedChapters = chaptersArray.sort((a: string, b: string) => parseFloat(a) - parseFloat(b));
+    
+    let lastContinuousChapter = 0;
+    for (let i = 0; i < sortedChapters.length; i++) {
+      if (parseFloat(sortedChapters[i]) === lastContinuousChapter + 1) {
+        lastContinuousChapter = parseFloat(sortedChapters[i]);
+      } else {
+        break;
+      }
+    }
+
+    return lastContinuousChapter > 0 ? `Chapter ${lastContinuousChapter}` : 'Not started';
+  } catch (error) {
+    console.error('Error getting last read chapter:', error);
+    return 'Unknown';
+  }
+};
+
+// Main component
 export default function BookmarksScreen() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState('To Read');
   const router = useRouter();
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
+
 
   const fetchBookmarks = useCallback(async () => {
     setIsLoading(true);
@@ -32,48 +68,18 @@ export default function BookmarksScreen() {
         const id = key.split('_')[1];
         const title = await AsyncStorage.getItem(`title_${id}`);
         const lastReadChapter = await getLastReadChapter(id);
-        return { id, title, status, lastReadChapter };
+        const imageUrl = await AsyncStorage.getItem(`image_${id}`); 
+        return { id, title, status, lastReadChapter, imageUrl };
       });
       const bookmarkItems = await Promise.all(bookmarkPromises);
-      setBookmarks(bookmarkItems.filter((item): item is BookmarkItem => item.title !== null));
+      setBookmarks(bookmarkItems.filter((item): item is BookmarkItem => item.title !== null && item.imageUrl !== null));
     } catch (error) {
       console.error('Error fetching bookmarks:', error);
     } finally {
       setIsLoading(false);
     }
   }, []);
-
-  const getLastReadChapter = async (mangaId: string): Promise<string> => {
-    try {
-      const key = `manga_${mangaId}_read_chapters`;
-      const readChapters = await AsyncStorage.getItem(key) || '[]';
-      const chaptersArray = JSON.parse(readChapters);
-      
-      // Sort chapters numerically
-      const sortedChapters = chaptersArray.sort((a, b) => parseFloat(a) - parseFloat(b));
-      
-      // Find the last continuously read chapter
-      let lastContinuousChapter = 0;
-      for (let i = 0; i < sortedChapters.length; i++) {
-        if (parseFloat(sortedChapters[i]) === lastContinuousChapter + 1) {
-          lastContinuousChapter = parseFloat(sortedChapters[i]);
-        } else {
-          break;
-        }
-      }
-
-      return lastContinuousChapter > 0 ? `Chapter ${lastContinuousChapter}` : 'Not started';
-    } catch (error) {
-      console.error('Error getting last read chapter:', error);
-      return 'Unknown';
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchBookmarks();
-    }, [fetchBookmarks])
-  );
+  useFocusEffect(useCallback(() => { fetchBookmarks(); }, [fetchBookmarks]));
 
   const handleBookmarkPress = (id: string) => {
     router.push(`/manga/${id}`);
@@ -81,37 +87,53 @@ export default function BookmarksScreen() {
 
   const renderBookmarkItem = ({ item }: { item: BookmarkItem }) => (
     <TouchableOpacity style={styles.bookmarkCard} onPress={() => handleBookmarkPress(item.id)}>
+      <Image source={{ uri: item.imageUrl }} style={styles.bookmarkImage} />
       <View style={styles.bookmarkInfo}>
-        <Text style={styles.bookmarkTitle}>{item.title}</Text>
+        <Text style={styles.bookmarkTitle} numberOfLines={2} ellipsizeMode="tail">{item.title}</Text>
         <Text style={styles.lastReadChapter}>Last Read: {item.lastReadChapter}</Text>
       </View>
-      <Ionicons
-        name={
-          item.status === 'To Read'
-            ? 'book-outline'
-            : item.status === 'Reading'
-            ? 'book'
-            : 'checkmark-circle-outline'
-        }
-        size={24}
-        color={colors.primary}
-      />
     </TouchableOpacity>
   );
 
-  const renderBookmarkSection = (title: string, data: BookmarkItem[]) => (
-    <View style={styles.sectionContainer}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <FlatList
-        data={data}
-        renderItem={renderBookmarkItem}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.bookmarkList}
-      />
-    </View>
-  );
+
+  const renderSectionButton = (title: string) => {
+    let iconName: keyof typeof Ionicons.glyphMap;
+    switch (title) {
+      case 'To Read':
+        iconName = 'book-outline';
+        break;
+      case 'Reading':
+        iconName = 'book';
+        break;
+      case 'Read':
+        iconName = 'checkmark-circle-outline';
+        break;
+      default:
+        iconName = 'book-outline';
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.sectionButton, activeSection === title && styles.activeSectionButton]}
+        onPress={() => setActiveSection(title)}
+      >
+        <Ionicons 
+          name={iconName} 
+          size={20} 
+          color={activeSection === title ? colors.card : colors.text} 
+          style={styles.sectionButtonIcon}
+        />
+        <Text style={[
+          styles.sectionButtonText, 
+          activeSection === title && styles.activeSectionButtonText
+        ]}>
+          {title}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+  
+  const filteredBookmarks = bookmarks.filter((item) => item.status === activeSection);
 
   if (isLoading) {
     return (
@@ -121,89 +143,118 @@ export default function BookmarksScreen() {
     );
   }
 
-  const toReadBookmarks = bookmarks.filter((item) => item.status === 'To Read');
-  const readingBookmarks = bookmarks.filter((item) => item.status === 'Reading');
-  const readBookmarks = bookmarks.filter((item) => item.status === 'Read');
-
-  return (
-    <View style={styles.container}>
+  const bookmarkSections: BookmarkSection[] = [
+    { title: 'To Read', data: bookmarks.filter((item) => item.status === 'To Read') },
+    { title: 'Reading', data: bookmarks.filter((item) => item.status === 'Reading') },
+    { title: 'Read', data: bookmarks.filter((item) => item.status === 'Read') },
+  ];
+ return (
+    <SafeAreaView style={styles.container}>
       <Text style={styles.header}>My Bookmarks</Text>
+      <View style={styles.sectionButtonsContainer}>
+        {renderSectionButton('To Read')}
+        {renderSectionButton('Reading')}
+        {renderSectionButton('Read')}
+      </View>
       {bookmarks.length === 0 ? (
         <Text style={styles.emptyText}>No bookmarks found.</Text>
       ) : (
         <FlatList
-          data={[
-            { title: 'To Read', data: toReadBookmarks },
-            { title: 'Reading', data: readingBookmarks },
-            { title: 'Read', data: readBookmarks },
-          ]}
-          renderItem={({ item }) => renderBookmarkSection(item.title, item.data)}
-          keyExtractor={(item) => item.title}
+          data={filteredBookmarks}
+          renderItem={renderBookmarkItem}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.contentContainer}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
-
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    backgroundColor: colors.background,
+  },
+  header: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.text,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  sectionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  sectionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     backgroundColor: colors.card,
+  },
+  activeSectionButton: {
+    backgroundColor: colors.primary,
+  },
+  sectionButtonIcon: {
+    marginRight: 8,
+  },
+  sectionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  activeSectionButtonText: {
+    color: colors.card,
+  },
+  contentContainer: {
+    paddingHorizontal: 10,
+    paddingBottom: 80,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.card,
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    color: colors.text,
-    marginTop: 40,
+    backgroundColor: colors.background,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 40,
     color: colors.text,
   },
-  sectionContainer: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    color: colors.text,
-  },
-  bookmarkList: {
-    paddingRight: 16,
+  columnWrapper: {
+    justifyContent: 'space-between',
   },
   bookmarkCard: {
+    width: Dimensions.get('window').width / 2 - 15,
+    marginBottom: 15,
     borderRadius: 12,
-    padding: 16,
-    marginRight: 12,
-    width: 220,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    overflow: 'hidden',
+    backgroundColor: colors.card,
+    elevation: 3,
     shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 }, 
-
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  bookmarkImage: {
+    width: '100%',
+    height: 200,
+    resizeMode: 'cover',
   },
   bookmarkInfo: {
-    flex: 1,
-    marginRight: 8,
+    padding: 10,
   },
   bookmarkTitle: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.text,
     marginBottom: 4,
   },
@@ -211,4 +262,5 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     fontSize: 12,
     color: colors.tabIconDefault,
   },
+  
 });
