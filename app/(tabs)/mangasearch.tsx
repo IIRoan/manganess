@@ -41,6 +41,7 @@ export default function MangaSearchScreen() {
 
   const handleMangaPress = useCallback((item: MangaItem) => {
     router.navigate({
+      // @ts-ignore
       pathname: `/manga/${item.id}`,
       params: {
         title: item.title,
@@ -48,6 +49,7 @@ export default function MangaSearchScreen() {
       }
     });
   }, [router]);
+  
 
   const renderMangaCard = useCallback(({ item }: { item: MangaItem }) => {
     return (
@@ -141,7 +143,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     alignItems: 'center',
     marginVertical: 10,
     borderRadius: 25,
-    marginTop: 25,
+    marginTop: 30,
     paddingHorizontal: 15,
     height: 50,
     backgroundColor: colors.card,

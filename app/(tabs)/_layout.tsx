@@ -1,9 +1,13 @@
 import { Tabs, usePathname } from 'expo-router';
 import React from 'react';
-import { useColorScheme, View, StyleSheet, Platform } from 'react-native';
-import { TabBarIcon } from '@/components/navigation/TabBarIcon';
+import { useColorScheme, View, StyleSheet, Platform, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
+
+const { width } = Dimensions.get('window');
+const TAB_BAR_WIDTH = width * 0.9;
+const TAB_WIDTH = TAB_BAR_WIDTH / 4;
 
 export default function TabLayout() {
   const { theme } = useTheme();
@@ -20,93 +24,94 @@ export default function TabLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.card }}>
       <Tabs
-        backBehavior="history"
-        screenOptions={{
-          tabBarActiveTintColor: colors.tint,
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ focused, color, size }) => {
+            let iconName;
+
+            if (route.name === 'index') {
+              iconName = focused ? 'home' : 'home-outline';
+            } else if (route.name === 'mangasearch') {
+              iconName = focused ? 'search' : 'search-outline';
+            } else if (route.name === 'bookmarks') {
+              iconName = focused ? 'bookmark' : 'bookmark-outline';
+            } else if (route.name === 'settings') {
+              iconName = focused ? 'settings' : 'settings-outline';
+            }
+
+            return (
+              <View style={styles.iconContainer}>
+                <Ionicons name={iconName as any} size={size} color={color} />
+                {focused && <View style={[styles.activeIndicator, { backgroundColor: colors.primary }]} />}
+              </View>
+            );
+          },
+          tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.tabIconDefault,
           tabBarStyle: {
+            position: 'absolute',
+            bottom: 25,
+            left: (width - TAB_BAR_WIDTH) / 2,
+            right: (width - TAB_BAR_WIDTH) / 2,
             backgroundColor: colors.card,
-            borderTopColor: colors.border,
+            borderRadius: 25,
             height: 60,
-            marginBottom: 20,
+            width: TAB_BAR_WIDTH,
             paddingBottom: 5,
             paddingTop: 5,
             display: shouldShowTabBar() ? 'flex' : 'none',
+            ...styles.tabBarShadow,
           },
           tabBarItemStyle: {
-            paddingTop: 5,
+            height: 50,
+            width: TAB_WIDTH,
           },
           tabBarLabelStyle: {
-            fontWeight: '500',
-            fontSize: 11,
+            fontWeight: '600',
+            fontSize: 10,
+            marginTop: 5,
           },
           headerStyle: {
             backgroundColor: colors.card,
           },
           headerTintColor: colors.text,
           headerShown: false,
-        }}
+        })}
       >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Home',
-            tabBarIcon: ({ color, focused }) => (
-              <TabBarIcon name={focused ? 'home' : 'home-outline'} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="mangasearch"
-          options={{
-            title: 'Search',
-            tabBarIcon: ({ color, focused }) => (
-              <TabBarIcon name={focused ? 'search' : 'search-outline'} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="bookmarks"
-          options={{
-            title: 'Bookmarks',
-            tabBarIcon: ({ color, focused }) => (
-              <TabBarIcon name={focused ? 'bookmark' : 'bookmark-outline'} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="settings"
-          options={{
-            title: 'Settings',
-            tabBarIcon: ({ color, focused }) => (
-              <TabBarIcon name={focused ? 'settings' : 'settings-outline'} color={color} />
-            ),
-          }}
-        />
+        <Tabs.Screen name="index" options={{ title: 'Home' }} />
+        <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
+        <Tabs.Screen name="bookmarks" options={{ title: 'Bookmarks' }} />
+        <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+        
         {/* Hide all other routes */}
-        <Tabs.Screen
-          name="manga/[id]"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="manga/[id]/chapter/[chapterNumber]"
-          options={{
-            href: null,
-          }}
-        />
+        <Tabs.Screen name="manga/[id]" options={{ href: null }} />
+        <Tabs.Screen name="manga/[id]/chapter/[chapterNumber]" options={{ href: null }} />
       </Tabs>
-      <View
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 25,
-          backgroundColor: colors.card,
-        }}
-      />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBarShadow: {
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  iconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: -5,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+  },
+});

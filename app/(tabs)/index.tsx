@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Image, Text, TouchableOpacity, Dimensions, FlatList, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Image, Text, TouchableOpacity, Dimensions, FlatList, ActivityIndicator, SafeAreaView, ScrollView, StatusBar } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import axios from 'axios';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -40,7 +41,7 @@ export default function HomeScreen() {
         timeout: 10000,
       });
 
-      const html = response.data;
+      const html = response.data as string;
 
       // Check if the response contains Cloudflare WAF challenge
       if (html.includes('cf-browser-verification') || html.includes('cf_captcha_kind')) {
@@ -77,115 +78,108 @@ export default function HomeScreen() {
     router.navigate(`/manga/${item.id}`);
   };
 
+
   const renderMangaItem = ({ item }: { item: MangaItem }) => (
     <TouchableOpacity style={styles.mangaItem} onPress={() => handleMangaPress(item)}>
       <Image source={{ uri: item.imageUrl }} style={styles.mangaImage} />
-      <View style={styles.mangaRankContainer}>
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.8)']}
+        style={styles.mangaGradient}
+      >
         <Text style={styles.mangaRank}>#{item.rank}</Text>
-      </View>
-      <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
+      </LinearGradient>
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Image
-          source={require('@/assets/images/nessiehigh.png')}
-          style={styles.bannerImage}
-        />
-        <View style={styles.overlay} />
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>MangaNess</Text>
-          <Text style={styles.subtitle}>Discover and read your favorite manga</Text>
-        </View>
-      </View>
-      <View style={styles.contentContainer}>
-        <Text style={styles.sectionTitle}>Top 10 Most Viewed Manga</Text>
-        {isLoading ? (
-          <ActivityIndicator size="large" color={colors.primary} />
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={fetchMostViewedManga}>
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <FlatList
-            data={mostViewedManga}
-            renderItem={renderMangaItem}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.mangaList}
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" />
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
+        <LinearGradient
+          colors={[colors.primary, colors.background]}
+          style={styles.headerContainer}
+        >
+          <Image
+            source={require('@/assets/images/nessiehigh.png')}
+            style={styles.bannerImage}
           />
-        )}
-        <TouchableOpacity style={styles.button} onPress={() => router.navigate('/mangasearch')}>
-          <Text style={styles.buttonText}>Explore More</Text>
-          <Ionicons name="arrow-forward" size={24} color="#fff" style={styles.buttonIcon} />
-        </TouchableOpacity>
-      </View>
-    </View>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>MangaNess</Text>
+            <Text style={styles.subtitle}>Discover and read your favorite manga</Text>
+          </View>
+        </LinearGradient>
+        <View style={styles.contentContainer}>
+          <Text style={styles.sectionTitle}>Top 10 Most Viewed Manga</Text>
+          {isLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={fetchMostViewedManga}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={mostViewedManga}
+              renderItem={renderMangaItem}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.mangaList}
+            />
+          )}
+        </View>
+      </ScrollView>
+      <TouchableOpacity style={styles.exploreButton} onPress={() => router.navigate('/mangasearch')}>
+        <Text style={styles.exploreButtonText}>Explore More</Text>
+        <Ionicons name="arrow-forward" size={24} color="#fff" />
+      </TouchableOpacity>
+    </SafeAreaView>
   );
 }
 
+
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: colors.card,
+    backgroundColor: colors.background,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    flexGrow: 1,
   },
   headerContainer: {
-    height: 350,
-    position: 'relative',
-    overflow: 'hidden',
+    height: 250,
+    justifyContent: 'flex-end',
+    padding: 20,
   },
   bannerImage: {
     position: 'absolute',
-    width: '150%',
-    height: '160%',
-    resizeMode: 'cover',
-    top: '15%',
-    left: '-5%',
-    transform: [
-      { rotate: '40deg' },
-      { translateX: -150 },
-      { translateY: 50 },
-    ],
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    width: '100%',
+    height: '100%',
+    opacity: 0.6,
   },
   headerContent: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
+    marginBottom: 20,
   },
   title: {
     fontSize: 36,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 10,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    marginBottom: 5,
   },
   subtitle: {
-    fontSize: 18,
-    color: '#e0e0e0',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    fontSize: 16,
+    color: '#fff',
+    opacity: 0.8,
   },
   contentContainer: {
     padding: 20,
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -20,
-    flex: 1,
+    backgroundColor: colors.background,
   },
   sectionTitle: {
     fontSize: 22,
@@ -194,53 +188,55 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     color: colors.text,
   },
   mangaList: {
-    paddingBottom: 10,
+    paddingRight: 20,
   },
   mangaItem: {
-    width: 120,
+    width: 140,
+    height: 210,
     marginRight: 15,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
   mangaImage: {
-    width: 120,
-    height: 180,
-    borderRadius: 8,
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
-  mangaRankContainer: {
+  mangaGradient: {
     position: 'absolute',
-    top: 5,
-    left: 5,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 5,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    justifyContent: 'flex-end',
+    padding: 10,
   },
   mangaRank: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 12,
+    fontSize: 14,
+    marginBottom: 5,
   },
   mangaTitle: {
-    marginTop: 8,
+    color: '#fff',
     fontSize: 14,
-    color: colors.text,
-    textAlign: 'center',
+    fontWeight: 'bold',
   },
-  button: {
+  exploreButton: {
     backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 15,
+    marginHorizontal: 20,
+    marginBottom: 120,
     borderRadius: 10,
-    marginTop: 20,
   },
-  buttonText: {
+  exploreButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
     marginRight: 10,
-  },
-  buttonIcon: {
-    marginLeft: 5,
   },
   errorContainer: {
     alignItems: 'center',
