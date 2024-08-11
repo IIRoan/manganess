@@ -1,55 +1,83 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, TextStyle, Platform, TextInput, LayoutAnimation } from 'react-native';
 
-const ExpandableText = ({ text, initialLines, style, expandTextStyle }) => {
-  const [textShown, setTextShown] = useState(false);
-  const [lengthMore, setLengthMore] = useState(false);
+interface ExpandableTextProps {
+  text: string;
+  initialLines?: number;
+  style?: TextStyle;
+  expandedStyle?: TextStyle;
+}
 
-  const toggleNumberOfLines = () => {
-    setTextShown(!textShown);
-  };
+const ExpandableText: React.FC<ExpandableTextProps> = ({ 
+  text, 
+  initialLines = 3, 
+  style,
+  expandedStyle,
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
 
-  const onTextLayout = useCallback(e => {
+  const onTextLayout = useCallback((e: any) => {
     if (e.nativeEvent.lines.length > initialLines) {
-      setLengthMore(true);
+      setIsTruncated(true);
     }
   }, [initialLines]);
 
+  const toggleExpand = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsExpanded((prev) => !prev);
+  }, []);
+
+  const TextComponent = useMemo(() => {
+    return Text;
+  }, [text]);
+
+  const textProps = useMemo(() => {
+    if (TextComponent === TextInput) {
+      return {
+        multiline: true,
+        editable: false,
+        scrollEnabled: false,
+      };
+    }
+    return {
+      numberOfLines: isExpanded ? undefined : initialLines,
+      onTextLayout: onTextLayout,
+    };
+  }, [TextComponent, isExpanded, initialLines, onTextLayout]);
+
   return (
-    <View>
-      <Text
-        onTextLayout={onTextLayout}
-        numberOfLines={textShown ? undefined : initialLines}
-        style={style}
+    <TouchableOpacity 
+      onPress={toggleExpand}
+      activeOpacity={0.7}
+      style={styles.container}
+    >
+      <TextComponent
+        {...textProps}
+        style={[
+          styles.text, 
+          style,
+          isExpanded && expandedStyle,
+          isTruncated && !isExpanded && styles.truncatedText
+        ]}
       >
         {text}
-      </Text>
-      
-      {lengthMore && (
-        <TouchableOpacity onPress={toggleNumberOfLines} style={styles.expandButton}>
-          <Text style={[styles.expandText, expandTextStyle]}>
-            {textShown ? 'Show less' : 'Show more'}
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
+      </TextComponent>
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  expandButton: {
-    position: 'absolute',
-    right: 0,
-    bottom: -30,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+  container: {
+    overflow: 'hidden',
   },
-  expandText: {
-    color: '#fff',
-    fontWeight: '600',
+  text: {
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  truncatedText: {
+    marginBottom: 4, // Add some space for the fade effect
   },
 });
 
-export default ExpandableText;
+export default React.memo(ExpandableText);

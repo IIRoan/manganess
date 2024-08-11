@@ -82,6 +82,8 @@ export default function ReadChapterScreen() {
             originWhitelist={['*']}
             onNavigationStateChange={handleNavigationStateChange}
             allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
+            decelerationRate="normal"
+            nestedScrollEnabled={true}
           />
           <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />

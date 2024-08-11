@@ -1,11 +1,27 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, TextInput, FlatList, StyleSheet, Text, useColorScheme, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  TextInput, 
+  FlatList, 
+  StyleSheet, 
+  Text, 
+  useColorScheme, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  Platform, 
+  StatusBar, 
+  Dimensions,
+  Keyboard
+} from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { searchManga, MangaItem } from '@/services/mangaFireService';
+
+
+const { height, width } = Dimensions.get('window');
 
 export default function MangaSearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,11 +80,17 @@ export default function MangaSearchScreen() {
 
   const keyExtractor = useCallback((item: MangaItem) => item.id, []);
 
+  
+  const handleScrollBegin = () => {
+    Keyboard.dismiss();
+  };
+
   return (
-    <>
+    <SafeAreaView style={styles.safeArea}>
       <Stack.Screen options={{
         title: 'Manga Search',
         headerTintColor: colors.text,
+        headerShown: false, // Hide the header
       }} />
       <View style={styles.container}>
         <TouchableOpacity 
@@ -126,13 +148,21 @@ export default function MangaSearchScreen() {
             ) : null
           }
           extraData={searchResults}
+          onScrollBeginDrag={handleScrollBegin}
+          keyboardShouldPersistTaps="handled" 
         />
       </View>
-    </>
+      
+      </SafeAreaView>
   );
 }
 
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.card,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
   container: {
     flex: 1,
     padding: 16,
@@ -141,17 +171,20 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 10,
+    marginBottom: 10,
     borderRadius: 25,
-    marginTop: 30,
     paddingHorizontal: 15,
-    height: 50,
+    height: height * 0.06,
+    maxHeight: 50,
+    minHeight: 40,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 }, 
-
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   searchIcon: {
     marginRight: 10,

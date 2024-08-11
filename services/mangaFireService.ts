@@ -81,10 +81,17 @@ const parseMangaDetails = (html: string): MangaDetails => {
   
   
   const descriptionMatch = html.match(/<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/);
-  const description = descriptionMatch
+  let description = descriptionMatch
     ? decode(descriptionMatch[1].trim()) || 'No description available'
     : 'No description available';
 
+  // Process HTML tags in the description
+  description = description
+    .replace(/<br\s*\/?>/gi, '\n') // Replace <br> tags with newlines
+    .replace(/<p>/gi, '') // Remove opening <p> tags
+    .replace(/<\/p>/gi, '\n\n') // Replace closing </p> tags with double newlines
+    .replace(/<(?:.|\n)*?>/gm, '') // Remove any remaining HTML tags
+    .trim(); // Trim any leading or trailing whitespace
 
 
 

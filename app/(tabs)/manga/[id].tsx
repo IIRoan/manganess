@@ -81,7 +81,7 @@ export default function MangaDetailScreen() {
         try {
             await AsyncStorage.setItem(`bookmark_${id}`, status);
             await AsyncStorage.setItem(`title_${id}`, mangaDetails?.title || '');
-            await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage|| '');
+            await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage || '');
 
 
             const keys = await AsyncStorage.getItem('bookmarkKeys');
@@ -159,8 +159,9 @@ export default function MangaDetailScreen() {
     };
 
     const handleBackPress = () => {
-        router.navigate(`/mangasearch`);
+        router.back();
     };
+      
 
     const markAllChaptersAsRead = async () => {
         try {
@@ -265,7 +266,6 @@ export default function MangaDetailScreen() {
                                 text={mangaDetails.alternativeTitle}
                                 initialLines={1}
                                 style={styles.alternativeTitle}
-                                expandTextStyle={[styles.expandText]}
                             />
                         </View>
                     )}
@@ -282,8 +282,8 @@ export default function MangaDetailScreen() {
                             text={mangaDetails.description}
                             initialLines={3}
                             style={styles.description}
-                            expandTextStyle={styles.expandText}
                         />
+
                     </View>
                     <View style={styles.detailsContainer}>
                         <Text style={styles.sectionTitle}>Details</Text>
@@ -581,4 +581,5 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         color: colors.text,
         fontSize: 16,
     },
+
 });
