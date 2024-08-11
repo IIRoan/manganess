@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Image, Text, TouchableOpacity, FlatList, ActivityIndicator, SafeAreaView, StatusBar, ScrollView } from 'react-native';
+import { StyleSheet, Animated, View, Image, Text, TouchableOpacity, FlatList, ActivityIndicator, SafeAreaView, StatusBar, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import axios from 'axios';
-
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNessieAnimation } from './NessieAnimation';
 
 interface MangaItem {
   id: string;
@@ -25,7 +26,8 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
-
+  const { nessieX, nessieY, bobY } = useNessieAnimation();
+  
   useEffect(() => {
     fetchMangaData();
   }, []);
@@ -105,30 +107,29 @@ export default function HomeScreen() {
     return [];
   };
 
-
   const renderMangaItem = ({ item }: { item: MangaItem }) => (
-    <TouchableOpacity style={styles.mangaItem} onPress={() => router.navigate(`/manga/${item.id}`)}>
+    <TouchableOpacity 
+      style={styles.mangaItem} 
+      onPress={() => router.navigate(`/manga/${item.id}`)}
+    >
       <Image source={{ uri: item.imageUrl }} style={styles.mangaImage} />
-      <View style={styles.mangaInfo}>
-        {item.rank && <Text style={styles.mangaRank}>#{item.rank}</Text>}
-        <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
-      </View>
+      <LinearGradient
+        colors={['transparent', `${colors.background}E6`]}
+        style={styles.infoContainer}
+      >
+        <View style={styles.titleContainer}>
+          <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
+        </View>
+        {item.rank && (
+          <Text style={styles.rankText}>#{item.rank}</Text>
+        )}
+      </LinearGradient>
     </TouchableOpacity>
   );
-
+  
   const renderSection = (title: string, data: MangaItem[] , renderItem: any) => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {title === 'Latest Updates' ? (
-        <FlatList
-          data={data}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={false}
-          contentContainerStyle={styles.latestUpdatesList}
-        />
-      ) : (
         <FlatList
           data={data}
           renderItem={renderItem}
@@ -137,7 +138,6 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.mangaList}
         />
-      )}
     </View>
   );
 
@@ -146,7 +146,21 @@ export default function HomeScreen() {
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>MangaNess</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>MangaNess</Text>
+            <Animated.Image
+              source={require('@/assets/images/nessie.png')}
+              style={[
+                styles.nessieImage,
+                {
+                  transform: [
+                    { translateX: nessieX },
+                    { translateY: Animated.add(nessieY, bobY) },
+                  ],
+                },
+              ]}
+            />
+          </View>
           <TouchableOpacity onPress={() => router.navigate('/mangasearch')}>
             <Ionicons name="search" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -188,7 +202,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: colors.card,
+    backgroundColor: colors.background,
   },
   headerTitle: {
     fontSize: 24,
@@ -209,38 +223,55 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     color: colors.text,
   },
   mangaList: {
-    paddingLeft: 20,
+    paddingLeft: 15,
   },
   mangaItem: {
-    width: 140,
+    width: 160,
+    height: 260,
     marginRight: 15,
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: colors.card,
-    elevation: 3,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+
   },
   mangaImage: {
     width: '100%',
-    height: 200,
+    height: '100%',
     resizeMode: 'cover',
   },
-  mangaInfo: {
+  infoContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
     padding: 10,
+    backgroundColor: `${colors.background}CC`,
   },
-  mangaRank: {
-    color: colors.primary,
-    fontWeight: 'bold',
-    fontSize: 14,
-    marginBottom: 5,
+  titleContainer: {
+    flex: 1,
+    marginRight: 10,
   },
   mangaTitle: {
     color: colors.text,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
+
+  },
+  rankContainer: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rankText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   loader: {
     flex: 1,
@@ -309,5 +340,18 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   latestUpdateChapter: {
     color: colors.text,
     fontSize: 14,
+  },
+  row: {
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  nessieImage: {
+    width: 30,
+    height: 30,
+    marginLeft: 10,
   },
 });

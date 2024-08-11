@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+
 export default function SettingsScreen() {
   const { theme, setTheme } = useTheme();
   const systemColorScheme = useColorScheme();

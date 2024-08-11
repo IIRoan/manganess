@@ -76,6 +76,7 @@ export default function TabLayout() {
           headerTintColor: colors.text,
           headerShown: false,
         })}
+          backBehavior="history"
       >
         <Tabs.Screen name="index" options={{ title: 'Home' }} />
         <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
