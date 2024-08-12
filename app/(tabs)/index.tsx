@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNessieAnimation } from './NessieAnimation';
+import { useNessieAnimation } from '@/components/NessieAnimation';
 
 interface MangaItem {
   id: string;
