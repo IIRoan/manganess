@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, useColorScheme } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect, useNavigation, usePathname } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { BackHandler } from 'react-native';
@@ -12,7 +12,7 @@ import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
-
+const MAX_HISTORY_LENGTH = 10; // Adjust as needed
 
 export default function MangaDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -28,6 +28,8 @@ export default function MangaDetailScreen() {
     const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
     const [isAlertVisible, setIsAlertVisible] = useState(false);
     const styles = getStyles(colors);
+    const navigation = useNavigation();
+    const pathname = usePathname();
 
     useEffect(() => {
         fetchMangaDetailsData();
@@ -158,10 +160,60 @@ export default function MangaDetailScreen() {
         router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
     };
 
-    const handleBackPress = () => {
-        router.back();
+    const isExcludedRoute = (path: string) => {
+        return path.match(/^\/manga\/[^\/]+$/) || path.match(/^\/manga\/.*\/chapter\/.*$/);
     };
-      
+
+    const updateHistory = useCallback(async (newPath: string) => {
+        try {
+            const historyString = await AsyncStorage.getItem('navigationHistory');
+            let history = historyString ? JSON.parse(historyString) : [];
+
+            // Filter out manga detail and chapter routes
+            history = history.filter((path: string) => !isExcludedRoute(path));
+            
+            if (!isExcludedRoute(newPath)) {
+                history.push(newPath);
+            }
+
+            // Keep only the last MAX_HISTORY_LENGTH items
+            if (history.length > MAX_HISTORY_LENGTH) {
+                history = history.slice(-MAX_HISTORY_LENGTH);
+            }
+
+            await AsyncStorage.setItem('navigationHistory', JSON.stringify(history));
+        } catch (error) {
+            console.error('Error updating navigation history:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        updateHistory(pathname);
+    }, [pathname, updateHistory]);
+
+    const handleBackPress = useCallback(async () => {
+        try {
+            const historyString = await AsyncStorage.getItem('navigationHistory');
+            let history = historyString ? JSON.parse(historyString) : [];
+
+            let previousRoute = '/mangasearch';
+
+            while (history.length > 0) {
+                const lastRoute = history.pop();
+                if (!isExcludedRoute(lastRoute)) {
+                    previousRoute = lastRoute;
+                    break;
+                }
+            }
+
+            await AsyncStorage.setItem('navigationHistory', JSON.stringify(history));
+            
+            router.replace(previousRoute as any);
+
+        } catch (error) {
+            router.replace('/mangasearch');
+        }
+    }, [router]);
 
     const markAllChaptersAsRead = async () => {
         try {
