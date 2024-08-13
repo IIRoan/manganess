@@ -20,7 +20,7 @@
     "android": {
       "userInterfaceStyle": "automatic",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/nessiehigh.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.iroan.manganess"
