@@ -75,8 +75,8 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
 };
 
 const parseMangaDetails = (html: string): MangaDetails => {
-  const title = html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title';
-  const alternativeTitle = html.match(/<h6>(.*?)<\/h6>/)?.[1] || '';
+  const title = decode(html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title');
+  const alternativeTitle = decode(html.match(/<h6>(.*?)<\/h6>/)?.[1] || '');
   const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
   
   
