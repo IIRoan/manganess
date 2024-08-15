@@ -12,7 +12,7 @@ import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
-const MAX_HISTORY_LENGTH = 10; 
+const MAX_HISTORY_LENGTH = 10;
 
 export default function MangaDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -77,23 +77,23 @@ export default function MangaDetailScreen() {
             await AsyncStorage.setItem(`bookmark_${id}`, status);
             await AsyncStorage.setItem(`title_${id}`, mangaDetails?.title || '');
             await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage || '');
-    
+
             const keys = await AsyncStorage.getItem('bookmarkKeys');
             const bookmarkKeys = keys ? JSON.parse(keys) : [];
             if (!bookmarkKeys.includes(`bookmark_${id}`)) {
                 bookmarkKeys.push(`bookmark_${id}`);
                 await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
             }
-    
+
             setBookmarkStatus(status);
             setIsAlertVisible(false);
-    
+
             if (status === "Reading" && mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
                 const lastReleasedChapter = mangaDetails.chapters[0].number;
                 await AsyncStorage.setItem(`last_notified_chapter_${id}`, lastReleasedChapter);
                 console.log(`Set last notified chapter for ${id} to ${lastReleasedChapter}`);
             }
-    
+
             if (status === "Read") {
                 Alert.alert(
                     "Mark All Chapters as Read",
@@ -114,8 +114,8 @@ export default function MangaDetailScreen() {
             console.error('Error saving bookmark:', error);
         }
     };
-    
-    
+
+
 
     const removeBookmark = async () => {
         try {
@@ -138,18 +138,18 @@ export default function MangaDetailScreen() {
 
     const fetchReadChapters = useCallback(async () => {
         try {
-          setReadChapters([]); // Clear previous read chapters
-          const key = `manga_${id}_read_chapters`;
-          const storedChapters = await AsyncStorage.getItem(key);
-          if (storedChapters) {
-            const parsedChapters = JSON.parse(storedChapters);
-            setReadChapters(parsedChapters);
-          }
+            setReadChapters([]); // Clear previous read chapters
+            const key = `manga_${id}_read_chapters`;
+            const storedChapters = await AsyncStorage.getItem(key);
+            if (storedChapters) {
+                const parsedChapters = JSON.parse(storedChapters);
+                setReadChapters(parsedChapters);
+            }
         } catch (error) {
-          console.error('Error fetching read chapters:', error);
+            console.error('Error fetching read chapters:', error);
         }
-      }, [id]);
-      
+    }, [id]);
+
 
     useFocusEffect(
         useCallback(() => {
@@ -160,6 +160,35 @@ export default function MangaDetailScreen() {
     const handleChapterPress = (chapterNumber: string) => {
         const chapterUrl = getChapterUrl(id as string, chapterNumber);
         router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
+    };
+
+    const handleChapterLongPress = async (chapterNumber: string) => {
+        const isRead = readChapters.includes(chapterNumber);
+        if (isRead) {
+            Alert.alert(
+                "Mark as Unread",
+                `Do you want to mark chapter ${chapterNumber} as unread?`,
+                [
+                    {
+                        text: "Cancel",
+                        style: "cancel"
+                    },
+                    {
+                        text: "Yes",
+                        onPress: async () => {
+                            try {
+                                const key = `manga_${id}_read_chapters`;
+                                const updatedReadChapters = readChapters.filter(ch => ch !== chapterNumber);
+                                await AsyncStorage.setItem(key, JSON.stringify(updatedReadChapters));
+                                setReadChapters(updatedReadChapters);
+                            } catch (error) {
+                                console.error('Error marking chapter as unread:', error);
+                            }
+                        }
+                    }
+                ]
+            );
+        }
     };
 
     const isExcludedRoute = (path: string) => {
@@ -173,7 +202,7 @@ export default function MangaDetailScreen() {
 
             // Filter out manga detail and chapter routes
             history = history.filter((path: string) => !isExcludedRoute(path));
-            
+
             if (!isExcludedRoute(newPath)) {
                 history.push(newPath);
             }
@@ -197,8 +226,8 @@ export default function MangaDetailScreen() {
         fetchMangaDetailsData();
         fetchReadChapters();
         fetchBookmarkStatus();
-      }, [id, fetchReadChapters]);
-      
+    }, [id, fetchReadChapters]);
+
 
     const handleBackPress = useCallback(async () => {
         try {
@@ -216,7 +245,7 @@ export default function MangaDetailScreen() {
             }
 
             await AsyncStorage.setItem('navigationHistory', JSON.stringify(history));
-            
+
             router.replace(previousRoute as any);
 
         } catch (error) {
@@ -238,7 +267,7 @@ export default function MangaDetailScreen() {
             console.error('Error marking all chapters as read:', error);
         }
     };
-    
+
 
 
     const GenreTag = ({ genre }: { genre: string }) => (
@@ -390,6 +419,7 @@ export default function MangaDetailScreen() {
                                     isLastItem && styles.lastChapterItem
                                 ]}
                                 onPress={() => handleChapterPress(chapter.number)}
+                                onLongPress={() => handleChapterLongPress(chapter.number)}
                             >
                                 <View style={styles.chapterInfo}>
                                     <Text style={[styles.chapterTitle, isRead && styles.readChapterTitle]}>

@@ -112,7 +112,6 @@ export default function TabLayout() {
         />
         
         {/* Hide all other routes */}
-        <Tabs.Screen name="Debug" options={{ href: null }} />
         <Tabs.Screen name="manga/[id]" options={{ href: null }} />
         <Tabs.Screen name="manga/[id]/chapter/[chapterNumber]" options={{ href: null }} />
       </Tabs>
