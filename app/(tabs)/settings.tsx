@@ -12,7 +12,7 @@ export default function SettingsScreen() {
   const colorScheme = theme === 'system' ? systemColorScheme : theme;
   const colors = Colors[colorScheme as keyof typeof Colors] || Colors.light;
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-
+  const [enableDebugTab, setEnableDebugTab] = useState(false);
   const styles = getStyles(colors);
 
   const themeOptions: Array<{ label: string; value: Theme; icon: string }> = [
@@ -24,7 +24,30 @@ export default function SettingsScreen() {
   useEffect(() => {
     // Load the current notification state when the component mounts
     loadNotificationState();
+    loadEnableDebugTabSetting();
   }, []);
+
+  const loadEnableDebugTabSetting = async () => {
+    try {
+      const value = await AsyncStorage.getItem('enableDebugTab');
+      console.log('Loaded enableDebugTab:', value);
+      setEnableDebugTab(value === 'true');
+    } catch (error) {
+      console.error('Error loading enable debug tab setting:', error);
+    }
+  };
+  
+  const toggleEnableDebugTab = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem('enableDebugTab', value.toString());
+      console.log('Saved enableDebugTab:', value.toString());
+      setEnableDebugTab(value);
+    } catch (error) {
+      console.error('Error toggling enable debug tab setting:', error);
+    }
+  };
+  
+
 
   const loadNotificationState = async () => {
     try {
@@ -57,8 +80,8 @@ export default function SettingsScreen() {
       "Are you sure you want to clear all app data? This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "OK", 
+        {
+          text: "OK",
           onPress: async () => {
             try {
               const keys = await AsyncStorage.getAllKeys();
@@ -78,7 +101,7 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
         <Text style={styles.title}>Settings</Text>
-        
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Theme</Text>
           {themeOptions.map((option) => (
@@ -87,10 +110,10 @@ export default function SettingsScreen() {
               style={[styles.option, theme === option.value && styles.activeOption]}
               onPress={() => setTheme(option.value)}
             >
-              <Ionicons 
+              <Ionicons
                 name={option.icon as any}
-                size={24} 
-                color={theme === option.value ? colors.primary : colors.text} 
+                size={24}
+                color={theme === option.value ? colors.primary : colors.text}
               />
               <Text style={[styles.optionText, theme === option.value && styles.activeOptionText]}>
                 {option.label}
@@ -105,10 +128,10 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notifications</Text>
           <View style={styles.option}>
-            <Ionicons 
+            <Ionicons
               name="notifications-outline"
-              size={24} 
-              color={colors.text} 
+              size={24}
+              color={colors.text}
             />
             <Text style={styles.optionText}>Enable Notifications</Text>
             <Switch
@@ -127,6 +150,27 @@ export default function SettingsScreen() {
             <Text style={styles.clearDataText}>Clear App Data</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Developer Options</Text>
+          <View style={styles.option}>
+            <Ionicons
+              name="bug-outline"
+              size={24}
+              color={colors.text}
+            />
+            <Text style={styles.optionText}>Enable Debug Tab</Text>
+            <Switch
+              value={enableDebugTab}
+              onValueChange={toggleEnableDebugTab}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={enableDebugTab ? colors.card : colors.text}
+            />
+          </View>
+          <Text style={styles.optionText}>You need to restart the app for this setting to take effect.</Text>
+
+        </View>
+        
       </ScrollView>
       <Image
         source={require('@/assets/images/nessie.png')}
@@ -141,6 +185,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.card,
+    paddingBottom: 80,
   },
   scrollView: {
     flex: 1,
@@ -168,7 +213,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    
+
   },
 
   activeOption: {

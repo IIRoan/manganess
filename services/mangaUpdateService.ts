@@ -42,11 +42,6 @@ const getBookmarks = async (): Promise<Bookmark[]> => {
 
 const checkForUpdates = async () => {
     try {
-      if (!(await isNotificationsEnabled())) {
-        console.log('[DEBUG] Notifications are disabled. Skipping update check.');
-        return;
-      }
-  
       console.log('[DEBUG] Checking for updates');
       const readingManga = await getBookmarks();
       console.log(`[DEBUG] Found ${readingManga.length} manga in 'Reading' status`);
@@ -54,19 +49,14 @@ const checkForUpdates = async () => {
   
       for (const manga of readingManga) {
         const mangaDetails = await fetchMangaDetails(manga.id);
-        const lastKnownChapter = manga.lastReadChapter ? JSON.parse(manga.lastReadChapter).pop() : null;
+        const lastNotifiedChapter = await AsyncStorage.getItem(`last_notified_chapter_${manga.id}`);
         
-        if (lastKnownChapter && mangaDetails.chapters.length > 0) {
+        if (mangaDetails.chapters.length > 0) {
           const newestChapter = mangaDetails.chapters[0].number;
-          if (newestChapter !== lastKnownChapter) {
-            const lastNotifiedChapter = await AsyncStorage.getItem(`last_notified_chapter_${manga.id}`);
-            if (newestChapter !== lastNotifiedChapter) {
-              newChapters.push({ mangaId: manga.id, title: manga.title, chapterNumber: newestChapter });
-              await AsyncStorage.setItem(`last_notified_chapter_${manga.id}`, newestChapter);
-            }
+          if (newestChapter !== lastNotifiedChapter) {
+            newChapters.push({ mangaId: manga.id, title: manga.title, chapterNumber: newestChapter });
+            await AsyncStorage.setItem(`last_notified_chapter_${manga.id}`, newestChapter);
           }
-        } else if (mangaDetails.chapters.length > 0) {
-          await AsyncStorage.setItem(`manga_${manga.id}_read_chapters`, JSON.stringify([mangaDetails.chapters[0].number]));
         }
       }
   
@@ -79,7 +69,7 @@ const checkForUpdates = async () => {
     } catch (error) {
       console.error('[DEBUG] Error checking for manga updates:', error);
     }
-  };
+  };  
 
 const sendPushNotifications = async (newChapters: { mangaId: string, title: string, chapterNumber: string }[]) => {
     if (!(await isNotificationsEnabled())) {
