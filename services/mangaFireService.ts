@@ -2,6 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { decode } from 'html-entities';
+import { MANGA_API_URL } from '@/constants/Config';
 
 export interface MangaItem {
   id: string;
@@ -25,13 +26,12 @@ export interface MangaDetails {
   chapters: Array<{ number: string; title: string; date: string; url: string }>;
 }
 
-const BASE_URL = 'https://mangafire.to';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
 
 export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
   try {
-    const response = await axios.get(`${BASE_URL}/filter?keyword=${encodeURIComponent(keyword)}`, {
+    const response = await axios.get(`${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword)}`, {
       headers: {
         'User-Agent': USER_AGENT,
       },
@@ -46,7 +46,7 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       const id = link.split('/').pop() || '';
       return {
         id,
-        link: `${BASE_URL}${link}`,
+        link: `${MANGA_API_URL}${link}`,
         title: decode(match[4].trim()),
         banner: match[2],
         type: decode(match[3].trim()),
@@ -60,7 +60,7 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
 
 export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
   try {
-    const response = await axios.get(`${BASE_URL}/manga/${id}`, {
+    const response = await axios.get(`${MANGA_API_URL}/manga/${id}`, {
       headers: {
         'User-Agent': USER_AGENT,
       },
@@ -136,7 +136,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
 };
 
 export const getChapterUrl = (id: string, chapterNumber: string): string => {
-    return `https://mangafire.to/read/${id}/en/chapter-${chapterNumber}`;
+    return `${MANGA_API_URL}/read/${id}/en/chapter-${chapterNumber}`;
   };
   
   export const markChapterAsRead = async (id: string, chapterNumber: string) => {
