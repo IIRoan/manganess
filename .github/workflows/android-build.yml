@@ -1,12 +1,12 @@
 name: Android Build
 
 on:
-  push:
-    branches:
-      - main  # or your default branch
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version'
+        required: true
+        default: '1.0.0'
 
 jobs:
   build:
