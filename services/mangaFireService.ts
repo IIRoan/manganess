@@ -47,9 +47,9 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       return {
         id,
         link: `${BASE_URL}${link}`,
-        title: match[4].trim(),
+        title: decode(match[4].trim()),
         banner: match[2],
-        type: match[3].trim(),
+        type: decode(match[3].trim()),
       };
     });
   } catch (error) {
