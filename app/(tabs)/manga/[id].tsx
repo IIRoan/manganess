@@ -12,7 +12,7 @@ import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
-const MAX_HISTORY_LENGTH = 10; // Adjust as needed
+const MAX_HISTORY_LENGTH = 10; 
 
 export default function MangaDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -77,18 +77,23 @@ export default function MangaDetailScreen() {
             await AsyncStorage.setItem(`bookmark_${id}`, status);
             await AsyncStorage.setItem(`title_${id}`, mangaDetails?.title || '');
             await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage || '');
-
-
+    
             const keys = await AsyncStorage.getItem('bookmarkKeys');
             const bookmarkKeys = keys ? JSON.parse(keys) : [];
             if (!bookmarkKeys.includes(`bookmark_${id}`)) {
                 bookmarkKeys.push(`bookmark_${id}`);
                 await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
             }
-
+    
             setBookmarkStatus(status);
             setIsAlertVisible(false);
-
+    
+            if (status === "Reading" && mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
+                const lastReleasedChapter = mangaDetails.chapters[0].number;
+                await AsyncStorage.setItem(`last_notified_chapter_${id}`, lastReleasedChapter);
+                console.log(`Set last notified chapter for ${id} to ${lastReleasedChapter}`);
+            }
+    
             if (status === "Read") {
                 Alert.alert(
                     "Mark All Chapters as Read",
@@ -109,6 +114,8 @@ export default function MangaDetailScreen() {
             console.error('Error saving bookmark:', error);
         }
     };
+    
+    
 
     const removeBookmark = async () => {
         try {
@@ -219,14 +226,19 @@ export default function MangaDetailScreen() {
 
     const markAllChaptersAsRead = async () => {
         try {
-            const key = `manga_${id}_read_chapters`;
-            const allChapterNumbers = mangaDetails?.chapters.map(chapter => chapter.number) || [];
-            await AsyncStorage.setItem(key, JSON.stringify(allChapterNumbers));
-            setReadChapters(allChapterNumbers);
+            if (mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
+                const key = `manga_${id}_read_chapters`;
+                const allChapterNumbers = mangaDetails.chapters.map(chapter => chapter.number);
+                await AsyncStorage.setItem(key, JSON.stringify(allChapterNumbers));
+                setReadChapters(allChapterNumbers);
+            } else {
+                console.log('No chapters to mark as read');
+            }
         } catch (error) {
             console.error('Error marking all chapters as read:', error);
         }
     };
+    
 
 
     const GenreTag = ({ genre }: { genre: string }) => (

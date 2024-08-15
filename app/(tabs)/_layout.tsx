@@ -1,13 +1,14 @@
 import { Tabs, usePathname } from 'expo-router';
-import React from 'react';
-import { useColorScheme, View, StyleSheet, Platform, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { useColorScheme, View, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 const TAB_BAR_WIDTH = width * 0.9;
-const TAB_WIDTH = TAB_BAR_WIDTH / 4;
+const TAB_WIDTH = TAB_BAR_WIDTH / 5; 
 
 export default function TabLayout() {
   const { theme } = useTheme();
@@ -15,9 +16,26 @@ export default function TabLayout() {
   const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
   const colors = Colors[colorScheme];
   const pathname = usePathname();
+  const [enableDebugTab, setEnableDebugTab] = useState(false);
+
+  useEffect(() => {
+    loadEnableDebugTabSetting();
+  }, []);
+
+  const loadEnableDebugTabSetting = async () => {
+    try {
+      const value = await AsyncStorage.getItem('enableDebugTab');
+      setEnableDebugTab(value === 'true');
+    } catch (error) {
+      console.error('Error loading enable debug tab setting:', error);
+    }
+  };
 
   const shouldShowTabBar = () => {
     const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
+    if (enableDebugTab) {
+      allowedPaths.push('/debug');
+    }
     return allowedPaths.includes(pathname) || pathname.match(/^\/manga\/[^\/]+$/);
   };
 
@@ -36,6 +54,8 @@ export default function TabLayout() {
               iconName = focused ? 'bookmark' : 'bookmark-outline';
             } else if (route.name === 'settings') {
               iconName = focused ? 'settings' : 'settings-outline';
+            } else if (route.name === 'debug') {
+              iconName = focused ? 'bug' : 'bug-outline';
             }
 
             return (
@@ -76,14 +96,23 @@ export default function TabLayout() {
           headerTintColor: colors.text,
           headerShown: false,
         })}
-          backBehavior="history"
+        backBehavior="history"
       >
         <Tabs.Screen name="index" options={{ title: 'Home' }} />
         <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
         <Tabs.Screen name="bookmarks" options={{ title: 'Bookmarks' }} />
         <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
         
+        <Tabs.Screen 
+          name="debug" 
+          options={{ 
+            title: 'Debug',
+            href: enableDebugTab ? undefined : null,
+          }} 
+        />
+        
         {/* Hide all other routes */}
+        <Tabs.Screen name="Debug" options={{ href: null }} />
         <Tabs.Screen name="manga/[id]" options={{ href: null }} />
         <Tabs.Screen name="manga/[id]/chapter/[chapterNumber]" options={{ href: null }} />
       </Tabs>
