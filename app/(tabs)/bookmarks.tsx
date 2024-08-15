@@ -14,7 +14,7 @@ interface BookmarkItem {
   title: string;
   status: string;
   lastReadChapter: string;
-  imageUrl: string; 
+  imageUrl: string;
 }
 
 interface BookmarkSection {
@@ -28,9 +28,9 @@ const getLastReadChapter = async (mangaId: string): Promise<string> => {
     const key = `manga_${mangaId}_read_chapters`;
     const readChapters = await AsyncStorage.getItem(key) || '[]';
     const chaptersArray = JSON.parse(readChapters);
-    
+
     const sortedChapters = chaptersArray.sort((a: string, b: string) => parseFloat(a) - parseFloat(b));
-    
+
     let lastContinuousChapter = 0;
     for (let i = 0; i < sortedChapters.length; i++) {
       if (parseFloat(sortedChapters[i]) === lastContinuousChapter + 1) {
@@ -68,7 +68,7 @@ export default function BookmarksScreen() {
         const id = key.split('_')[1];
         const title = await AsyncStorage.getItem(`title_${id}`);
         const lastReadChapter = await getLastReadChapter(id);
-        const imageUrl = await AsyncStorage.getItem(`image_${id}`); 
+        const imageUrl = await AsyncStorage.getItem(`image_${id}`);
         return { id, title, status, lastReadChapter, imageUrl };
       });
       const bookmarkItems = await Promise.all(bookmarkPromises);
@@ -117,14 +117,14 @@ export default function BookmarksScreen() {
         style={[styles.sectionButton, activeSection === title && styles.activeSectionButton]}
         onPress={() => setActiveSection(title)}
       >
-        <Ionicons 
-          name={iconName} 
-          size={20} 
-          color={activeSection === title ? colors.card : colors.text} 
+        <Ionicons
+          name={iconName}
+          size={20}
+          color={activeSection === title ? colors.card : colors.text}
           style={styles.sectionButtonIcon}
         />
         <Text style={[
-          styles.sectionButtonText, 
+          styles.sectionButtonText,
           activeSection === title && styles.activeSectionButtonText
         ]}>
           {title}
@@ -132,7 +132,7 @@ export default function BookmarksScreen() {
       </TouchableOpacity>
     );
   };
-  
+
   const filteredBookmarks = bookmarks.filter((item) => item.status === activeSection);
 
   if (isLoading) {
@@ -148,12 +148,12 @@ export default function BookmarksScreen() {
     { title: 'Reading', data: bookmarks.filter((item) => item.status === 'Reading') },
     { title: 'Read', data: bookmarks.filter((item) => item.status === 'Read') },
   ];
- return (
+  return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.header}>My Bookmarks</Text>
       <View style={styles.sectionButtonsContainer}>
-        {renderSectionButton('To Read')}
         {renderSectionButton('Reading')}
+        {renderSectionButton('To Read')}
         {renderSectionButton('Read')}
       </View>
       {bookmarks.length === 0 ? (
@@ -262,5 +262,5 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     fontSize: 12,
     color: colors.tabIconDefault,
   },
-  
+
 });
