@@ -39,7 +39,7 @@ jobs:
 
     - name: Update build.gradle
       run: |
-        sed -i 's/com.android.application/com.android.application"\n    id("com.android.library")/g' android/app/build.gradle
+        sed -i '/apply plugin: "com.android.application"/a apply plugin: "com.android.library"' android/app/build.gradle
         echo "android.namespace='com.iroan.manganess'" >> android/app/build.gradle
 
     - name: Grant execute permission for gradlew
