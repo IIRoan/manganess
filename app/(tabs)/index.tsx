@@ -7,14 +7,14 @@ import { Colors } from '@/constants/Colors';
 import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NessieAnimation } from '@/components/NessieAnimation';
+import { MANGA_API_URL } from '@/constants/Config';
+
 interface MangaItem {
   id: string;
   title: string;
   imageUrl: string;
   rank?: number;
 }
-
-
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -35,7 +35,7 @@ export default function HomeScreen() {
       setIsLoading(true);
       setError(null);
 
-      const response = await axios.get('https://mangafire.to/home', {
+      const response = await axios.get(`${MANGA_API_URL}/home`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
         },
