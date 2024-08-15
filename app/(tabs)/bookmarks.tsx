@@ -29,23 +29,20 @@ const getLastReadChapter = async (mangaId: string): Promise<string> => {
     const readChapters = await AsyncStorage.getItem(key) || '[]';
     const chaptersArray = JSON.parse(readChapters);
 
-    const sortedChapters = chaptersArray.sort((a: string, b: string) => parseFloat(a) - parseFloat(b));
-
-    let lastContinuousChapter = 0;
-    for (let i = 0; i < sortedChapters.length; i++) {
-      if (parseFloat(sortedChapters[i]) === lastContinuousChapter + 1) {
-        lastContinuousChapter = parseFloat(sortedChapters[i]);
-      } else {
-        break;
-      }
+    if (chaptersArray.length === 0) {
+      return 'Not started';
     }
 
-    return lastContinuousChapter > 0 ? `Chapter ${lastContinuousChapter}` : 'Not started';
+    const numericChapters = chaptersArray.map((chapter: string) => parseFloat(chapter));
+    const lastReadChapter = Math.max(...numericChapters);
+
+    return `Chapter ${lastReadChapter}`;
   } catch (error) {
     console.error('Error getting last read chapter:', error);
     return 'Unknown';
   }
 };
+
 
 // Main component
 export default function BookmarksScreen() {
