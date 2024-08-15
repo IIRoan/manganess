@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/favicon.png",
     "scheme": "myapp",
+    "useNextNotificationsApi": true,
     "userInterfaceStyle": "automatic",
     "notification": {
       "icon": "./assets/images/nessie.png"
