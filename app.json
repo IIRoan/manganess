@@ -4,7 +4,7 @@
     "slug": "manganess",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/favicon.png",
+    "icon": "./assets/images/adaptive-icon.png",
     "scheme": "myapp",
     "useNextNotificationsApi": true,
     "userInterfaceStyle": "automatic",
@@ -29,7 +29,7 @@
     "android": {
       "userInterfaceStyle": "automatic",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/nessie.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.iroan.manganess"

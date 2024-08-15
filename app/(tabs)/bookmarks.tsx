@@ -51,7 +51,7 @@ const getLastReadChapter = async (mangaId: string): Promise<string> => {
 export default function BookmarksScreen() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState('To Read');
+  const [activeSection, setActiveSection] = useState('Reading');
   const router = useRouter();
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
