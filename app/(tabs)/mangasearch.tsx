@@ -167,7 +167,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: colors.card,
-    marginBottom: 80,
+    marginBottom: 10,
   },
   searchContainer: {
     flexDirection: 'row',
