@@ -23,21 +23,24 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: '18'
+        node-version: '20'
 
     - name: Install dependencies
       run: |
         npm install
-        npm install -g react-native-cli
+        npm install -g expo-cli
 
-    - name: Update Gradle Wrapper
-      run: |
-        cd android
-        ./gradlew wrapper --gradle-version 8.0
+    - name: Eject Expo app
+      run: expo eject
 
-    - name: Build Android project
+    - name: Update AndroidManifest.xml
       run: |
-        react-native bundle --entry-file index.js --platform android --dev false --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+        sed -i 's/package="com.iroan.manganess"//g' android/app/src/main/AndroidManifest.xml
+
+    - name: Update build.gradle
+      run: |
+        sed -i 's/com.android.application/com.android.application"\n    id("com.android.library")/g' android/app/build.gradle
+        echo "android.namespace='com.iroan.manganess'" >> android/app/build.gradle
 
     - name: Grant execute permission for gradlew
       run: chmod +x android/gradlew
@@ -45,7 +48,7 @@ jobs:
     - name: Build APK
       run: |
         cd android
-        ./gradlew assembleRelease
+        ./gradlew assembleRelease --warning-mode all
 
     - name: Upload APK
       uses: actions/upload-artifact@v2
