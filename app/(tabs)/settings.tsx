@@ -1,16 +1,17 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Image, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Image, Alert, Switch } from 'react-native';
 import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import * as Notifications from 'expo-notifications';
 
 export default function SettingsScreen() {
   const { theme, setTheme } = useTheme();
   const systemColorScheme = useColorScheme();
   const colorScheme = theme === 'system' ? systemColorScheme : theme;
   const colors = Colors[colorScheme as keyof typeof Colors] || Colors.light;
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   const styles = getStyles(colors);
 
@@ -19,6 +20,36 @@ export default function SettingsScreen() {
     { label: 'Dark', value: 'dark', icon: 'moon-outline' },
     { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
   ];
+
+  useEffect(() => {
+    // Load the current notification state when the component mounts
+    loadNotificationState();
+  }, []);
+
+  const loadNotificationState = async () => {
+    try {
+      const state = await AsyncStorage.getItem('notificationsEnabled');
+      setNotificationsEnabled(state !== 'false');
+    } catch (error) {
+      console.error('Error loading notification state:', error);
+    }
+  };
+
+  const toggleNotifications = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem('notificationsEnabled', value.toString());
+      setNotificationsEnabled(value);
+      if (value) {
+        // Re-enable notifications
+        await Notifications.requestPermissionsAsync();
+      } else {
+        // Disable notifications
+        await Notifications.cancelAllScheduledNotificationsAsync();
+      }
+    } catch (error) {
+      console.error('Error toggling notifications:', error);
+    }
+  };
 
   const clearAsyncStorage = async () => {
     Alert.alert(
@@ -69,6 +100,24 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Notifications</Text>
+          <View style={styles.option}>
+            <Ionicons 
+              name="notifications-outline"
+              size={24} 
+              color={colors.text} 
+            />
+            <Text style={styles.optionText}>Enable Notifications</Text>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={toggleNotifications}
+              trackColor={{ false: colors.border, true: colors.border }}
+              thumbColor={notificationsEnabled ? colors.primary : colors.primary}
+            />
+          </View>
         </View>
 
         <View style={styles.section}>

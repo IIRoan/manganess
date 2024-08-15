@@ -6,10 +6,15 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { useColorScheme } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
+import { setupNotifications } from '@/services/notificationSetup';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
+  useEffect(() => {
+    setupNotifications();
+  }, []);
+
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
 

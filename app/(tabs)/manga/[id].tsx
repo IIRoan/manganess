@@ -31,10 +31,6 @@ export default function MangaDetailScreen() {
     const navigation = useNavigation();
     const pathname = usePathname();
 
-    useEffect(() => {
-        fetchMangaDetailsData();
-        fetchReadChapters();
-    }, [id]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -62,9 +58,6 @@ export default function MangaDetailScreen() {
         }
     };
 
-    useEffect(() => {
-        fetchBookmarkStatus();
-    }, [id]);
 
     const fetchBookmarkStatus = async () => {
         const status = await AsyncStorage.getItem(`bookmark_${id}`);
@@ -138,16 +131,18 @@ export default function MangaDetailScreen() {
 
     const fetchReadChapters = useCallback(async () => {
         try {
-            const key = `manga_${id}_read_chapters`;
-            const storedChapters = await AsyncStorage.getItem(key);
-            if (storedChapters) {
-                const parsedChapters = JSON.parse(storedChapters);
-                setReadChapters(parsedChapters);
-            }
+          setReadChapters([]); // Clear previous read chapters
+          const key = `manga_${id}_read_chapters`;
+          const storedChapters = await AsyncStorage.getItem(key);
+          if (storedChapters) {
+            const parsedChapters = JSON.parse(storedChapters);
+            setReadChapters(parsedChapters);
+          }
         } catch (error) {
-            console.error('Error fetching read chapters:', error);
+          console.error('Error fetching read chapters:', error);
         }
-    }, [id]);
+      }, [id]);
+      
 
     useFocusEffect(
         useCallback(() => {
@@ -190,6 +185,13 @@ export default function MangaDetailScreen() {
     useEffect(() => {
         updateHistory(pathname);
     }, [pathname, updateHistory]);
+
+    useEffect(() => {
+        fetchMangaDetailsData();
+        fetchReadChapters();
+        fetchBookmarkStatus();
+      }, [id, fetchReadChapters]);
+      
 
     const handleBackPress = useCallback(async () => {
         try {
