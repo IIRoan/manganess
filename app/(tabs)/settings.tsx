@@ -137,8 +137,8 @@ export default function SettingsScreen() {
             <Switch
               value={notificationsEnabled}
               onValueChange={toggleNotifications}
-              trackColor={{ false: colors.border, true: colors.border }}
-              thumbColor={notificationsEnabled ? colors.primary : colors.primary}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={notificationsEnabled ? colors.card : colors.text}
             />
           </View>
         </View>
@@ -168,7 +168,6 @@ export default function SettingsScreen() {
             />
           </View>
           <Text style={styles.optionText}>You need to restart the app for this setting to take effect.</Text>
-
         </View>
         
       </ScrollView>
