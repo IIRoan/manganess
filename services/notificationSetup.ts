@@ -3,7 +3,6 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 export async function setupNotifications() {
-  let token;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
@@ -21,10 +20,8 @@ export async function setupNotifications() {
   }
   if (finalStatus !== 'granted') {
     alert('Failed to get push token for push notification!');
-    return;
+    return false;
   }
-  token = (await Notifications.getExpoPushTokenAsync()).data;
-  console.log(token);
 
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -33,4 +30,7 @@ export async function setupNotifications() {
       shouldSetBadge: false,
     }),
   });
+
+  return true;
 }
+
