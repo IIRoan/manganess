@@ -7,6 +7,7 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import { Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import MangaCard from '@/components/MangaCard';
 
 // Types
 interface BookmarkItem {
@@ -83,13 +84,12 @@ export default function BookmarksScreen() {
   };
 
   const renderBookmarkItem = ({ item }: { item: BookmarkItem }) => (
-    <TouchableOpacity style={styles.bookmarkCard} onPress={() => handleBookmarkPress(item.id)}>
-      <Image source={{ uri: item.imageUrl }} style={styles.bookmarkImage} />
-      <View style={styles.bookmarkInfo}>
-        <Text style={styles.bookmarkTitle} numberOfLines={2} ellipsizeMode="tail">{item.title}</Text>
-        <Text style={styles.lastReadChapter}>Last Read: {item.lastReadChapter}</Text>
-      </View>
-    </TouchableOpacity>
+    <MangaCard
+      title={item.title}
+      imageUrl={item.imageUrl}
+      onPress={() => handleBookmarkPress(item.id)}
+      lastReadChapter={item.lastReadChapter} 
+    />
   );
 
 
@@ -139,12 +139,6 @@ export default function BookmarksScreen() {
       </View>
     );
   }
-
-  const bookmarkSections: BookmarkSection[] = [
-    { title: 'To Read', data: bookmarks.filter((item) => item.status === 'To Read') },
-    { title: 'Reading', data: bookmarks.filter((item) => item.status === 'Reading') },
-    { title: 'Read', data: bookmarks.filter((item) => item.status === 'Read') },
-  ];
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.header}>My Bookmarks</Text>
