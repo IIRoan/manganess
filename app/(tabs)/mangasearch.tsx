@@ -1,17 +1,17 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   View, 
   TextInput, 
   FlatList, 
   StyleSheet, 
   Text, 
-  useColorScheme, 
   TouchableOpacity, 
   SafeAreaView, 
   Platform, 
   StatusBar, 
   Dimensions,
-  Keyboard
+  Keyboard,
+  ActivityIndicator
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
@@ -19,6 +19,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { searchManga, MangaItem } from '@/services/mangaFireService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 const { height, width } = Dimensions.get('window');
@@ -29,12 +30,11 @@ export default function MangaSearchScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const { theme } = useTheme();
-  const systemColorScheme = useColorScheme() as ColorScheme;
-  const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
-  const colors = Colors[colorScheme];
+  const { actualTheme } = useTheme();
+  const colors = Colors[actualTheme];
   const styles = getStyles(colors);
   const inputRef = useRef<TextInput>(null);
+  const [lastReadChapters, setLastReadChapters] = useState<{[key: string]: string | null}>({});
 
   const onChangeSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
@@ -57,15 +57,34 @@ export default function MangaSearchScreen() {
 
   const handleMangaPress = useCallback((item: MangaItem) => {
     router.navigate({
-      // @ts-ignore
-      pathname: `/manga/${item.id}`,
+      pathname: "/manga/[id]",
       params: {
+        id: item.id,
         title: item.title,
         bannerImage: item.banner
       }
     });
   }, [router]);
-  
+
+  const getLastReadChapter = async (mangaId: string): Promise<string | null> => {
+    try {
+      const key = `manga_${mangaId}_read_chapters`;
+      const readChapters = await AsyncStorage.getItem(key) || '[]';
+      const chaptersArray = JSON.parse(readChapters);
+
+      if (chaptersArray.length === 0) {
+        return null;
+      }
+
+      const numericChapters = chaptersArray.map((chapter: string) => parseFloat(chapter));
+      const lastReadChapter = Math.max(...numericChapters);
+
+      return `Chapter ${lastReadChapter}`;
+    } catch (error) {
+      console.error('Error getting last read chapter:', error);
+      return null;
+    }
+  };
 
   const renderMangaCard = useCallback(({ item }: { item: MangaItem }) => {
     return (
@@ -74,110 +93,99 @@ export default function MangaSearchScreen() {
         title={item.title}
         imageUrl={item.banner}
         onPress={() => handleMangaPress(item)}
+        lastReadChapter={lastReadChapters[item.id]}
       />
     );
-  }, [handleMangaPress]);
+  }, [handleMangaPress, lastReadChapters]);
+
+  useEffect(() => {
+    const fetchLastReadChapters = async () => {
+      const chapters: {[key: string]: string | null} = {};
+      for (const item of searchResults) {
+        chapters[item.id] = await getLastReadChapter(item.id);
+      }
+      setLastReadChapters(chapters);
+    };
+
+    if (searchResults.length > 0) {
+      fetchLastReadChapters();
+    }
+  }, [searchResults]);
 
   const keyExtractor = useCallback((item: MangaItem) => item.id, []);
 
-  
   const handleScrollBegin = () => {
     Keyboard.dismiss();
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.container}>
       <Stack.Screen options={{
         title: 'Manga Search',
         headerTintColor: colors.text,
-        headerShown: false, // Hide the header
+        headerShown: false,
       }} />
-      <View style={styles.container}>
-        <TouchableOpacity 
-          style={styles.searchContainer}
-          onPress={() => inputRef.current?.focus()}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="search"
-            size={20}
-            color={colors.text}
-            style={styles.searchIcon}
-          />
-          <TextInput
-            ref={inputRef}
-            style={styles.searchBar}
-            placeholder="Search manga"
-            placeholderTextColor={colors.tabIconDefault}
-            value={searchQuery}
-            onChangeText={onChangeSearch}
-          />
-        </TouchableOpacity>
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading...</Text>
-          </View>
-        )}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-        {!isLoading && searchQuery.length <= 2 && (
-          <View style={styles.instructionContainer}>
-            <Text style={styles.instructionText}>
-              Start searching for manga by entering a keyword in the search bar above.
-            </Text>
-            <Text style={styles.instructionSubText}>
-              Enter at least 3 characters to start searching for manga
-            </Text>
-          </View>
-        )}
+      <View style={styles.searchContainer}>
+        <Ionicons
+          name="search"
+          size={20}
+          color={colors.text}
+          style={styles.searchIcon}
+        />
+        <TextInput
+          ref={inputRef}
+          style={styles.searchBar}
+          placeholder="Search manga"
+          placeholderTextColor={colors.tabIconDefault}
+          value={searchQuery}
+          onChangeText={onChangeSearch}
+        />
+      </View>
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : searchResults.length === 0 && searchQuery.length > 2 ? (
+        <Text style={styles.emptyText}>No results found.</Text>
+      ) : (
         <FlatList
           data={searchResults}
           renderItem={renderMangaCard}
           keyExtractor={keyExtractor}
           numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.flatListContent}
-          ListEmptyComponent={() =>
-            !isLoading && searchQuery.length > 2 ? (
-              <View style={styles.noResultsContainer}>
-                <Text style={styles.noResultsText}>No results found</Text>
-              </View>
-            ) : null
-          }
-          extraData={searchResults}
+          columnWrapperStyle={styles.columnWrapper}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.contentContainer}
           onScrollBeginDrag={handleScrollBegin}
-          keyboardShouldPersistTaps="handled" 
+          keyboardShouldPersistTaps="handled"
         />
-      </View>
-      
-      </SafeAreaView>
+      )}
+    </SafeAreaView>
   );
 }
 
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.card,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-  },
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: colors.card,
-    marginBottom: 10,
+    backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  header: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.text,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    borderRadius: 25,
+    marginHorizontal: 20,
+    marginBottom: 20,
     paddingHorizontal: 15,
-    height: height * 0.06,
-    maxHeight: 50,
-    minHeight: 40,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
@@ -193,16 +201,25 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   searchBar: {
     flex: 1,
     fontSize: 16,
-    height: '100%',
     color: colors.text,
   },
   loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
   },
-  loadingText: {
+  emptyText: {
     fontSize: 18,
+    textAlign: 'center',
+    marginTop: 40,
     color: colors.text,
+  },
+  contentContainer: {
+    paddingHorizontal: 10,
+    paddingBottom: 80,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
   },
   errorContainer: {
     alignItems: 'center',
@@ -216,6 +233,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   instructionContainer: {
     alignItems: 'center',
     marginTop: 20,
+    paddingHorizontal: 20,
   },
   instructionText: {
     fontSize: 18,
@@ -226,21 +244,6 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   instructionSubText: {
     fontSize: 14,
     textAlign: 'center',
-    color: colors.text,
-  },
-  flatListContent: {
-    paddingTop: 10,
-  },
-  row: {
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  noResultsContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  noResultsText: {
-    fontSize: 16,
     color: colors.text,
   },
 });

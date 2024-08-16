@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 
@@ -7,60 +7,61 @@ interface MangaCardProps {
   title: string;
   imageUrl: string;
   onPress: () => void;
+  lastReadChapter: string | null;
 }
 
-const MangaCard: React.FC<MangaCardProps> = ({ title, imageUrl, onPress }) => {
-  const { theme, systemTheme } = useTheme();
+const MangaCard: React.FC<MangaCardProps> = ({ title, imageUrl, onPress, lastReadChapter }) => {
+    const { theme, systemTheme } = useTheme();
   const colorScheme = theme === 'system' ? systemTheme : theme as ColorScheme;
   const colors = Colors[colorScheme];
 
+  const styles = getStyles(colors);
+
   return (
-    <TouchableOpacity 
-      onPress={onPress} 
-      style={[
-        styles.card, 
-        { 
-          backgroundColor: colors.card,
-          borderColor: colors.border,
-        }
-      ]}
-    >
-      <Image source={{ uri: imageUrl }} style={styles.image} />
-      <View style={styles.titleContainer}>
-        <Text 
-          style={[
-            styles.title, 
-            { color: colors.text }
-          ]} 
-          numberOfLines={2}
-        >
-          {title}
-        </Text>
+    <TouchableOpacity onPress={onPress} style={styles.bookmarkCard}>
+      <Image source={{ uri: imageUrl }} style={styles.bookmarkImage} />
+      <View style={styles.bookmarkInfo}>
+        <Text style={styles.bookmarkTitle} numberOfLines={2} ellipsizeMode="tail">{title}</Text>
+        {lastReadChapter && (
+          <Text style={styles.lastReadChapter}>Last Read: {lastReadChapter}</Text>
+        )}
       </View>
     </TouchableOpacity>
   );
 };
 
-const styles = StyleSheet.create({
-  card: {
-    width: '48%',
-    marginBottom: 10,
-    borderRadius: 8,
+const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
+  bookmarkCard: {
+    width: Dimensions.get('window').width / 2 - 15,
+    marginBottom: 15,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 1,
+    backgroundColor: colors.card,
+    elevation: 3,
+    shadowColor: colors.text,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  image: {
+  bookmarkImage: {
     width: '100%',
     height: 200,
     resizeMode: 'cover',
   },
-  titleContainer: {
-    padding: 8,
+  bookmarkInfo: {
+    padding: 10,
   },
-  title: {
+  bookmarkTitle: {
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  lastReadChapter: {
+    fontSize: 12,
+    color: colors.tabIconDefault,
+    marginTop: 4,
   },
 });
 
-export default MangaCard;
+export default MangaCard; 

@@ -10,6 +10,7 @@ import ExpandableText from '@/components/ExpandableText';
 import Alert2 from '@/components/Alert';
 import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
+import { decode } from 'html-entities';
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
 const MAX_HISTORY_LENGTH = 10;
@@ -75,25 +76,29 @@ export default function MangaDetailScreen() {
     const saveBookmark = async (status: BookmarkStatus) => {
         try {
             await AsyncStorage.setItem(`bookmark_${id}`, status);
-            await AsyncStorage.setItem(`title_${id}`, mangaDetails?.title || '');
+            
+            // Decode the title before saving
+            const decodedTitle = decode(mangaDetails?.title || '');
+            await AsyncStorage.setItem(`title_${id}`, decodedTitle);
+            
             await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage || '');
-
+    
             const keys = await AsyncStorage.getItem('bookmarkKeys');
             const bookmarkKeys = keys ? JSON.parse(keys) : [];
             if (!bookmarkKeys.includes(`bookmark_${id}`)) {
                 bookmarkKeys.push(`bookmark_${id}`);
                 await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
             }
-
+    
             setBookmarkStatus(status);
             setIsAlertVisible(false);
-
+    
             if (status === "Reading" && mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
                 const lastReleasedChapter = mangaDetails.chapters[0].number;
                 await AsyncStorage.setItem(`last_notified_chapter_${id}`, lastReleasedChapter);
                 console.log(`Set last notified chapter for ${id} to ${lastReleasedChapter}`);
             }
-
+    
             if (status === "Read") {
                 Alert.alert(
                     "Mark All Chapters as Read",
@@ -114,8 +119,6 @@ export default function MangaDetailScreen() {
             console.error('Error saving bookmark:', error);
         }
     };
-
-
 
     const removeBookmark = async () => {
         try {
