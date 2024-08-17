@@ -22,27 +22,29 @@ jobs:
     - name: Install dependencies
       run: |
         npm install
-        npm install -g expo-cli
+        npm install -g eas-cli
 
-    - name: Update app.json with new version
+    - name: Update app.json
       run: |
         jq '.expo.version = "${{ github.event.inputs.version }}" | .expo.ios.buildNumber = "${{ github.event.inputs.version }}"' app.json > temp.json && mv temp.json app.json
 
-    - name: Start Expo build
-      env:
-        EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    - name: Configure EAS
       run: |
-        expo build:ios --non-interactive --no-publish --type archive
+        echo '{"cli":{"version":">= 0.52.0"},"build":{"ios":{"simulator":true}}}' > eas.json
+
+    - name: Build iOS IPA
+      run: |
+        eas build --platform ios --profile preview --non-interactive --no-wait
 
     - name: Download IPA
       run: |
-        mkdir build_artifacts
-        expo url:ipa > ipa_url.txt
-        EXPO_ARTIFACT_URL=$(cat ipa_url.txt)
-        curl -o ./build_artifacts/app.ipa $EXPO_ARTIFACT_URL
+        eas build:list --status finished --platform ios --non-interactive --json > builds.json
+        BUILD_ID=$(jq -r '.[0].id' builds.json)
+        eas build:download --platform ios --id $BUILD_ID --output ./app-preview.ipa
 
     - name: Upload IPA
       uses: actions/upload-artifact@v2
       with:
-        name: app-release
-        path: build_artifacts/app.ipa
+        name: app-preview
+        path: ./app-preview.ipa
+
