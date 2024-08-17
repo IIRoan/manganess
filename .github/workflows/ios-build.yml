@@ -1,0 +1,56 @@
+name: iOS IPA Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: |
+        npm install
+        npm install -g expo-cli
+
+    - name: Eject Expo app
+      run: expo eject
+
+    - name: Install CocoaPods
+      run: |
+        cd ios
+        pod install
+
+    - name: Update Info.plist
+      run: |
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.event.inputs.version }}" ios/manganess/Info.plist
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ github.event.inputs.version }}" ios/manganess/Info.plist
+
+    - name: Build IPA
+      run: |
+        cd ios
+        xcodebuild -workspace manganess.xcworkspace -scheme manganess -configuration Release -sdk iphoneos -archivePath $PWD/build/manganess.xcarchive clean archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+
+    - name: Create IPA
+      run: |
+        cd ios
+        mkdir Payload
+        cp -r build/manganess.xcarchive/Products/Applications/manganess.app Payload/
+        zip -r manganess.ipa Payload
+
+    - name: Upload IPA
+      uses: actions/upload-artifact@v2
+      with:
+        name: app-release
+        path: ios/manganess.ipa
