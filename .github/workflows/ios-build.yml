@@ -24,33 +24,25 @@ jobs:
         npm install
         npm install -g expo-cli
 
-    - name: Eject Expo app
-      run: expo eject
-
-    - name: Install CocoaPods
+    - name: Update app.json with new version
       run: |
-        cd ios
-        pod install
+        jq '.expo.version = "${{ github.event.inputs.version }}" | .expo.ios.buildNumber = "${{ github.event.inputs.version }}"' app.json > temp.json && mv temp.json app.json
 
-    - name: Update Info.plist
+    - name: Start Expo build
+      env:
+        EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       run: |
-        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.event.inputs.version }}" ios/manganess/Info.plist
-        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ github.event.inputs.version }}" ios/manganess/Info.plist
+        expo build:ios --non-interactive --no-publish --type archive
 
-    - name: Build IPA
+    - name: Download IPA
       run: |
-        cd ios
-        xcodebuild -workspace manganess.xcworkspace -scheme manganess -configuration Release -sdk iphoneos -archivePath $PWD/build/manganess.xcarchive clean archive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-
-    - name: Create IPA
-      run: |
-        cd ios
-        mkdir Payload
-        cp -r build/manganess.xcarchive/Products/Applications/manganess.app Payload/
-        zip -r manganess.ipa Payload
+        mkdir build_artifacts
+        expo url:ipa > ipa_url.txt
+        EXPO_ARTIFACT_URL=$(cat ipa_url.txt)
+        curl -o ./build_artifacts/app.ipa $EXPO_ARTIFACT_URL
 
     - name: Upload IPA
       uses: actions/upload-artifact@v2
       with:
         name: app-release
-        path: ios/manganess.ipa
+        path: build_artifacts/app.ipa
