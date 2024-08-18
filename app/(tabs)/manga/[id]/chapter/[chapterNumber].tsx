@@ -124,7 +124,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: 40,
+    top: 50,
     left: 10,
     zIndex: 1000,
     color: colors.text,

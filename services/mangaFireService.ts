@@ -78,8 +78,8 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const title = decode(html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title');
   const alternativeTitle = decode(html.match(/<h6>(.*?)<\/h6>/)?.[1] || '');
   const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
-  
-  
+
+
   const descriptionMatch = html.match(/<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/);
   let description = descriptionMatch
     ? decode(descriptionMatch[1].trim()) || 'No description available'
@@ -136,24 +136,24 @@ const parseMangaDetails = (html: string): MangaDetails => {
 };
 
 export const getChapterUrl = (id: string, chapterNumber: string): string => {
-    return `${MANGA_API_URL}/read/${id}/en/chapter-${chapterNumber}`;
-  };
-  
-  export const markChapterAsRead = async (id: string, chapterNumber: string) => {
-    try {
-      const key = `manga_${id}_read_chapters`;
-      const readChapters = await AsyncStorage.getItem(key) || '[]';
-      const chaptersArray = JSON.parse(readChapters);
-      if (!chaptersArray.includes(chapterNumber)) {
-        chaptersArray.push(chapterNumber);
-        await AsyncStorage.setItem(key, JSON.stringify(chaptersArray));
-        console.log(`Marked chapter ${chapterNumber} as read for manga ${id}`);
-      }
-    } catch (error) {
-      console.error('Error marking chapter as read:', error);
+  return `${MANGA_API_URL}/read/${id}/en/chapter-${chapterNumber}`;
+};
+
+export const markChapterAsRead = async (id: string, chapterNumber: string) => {
+  try {
+    const key = `manga_${id}_read_chapters`;
+    const readChapters = await AsyncStorage.getItem(key) || '[]';
+    const chaptersArray = JSON.parse(readChapters);
+    if (!chaptersArray.includes(chapterNumber)) {
+      chaptersArray.push(chapterNumber);
+      await AsyncStorage.setItem(key, JSON.stringify(chaptersArray));
+      console.log(`Marked chapter ${chapterNumber} as read for manga ${id}`);
     }
-  };
-  
+  } catch (error) {
+    console.error('Error marking chapter as read:', error);
+  }
+};
+
 export const getInjectedJavaScript = (backgroundColor: string) => `
   (function() {
     // Function to remove elements
@@ -176,7 +176,25 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
         });
       });
     }
+
+        // Function to remove toast div
+    function removeToast() {
+      const toastDiv = document.getElementById('toast');
+      if (toastDiv) {
+        toastDiv.remove();
+      }
+    }
+
+    // Function to remove header
+    function removeHeader() {
+      const header = document.querySelector('header');
+      if (header) {
+        header.remove();
+      }
+    }
   
+
+
     // Function to change background and remove background image
   function adjustBackground() {
     const bgSpan = document.querySelector('span.bg');
@@ -206,9 +224,10 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
     function cleanPage() {
       removeElements(['.ad-container', '[id^="google_ads_"]', '[id^="adsbygoogle"]', 'iframe[src*="googleads"]', 'iframe[src*="doubleclick"]']);
       hideElements(['#toast', '.toast', '.popup', '.modal', '#overlay', '.overlay', '.banner']);
+      removeToast();
+      removeHeader();
       adjustBackground();
     }
-  
     // Initial cleaning and background adjustment
     cleanPage();
   
@@ -310,4 +329,3 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
     true; // This is required for the injected JavaScript to work
   })();
   `;
-  

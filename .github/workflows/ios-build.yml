@@ -1,4 +1,4 @@
-name: iOS IPA Build
+name: iOS Local Build
 
 on:
   workflow_dispatch:
@@ -22,29 +22,31 @@ jobs:
     - name: Install dependencies
       run: |
         npm install
-        npm install -g eas-cli
+        npm install -g expo-cli
 
     - name: Update app.json
       run: |
         jq '.expo.version = "${{ github.event.inputs.version }}" | .expo.ios.buildNumber = "${{ github.event.inputs.version }}"' app.json > temp.json && mv temp.json app.json
 
-    - name: Configure EAS
-      run: |
-        echo '{"cli":{"version":">= 0.52.0"},"build":{"ios":{"simulator":true}}}' > eas.json
+    - name: Install Expo Development Build
+      run: npx expo install expo-dev-client
 
-    - name: Build iOS IPA
+    - name: Build iOS app locally
       run: |
-        eas build --platform ios --profile preview --non-interactive --no-wait
+        expo prebuild --platform ios
+        cd ios
+        pod install
+        xcodebuild -workspace "$(ls *.xcworkspace | head -n 1)" -scheme "$(ls *.xcodeproj | sed 's/\.xcodeproj//')" -configuration Release -sdk iphonesimulator -arch x86_64 BUILD_DIR="build"
 
-    - name: Download IPA
+    - name: Package app
       run: |
-        eas build:list --status finished --platform ios --non-interactive --json > builds.json
-        BUILD_ID=$(jq -r '.[0].id' builds.json)
-        eas build:download --platform ios --id $BUILD_ID --output ./app-preview.ipa
+        cd ios/build/Release-iphonesimulator
+        mkdir Payload
+        cp -r "$(ls *.app | head -n 1)" Payload
+        zip -r app.ipa Payload
 
     - name: Upload IPA
       uses: actions/upload-artifact@v2
       with:
-        name: app-preview
-        path: ./app-preview.ipa
-
+        name: app-local-build
+        path: ios/build/Release-iphonesimulator/app.ipa
