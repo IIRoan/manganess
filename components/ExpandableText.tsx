@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   truncatedText: {
-    marginBottom: 4, // Add some space for the fade effect
+    marginBottom: 4,
   },
 });
 

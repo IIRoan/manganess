@@ -7,12 +7,20 @@ import 'react-native-reanimated';
 import { useColorScheme } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import { setupNotifications } from '@/services/notificationSetup';
+import * as MangaUpdateService from '@/services/mangaUpdateService';
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   useEffect(() => {
     setupNotifications();
+  }, []);
+
+  useEffect(() => {
+    MangaUpdateService.startUpdateService();
+    return () => {
+      MangaUpdateService.stopUpdateService();
+    };
   }, []);
 
   const { theme } = useTheme();

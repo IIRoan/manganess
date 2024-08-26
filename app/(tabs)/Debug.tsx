@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import * as MangaUpdateService from '@/services/mangaUpdateService';
 import * as Notifications from 'expo-notifications';
+import * as AniListOAuth from '@/services/anilistOAuth';
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -12,17 +13,58 @@ export default function DebugScreen() {
   const colorScheme = theme === 'system' ? systemColorScheme : theme;
   const colors = Colors[colorScheme as keyof typeof Colors] || Colors.light;
   const styles = getStyles(colors);
-
+  const [user, setUser] = useState<any>(null);
   const [mangaId, setMangaId] = useState('chainsaw-man.0w5k');
   const [chapterNumber, setChapterNumber] = useState('176');
 
   useEffect(() => {
     MangaUpdateService.startUpdateService();
+    checkLoginStatus();
     return () => {
       MangaUpdateService.stopUpdateService();
     };
   }, []);
 
+  const checkLoginStatus = async () => {
+    const authData = await AniListOAuth.getAuthData();
+    if (authData) {
+      try {
+        const userData = await AniListOAuth.getCurrentUser();
+        setUser(userData.data.Viewer);
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    }
+  };
+
+  const handleAniListLogin = async () => {
+    try {
+      await AniListOAuth.loginWithAniList();
+      const userData = await AniListOAuth.getCurrentUser();
+      setUser(userData.data.Viewer);
+      Alert.alert("Success", `Logged in as: ${userData.data.Viewer.name}`);
+    } catch (error) {
+      console.error('AniList login error:', error);
+      if (error.message === 'Login was cancelled') {
+        Alert.alert("Cancelled", "Login was cancelled");
+      } else {
+        Alert.alert("Error", `Failed to login with AniList: ${error.message}`);
+      }
+    }
+  };
+  
+
+  const handleAniListLogout = async () => {
+    try {
+      await AniListOAuth.logout();
+      setUser(null);
+      Alert.alert("Success", "Logged out successfully");
+    } catch (error) {
+      console.error('AniList logout error:', error);
+      Alert.alert("Error", `Failed to logout: ${error.message}`);
+    }
+  };
+  
   const sendTestNotification = async () => {
     try {
       const notificationId = await Notifications.scheduleNotificationAsync({
@@ -99,6 +141,33 @@ export default function DebugScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AniList OAuth</Text>
+          {user ? (
+            <>
+              <View style={styles.userInfo}>
+                <Image source={{ uri: user.avatar.large }} style={styles.avatar} />
+                <Text style={styles.username}>{user.name}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.option}
+                onPress={handleAniListLogout}
+              >
+                <Ionicons name="log-out-outline" size={24} color={colors.text} />
+                <Text style={styles.optionText}>Logout from AniList</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={styles.option}
+              onPress={handleAniListLogin}
+            >
+              <Ionicons name="log-in-outline" size={24} color={colors.text} />
+              <Text style={styles.optionText}>Login with AniList</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Debug Actions</Text>
           <TouchableOpacity
             style={styles.option}
@@ -119,7 +188,6 @@ export default function DebugScreen() {
     </SafeAreaView>
   );
 }
-
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
@@ -152,6 +220,22 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 10,
+  },
+  username: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
   },
   optionText: {
     fontSize: 16,
