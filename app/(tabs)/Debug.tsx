@@ -17,7 +17,6 @@ export default function DebugScreen() {
   const [mangaId, setMangaId] = useState('chainsaw-man.0w5k');
   const [chapterNumber, setChapterNumber] = useState('176');
 
-
   useEffect(() => {
     MangaUpdateService.startUpdateService();
     checkLoginStatus();
@@ -40,18 +39,20 @@ export default function DebugScreen() {
 
   const handleAniListLogin = async () => {
     try {
-      const result = await AniListOAuth.loginWithAniList();
-      console.log('Login result:', result);
-      const authData = await AniListOAuth.exchangeCodeForToken(result.code, result.codeVerifier);
-      console.log('Auth data:', authData);
+      await AniListOAuth.loginWithAniList();
       const userData = await AniListOAuth.getCurrentUser();
       setUser(userData.data.Viewer);
       Alert.alert("Success", `Logged in as: ${userData.data.Viewer.name}`);
     } catch (error) {
       console.error('AniList login error:', error);
-      Alert.alert("Error", `Failed to login with AniList: ${error.message}`);
+      if (error.message === 'Login was cancelled') {
+        Alert.alert("Cancelled", "Login was cancelled");
+      } else {
+        Alert.alert("Error", `Failed to login with AniList: ${error.message}`);
+      }
     }
   };
+  
 
   const handleAniListLogout = async () => {
     try {
@@ -166,7 +167,6 @@ export default function DebugScreen() {
           )}
         </View>
 
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Debug Actions</Text>
           <TouchableOpacity
@@ -188,7 +188,6 @@ export default function DebugScreen() {
     </SafeAreaView>
   );
 }
-
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,

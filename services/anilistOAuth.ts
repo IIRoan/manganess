@@ -1,32 +1,31 @@
 import * as WebBrowser from 'expo-web-browser';
 import * as Crypto from 'expo-crypto';
-import { makeRedirectUri } from 'expo-auth-session';
+import * as AuthSession from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ANILIST_CLIENT_ID, ANILIST_CLIENT_SECRET } from '@env';
+import { ANILIST_CLIENT_SECRET} from '@env';
 
+WebBrowser.maybeCompleteAuthSession();
+
+const ANILIST_CLIENT_ID = '20599'; 
 const ANILIST_AUTH_URL = 'https://anilist.co/api/v2/oauth/authorize';
 const ANILIST_TOKEN_URL = 'https://anilist.co/api/v2/oauth/token';
 const ANILIST_API_URL = 'https://graphql.anilist.co';
+
 
 interface AuthData {
   accessToken: string;
   expiresAt: number;
 }
 
-export async function loginWithAniList() {
+export async function loginWithAniList(): Promise<AuthData> {
   try {
     console.log('Starting AniList login process');
 
-    // Generate a dynamic redirect URI
-    const redirectUri = makeRedirectUri({
-      scheme: 'exp',
-      path: 'oauth-callback',
-      preferLocalhost: false,
+    const redirectUri = AuthSession.makeRedirectUri({
+      native: 'com.iroan.manganess://oauth',
     });
-
     console.log('Redirect URI:', redirectUri);
 
-    // Generate PKCE code verifier and challenge
     const codeVerifier = Crypto.randomUUID();
     const codeChallenge = await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
@@ -37,98 +36,76 @@ export async function loginWithAniList() {
     console.log('Code Verifier:', codeVerifier);
     console.log('Code Challenge:', codeChallenge);
 
-    // Construct the authorization URL
-    const authUrl = `${ANILIST_AUTH_URL}?client_id=${ANILIST_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256`;
+    const request = new AuthSession.AuthRequest({
+      clientId: ANILIST_CLIENT_ID,
+      scopes: [],
+      redirectUri,
+      responseType: AuthSession.ResponseType.Code,
+      codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
+      codeChallenge,
+      usePKCE: true,
+    });
 
-    console.log('Auth URL:', authUrl);
+    const result = await request.promptAsync({
+      authorizationEndpoint: ANILIST_AUTH_URL,
+    });
 
-    // Open the browser for authentication
-    const result = await WebBrowser.openAuthSessionAsync(
-      authUrl,
-      redirectUri
-    );
+    console.log('Auth result:', JSON.stringify(result, null, 2));
 
-    console.log('WebBrowser result:', result);
-
-    if (result.type === 'success') {
-      const { url } = result;
-      console.log('Returned URL:', url);
-
-      const code = new URL(url).searchParams.get('code');
+    if (result.type === 'success' && result.params.code) {
+      console.log('Received authorization code:', result.params.code);
+      const tokenResult = await exchangeCodeForToken(result.params.code, codeVerifier, redirectUri);
+      console.log('Token exchange result:', JSON.stringify(tokenResult, null, 2));
       
-      if (code) {
-        console.log('Authorization code:', code);
-        return { code, codeVerifier };
-      } else {
-        console.error('No code found in the returned URL');
-        throw new Error('No authorization code found in the response');
-      }
-    } else if (result.type === 'cancel') {
-      throw new Error('User cancelled the login process');
+      const authData: AuthData = {
+        accessToken: tokenResult.access_token,
+        expiresAt: Date.now() + tokenResult.expires_in * 1000,
+      };
+
+      await saveAuthData(authData);
+      return authData;
+    } else if (result.type === 'error') {
+      console.error('Authorization error:', result.error);
+      throw new Error(`Authorization failed: ${result.error?.description || 'Unknown error'}`);
     } else {
-      throw new Error(`Authentication failed: ${result.type}`);
+      console.error('Login failed. Result:', JSON.stringify(result, null, 2));
+      throw new Error('Login failed');
     }
   } catch (error) {
     console.error('AniList login error:', error);
     throw error;
-  } finally {
-    await WebBrowser.coolDownAsync();
   }
 }
 
-export async function exchangeCodeForToken(code: string, codeVerifier: string): Promise<AuthData> {
-  const redirectUri = makeRedirectUri({
-    scheme: 'exp',
-    path: 'oauth-callback',
-    preferLocalhost: false,
-  });
-
-  console.log('Exchanging code for token...');
+async function exchangeCodeForToken(code: string, codeVerifier: string, redirectUri: string): Promise<any> {
+  console.log('Exchanging code for token');
   console.log('Code:', code);
   console.log('Code Verifier:', codeVerifier);
   console.log('Redirect URI:', redirectUri);
 
-  const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    client_id: ANILIST_CLIENT_ID,
-    client_secret: ANILIST_CLIENT_SECRET,
-    redirect_uri: redirectUri,
-    code: code,
-    code_verifier: codeVerifier,
+  const response = await fetch(ANILIST_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      client_id: ANILIST_CLIENT_ID,
+      client_secret: ANILIST_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      code: code,
+      code_verifier: codeVerifier,
+    }),
   });
 
-  try {
-    const response = await fetch(ANILIST_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-      },
-      body: body.toString(),
-    });
+  const responseText = await response.text();
+  console.log('Token exchange response:', responseText);
 
-    console.log('Token exchange response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Token exchange error:', errorText);
-      throw new Error(`Failed to exchange code for token: ${response.status} ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log('Token exchange successful:', data);
-
-    const authData: AuthData = {
-      accessToken: data.access_token,
-      expiresAt: Date.now() + data.expires_in * 1000,
-    };
-
-    await saveAuthData(authData);
-    return authData;
-  } catch (error) {
-    console.error('Error during token exchange:', error);
-    throw error;
+  if (!response.ok) {
+    throw new Error(`Failed to exchange code for token: ${response.status} ${response.statusText}`);
   }
+
+  return JSON.parse(responseText);
 }
 
 async function saveAuthData(authData: AuthData): Promise<void> {
