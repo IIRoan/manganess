@@ -11,6 +11,8 @@ import Alert2 from '@/components/Alert';
 import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 import { decode } from 'html-entities';
+import { updateMangaStatus, searchAnilistMangaByName } from '@/services/anilistService';
+
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
 const MAX_HISTORY_LENGTH = 10;
@@ -106,17 +108,59 @@ export default function MangaDetailScreen() {
                     [
                         {
                             text: "No",
-                            style: "cancel"
+                            style: "cancel",
+                            onPress: () => updateAniListStatus(status)
                         },
                         {
                             text: "Yes",
-                            onPress: () => markAllChaptersAsRead()
+                            onPress: async () => {
+                                await markAllChaptersAsRead();
+                                await updateAniListStatus(status);
+                            }
                         }
                     ]
                 );
+            } else {
+                await updateAniListStatus(status);
             }
         } catch (error) {
             console.error('Error saving bookmark:', error);
+        }
+    };
+    
+    const updateAniListStatus = async (status: BookmarkStatus) => {
+        try {
+            const anilistManga = await searchAnilistMangaByName(mangaDetails?.title || '');
+            if (anilistManga) {
+                let anilistStatus: string;
+                let progress: number = 0;
+    
+                switch (status) {
+                    case "To Read":
+                        anilistStatus = "PLANNING";
+                        break;
+                    case "Reading":
+                        anilistStatus = "CURRENT";
+                        progress = readChapters.length;
+                        break;
+                    case "Read":
+                        anilistStatus = "COMPLETED";
+                        progress = mangaDetails?.chapters.length || 0;
+                        break;
+                    default:
+                        anilistStatus = "PLANNING";
+                }
+    
+                await updateMangaStatus(anilistManga.id, anilistStatus, progress);
+                console.log(`Updated AniList status for ${mangaDetails?.title} to ${anilistStatus}`);
+                Alert.alert("Success", `Updated AniList status for "${mangaDetails?.title}" to ${status}`);
+            } else {
+                console.log(`Manga ${mangaDetails?.title} not found on AniList`);
+                Alert.alert("Not Found", `"${mangaDetails?.title}" was not found on AniList. Only local status was updated.`);
+            }
+        } catch (error) {
+            console.error('Error updating AniList status:', error);
+            Alert.alert("Error", `Failed to update AniList status: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     };
 
