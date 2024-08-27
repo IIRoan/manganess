@@ -13,6 +13,17 @@ interface AnilistManga {
   };
 }
 
+
+export const isLoggedInToAniList = async (): Promise<boolean> => {
+  try {
+    const token = await AsyncStorage.getItem('anilistToken');
+    return !!token; // Returns true if token exists, false otherwise
+  } catch (error) {
+    console.error('Error checking AniList login status:', error);
+    return false;
+  }
+};
+
 async function makeGraphQLRequest(query: string, variables: any, accessToken?: string) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

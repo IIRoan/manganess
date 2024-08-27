@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { decode } from 'html-entities';
 import { MANGA_API_URL } from '@/constants/Config';
-import { searchAnilistMangaByName, updateMangaStatus } from '@/services/anilistService';
+import { searchAnilistMangaByName, updateMangaStatus, isLoggedInToAniList } from '@/services/anilistService';
 
 export interface MangaItem {
   id: string;
@@ -182,6 +182,13 @@ const updateAniListProgress = async (id: string, mangaTitle: string, progress: n
   }
 
   try {
+    // Check if the user is logged in to AniList
+    const isLoggedIn = await isLoggedInToAniList();
+    if (!isLoggedIn) {
+      console.log('User is not logged in to AniList. Skipping update.');
+      return;
+    }
+
     const anilistManga = await searchAnilistMangaByName(mangaTitle);
     if (anilistManga) {
       let status: string;

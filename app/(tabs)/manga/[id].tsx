@@ -12,7 +12,7 @@ import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 import { decode } from 'html-entities';
 import { updateMangaStatus, searchAnilistMangaByName } from '@/services/anilistService';
-
+import { isLoggedInToAniList } from '@/services/anilistService';
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
 const MAX_HISTORY_LENGTH = 10;
@@ -130,6 +130,12 @@ export default function MangaDetailScreen() {
     
     const updateAniListStatus = async (status: BookmarkStatus) => {
         try {
+            const isLoggedIn = await isLoggedInToAniList();
+            if (!isLoggedIn) {
+                console.log('User is not logged in to AniList. Skipping update.');
+                return;
+            }
+    
             const anilistManga = await searchAnilistMangaByName(mangaDetails?.title || '');
             if (anilistManga) {
                 let anilistStatus: string;
@@ -160,7 +166,6 @@ export default function MangaDetailScreen() {
             }
         } catch (error) {
             console.error('Error updating AniList status:', error);
-            Alert.alert("Error", `Failed to update AniList status: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     };
 
