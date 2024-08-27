@@ -34,7 +34,7 @@ export default function TabLayout() {
   const shouldShowTabBar = () => {
     const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
     if (enableDebugTab) {
-      allowedPaths.push('/Debug');
+      allowedPaths.push('/debug');
     }
     return allowedPaths.includes(pathname) || pathname.match(/^\/manga\/[^\/]+$/);
   };
@@ -54,7 +54,7 @@ export default function TabLayout() {
               iconName = focused ? 'bookmark' : 'bookmark-outline';
             } else if (route.name === 'settings') {
               iconName = focused ? 'settings' : 'settings-outline';
-            } else if (route.name === 'Debug') {
+            } else if (route.name === 'debug') {
               iconName = focused ? 'bug' : 'bug-outline';
             }
 
@@ -104,7 +104,7 @@ export default function TabLayout() {
         <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
         
         <Tabs.Screen 
-          name="Debug" 
+          name="debug" 
           options={{ 
             title: 'Debug',
             href: enableDebugTab ? undefined : null,
