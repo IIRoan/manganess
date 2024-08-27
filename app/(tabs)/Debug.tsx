@@ -6,6 +6,7 @@ import { Colors } from '@/constants/Colors';
 import * as MangaUpdateService from '@/services/mangaUpdateService';
 import * as Notifications from 'expo-notifications';
 import * as AniListOAuth from '@/services/anilistOAuth';
+import { searchAnilistMangaByName, updateMangaStatus } from '@/services/anilistService';
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -16,6 +17,10 @@ export default function DebugScreen() {
   const [user, setUser] = useState<any>(null);
   const [mangaId, setMangaId] = useState('chainsaw-man.0w5k');
   const [chapterNumber, setChapterNumber] = useState('176');
+
+  const [mangaName, setMangaName] = useState('');
+  const [anilistResult, setAnilistResult] = useState<null | { id: number; title: string }>(null);
+  const [markAsReadMangaName, setMarkAsReadMangaName] = useState('');
 
   useEffect(() => {
     MangaUpdateService.startUpdateService();
@@ -43,28 +48,83 @@ export default function DebugScreen() {
       const userData = await AniListOAuth.getCurrentUser();
       setUser(userData.data.Viewer);
       Alert.alert("Success", `Logged in as: ${userData.data.Viewer.name}`);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('AniList login error:', error);
-      if (error.message === 'Login was cancelled') {
+      if (error instanceof Error && error.message === 'Login was cancelled') {
         Alert.alert("Cancelled", "Login was cancelled");
       } else {
-        Alert.alert("Error", `Failed to login with AniList: ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+        Alert.alert("Error", `Failed to login with AniList: ${errorMessage}`);
       }
     }
   };
-  
+
 
   const handleAniListLogout = async () => {
     try {
       await AniListOAuth.logout();
       setUser(null);
       Alert.alert("Success", "Logged out successfully");
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('AniList logout error:', error);
-      Alert.alert("Error", `Failed to logout: ${error.message}`);
+      if (error instanceof Error) {
+        Alert.alert("Error", `Failed to logout: ${error.message}`);
+      } else {
+        Alert.alert("Error", "Failed to logout: An unknown error occurred");
+      }
     }
   };
+
+  const searchAnilistManga = async () => {
+    if (!mangaName.trim()) {
+      Alert.alert("Error", "Please enter a manga name");
+      return;
+    }
+
+    try {
+      const result = await searchAnilistMangaByName(mangaName);
+      if (result) {
+        setAnilistResult({
+          id: result.id,
+          title: result.title.english || result.title.romaji || result.title.native
+        });
+      } else {
+        setAnilistResult(null);
+        Alert.alert("Not Found", "No manga found with that name on AniList");
+      }
+    } catch (error) {
+      console.error('Error searching AniList:', error);
+      Alert.alert("Error", "Failed to search AniList. Please try again.");
+    }
+  };
+
+
+  const markMangaAsRead = async () => {
+    if (!markAsReadMangaName.trim()) {
+      Alert.alert("Error", "Please enter a manga name");
+      return;
+    }
   
+    try {
+      const authData = await AniListOAuth.getAuthData();
+      if (!authData) {
+        Alert.alert("Error", "You are not logged in to AniList. Please log in first.");
+        return;
+      }
+  
+      const result = await searchAnilistMangaByName(markAsReadMangaName);
+      if (result) {
+        await updateMangaStatus(result.id, 'COMPLETED', 0);
+        Alert.alert("Success", `Marked "${result.title.english || result.title.romaji}" as read on AniList`);
+      } else {
+        Alert.alert("Not Found", "No manga found with that name on AniList");
+      }
+    } catch (error: unknown) {
+      console.error('Error marking manga as read:', error);
+      Alert.alert("Error", `Failed to mark manga as read: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const sendTestNotification = async () => {
     try {
       const notificationId = await Notifications.scheduleNotificationAsync({
@@ -86,7 +146,7 @@ export default function DebugScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
         <Text style={styles.title}>Debug</Text>
-        
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Update Service</Text>
           <TouchableOpacity
@@ -168,6 +228,52 @@ export default function DebugScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AniList Manga Search</Text>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Manga Name:</Text>
+            <TextInput
+              value={mangaName}
+              onChangeText={setMangaName}
+              style={styles.input}
+              placeholderTextColor={colors.text}
+              placeholder="Enter manga name"
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={searchAnilistManga}
+          >
+            <Text style={styles.buttonText}>Search AniList</Text>
+          </TouchableOpacity>
+          {anilistResult && (
+            <View style={styles.resultContainer}>
+              <Text style={styles.resultText}>AniList ID: {anilistResult.id}</Text>
+              <Text style={styles.resultText}>Title: {anilistResult.title}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Mark Manga as Read on AniList</Text>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Manga Name:</Text>
+            <TextInput
+              value={markAsReadMangaName}
+              onChangeText={setMarkAsReadMangaName}
+              style={styles.input}
+              placeholderTextColor={colors.text}
+              placeholder="Enter manga name to mark as read"
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={markMangaAsRead}
+          >
+            <Text style={styles.buttonText}>Mark as Read on AniList</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Debug Actions</Text>
           <TouchableOpacity
             style={styles.option}
@@ -225,6 +331,17 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
+  },
+  resultContainer: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: colors.background,
+    borderRadius: 5,
+  },
+  resultText: {
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 5,
   },
   avatar: {
     width: 50,
