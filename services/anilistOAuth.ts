@@ -76,7 +76,6 @@ export async function loginWithAniList(): Promise<AuthData> {
     throw error;
   }
 }
-
 async function exchangeCodeForToken(code: string, codeVerifier: string, redirectUri: string): Promise<any> {
   console.log('Exchanging code for token');
   console.log('Code:', code);
@@ -105,7 +104,10 @@ async function exchangeCodeForToken(code: string, codeVerifier: string, redirect
     throw new Error(`Failed to exchange code for token: ${response.status} ${response.statusText}`);
   }
 
-  return JSON.parse(responseText);
+  const tokenData = JSON.parse(responseText);
+  await AsyncStorage.setItem('anilistToken', tokenData.access_token);
+
+  return tokenData;
 }
 
 async function saveAuthData(authData: AuthData): Promise<void> {

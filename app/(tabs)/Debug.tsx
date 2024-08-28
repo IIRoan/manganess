@@ -6,7 +6,7 @@ import { Colors } from '@/constants/Colors';
 import * as MangaUpdateService from '@/services/mangaUpdateService';
 import * as Notifications from 'expo-notifications';
 import * as AniListOAuth from '@/services/anilistOAuth';
-import { searchAnilistMangaByName, updateMangaStatus } from '@/services/anilistService';
+import { searchAnilistMangaByName, updateMangaStatus, syncAllMangaWithAniList } from '@/services/anilistService';
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -42,12 +42,22 @@ export default function DebugScreen() {
     }
   };
 
+
+  const handleSyncAllManga = async () => {
+    try {
+      const results = await syncAllMangaWithAniList();
+      Alert.alert("Sync Results", results.join('\n'));
+    } catch (error) {
+      console.error('Error syncing manga:', error);
+      Alert.alert("Error", `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handleAniListLogin = async () => {
     try {
       await AniListOAuth.loginWithAniList();
       const userData = await AniListOAuth.getCurrentUser();
       setUser(userData.data.Viewer);
-      Alert.alert("Success", `Logged in as: ${userData.data.Viewer.name}`);
     } catch (error: unknown) {
       console.error('AniList login error:', error);
       if (error instanceof Error && error.message === 'Login was cancelled') {
@@ -64,7 +74,6 @@ export default function DebugScreen() {
     try {
       await AniListOAuth.logout();
       setUser(null);
-      Alert.alert("Success", "Logged out successfully");
     } catch (error: unknown) {
       console.error('AniList logout error:', error);
       if (error instanceof Error) {
@@ -270,6 +279,16 @@ export default function DebugScreen() {
             onPress={markMangaAsRead}
           >
             <Text style={styles.buttonText}>Mark as Read on AniList</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AniList Sync</Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleSyncAllManga}
+          >
+            <Text style={styles.buttonText}>Sync All Manga with AniList</Text>
           </TouchableOpacity>
         </View>
 

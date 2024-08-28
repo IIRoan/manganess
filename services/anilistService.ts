@@ -1,7 +1,7 @@
 // anilistService.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthData } from './anilistOAuth'; 
-
+import { decode } from 'html-entities';
 const ANILIST_API_URL = 'https://graphql.anilist.co';
 
 interface AnilistManga {
@@ -16,8 +16,8 @@ interface AnilistManga {
 
 export const isLoggedInToAniList = async (): Promise<boolean> => {
   try {
-    const token = await AsyncStorage.getItem('anilistToken');
-    return !!token; // Returns true if token exists, false otherwise
+    const authData = await getAuthData();
+    return !!authData && Date.now() < authData.expiresAt;
   } catch (error) {
     console.error('Error checking AniList login status:', error);
     return false;
@@ -91,6 +91,11 @@ export async function getAnilistIdFromInternalId(internalId: string): Promise<nu
 }
 
 export async function updateMangaStatus(mediaId: number, status: string, progress: number): Promise<void> {
+  const isLoggedIn = await isLoggedInToAniList();
+  if (!isLoggedIn) {
+    console.log('User is not logged in to AniList. Skipping update.');
+    return;
+  }
   const authData = await getAuthData();
   if (!authData) {
     throw new Error('User not authenticated with AniList');
@@ -118,4 +123,70 @@ export async function updateMangaStatus(mediaId: number, status: string, progres
     console.error('Error updating manga status on AniList:', error);
     throw error;
   }
+}
+
+
+
+// large syncAllMangaWithAniList function
+
+export async function syncAllMangaWithAniList(): Promise<string[]> {
+  const isLoggedIn = await isLoggedInToAniList();
+  if (!isLoggedIn) {
+    throw new Error('User is not logged in to AniList');
+  }
+
+  const bookmarkKeysString = await AsyncStorage.getItem('bookmarkKeys');
+  if (!bookmarkKeysString) {
+    return ['No bookmarked manga found'];
+  }
+
+  const bookmarkKeys = JSON.parse(bookmarkKeysString);
+  const results: string[] = [];
+
+  for (const key of bookmarkKeys) {
+    const id = key.replace('bookmark_', '');
+    const status = await AsyncStorage.getItem(key);
+    const title = await AsyncStorage.getItem(`title_${id}`);
+    const readChaptersString = await AsyncStorage.getItem(`manga_${id}_read_chapters`);
+
+    if (!title || !status) {
+      results.push(`Skipped manga with ID ${id}: Missing title or status`);
+      continue;
+    }
+
+    const decodedTitle = decode(title);
+    const anilistManga = await searchAnilistMangaByName(decodedTitle);
+
+    if (!anilistManga) {
+      results.push(`Manga not found on AniList: ${decodedTitle}`);
+      continue;
+    }
+
+    let anilistStatus: string;
+    switch (status) {
+      case 'To Read':
+        anilistStatus = 'PLANNING';
+        break;
+      case 'Reading':
+        anilistStatus = 'CURRENT';
+        break;
+      case 'Read':
+        anilistStatus = 'COMPLETED';
+        break;
+      default:
+        anilistStatus = 'PLANNING';
+    }
+
+    const readChapters = readChaptersString ? JSON.parse(readChaptersString) : [];
+    const progress = readChapters.length;
+
+    try {
+      await updateMangaStatus(anilistManga.id, anilistStatus, progress);
+      results.push(`Updated "${decodedTitle}" on AniList: Status=${anilistStatus}, Progress=${progress}`);
+    } catch (error) {
+      results.push(`Failed to update "${decodedTitle}" on AniList: ${error}`);
+    }
+  }
+
+  return results;
 }
