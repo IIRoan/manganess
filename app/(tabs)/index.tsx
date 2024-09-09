@@ -346,5 +346,4 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 15,
   },
-
 });

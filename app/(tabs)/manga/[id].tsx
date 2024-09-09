@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, useColorScheme } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, useColorScheme, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect, useNavigation, usePathname } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,8 @@ import Alert2 from '@/components/Alert';
 import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 import { decode } from 'html-entities';
+import { updateMangaStatus, searchAnilistMangaByName } from '@/services/anilistService';
+import { isLoggedInToAniList } from '@/services/anilistService';
 
 type BookmarkStatus = "To Read" | "Reading" | "Read";
 const MAX_HISTORY_LENGTH = 10;
@@ -76,29 +78,29 @@ export default function MangaDetailScreen() {
     const saveBookmark = async (status: BookmarkStatus) => {
         try {
             await AsyncStorage.setItem(`bookmark_${id}`, status);
-            
+
             // Decode the title before saving
             const decodedTitle = decode(mangaDetails?.title || '');
             await AsyncStorage.setItem(`title_${id}`, decodedTitle);
-            
+
             await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage || '');
-    
+
             const keys = await AsyncStorage.getItem('bookmarkKeys');
             const bookmarkKeys = keys ? JSON.parse(keys) : [];
             if (!bookmarkKeys.includes(`bookmark_${id}`)) {
                 bookmarkKeys.push(`bookmark_${id}`);
                 await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
             }
-    
+
             setBookmarkStatus(status);
             setIsAlertVisible(false);
-    
+
             if (status === "Reading" && mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
                 const lastReleasedChapter = mangaDetails.chapters[0].number;
                 await AsyncStorage.setItem(`last_notified_chapter_${id}`, lastReleasedChapter);
                 console.log(`Set last notified chapter for ${id} to ${lastReleasedChapter}`);
             }
-    
+
             if (status === "Read") {
                 Alert.alert(
                     "Mark All Chapters as Read",
@@ -106,17 +108,64 @@ export default function MangaDetailScreen() {
                     [
                         {
                             text: "No",
-                            style: "cancel"
+                            style: "cancel",
+                            onPress: () => updateAniListStatus(status)
                         },
                         {
                             text: "Yes",
-                            onPress: () => markAllChaptersAsRead()
+                            onPress: async () => {
+                                await markAllChaptersAsRead();
+                                await updateAniListStatus(status);
+                            }
                         }
                     ]
                 );
+            } else {
+                await updateAniListStatus(status);
             }
         } catch (error) {
             console.error('Error saving bookmark:', error);
+        }
+    };
+
+    const updateAniListStatus = async (status: BookmarkStatus) => {
+        try {
+            const isLoggedIn = await isLoggedInToAniList();
+            if (!isLoggedIn) {
+                console.log('User is not logged in to AniList. Skipping update.');
+                return;
+            }
+
+            const anilistManga = await searchAnilistMangaByName(mangaDetails?.title || '');
+            if (anilistManga) {
+                let anilistStatus: string;
+                let progress: number = 0;
+
+                switch (status) {
+                    case "To Read":
+                        anilistStatus = "PLANNING";
+                        break;
+                    case "Reading":
+                        anilistStatus = "CURRENT";
+                        progress = readChapters.length;
+                        break;
+                    case "Read":
+                        anilistStatus = "COMPLETED";
+                        progress = mangaDetails?.chapters.length || 0;
+                        break;
+                    default:
+                        anilistStatus = "PLANNING";
+                }
+
+                await updateMangaStatus(anilistManga.id, anilistStatus, progress);
+                console.log(`Updated AniList status for ${mangaDetails?.title} to ${anilistStatus}`);
+                Alert.alert("Success", `Updated AniList status for "${mangaDetails?.title}" to ${status}`);
+            } else {
+                console.log(`Manga ${mangaDetails?.title} not found on AniList`);
+                Alert.alert("Not Found", `"${mangaDetails?.title}" was not found on AniList. Only local status was updated.`);
+            }
+        } catch (error) {
+            console.error('Error updating AniList status:', error);
         }
     };
 
@@ -305,145 +354,143 @@ export default function MangaDetailScreen() {
     }
 
     return (
-        <ScrollView style={styles.container}>
-            <View style={styles.headerContainer}>
-                <Image
-                    source={{ uri: mangaDetails.bannerImage }}
-                    style={styles.bannerImage}
-                    onError={(error) => console.error('Error loading banner image:', error)}
-                />
-                <View style={styles.overlay} />
-                <View style={styles.headerContent}>
-                    <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
-                        {mangaDetails.title}
-                    </Text>
-                    <TouchableOpacity onPress={handleBookmark} style={styles.bookmarkButton}>
-                        <Ionicons
-                            name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
-                            size={30}
-                            color={colors.primary}
-                        />
-                    </TouchableOpacity>
-
-
-                    <Alert2
-                        visible={isAlertVisible}
-                        title={bookmarkStatus ? "Update Bookmark" : "Bookmark Manga"}
-                        onClose={() => setIsAlertVisible(false)}
-                        // @ts-ignore
-                        options={
-                            bookmarkStatus
-                                ? [
-                                    { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
-                                    { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
-                                    {
-                                        text: "Read",
-                                        onPress: () => saveBookmark("Read"),
-                                        icon: "checkmark-circle-outline"
-                                    },
-                                    { text: "Unbookmark", onPress: removeBookmark, icon: "close-circle-outline" },
-                                ]
-                                : [
-                                    { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
-                                    { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
-                                    {
-                                        text: "Read",
-                                        onPress: () => saveBookmark("Read"),
-                                        icon: "checkmark-circle-outline"
-                                    },
-                                ]
-                        }
-                    />
-
-                    {mangaDetails.alternativeTitle && (
-                        <View>
-                            <ExpandableText
-                                text={mangaDetails.alternativeTitle}
-                                initialLines={1}
-                                style={styles.alternativeTitle}
+        <View style={styles.container}>
+            <FlatList
+                ListHeaderComponent={() => (
+                    <>
+                        <View style={styles.headerContainer}>
+                            <Image
+                                source={{ uri: mangaDetails.bannerImage }}
+                                style={styles.bannerImage}
+                                onError={(error) => console.error('Error loading banner image:', error)}
                             />
-                        </View>
-                    )}
-                    <View style={styles.statusContainer}>
-                        <Text style={styles.statusText}>{mangaDetails.status}</Text>
-                    </View>
-                </View>
-            </View>
-            <View style={styles.contentContainer}>
-                <View style={styles.infoContainer}>
-                    <View style={styles.descriptionContainer}>
-                        <Text style={styles.sectionTitle}>Description</Text>
-                        <ExpandableText
-                            text={mangaDetails.description}
-                            initialLines={3}
-                            style={styles.description}
-                        />
-
-                    </View>
-                    <View style={styles.detailsContainer}>
-                        <Text style={styles.sectionTitle}>Details</Text>
-                        <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Author</Text>
-                            <Text style={styles.detailValue}>{mangaDetails.author.join(', ')}</Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Published</Text>
-                            <Text style={styles.detailValue}>{mangaDetails.published}</Text>
-                        </View>
-                        <View style={styles.detailRow}>
-                            <Text style={styles.detailLabel}>Rating</Text>
-                            <View style={styles.ratingContainer}>
-                                <Text style={styles.rating}>{mangaDetails.rating}</Text>
-                                <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
+                            <View style={styles.overlay} />
+                            <View style={styles.headerContent}>
+                                <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+                                    <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
+                                </TouchableOpacity>
+                                <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
+                                    {mangaDetails.title}
+                                </Text>
+                                <TouchableOpacity onPress={handleBookmark} style={styles.bookmarkButton}>
+                                    <Ionicons
+                                        name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
+                                        size={30}
+                                        color={colors.primary}
+                                    />
+                                </TouchableOpacity>
+    
+                                <Alert2
+                                    visible={isAlertVisible}
+                                    title={bookmarkStatus ? "Update Bookmark" : "Bookmark Manga"}
+                                    onClose={() => setIsAlertVisible(false)}
+                                    options={
+                                        bookmarkStatus
+                                            ? [
+                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline"},
+                                                { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
+                                                { text: "Read", onPress: () => saveBookmark("Read"), icon: "checkmark-circle-outline" },
+                                                { text: "Unbookmark", onPress: removeBookmark, icon: "close-circle-outline" },
+                                            ]
+                                            : [
+                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
+                                                { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
+                                                { text: "Read", onPress: () => saveBookmark("Read"), icon: "checkmark-circle-outline" },
+                                            ]
+                                    }
+                                />
+    
+                                {mangaDetails.alternativeTitle && (
+                                    <View>
+                                        <ExpandableText
+                                            text={mangaDetails.alternativeTitle}
+                                            initialLines={1}
+                                            style={styles.alternativeTitle}
+                                        />
+                                    </View>
+                                )}
+                                <View style={styles.statusContainer}>
+                                    <Text style={styles.statusText}>{mangaDetails.status}</Text>
+                                </View>
                             </View>
                         </View>
-                        <Text style={[styles.detailLabel, { marginTop: 10 }]}>Genres</Text>
-                        <View style={styles.genresContainer}>
-                            {mangaDetails.genres.map((genre, index) => (
-                                <GenreTag key={index} genre={genre} />
-                            ))}
+                        <View style={styles.contentContainer}>
+                            <View style={styles.infoContainer}>
+                                <View style={styles.descriptionContainer}>
+                                    <Text style={styles.sectionTitle}>Description</Text>
+                                    <ExpandableText
+                                        text={mangaDetails.description}
+                                        initialLines={3}
+                                        style={styles.description}
+                                    />
+                                </View>
+                                <View style={styles.detailsContainer}>
+                                    <Text style={styles.sectionTitle}>Details</Text>
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>Author</Text>
+                                        <Text style={styles.detailValue}>{mangaDetails.author.join(', ')}</Text>
+                                    </View>
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>Published</Text>
+                                        <Text style={styles.detailValue}>{mangaDetails.published}</Text>
+                                    </View>
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>Rating</Text>
+                                        <View style={styles.ratingContainer}>
+                                            <Text style={styles.rating}>{mangaDetails.rating}</Text>
+                                            <Text style={styles.ratingText}>/10 ({mangaDetails.reviewCount} reviews)</Text>
+                                        </View>
+                                    </View>
+                                    <Text style={[styles.detailLabel, { marginTop: 10 }]}>Genres</Text>
+                                    <View style={styles.genresContainer}>
+                                        {mangaDetails.genres.map((genre, index) => (
+                                            <GenreTag key={index} genre={genre} />
+                                        ))}
+                                    </View>
+                                </View>
+                            </View>
                         </View>
-                    </View>
-
-                </View>
-                <View style={styles.chaptersContainer}>
-                    <Text style={styles.sectionTitle}>Chapters</Text>
-                    {mangaDetails.chapters.map((chapter, index) => {
-                        const isRead = readChapters.includes(chapter.number);
-                        const isLastItem = index === mangaDetails.chapters.length - 1;
-                        return (
-                            <TouchableOpacity
-                                key={index}
-                                style={[
-                                    styles.chapterItem,
-                                    isLastItem && styles.lastChapterItem
-                                ]}
-                                onPress={() => handleChapterPress(chapter.number)}
-                                onLongPress={() => handleChapterLongPress(chapter.number)}
-                            >
-                                <View style={styles.chapterInfo}>
-                                    <Text style={[styles.chapterTitle, isRead && styles.readChapterTitle]}>
-                                        {chapter.title}
-                                    </Text>
-                                    <Text style={styles.chapterDate}>{chapter.date}</Text>
-                                </View>
-                                <View style={styles.chapterStatus}>
-                                    {isRead ? (
-                                        <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-                                    ) : (
-                                        <Ionicons name="ellipse-outline" size={24} color={colors.tabIconDefault} />
-                                    )}
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-            </View>
-        </ScrollView>
+                        <View style={styles.chaptersContainer}>
+                            <Text style={styles.sectionTitle}>Chapters</Text>
+                        </View>
+                    </>
+                )}
+                data={mangaDetails.chapters}
+                keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
+                renderItem={({ item: chapter, index }) => {
+                    const isRead = readChapters.includes(chapter.number);
+                    const isLastItem = index === mangaDetails.chapters.length - 1;
+                    return (
+                        <TouchableOpacity
+                            style={[
+                                styles.chapterItem,
+                                isLastItem && styles.lastChapterItem
+                            ]}
+                            onPress={() => handleChapterPress(chapter.number)}
+                            onLongPress={() => handleChapterLongPress(chapter.number)}
+                        >
+                            <View style={styles.chapterInfo}>
+                                <Text style={[styles.chapterTitle, isRead && styles.readChapterTitle]}>
+                                    {chapter.title}
+                                </Text>
+                                <Text style={styles.chapterDate}>{chapter.date}</Text>
+                            </View>
+                            <View style={styles.chapterStatus}>
+                                {isRead ? (
+                                    <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                                ) : (
+                                    <Ionicons name="ellipse-outline" size={24} color={colors.tabIconDefault} />
+                                )}
+                            </View>
+                        </TouchableOpacity>
+                    );
+                }}
+                ListFooterComponent={<View style={{ height: 70 }} />}
+            />
+        </View>
     );
+    
+    
 }
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     container: {
@@ -582,6 +629,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 10,
         color: colors.text,
+        textAlign: 'left',
     },
     description: {
         fontSize: 16,
@@ -625,7 +673,8 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         fontWeight: '600',
     },
     chaptersContainer: {
-        padding: 20,
+        paddingHorizontal: 20,
+        paddingTop: 20,
         backgroundColor: colors.card,
     },
     chapterItem: {
@@ -633,8 +682,14 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingVertical: 15,
+        paddingHorizontal: 20,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
+        backgroundColor: colors.card,
+    },
+    chapterItemContainer: {
+        paddingHorizontal: 20,
+        backgroundColor: colors.card,
     },
     lastChapterItem: {
         borderBottomWidth: 0,
