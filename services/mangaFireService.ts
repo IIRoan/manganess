@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { decode } from 'html-entities';
 import { MANGA_API_URL } from '@/constants/Config';
+import { searchAnilistMangaByName, updateMangaStatus, isLoggedInToAniList } from '@/services/anilistService';
 
 export interface MangaItem {
   id: string;
@@ -139,7 +140,12 @@ export const getChapterUrl = (id: string, chapterNumber: string): string => {
   return `${MANGA_API_URL}/read/${id}/en/chapter-${chapterNumber}`;
 };
 
-export const markChapterAsRead = async (id: string, chapterNumber: string) => {
+export const markChapterAsRead = async (id: string, chapterNumber: string, mangaTitle: string) => {
+  if (!id || !chapterNumber || !mangaTitle) {
+    console.error('Invalid parameters for markChapterAsRead:', { id, chapterNumber, mangaTitle });
+    return;
+  }
+
   try {
     const key = `manga_${id}_read_chapters`;
     const readChapters = await AsyncStorage.getItem(key) || '[]';
@@ -147,12 +153,68 @@ export const markChapterAsRead = async (id: string, chapterNumber: string) => {
     if (!chaptersArray.includes(chapterNumber)) {
       chaptersArray.push(chapterNumber);
       await AsyncStorage.setItem(key, JSON.stringify(chaptersArray));
-      console.log(`Marked chapter ${chapterNumber} as read for manga ${id}`);
+      console.log(`Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`);
+
+      // Check bookmark status before updating AniList
+      const bookmarkStatus = await getBookmarkStatus(id);
+      if (bookmarkStatus) {
+        await updateAniListProgress(id, mangaTitle, chaptersArray.length, bookmarkStatus);
+      }
     }
   } catch (error) {
     console.error('Error marking chapter as read:', error);
   }
 };
+
+const getBookmarkStatus = async (id: string): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem(`bookmark_${id}`);
+  } catch (error) {
+    console.error('Error getting bookmark status:', error);
+    return null;
+  }
+};
+
+const updateAniListProgress = async (id: string, mangaTitle: string, progress: number, bookmarkStatus: string) => {
+  if (!mangaTitle) {
+    console.error('Manga title is undefined for id:', id);
+    return;
+  }
+
+  try {
+    // Check if the user is logged in to AniList
+    const isLoggedIn = await isLoggedInToAniList();
+    if (!isLoggedIn) {
+      console.log('User is not logged in to AniList. Skipping update.');
+      return;
+    }
+
+    const anilistManga = await searchAnilistMangaByName(mangaTitle);
+    if (anilistManga) {
+      let status: string;
+      switch (bookmarkStatus) {
+        case "To Read":
+          status = "PLANNING";
+          break;
+        case "Reading":
+          status = "CURRENT";
+          break;
+        case "Read":
+          status = "COMPLETED";
+          break;
+        default:
+          status = "CURRENT";
+      }
+      await updateMangaStatus(anilistManga.id, status, progress);
+      console.log(`Updated AniList progress for "${mangaTitle}" (${id}) to ${progress} chapters with status ${status}`);
+    } else {
+      console.log(`Manga "${mangaTitle}" (${id}) not found on AniList`);
+    }
+  } catch (error) {
+    console.error('Error updating AniList progress:', error);
+  }
+};
+
 
 export const getInjectedJavaScript = (backgroundColor: string) => `
   (function() {

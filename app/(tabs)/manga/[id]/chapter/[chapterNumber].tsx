@@ -1,19 +1,20 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { WebView } from 'react-native-webview';
+import { WebView, WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { getChapterUrl, markChapterAsRead, getInjectedJavaScript } from '@/services/mangaFireService';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mangaTitle, setMangaTitle] = useState<string | null>(null);
   const webViewRef = useRef<WebView>(null);
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
@@ -22,9 +23,22 @@ export default function ReadChapterScreen() {
   const chapterUrl = getChapterUrl(id as string, chapterNumber as string);
 
   useEffect(() => {
-    markChapterAsRead(id as string, chapterNumber as string);
-  }, [id, chapterNumber]);
+    const fetchMangaTitle = async () => {
+      try {
+        const title = await AsyncStorage.getItem(`title_${id}`);
+        setMangaTitle(title);
+        if (title) {
+          await markChapterAsRead(id as string, chapterNumber as string, title);
+        } else {
+          console.log('Manga title not found for id:', id);
+        }
+      } catch (error) {
+        console.error('Error fetching manga title:', error);
+      }
+    };
 
+    fetchMangaTitle();
+  }, [id, chapterNumber]);
 
   useFocusEffect(
     useCallback(() => {
@@ -45,13 +59,16 @@ export default function ReadChapterScreen() {
     setIsLoading(false);
   };
 
-  //@ts-ignore
-  const handleNavigationStateChange = async (navState: WebView.NavigationStateChangeEvent) => {
+  const handleNavigationStateChange = async (navState: WebViewNavigation) => {
     if (navState.url !== chapterUrl) {
       const newChapterMatch = navState.url.match(/\/chapter-(\d+)/);
       if (newChapterMatch) {
         const newChapterNumber = newChapterMatch[1];
-        await markChapterAsRead(id as string, chapterNumber as string);
+        if (mangaTitle) {
+          await markChapterAsRead(id as string, newChapterNumber, mangaTitle);
+        } else {
+          console.error('Manga title not available for marking new chapter as read');
+        }
         router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
       }
     }
