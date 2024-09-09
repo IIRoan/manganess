@@ -58,19 +58,23 @@ const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, options })
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
               <Text style={styles.modalText}>{title}</Text>
-              {options.map((option, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.button}
-                  onPress={() => {
-                    option.onPress();
-                    onClose();
-                  }}
-                >
-                  <Ionicons name={option.icon} size={24} color={colors.text} style={styles.icon} />
-                  <Text style={styles.textStyle}>{option.text}</Text>
-                </TouchableOpacity>
-              ))}
+              <View style={styles.optionsContainer}>
+                {options.map((option, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.button}
+                    onPress={() => {
+                      option.onPress();
+                      onClose();
+                    }}
+                  >
+                    <View style={styles.iconContainer}>
+                      <Ionicons name={option.icon} size={24} color={colors.primary} />
+                    </View>
+                    <Text style={styles.textStyle}>{option.text}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </Animated.View>
           </TouchableWithoutFeedback>
         </View>
@@ -89,19 +93,22 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   modalView: {
     margin: 20,
     backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 25,
+    borderRadius: 24,
+    padding: 24,
     alignItems: 'stretch',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
     shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 5,
-    minWidth: 280,
-    maxWidth: '80%',
+    minWidth: 300,
+    maxWidth: '85%',
+  },
+  optionsContainer: {
+    marginTop: 16,
   },
   button: {
     flexDirection: 'row',
@@ -113,8 +120,14 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  icon: {
-    marginRight: 10,
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: `${colors.primary}15`,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   textStyle: {
     color: colors.text,
@@ -123,17 +136,23 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     flex: 1,
   },
   modalText: {
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
     fontWeight: 'bold',
-    fontSize: 22,
+    fontSize: 24,
     color: colors.primary,
   },
   closeButton: {
     position: 'absolute',
-    right: 15,
-    top: 15,
+    right: 16,
+    top: 16,
     zIndex: 1,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: `${colors.text}10`,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

@@ -2,7 +2,6 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Crypto from 'expo-crypto';
 import * as AuthSession from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ANILIST_CLIENT_SECRET } from './env';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -10,6 +9,7 @@ const ANILIST_CLIENT_ID = '20599';
 const ANILIST_AUTH_URL = 'https://anilist.co/api/v2/oauth/authorize';
 const ANILIST_TOKEN_URL = 'https://anilist.co/api/v2/oauth/token';
 const ANILIST_API_URL = 'https://graphql.anilist.co';
+const ANILIST_CLIENT_SECRET = process.env.EXPO_PUBLIC_ANILIST_CLIENT_SECRET;
 
 
 interface AuthData {

@@ -22,7 +22,8 @@ import { searchManga, MangaItem } from '@/services/mangaFireService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-const { height, width } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+const CARD_WIDTH = (width - 48) / 2;
 
 export default function MangaSearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,13 +89,19 @@ export default function MangaSearchScreen() {
 
   const renderMangaCard = useCallback(({ item }: { item: MangaItem }) => {
     return (
+      <View style={styles.cardWrapper}>
       <MangaCard
         key={item.id}
         title={item.title}
         imageUrl={item.banner}
         onPress={() => handleMangaPress(item)}
         lastReadChapter={lastReadChapters[item.id]}
+        style={styles.card}
       />
+            <View style={styles.titleContainer}>
+        <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
+      </View>
+      </View>
     );
   }, [handleMangaPress, lastReadChapters]);
 
@@ -245,5 +252,22 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     color: colors.text,
+  },
+  cardWrapper: {
+    width: CARD_WIDTH,
+    marginBottom: 16,
+  },
+  card: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+  },
+  titleContainer: {
+    flex: 1,
+    marginRight: 10,
+  },
+  mangaTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });

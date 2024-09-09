@@ -379,15 +379,15 @@ export default function MangaDetailScreen() {
                                         color={colors.primary}
                                     />
                                 </TouchableOpacity>
-    
+
                                 <Alert2
                                     visible={isAlertVisible}
-                                    title={bookmarkStatus ? "Update Bookmark" : "Bookmark Manga"}
+                                    title={bookmarkStatus ? "Update Bookmark for \n" + mangaDetails.title :  "Bookmark\n" + mangaDetails.title}
                                     onClose={() => setIsAlertVisible(false)}
                                     options={
                                         bookmarkStatus
                                             ? [
-                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline"},
+                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
                                                 { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
                                                 { text: "Read", onPress: () => saveBookmark("Read"), icon: "checkmark-circle-outline" },
                                                 { text: "Unbookmark", onPress: removeBookmark, icon: "close-circle-outline" },
@@ -399,7 +399,7 @@ export default function MangaDetailScreen() {
                                             ]
                                     }
                                 />
-    
+
                                 {mangaDetails.alternativeTitle && (
                                     <View>
                                         <ExpandableText
@@ -489,8 +489,8 @@ export default function MangaDetailScreen() {
             />
         </View>
     );
-    
-    
+
+
 }
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     container: {
@@ -712,7 +712,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         marginLeft: 10,
     },
     readChapterTitle: {
-        color: '#4CAF50',
+        color: colors.primary,
         fontWeight: '600',
     },
     expandText: {
