@@ -30,7 +30,7 @@ export default function ReadChapterScreen() {
         if (title) {
           await markChapterAsRead(id as string, chapterNumber as string, title);
         } else {
-          console.error('Manga title not found for id:', id);
+          console.log('Manga title not found for id:', id);
         }
       } catch (error) {
         console.error('Error fetching manga title:', error);
