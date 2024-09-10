@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Animated, View, Image, Text, TouchableOpacity, FlatList, ActivityIndicator, SafeAreaView, StatusBar, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, ActivityIndicator, SafeAreaView, StatusBar, ScrollView, Dimensions, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,13 +8,22 @@ import axios from 'axios';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NessieAnimation } from '@/components/NessieAnimation';
 import { MANGA_API_URL } from '@/constants/Config';
+import MangaCard from '@/components/MangaCard';
+import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireService';
 
 interface MangaItem {
   id: string;
-  title: string;
+  title: string ;
   imageUrl: string;
   rank?: number;
 }
+
+
+const { width } = Dimensions.get('window');
+const CARD_WIDTH = (width - 60) / 2;
+const MOST_VIEWED_CARD_WIDTH = 160;
+const MOST_VIEWED_CARD_HEIGHT = 260;
+
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -64,53 +73,12 @@ export default function HomeScreen() {
   };
 
 
-  const parseMostViewedManga = (html: string): MangaItem[] => {
-    const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
-    const matches = [...html.matchAll(regex)];
-    return matches.slice(0, 10).map(match => ({
-      id: match[1],
-      rank: parseInt(match[2]),
-      imageUrl: match[3],
-      title: match[4],
-    }));
-  };
-
-  const parseNewReleases = (html: string): MangaItem[] => {
-    // Find all home-swiper sections
-    const homeSwiperRegex = /<section class="home-swiper">([\s\S]*?)<\/section>/g;
-    const homeSwiperMatches = Array.from(html.matchAll(homeSwiperRegex));
-
-    for (const match of homeSwiperMatches) {
-      const swiperContent = match[1];
-
-      // Check if this home-swiper contains the "New Release" heading
-      if (swiperContent.includes('<h2>New Release</h2>')) {
-
-        // Extract individual manga items
-        const itemRegex = /<div class="swiper-slide unit[^"]*">\s*<a href="\/manga\/([^"]+)">\s*<div class="poster">\s*<div><img src="([^"]+)" alt="([^"]+)"><\/div>\s*<\/div>\s*<span>([^<]+)<\/span>\s*<\/a>\s*<\/div>/g;
-        const matches = Array.from(swiperContent.matchAll(itemRegex));
-
-        const mangaItems = matches.map(match => ({
-          id: match[1],
-          imageUrl: match[2],
-          title: match[4].trim(),
-        }));
-
-
-        return mangaItems;
-      }
-    }
-
-    console.log('Could not find "New Release" section');
-    return [];
-  };
-
-  const renderMangaItem = ({ item }: { item: MangaItem }) => (
+  const renderMostViewedItem = ({ item }: { item: MangaItem }) => (
     <TouchableOpacity
-      style={styles.mangaItem}
+      style={styles.mostViewedItem}
       onPress={() => router.navigate(`/manga/${item.id}`)}
     >
-      <Image source={{ uri: item.imageUrl }} style={styles.mangaImage} />
+      <Image source={{ uri: item.imageUrl }} style={styles.mostViewedImage} />
       <LinearGradient
         colors={['transparent', `${colors.background}E6`]}
         style={styles.infoContainer}
@@ -125,17 +93,18 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const renderSection = (title: string, data: MangaItem[], renderItem: any) => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <FlatList
-        data={data}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.mangaList}
+  const renderNewReleaseItem = ({ item }: { item: MangaItem }) => (
+    <View style={styles.cardWrapper}>
+      <MangaCard
+        title={item.title}
+        imageUrl={item.imageUrl}
+        onPress={() => router.navigate(`/manga/${item.id}`)}
+        lastReadChapter={null}
+        style={styles.card}
       />
+      <View style={styles.titleContainer}>
+        <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
+      </View>
     </View>
   );
 
@@ -150,8 +119,6 @@ export default function HomeScreen() {
               <NessieAnimation />
             </View>
           </View>
-
-
           <TouchableOpacity onPress={() => router.navigate('/mangasearch')}>
             <Ionicons name="search" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -170,8 +137,27 @@ export default function HomeScreen() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.content}
           >
-            {renderSection('Top 10 Most Viewed Manga', mostViewedManga, renderMangaItem)}
-            {renderSection('New Releases', newReleases, renderMangaItem)}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Top 10 Most Viewed Manga</Text>
+              <FlatList
+                data={mostViewedManga}
+                renderItem={renderMostViewedItem}
+                keyExtractor={(item) => item.id}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.mostViewedList}
+              />
+            </View>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>New Releases</Text>
+              <View style={styles.newReleaseGrid}>
+                {newReleases.map((item) => (
+                  <View key={item.id} style={styles.newReleaseItemWrapper}>
+                    {renderNewReleaseItem({ item })}
+                  </View>
+                ))}
+              </View>
+            </View>
           </ScrollView>
         )}
       </View>
@@ -183,6 +169,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+
   container: {
     flex: 1,
     paddingTop: StatusBar.currentHeight || 0,
@@ -203,39 +190,25 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
-    marginRight: 10, // Add some space between the title and Nessie
+    marginRight: 10,
   },
   nessieContainer: {
-
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
-    paddingBottom: 100,
+  mostViewedList: {
+    paddingLeft: 16,
+    paddingRight: 8,
   },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    paddingHorizontal: 20,
-    color: colors.text,
-  },
-  mangaList: {
-    paddingLeft: 15,
-  },
-  mangaItem: {
-    width: 160,
-    height: 260,
+  mostViewedItem: {
+    width: MOST_VIEWED_CARD_WIDTH,
+    height: MOST_VIEWED_CARD_HEIGHT,
     marginRight: 15,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: colors.card,
-
   },
-  mangaImage: {
+  mostViewedImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
@@ -259,20 +232,39 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     fontWeight: 'bold',
-
-  },
-  rankContainer: {
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   rankText: {
     color: colors.primary,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  newReleaseGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  newReleaseItemWrapper: {
+    width: CARD_WIDTH,
+    marginBottom: 20,
+  },
+  content: {
+    paddingBottom: 100,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    color: colors.text,
+  },
+  cardWrapper: {
+    width: CARD_WIDTH,
+    marginRight: 8,
+    marginBottom: 16,
   },
   loader: {
     flex: 1,
@@ -302,48 +294,9 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  latestUpdatesList: {
-    paddingHorizontal: 20,
+  card: {
+    width: '100%',
+    aspectRatio: 3 / 4,
   },
-  latestUpdateItem: {
-    flexDirection: 'row',
-    marginBottom: 15,
-    backgroundColor: colors.card,
-    borderRadius: 10,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  latestUpdateImage: {
-    width: 80,
-    height: 120,
-    resizeMode: 'cover',
-  },
-  latestUpdateInfo: {
-    flex: 1,
-    padding: 10,
-    justifyContent: 'space-between',
-  },
-  latestUpdateTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 5,
-  },
-  latestUpdateType: {
-    color: colors.primary,
-    fontSize: 14,
-    marginBottom: 5,
-  },
-  latestUpdateChapter: {
-    color: colors.text,
-    fontSize: 14,
-  },
-  row: {
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
+
 });

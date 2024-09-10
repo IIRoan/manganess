@@ -9,6 +9,7 @@ export interface MangaItem {
   id: string;
   title: string;
   banner: string;
+  imageUrl: string;
   link: string;
   type: string;
 }
@@ -50,6 +51,7 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
         link: `${MANGA_API_URL}${link}`,
         title: decode(match[4].trim()),
         banner: match[2],
+        imageUrl: match[2],
         type: decode(match[3].trim()),
       };
     });
@@ -215,6 +217,47 @@ const updateAniListProgress = async (id: string, mangaTitle: string, progress: n
   }
 };
 
+export const parseNewReleases = (html: string): MangaItem[] => {
+  // Find all home-swiper sections
+  const homeSwiperRegex = /<section class="home-swiper">([\s\S]*?)<\/section>/g;
+  const homeSwiperMatches = Array.from(html.matchAll(homeSwiperRegex));
+
+  for (const match of homeSwiperMatches) {
+    const swiperContent = match[1];
+
+    // Check if this home-swiper contains the "New Release" heading
+    if (swiperContent.includes('<h2>New Release</h2>')) {
+      // Extract individual manga items
+      const itemRegex = /<div class="swiper-slide unit[^"]*">\s*<a href="\/manga\/([^"]+)">\s*<div class="poster">\s*<div><img src="([^"]+)" alt="([^"]+)"><\/div>\s*<\/div>\s*<span>([^<]+)<\/span>\s*<\/a>\s*<\/div>/g;
+      const matches = Array.from(swiperContent.matchAll(itemRegex));
+
+      return matches.map(match => ({
+        id: match[1],
+        imageUrl: match[2],
+        title: decode(match[4].trim()),
+        banner: '',
+        link: `/manga/${match[1]}`, 
+        type: 'manga' 
+      }));
+    }
+  }
+
+  console.log('Could not find "New Release" section');
+  return [];
+};
+export const parseMostViewedManga = (html: string): MangaItem[] => {
+  const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
+  const matches = [...html.matchAll(regex)];
+  return matches.slice(0, 10).map(match => ({
+    id: match[1],
+    rank: parseInt(match[2]),
+    imageUrl: match[3],
+    title: decode(match[4]),
+    banner: '',
+    link: `/manga/${match[1]}`,
+    type: 'manga'
+  }));
+};
 
 export const getInjectedJavaScript = (backgroundColor: string) => `
   (function() {
@@ -391,3 +434,4 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
     true; // This is required for the injected JavaScript to work
   })();
   `;
+
