@@ -84,12 +84,15 @@ export default function BookmarksScreen() {
   };
 
   const renderBookmarkItem = ({ item }: { item: BookmarkItem }) => (
-    <MangaCard
-      title={item.title}
-      imageUrl={item.imageUrl}
-      onPress={() => handleBookmarkPress(item.id)}
-      lastReadChapter={item.lastReadChapter} 
-    />
+    <View style={styles.bookmarkCardWrapper}>
+      <MangaCard
+        title={item.title}
+        imageUrl={item.imageUrl}
+        onPress={() => handleBookmarkPress(item.id)}
+        lastReadChapter={item.lastReadChapter}
+        style={styles.bookmarkCard}
+      />
+    </View>
   );
 
 
@@ -205,8 +208,18 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     color: colors.card,
   },
   contentContainer: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     paddingBottom: 80,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+  },
+  bookmarkCardWrapper: {
+    width: '48%',
+    marginBottom: 15,
+  },
+  bookmarkCard: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -219,21 +232,6 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
     color: colors.text,
-  },
-  columnWrapper: {
-    justifyContent: 'space-between',
-  },
-  bookmarkCard: {
-    width: Dimensions.get('window').width / 2 - 15,
-    marginBottom: 15,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: colors.card,
-    elevation: 3,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   bookmarkImage: {
     width: '100%',

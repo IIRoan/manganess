@@ -14,6 +14,8 @@ import { decode } from 'html-entities';
 import { updateMangaStatus, searchAnilistMangaByName } from '@/services/anilistService';
 import { isLoggedInToAniList } from '@/services/anilistService';
 
+
+type IconName = 'options' | 'key' | 'search' | 'repeat' | 'link' | 'at' | 'push' | 'map' | 'filter' | 'scale' | 'body' | 'code' | 'menu' | 'time' | 'ellipse' | 'image' | 'stop' | 'text' | 'alert';
 type BookmarkStatus = "To Read" | "Reading" | "Read";
 const MAX_HISTORY_LENGTH = 10;
 
@@ -379,27 +381,27 @@ export default function MangaDetailScreen() {
                                         color={colors.primary}
                                     />
                                 </TouchableOpacity>
-    
+
                                 <Alert2
                                     visible={isAlertVisible}
-                                    title={bookmarkStatus ? "Update Bookmark" : "Bookmark Manga"}
+                                    title={bookmarkStatus ? "Update Bookmark for \n" + mangaDetails.title :  "Bookmark\n" + mangaDetails.title}
                                     onClose={() => setIsAlertVisible(false)}
                                     options={
                                         bookmarkStatus
                                             ? [
-                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline"},
-                                                { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
-                                                { text: "Read", onPress: () => saveBookmark("Read"), icon: "checkmark-circle-outline" },
-                                                { text: "Unbookmark", onPress: removeBookmark, icon: "close-circle-outline" },
+                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" as IconName },
+                                                { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" as IconName },
+                                                { text: "Read", onPress: () => saveBookmark("Read"), icon: "checkmark-circle-outline" as IconName },
+                                                { text: "Unbookmark", onPress: removeBookmark, icon: "close-circle-outline" as IconName },
                                             ]
                                             : [
-                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" },
-                                                { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" },
-                                                { text: "Read", onPress: () => saveBookmark("Read"), icon: "checkmark-circle-outline" },
+                                                { text: "To Read", onPress: () => saveBookmark("To Read"), icon: "book-outline" as IconName},
+                                                { text: "Reading", onPress: () => saveBookmark("Reading"), icon: "book" as IconName},
+                                                { text: "Read", onPress: () => saveBookmark("Read"), icon: "checkmark-circle-outline" as IconName},
                                             ]
                                     }
                                 />
-    
+
                                 {mangaDetails.alternativeTitle && (
                                     <View>
                                         <ExpandableText
@@ -489,8 +491,8 @@ export default function MangaDetailScreen() {
             />
         </View>
     );
-    
-    
+
+
 }
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     container: {
@@ -712,7 +714,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         marginLeft: 10,
     },
     readChapterTitle: {
-        color: '#4CAF50',
+        color: colors.primary,
         fontWeight: '600',
     },
     expandText: {
