@@ -245,6 +245,7 @@ export const parseNewReleases = (html: string): MangaItem[] => {
   console.log('Could not find "New Release" section');
   return [];
 };
+
 export const parseMostViewedManga = (html: string): MangaItem[] => {
   const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
   const matches = [...html.matchAll(regex)];
@@ -259,6 +260,7 @@ export const parseMostViewedManga = (html: string): MangaItem[] => {
   }));
 };
 
+
 export const getInjectedJavaScript = (backgroundColor: string) => `
   (function() {
     // Function to remove elements
@@ -268,7 +270,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
         elements.forEach(el => el.remove());
       });
     }
-  
+
     // Function to hide elements
     function hideElements(selectors) {
       selectors.forEach(selector => {
@@ -282,7 +284,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
       });
     }
 
-        // Function to remove toast div
+    // Function to remove toast div
     function removeToast() {
       const toastDiv = document.getElementById('toast');
       if (toastDiv) {
@@ -290,108 +292,44 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
       }
     }
 
-    // Function to remove header
-    function removeHeader() {
-      const header = document.querySelector('header');
-      if (header) {
-        header.remove();
-      }
-    }
-  
-
-
     // Function to change background and remove background image
-  function adjustBackground() {
-    const bgSpan = document.querySelector('span.bg');
-    if (bgSpan) {
-      bgSpan.style.backgroundImage = 'none';
-      bgSpan.style.backgroundColor = '${backgroundColor}';
+    function adjustBackground() {
+      const bgSpan = document.querySelector('span.bg');
+      if (bgSpan) {
+        bgSpan.style.backgroundImage = 'none';
+        bgSpan.style.backgroundColor = '${backgroundColor}';
+      }
+      // Change the body background
+      document.body.style.backgroundImage = 'none';
+      document.body.style.backgroundColor = '${backgroundColor}';
     }
-    // Change the body background
-    document.body.style.backgroundImage = 'none';
-    document.body.style.backgroundColor = '${backgroundColor}';
-  }
-  
+
     // Hide header, footer, and other unwanted elements
     removeElements(['header', 'footer', '.ad-container', '[id^="google_ads_"]', '[id^="adsbygoogle"]', 'iframe[src*="googleads"]', 'iframe[src*="doubleclick"]', '.navbar', '.nav-bar', '#navbar', '#nav-bar', '.top-bar', '#top-bar']);
-  
+
     // Hide toast and other dynamic elements
     hideElements(['#toast', '.toast', '.popup', '.modal', '#overlay', '.overlay', '.banner']);
-  
-    // Adjust main content
-    const main = document.querySelector('main');
-    if (main) {
-      main.style.paddingTop = '0';
-      main.style.marginTop = '0';
-    }
-  
+
     // Remove ads and unwanted elements
     function cleanPage() {
       removeElements(['.ad-container', '[id^="google_ads_"]', '[id^="adsbygoogle"]', 'iframe[src*="googleads"]', 'iframe[src*="doubleclick"]']);
       hideElements(['#toast', '.toast', '.popup', '.modal', '#overlay', '.overlay', '.banner']);
       removeToast();
-      removeHeader();
       adjustBackground();
     }
     // Initial cleaning and background adjustment
     cleanPage();
-  
-    // Function to force vertical layout
-    function forceVerticalLayout() {
-      // Reset body and html styles
-      document.body.style.width = '100%';
-      document.body.style.height = 'auto';
-      document.body.style.overflow = 'auto';
-      document.documentElement.style.overflow = 'auto';
-  
-      // Force vertical layout on all potential container elements
-      const containers = document.querySelectorAll('body > *, .content-container, .page-container, .image-container');
-      containers.forEach(container => {
-        container.style.width = '100%';
-        container.style.height = 'auto';
-        container.style.display = 'block';
-        container.style.overflowX = 'hidden';
-        container.style.overflowY = 'auto';
-        container.style.whiteSpace = 'normal';
-        container.style.flexDirection = 'column';
-        container.style.alignItems = 'center';
-      });
-  
-      // Adjust all images
-      const images = document.querySelectorAll('img');
-      images.forEach(img => {
-        img.style.maxWidth = '100%';
-        img.style.height = 'auto';
-        img.style.objectFit = 'contain';
-        img.style.display = 'block';
-        img.style.marginBottom = '10px';
-      });
-  
-      // Force any horizontal scrollers to be vertical
-      const scrollers = document.querySelectorAll('[class*="scroller"], [id*="scroller"]');
-      scrollers.forEach(scroller => {
-        scroller.style.overflowX = 'hidden';
-        scroller.style.overflowY = 'auto';
-        scroller.style.whiteSpace = 'normal';
-        scroller.style.display = 'block';
-        scroller.style.width = '100%';
-        scroller.style.height = 'auto';
-      });
-    }
-  
-    // Initial layout adjustment
-    forceVerticalLayout();
-  
+
     // Set up a MutationObserver to remove ads and popups that might be dynamically added
     const observer = new MutationObserver(cleanPage);
     observer.observe(document.body, { childList: true, subtree: true });
-  
+
     // Prevent popups and new window opening
     window.open = function() { return null; };
     window.alert = function() { return null; };
     window.confirm = function() { return null; };
     window.prompt = function() { return null; };
-  
+
     // Function to handle navigation
     function handleNavigation(e) {
       const target = e.target.closest('.number-nav a');
@@ -405,20 +343,8 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
       e.stopPropagation();
       return false;
     }
-  
-    // Prevent default zoom behavior
-    document.addEventListener('gesturestart', function(e) {
-      e.preventDefault();
-    });
-  
-    // Disable text selection
-    document.body.style.webkitTouchCallout = 'none';
-    document.body.style.webkitUserSelect = 'none';
-    document.body.style.khtmlUserSelect = 'none';
-    document.body.style.mozUserSelect = 'none';
-    document.body.style.msUserSelect = 'none';
-    document.body.style.userSelect = 'none';
-  
+
+
     // Block common tracking and ad scripts
     const scriptBlocker = {
       apply: function(target, thisArg, argumentsList) {
@@ -430,8 +356,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
       }
     };
     document.createElement = new Proxy(document.createElement, scriptBlocker);
-  
+
     true; // This is required for the injected JavaScript to work
   })();
-  `;
-
+`;
