@@ -22,7 +22,7 @@ export async function loginWithAniList(): Promise<AuthData> {
     console.log('Starting AniList login process');
 
     const redirectUri = AuthSession.makeRedirectUri({
-      native: 'com.iroan.manganess://oauth',
+      native: 'com.iroan.manganess://Debug',
     });
     console.log('Redirect URI:', redirectUri);
 
