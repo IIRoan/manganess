@@ -169,7 +169,7 @@ export default function MangaDetailScreen() {
     if (isLoading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
+                <ActivityIndicator testID="loading-indicator" size="large" color={colors.primary} />
             </View>
         );
     }
@@ -195,9 +195,14 @@ export default function MangaDetailScreen() {
 
             {/* Alert component is used to display alerts */}
             <Alert
-                title={''} type={'bookmarks'} visible={isAlertVisible}
+            //@ts-expect-error
+                testID="alert-component"
+                visible={isAlertVisible}
+                title={''} 
+                type={'bookmarks'}
                 onClose={() => setIsAlertVisible(false)}
-                {...alertConfig} />
+                {...alertConfig}
+            />
 
 
             <FlatList
@@ -217,7 +222,7 @@ export default function MangaDetailScreen() {
                                 <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
                                     {mangaDetails.title}
                                 </Text>
-                                <TouchableOpacity onPress={handleBookmark} style={styles.bookmarkButton}>
+                                <TouchableOpacity testID="bookmark-button" onPress={handleBookmark} style={styles.bookmarkButton}>
                                     <Ionicons
                                         name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
                                         size={30}
@@ -287,6 +292,7 @@ export default function MangaDetailScreen() {
                     const isLastItem = index === mangaDetails.chapters.length - 1;
                     return (
                         <TouchableOpacity
+                            testID="chapter-item"
                             style={[
                                 styles.chapterItem,
                                 isLastItem && styles.lastChapterItem

@@ -13,7 +13,7 @@ const CustomWebView = (props: any) => {
   const webViewRef = useRef<WebView>(null);
 
   const handleMessage = (event: WebViewMessageEvent) => {
-      console.log('message', event.nativeEvent.data);
+    console.log('message', event.nativeEvent.data);
   };
 
   return (
@@ -93,7 +93,7 @@ export default function ReadChapterScreen() {
     <View style={styles.container}>
       {isLoading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator testID="loading-indicator" size="large" color={colors.primary} />
         </View>
       )}
       {error ? (
@@ -107,6 +107,7 @@ export default function ReadChapterScreen() {
             style={styles.webView}
             onLoadEnd={handleLoadEnd}
             onError={handleError}
+            testID="chapter-webview"
             injectedJavaScript={getInjectedJavaScript(colors.card)}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -116,7 +117,7 @@ export default function ReadChapterScreen() {
             decelerationRate="normal"
             nestedScrollEnabled={true}
           />
-          <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+          <TouchableOpacity testID="back-button" style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
         </>
