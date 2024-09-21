@@ -1,19 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet, Image, Dimensions, useColorScheme, FlatList } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect, useNavigation, usePathname } from 'expo-router';
+import { View, Text, ActivityIndicator, TouchableOpacity, StyleSheet, Image, useColorScheme, FlatList } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import ExpandableText from '@/components/ExpandableText';
-import Alert2 from '@/components/Alert';
-import { Alert } from 'react-native';
+import Alert from '@/components/Alert';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 import { fetchBookmarkStatus, saveBookmark, removeBookmark, BookmarkStatus } from '@/services/bookmarkService';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
-
-const MAX_HISTORY_LENGTH = 10;
+import { GenreTag } from '@/components/GanreTag';
 
 export default function MangaDetailScreen() {
     const { id } = useLocalSearchParams();
@@ -29,23 +26,9 @@ export default function MangaDetailScreen() {
     const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
     const [isAlertVisible, setIsAlertVisible] = useState(false);
     const styles = getStyles(colors);
-    const navigation = useNavigation();
-    const pathname = usePathname();
-
+    const [alertConfig, setAlertConfig] = useState({});
     const { handleBackPress } = useNavigationHistory();
 
-    useFocusEffect(
-        React.useCallback(() => {
-            const onBackPress = () => {
-                router.navigate(`/mangasearch`);
-                return true;
-            };
-
-            BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
-            return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
-        }, [router])
-    );
 
     const fetchMangaDetailsData = async () => {
         setIsLoading(true);
@@ -66,7 +49,55 @@ export default function MangaDetailScreen() {
     };
 
     const handleBookmark = () => {
+        if (!mangaDetails) return; // Early return if mangaDetails is null
         setIsAlertVisible(true);
+        setAlertConfig({
+            type: 'bookmarks',
+            title: bookmarkStatus ? `Update Bookmark for ${mangaDetails.title}` : `Bookmark ${mangaDetails.title}`,
+            options: bookmarkStatus
+                ? [
+                    { text: "To Read", onPress: () => handleSaveBookmark("To Read"), icon: "book-outline" },
+                    { text: "Reading", onPress: () => handleSaveBookmark("Reading"), icon: "book" },
+                    { text: "Read", onPress: () => handleSaveBookmark("Read"), icon: "checkmark-circle-outline" },
+                    { text: "Unbookmark", onPress: handleRemoveBookmark, icon: "close-circle-outline" },
+                ]
+                : [
+                    { text: "To Read", onPress: () => handleSaveBookmark("To Read"), icon: "book-outline" },
+                    { text: "Reading", onPress: () => handleSaveBookmark("Reading"), icon: "book" },
+                    { text: "Read", onPress: () => handleSaveBookmark("Read"), icon: "checkmark-circle-outline" },
+                ]
+        });
+    };
+
+    const handleChapterLongPress = async (chapterNumber: string) => {
+        const isRead = readChapters.includes(chapterNumber);
+        if (isRead) {
+            setIsAlertVisible(true);
+            setAlertConfig({
+                type: 'confirm',
+                title: "Mark as Unread",
+                message: `Do you want to mark chapter ${chapterNumber} as unread?`,
+                options: [
+                    {
+                        text: "Cancel",
+                        onPress: () => { }
+                    },
+                    {
+                        text: "Yes",
+                        onPress: async () => {
+                            try {
+                                const key = `manga_${id}_read_chapters`;
+                                const updatedReadChapters = readChapters.filter(ch => ch !== chapterNumber);
+                                await AsyncStorage.setItem(key, JSON.stringify(updatedReadChapters));
+                                setReadChapters(updatedReadChapters);
+                            } catch (error) {
+                                console.error('Error marking chapter as unread:', error);
+                            }
+                        }
+                    }
+                ]
+            });
+        }
     };
 
     const handleSaveBookmark = async (status: BookmarkStatus) => {
@@ -126,36 +157,6 @@ export default function MangaDetailScreen() {
         router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
     };
 
-    const handleChapterLongPress = async (chapterNumber: string) => {
-        const isRead = readChapters.includes(chapterNumber);
-        if (isRead) {
-            Alert.alert(
-                "Mark as Unread",
-                `Do you want to mark chapter ${chapterNumber} as unread?`,
-                [
-                    {
-                        text: "Cancel",
-                        style: "cancel"
-                    },
-                    {
-                        text: "Yes",
-                        onPress: async () => {
-                            try {
-                                const key = `manga_${id}_read_chapters`;
-                                const updatedReadChapters = readChapters.filter(ch => ch !== chapterNumber);
-                                await AsyncStorage.setItem(key, JSON.stringify(updatedReadChapters));
-                                setReadChapters(updatedReadChapters);
-                            } catch (error) {
-                                console.error('Error marking chapter as unread:', error);
-                            }
-                        }
-                    }
-                ]
-            );
-        }
-    };
-
-  
 
     useEffect(() => {
         if (typeof id === 'string') {
@@ -164,13 +165,6 @@ export default function MangaDetailScreen() {
             fetchBookmarkStatus(id);
         }
     }, [id, fetchReadChapters, fetchBookmarkStatus]);
-
-    const GenreTag = ({ genre }: { genre: string }) => (
-        <View style={styles.genreTag}>
-            <Text style={styles.genreText}>{genre}</Text>
-        </View>
-    );
-
 
     if (isLoading) {
         return (
@@ -198,6 +192,14 @@ export default function MangaDetailScreen() {
 
     return (
         <View style={styles.container}>
+
+            {/* Alert component is used to display alerts */}
+            <Alert
+                title={''} type={'bookmarks'} visible={isAlertVisible}
+                onClose={() => setIsAlertVisible(false)}
+                {...alertConfig} />
+
+
             <FlatList
                 ListHeaderComponent={() => (
                     <>
@@ -222,27 +224,6 @@ export default function MangaDetailScreen() {
                                         color={colors.primary}
                                     />
                                 </TouchableOpacity>
-
-                                <Alert2
-                                    visible={isAlertVisible}
-                                    title={bookmarkStatus ? "Update Bookmark for \n" + mangaDetails.title : "Bookmark\n" + mangaDetails.title}
-                                    onClose={() => setIsAlertVisible(false)}
-                                    //@ts-ignore
-                                    options={
-                                        bookmarkStatus
-                                            ? [
-                                                { text: "To Read", onPress: () => handleSaveBookmark("To Read"), icon: "book-outline" },
-                                                { text: "Reading", onPress: () => handleSaveBookmark("Reading"), icon: "book" },
-                                                { text: "Read", onPress: () => handleSaveBookmark("Read"), icon: "checkmark-circle-outline" },
-                                                { text: "Unbookmark", onPress: handleRemoveBookmark, icon: "close-circle-outline" },
-                                            ]
-                                            : [
-                                                { text: "To Read", onPress: () => handleSaveBookmark("To Read"), icon: "book-outline" },
-                                                { text: "Reading", onPress: () => handleSaveBookmark("Reading"), icon: "book" },
-                                                { text: "Read", onPress: () => handleSaveBookmark("Read"), icon: "checkmark-circle-outline" },
-                                            ]
-                                    }
-                                />
 
                                 {mangaDetails.alternativeTitle && (
                                     <View>
@@ -331,6 +312,7 @@ export default function MangaDetailScreen() {
                 }}
                 ListFooterComponent={<View style={{ height: 70 }} />}
             />
+
         </View>
     );
 
@@ -480,11 +462,6 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         lineHeight: 24,
         color: colors.text,
     },
-    infoText: {
-        fontSize: 16,
-        marginBottom: 10,
-        color: colors.text,
-    },
     ratingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -504,18 +481,6 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         flexWrap: 'wrap',
         marginTop: 5,
     },
-    genreTag: {
-        backgroundColor: colors.primary,
-        borderRadius: 15,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        margin: 2,
-    },
-    genreText: {
-        color: colors.card,
-        fontSize: 12,
-        fontWeight: '600',
-    },
     chaptersContainer: {
         paddingHorizontal: 20,
         paddingTop: 20,
@@ -529,10 +494,6 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         paddingHorizontal: 20,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
-        backgroundColor: colors.card,
-    },
-    chapterItemContainer: {
-        paddingHorizontal: 20,
         backgroundColor: colors.card,
     },
     lastChapterItem: {
@@ -559,25 +520,4 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         color: colors.primary,
         fontWeight: '600',
     },
-    expandText: {
-        color: colors.primary,
-    },
-    actionButtonsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginBottom: 20,
-    },
-    actionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.card,
-        padding: 10,
-        borderRadius: 8,
-    },
-    actionButtonText: {
-        marginLeft: 8,
-        color: colors.text,
-        fontSize: 16,
-    },
-
 });
