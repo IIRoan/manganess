@@ -4,23 +4,24 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
-type IconName = 'options' | 'key' | 'search' | 'repeat' | 'link' | 'at' | 'push' | 'map' | 'filter' | 'scale' | 'body' | 'code' | 'menu' | 'time' | 'ellipse' | 'image' | 'stop' | 'text' | 'alert'; // Add other valid icon names as needed
+type IconName = 'options' | 'key' | 'search' | 'repeat' | 'link' | 'at' | 'push' | 'map' | 'filter' | 'scale' | 'body' | 'code' | 'menu' | 'time' | 'ellipse' | 'image' | 'stop' | 'text' | 'alert' | 'book-outline' | 'book' | 'checkmark-circle-outline' | 'close-circle-outline';
 
 interface Option {
   text: string;
   onPress: () => void;
-  icon: IconName;
+  icon?: IconName;
 }
 
 interface CustomAlertProps {
   visible: boolean;
   title: string;
   onClose: () => void;
-  options: Option[];
+  type: 'bookmarks' | 'confirm';
+  options?: Option[];
+  message?: string;
 }
 
-
-const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, options }) => {
+const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, type, options, message }) => {
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
@@ -43,6 +44,52 @@ const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, options })
     }
   }, [visible]);
 
+  const renderContent = () => {
+    if (type === 'bookmarks') {
+      return (
+        <View style={styles.optionsContainer}>
+          {options?.map((option, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.button}
+              onPress={() => {
+                option.onPress();
+                onClose();
+              }}
+            >
+              {option.icon && (
+                <View style={styles.iconContainer}>
+                  <Ionicons name={option.icon} size={24} color={colors.primary} />
+                </View>
+              )}
+              <Text style={styles.textStyle}>{option.text}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    } else if (type === 'confirm') {
+      return (
+        <>
+          <Text style={styles.message}>{message}</Text>
+          <View style={styles.confirmButtonsContainer}>
+            {options?.map((option, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.confirmButton}
+                onPress={() => {
+                  option.onPress();
+                  onClose();
+                }}
+              >
+                <Text style={styles.confirmButtonText}>{option.text}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      );
+    }
+  };
+
   return (
     <Modal
       transparent={true}
@@ -58,23 +105,7 @@ const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, options })
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
               <Text style={styles.modalText}>{title}</Text>
-              <View style={styles.optionsContainer}>
-                {options.map((option, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.button}
-                    onPress={() => {
-                      option.onPress();
-                      onClose();
-                    }}
-                  >
-                    <View style={styles.iconContainer}>
-                      <Ionicons name={option.icon} size={24} color={colors.primary} />
-                    </View>
-                    <Text style={styles.textStyle}>{option.text}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {renderContent()}
             </Animated.View>
           </TouchableWithoutFeedback>
         </View>
@@ -153,6 +184,27 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     backgroundColor: `${colors.text}10`,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  message: {
+    fontSize: 16,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  confirmButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  confirmButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  confirmButtonText: {
+    color: colors.card,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

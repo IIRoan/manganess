@@ -126,6 +126,62 @@ export async function updateMangaStatus(mediaId: number, status: string, progres
 }
 
 
+export async function updateAniListStatus(
+  mangaTitle: string,
+  status: "To Read" | "Reading" | "Read",
+  readChapters: string[],
+  totalChapters: number
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const isLoggedIn = await isLoggedInToAniList();
+    if (!isLoggedIn) {
+      console.log('User is not logged in to AniList. Skipping update.');
+      return { success: false, message: 'User is not logged in to AniList' };
+    }
+
+    const anilistManga = await searchAnilistMangaByName(mangaTitle);
+    if (anilistManga) {
+      let anilistStatus: string;
+      let progress: number = 0;
+
+      switch (status) {
+        case "To Read":
+          anilistStatus = "PLANNING";
+          break;
+        case "Reading":
+          anilistStatus = "CURRENT";
+          progress = readChapters.length;
+          break;
+        case "Read":
+          anilistStatus = "COMPLETED";
+          progress = totalChapters;
+          break;
+        default:
+          anilistStatus = "PLANNING";
+      }
+
+      await updateMangaStatus(anilistManga.id, anilistStatus, progress);
+      console.log(`Updated AniList status for ${mangaTitle} to ${anilistStatus}`);
+      return { 
+        success: true, 
+        message: `Updated AniList status for "${mangaTitle}" to ${status}` 
+      };
+    } else {
+      console.log(`Manga ${mangaTitle} not found on AniList`);
+      return { 
+        success: false, 
+        message: `"${mangaTitle}" was not found on AniList. Only local status was updated.` 
+      };
+    }
+  } catch (error) {
+    console.error('Error updating AniList status:', error);
+    return { 
+      success: false, 
+      message: `Error updating AniList status: ${error}` 
+    };
+  }
+}
+
 
 // large syncAllMangaWithAniList function
 
