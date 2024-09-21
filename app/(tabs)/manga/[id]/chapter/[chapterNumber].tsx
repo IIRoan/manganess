@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { WebView, WebViewNavigation } from 'react-native-webview';
+import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { getChapterUrl, markChapterAsRead, getInjectedJavaScript } from '@/services/mangaFireService';
 import { BackHandler } from 'react-native';
@@ -9,13 +9,28 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const CustomWebView = (props: any) => {
+  const webViewRef = useRef<WebView>(null);
+
+  const handleMessage = (event: WebViewMessageEvent) => {
+      console.log('message', event.nativeEvent.data);
+  };
+
+  return (
+    <WebView
+      ref={webViewRef}
+      onMessage={handleMessage}
+      {...props}
+    />
+  );
+};
+
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
-  const webViewRef = useRef<WebView>(null);
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
@@ -87,8 +102,7 @@ export default function ReadChapterScreen() {
         </View>
       ) : (
         <>
-          <WebView
-            ref={webViewRef}
+          <CustomWebView
             source={{ uri: chapterUrl }}
             style={styles.webView}
             onLoadEnd={handleLoadEnd}
@@ -110,6 +124,7 @@ export default function ReadChapterScreen() {
     </View>
   );
 }
+
 
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {

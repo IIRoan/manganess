@@ -19,8 +19,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { searchManga, MangaItem } from '@/services/mangaFireService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { getLastReadChapter } from '@/services/readChapterService';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -67,25 +66,19 @@ export default function MangaSearchScreen() {
     });
   }, [router]);
 
-  const getLastReadChapter = async (mangaId: string): Promise<string | null> => {
-    try {
-      const key = `manga_${mangaId}_read_chapters`;
-      const readChapters = await AsyncStorage.getItem(key) || '[]';
-      const chaptersArray = JSON.parse(readChapters);
-
-      if (chaptersArray.length === 0) {
-        return null;
+  useEffect(() => {
+    const fetchLastReadChapters = async () => {
+      const chapters: {[key: string]: string} = {};
+      for (const item of searchResults) {
+        chapters[item.id] = await getLastReadChapter(item.id);
       }
+      setLastReadChapters(chapters);
+    };
 
-      const numericChapters = chaptersArray.map((chapter: string) => parseFloat(chapter));
-      const lastReadChapter = Math.max(...numericChapters);
-
-      return `Chapter ${lastReadChapter}`;
-    } catch (error) {
-      console.error('Error getting last read chapter:', error);
-      return null;
+    if (searchResults.length > 0) {
+      fetchLastReadChapters();
     }
-  };
+  }, [searchResults]);
 
   const renderMangaCard = useCallback(({ item }: { item: MangaItem }) => {
     return (
