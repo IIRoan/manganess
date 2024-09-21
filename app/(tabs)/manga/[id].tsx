@@ -11,6 +11,7 @@ import Alert2 from '@/components/Alert';
 import { Alert } from 'react-native';
 import { fetchMangaDetails, MangaDetails, getChapterUrl } from '@/services/mangaFireService';
 import { fetchBookmarkStatus, saveBookmark, removeBookmark, BookmarkStatus } from '@/services/bookmarkService';
+import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 
 const MAX_HISTORY_LENGTH = 10;
 
@@ -31,6 +32,7 @@ export default function MangaDetailScreen() {
     const navigation = useNavigation();
     const pathname = usePathname();
 
+    const { handleBackPress } = useNavigationHistory();
 
     useFocusEffect(
         React.useCallback(() => {
@@ -153,36 +155,7 @@ export default function MangaDetailScreen() {
         }
     };
 
-    const isExcludedRoute = (path: string) => {
-        return path.match(/^\/manga\/[^\/]+$/) || path.match(/^\/manga\/.*\/chapter\/.*$/);
-    };
-
-    const updateHistory = useCallback(async (newPath: string) => {
-        try {
-            const historyString = await AsyncStorage.getItem('navigationHistory');
-            let history = historyString ? JSON.parse(historyString) : [];
-
-            // Filter out manga detail and chapter routes
-            history = history.filter((path: string) => !isExcludedRoute(path));
-
-            if (!isExcludedRoute(newPath)) {
-                history.push(newPath);
-            }
-
-            // Keep only the last MAX_HISTORY_LENGTH items
-            if (history.length > MAX_HISTORY_LENGTH) {
-                history = history.slice(-MAX_HISTORY_LENGTH);
-            }
-
-            await AsyncStorage.setItem('navigationHistory', JSON.stringify(history));
-        } catch (error) {
-            console.error('Error updating navigation history:', error);
-        }
-    }, []);
-
-    useEffect(() => {
-        updateHistory(pathname);
-    }, [pathname, updateHistory]);
+  
 
     useEffect(() => {
         if (typeof id === 'string') {
@@ -191,31 +164,6 @@ export default function MangaDetailScreen() {
             fetchBookmarkStatus(id);
         }
     }, [id, fetchReadChapters, fetchBookmarkStatus]);
-
-
-    const handleBackPress = useCallback(async () => {
-        try {
-            const historyString = await AsyncStorage.getItem('navigationHistory');
-            let history = historyString ? JSON.parse(historyString) : [];
-
-            let previousRoute = '/mangasearch';
-
-            while (history.length > 0) {
-                const lastRoute = history.pop();
-                if (!isExcludedRoute(lastRoute)) {
-                    previousRoute = lastRoute;
-                    break;
-                }
-            }
-
-            await AsyncStorage.setItem('navigationHistory', JSON.stringify(history));
-
-            router.replace(previousRoute as any);
-
-        } catch (error) {
-            router.replace('/mangasearch');
-        }
-    }, [router]);
 
     const GenreTag = ({ genre }: { genre: string }) => (
         <View style={styles.genreTag}>
