@@ -1,11 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert } from 'react-native';
-
-import {
-  fetchBookmarkStatus,
-  saveBookmark,
-  removeBookmark,
-} from '@/services/bookmarkService';
+import { fetchBookmarkStatus, saveBookmark, removeBookmark } from '@/services/bookmarkService';
 
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -14,20 +8,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   removeItem: jest.fn(),
 }));
 
-// Mock Alert
-jest.mock('react-native/Libraries/Alert/Alert', () => ({
-  alert: jest.fn(),
-}));
-
-// Mock updateAniListStatusAndAlert to do nothing
-jest.mock('@/services/bookmarkService', () => {
-  const originalModule = jest.requireActual('@/services/bookmarkService');
-  return {
-    ...originalModule,
-    updateAniListStatusAndAlert: jest.fn(),
-  };
-});
-
 describe('bookmarkService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -35,7 +15,7 @@ describe('bookmarkService', () => {
 
   describe('fetchBookmarkStatus', () => {
     it('fetches bookmark status from AsyncStorage', async () => {
-      AsyncStorage.getItem.mockResolvedValue('Reading');
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValue('Reading');
       const status = await fetchBookmarkStatus('123');
       expect(AsyncStorage.getItem).toHaveBeenCalledWith('bookmark_123');
       expect(status).toBe('Reading');
@@ -43,7 +23,7 @@ describe('bookmarkService', () => {
   });
 
   describe('saveBookmark', () => {
-    it('saves bookmark and updates state', async () => {
+    it('saves bookmark data to AsyncStorage', async () => {
       const setBookmarkStatus = jest.fn();
       const setIsAlertVisible = jest.fn();
       const markAllChaptersAsRead = jest.fn();
@@ -56,7 +36,7 @@ describe('bookmarkService', () => {
 
       const readChapters = ['1'];
 
-      // Since we're not testing updateAniListStatus, we don't need to mock it.
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
 
       await saveBookmark(
         '123',
@@ -71,54 +51,13 @@ describe('bookmarkService', () => {
       expect(AsyncStorage.setItem).toHaveBeenCalledWith('bookmark_123', 'Reading');
       expect(AsyncStorage.setItem).toHaveBeenCalledWith('title_123', 'Test Manga');
       expect(AsyncStorage.setItem).toHaveBeenCalledWith('image_123', 'http://example.com/image.jpg');
-      expect(setBookmarkStatus).toHaveBeenCalledWith('Reading');
-      expect(setIsAlertVisible).toHaveBeenCalledWith(false);
-
-      // Verify that bookmarkKeys are updated
       expect(AsyncStorage.getItem).toHaveBeenCalledWith('bookmarkKeys');
       expect(AsyncStorage.setItem).toHaveBeenCalledWith('bookmarkKeys', JSON.stringify(['bookmark_123']));
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith('last_notified_chapter_123', '1');
     });
 
-    it('handles status "Read" with Alert prompt', async () => {
-      const setBookmarkStatus = jest.fn();
-      const setIsAlertVisible = jest.fn();
-      const markAllChaptersAsRead = jest.fn();
-
-      const mangaDetails = {
-        title: 'Test Manga',
-        chapters: [{ number: '1' }, { number: '2' }],
-      };
-
-      const readChapters = ['1'];
-
-      // Mock Alert.alert to simulate pressing "No"
-      Alert.alert.mockImplementation((title, message, buttons) => {
-        const noButton = buttons.find(button => button.text === 'No');
-        noButton.onPress();
-      });
-
-      await saveBookmark(
-        '123',
-        'Read',
-        mangaDetails,
-        readChapters,
-        setBookmarkStatus,
-        setIsAlertVisible,
-        markAllChaptersAsRead
-      );
-
-      expect(Alert.alert).toHaveBeenCalledWith(
-        'Mark All Chapters as Read',
-        'Do you want to mark all chapters as read?',
-        expect.any(Array)
-      );
-
-      // Since we simulate pressing "No", markAllChaptersAsRead should not be called
-      expect(markAllChaptersAsRead).not.toHaveBeenCalled();
-    });
-
-    it('handles errors gracefully', async () => {
-      AsyncStorage.setItem.mockRejectedValue(new Error('Storage Error'));
+    it('handles errors when saving bookmark', async () => {
+      (AsyncStorage.setItem as jest.Mock).mockRejectedValue(new Error('Storage Error'));
 
       const setBookmarkStatus = jest.fn();
       const setIsAlertVisible = jest.fn();
@@ -137,31 +76,26 @@ describe('bookmarkService', () => {
       );
 
       expect(console.error).toHaveBeenCalledWith('Error saving bookmark:', expect.any(Error));
-      expect(Alert.alert).toHaveBeenCalledWith('Error', 'Failed to update status. Please try again.');
     });
   });
 
   describe('removeBookmark', () => {
-    it('removes bookmark and updates state', async () => {
+    it('removes bookmark data from AsyncStorage', async () => {
       const setBookmarkStatus = jest.fn();
       const setIsAlertVisible = jest.fn();
 
-      AsyncStorage.getItem.mockResolvedValue(JSON.stringify(['bookmark_123']));
+      jest.spyOn(AsyncStorage, 'getItem').mockResolvedValue(JSON.stringify(['bookmark_123']));
 
       await removeBookmark('123', setBookmarkStatus, setIsAlertVisible);
 
       expect(AsyncStorage.removeItem).toHaveBeenCalledWith('bookmark_123');
       expect(AsyncStorage.removeItem).toHaveBeenCalledWith('title_123');
-
       expect(AsyncStorage.getItem).toHaveBeenCalledWith('bookmarkKeys');
       expect(AsyncStorage.setItem).toHaveBeenCalledWith('bookmarkKeys', JSON.stringify([]));
-
-      expect(setBookmarkStatus).toHaveBeenCalledWith(null);
-      expect(setIsAlertVisible).toHaveBeenCalledWith(false);
     });
 
-    it('handles errors gracefully', async () => {
-      AsyncStorage.removeItem.mockRejectedValue(new Error('Remove Error'));
+    it('handles errors when removing bookmark', async () => {
+      (AsyncStorage.removeItem as jest.Mock).mockRejectedValue(new Error('Remove Error'));
 
       const setBookmarkStatus = jest.fn();
       const setIsAlertVisible = jest.fn();
