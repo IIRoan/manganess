@@ -49,6 +49,7 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
   return (
     <TouchableOpacity 
       onPress={toggleExpand}
+      testID="expandable-text"
       activeOpacity={0.7}
       style={styles.container}
     >

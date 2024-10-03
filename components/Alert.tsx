@@ -47,7 +47,7 @@ const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, type, opti
   const renderContent = () => {
     if (type === 'bookmarks') {
       return (
-        <View style={styles.optionsContainer}>
+        <View testID="alert-options" style={styles.optionsContainer}>
           {options?.map((option, index) => (
             <TouchableOpacity
               key={index}
@@ -101,10 +101,10 @@ const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, type, opti
         <View style={styles.centeredView}>
           <TouchableWithoutFeedback>
             <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }] }]}>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <TouchableOpacity testID="close-button" style={styles.closeButton} onPress={onClose}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
-              <Text style={styles.modalText}>{title}</Text>
+              <Text testID="alert-title" style={styles.modalText}>{title}</Text>
               {renderContent()}
             </Animated.View>
           </TouchableWithoutFeedback>

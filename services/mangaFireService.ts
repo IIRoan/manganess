@@ -156,17 +156,13 @@ export const markChapterAsRead = async (id: string, chapterNumber: string, manga
       chaptersArray.push(chapterNumber);
       await AsyncStorage.setItem(key, JSON.stringify(chaptersArray));
       console.log(`Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`);
-
-      // Check bookmark status before updating AniList
-      const bookmarkStatus = await getBookmarkStatus(id);
-      if (bookmarkStatus) {
-        await updateAniListProgress(id, mangaTitle, chaptersArray.length, bookmarkStatus);
-      }
     }
   } catch (error) {
     console.error('Error marking chapter as read:', error);
   }
 };
+
+
 
 const getBookmarkStatus = async (id: string): Promise<string | null> => {
   try {

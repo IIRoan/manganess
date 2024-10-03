@@ -19,8 +19,8 @@ const MangaCard: React.FC<MangaCardProps> = ({ title, imageUrl, onPress, lastRea
   const styles = getStyles(colors);
 
   return (
-    <TouchableOpacity onPress={onPress} style={[styles.cardContainer, style]}>
-      <Image source={{ uri: imageUrl }} style={styles.cardImage} />
+    <TouchableOpacity testID="manga-card" onPress={onPress} style={[styles.cardContainer, style]}>
+      <Image source={{ uri: imageUrl }} style={styles.cardImage} accessibilityLabel="Manga Image"/>
       <View style={styles.cardInfo}>
         <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">{title}</Text>
         {lastReadChapter && (
