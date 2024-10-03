@@ -1,0 +1,93 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`MangaCard Component matches snapshot 1`] = `
+<View
+  accessibilityState={
+    {
+      "busy": undefined,
+      "checked": undefined,
+      "disabled": undefined,
+      "expanded": undefined,
+      "selected": undefined,
+    }
+  }
+  accessibilityValue={
+    {
+      "max": undefined,
+      "min": undefined,
+      "now": undefined,
+      "text": undefined,
+    }
+  }
+  accessible={true}
+  collapsable={false}
+  focusable={true}
+  onClick={[Function]}
+  onResponderGrant={[Function]}
+  onResponderMove={[Function]}
+  onResponderRelease={[Function]}
+  onResponderTerminate={[Function]}
+  onResponderTerminationRequest={[Function]}
+  onStartShouldSetResponder={[Function]}
+  style={
+    {
+      "backgroundColor": "#FFFFFF",
+      "borderRadius": 12,
+      "opacity": 1,
+      "overflow": "hidden",
+    }
+  }
+  testID="manga-card"
+>
+  <Image
+    accessibilityLabel="Manga Image"
+    source={
+      {
+        "uri": "http://example.com/image.jpg",
+      }
+    }
+    style={
+      {
+        "aspectRatio": 0.75,
+        "resizeMode": "cover",
+        "width": "100%",
+      }
+    }
+  />
+  <View
+    style={
+      {
+        "padding": 8,
+      }
+    }
+  >
+    <Text
+      ellipsizeMode="tail"
+      numberOfLines={2}
+      style={
+        {
+          "color": "#333333",
+          "fontSize": 14,
+          "fontWeight": "600",
+          "marginBottom": 4,
+        }
+      }
+    >
+      Snapshot Manga
+    </Text>
+    <Text
+      ellipsizeMode="tail"
+      numberOfLines={1}
+      style={
+        {
+          "color": "#BDBDBD",
+          "fontSize": 12,
+        }
+      }
+    >
+      Last read: 
+      Chapter 10
+    </Text>
+  </View>
+</View>
+`;
