@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity }
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { getChapterUrl, markChapterAsRead, getInjectedJavaScript } from '@/services/mangaFireService';
+import { getChapterUrl, markChapterAsRead, getInjectedJavaScript, fetchMangaDetails } from '@/services/mangaFireService';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
@@ -38,22 +38,28 @@ export default function ReadChapterScreen() {
   const chapterUrl = getChapterUrl(id as string, chapterNumber as string);
 
   useEffect(() => {
-    const fetchMangaTitle = async () => {
+    const markChapterAsReadWithFallback = async () => {
       try {
-        const title = await AsyncStorage.getItem(`title_${id}`);
-        setMangaTitle(title);
-        if (title) {
-          await markChapterAsRead(id as string, chapterNumber as string, title);
-        } else {
-          console.log('Manga title not found for id:', id);
+        // Try to get the title from AsyncStorage
+        let title = await AsyncStorage.getItem(`title_${id}`);
+        
+        // If no title is found in AsyncStorage, use a fallback title by fetching it
+        if (!title) {
+          const mangaDetails = await fetchMangaDetails(id as string);
+          title = mangaDetails.title;
         }
+        
+        await markChapterAsRead(id as string, chapterNumber as string, title);
+        setMangaTitle(title);
       } catch (error) {
-        console.error('Error fetching manga title:', error);
+        console.error('Error marking chapter as read:', error);
       }
     };
-
-    fetchMangaTitle();
+  
+    markChapterAsReadWithFallback();
   }, [id, chapterNumber]);
+  
+  
 
   useFocusEffect(
     useCallback(() => {

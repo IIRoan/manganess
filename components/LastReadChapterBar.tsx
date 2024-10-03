@@ -9,16 +9,20 @@ interface LastReadChapterBarProps {
 }
 
 const LastReadChapterBar: React.FC<LastReadChapterBarProps> = ({ lastReadChapter, onPress, colors }) => {
-  if (!lastReadChapter || lastReadChapter === 'Not started') {
-    return null;
-  }
+  const isStartReading = !lastReadChapter || lastReadChapter === 'Not started';
 
   return (
     <TouchableOpacity onPress={onPress} style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.content}>
-        <Ionicons name="bookmark" size={20} color={colors.primary} />
+        <Ionicons name={isStartReading ? "play-circle-outline" : "bookmark"} size={20} color={colors.primary} />
         <Text style={[styles.text, { color: colors.text }]}>
-          Continue from <Text style={[styles.chapterText, { color: colors.primary }]}>{lastReadChapter}</Text>
+          {isStartReading ? (
+            "Start reading"
+          ) : (
+            <>
+              Continue from <Text style={[styles.chapterText, { color: colors.primary }]}>{lastReadChapter}</Text>
+            </>
+          )}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.primary} />

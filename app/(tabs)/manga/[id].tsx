@@ -198,16 +198,20 @@ export default function MangaDetailScreen() {
     };
 
     const handleLastReadChapterPress = () => {
-        if (lastReadChapter && lastReadChapter !== 'Not started') {
-            const chapterNumber = lastReadChapter.replace('Chapter ', '');
-            handleChapterPress(chapterNumber);
+        if (!lastReadChapter || lastReadChapter === 'Not started') {
+          // If no chapter has been read, navigate to the first chapter
+          if (mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
+            // Get the last element of the array, which is the first chapter
+            const firstChapter = mangaDetails.chapters[mangaDetails.chapters.length - 1];
+            handleChapterPress(firstChapter.number);
+          }
         } else {
-            // If no chapter has been read, navigate to the first chapter
-            if (mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
-                handleChapterPress(mangaDetails.chapters[0].number);
-            }
+          const chapterNumber = lastReadChapter.replace('Chapter ', '');
+          handleChapterPress(chapterNumber);
         }
-    };
+      };
+      
+      
 
     if (isLoading) {
         return (
@@ -258,28 +262,27 @@ export default function MangaDetailScreen() {
                             />
                             <View style={styles.overlay} />
                             <View style={styles.headerContent}>
-                                <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-                                    <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
-                                </TouchableOpacity>
+                                <View style={styles.headerButtons}>
+                                    <TouchableOpacity onPress={handleBackPress} style={styles.headerButton}>
+                                        <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity testID="bookmark-button" onPress={handleBookmark} style={styles.headerButton}>
+                                        <Ionicons
+                                            name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
+                                            size={30}
+                                            color={colors.primary}
+                                        />
+                                    </TouchableOpacity>
+                                </View>
                                 <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
                                     {mangaDetails.title}
                                 </Text>
-                                <TouchableOpacity testID="bookmark-button" onPress={handleBookmark} style={styles.bookmarkButton}>
-                                    <Ionicons
-                                        name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
-                                        size={30}
-                                        color={colors.primary}
-                                    />
-                                </TouchableOpacity>
-
                                 {mangaDetails.alternativeTitle && (
-                                    <View>
-                                        <ExpandableText
-                                            text={mangaDetails.alternativeTitle}
-                                            initialLines={1}
-                                            style={styles.alternativeTitle}
-                                        />
-                                    </View>
+                                    <ExpandableText
+                                        text={mangaDetails.alternativeTitle}
+                                        initialLines={1}
+                                        style={styles.alternativeTitle}
+                                    />
                                 )}
                                 <View style={styles.statusContainer}>
                                     <Text style={styles.statusText}>{mangaDetails.status}</Text>
@@ -357,7 +360,7 @@ export default function MangaDetailScreen() {
                             </View>
                             <View style={styles.chapterStatus}>
                                 {isRead ? (
-                                    <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                                    <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
                                 ) : (
                                     <Ionicons name="ellipse-outline" size={24} color={colors.tabIconDefault} />
                                 )}
@@ -416,8 +419,15 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         left: 20,
         right: 20,
     },
-    backButton: {
+    headerButtons: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+    },
+    headerButton: {
         padding: 10,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        borderRadius: 20,
     },
     title: {
         fontSize: 28,
@@ -442,6 +452,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         paddingVertical: 5,
         borderRadius: 20,
         alignSelf: 'flex-start',
+        marginTop: 10,
         marginBottom: 20,
     },
     statusText: {
