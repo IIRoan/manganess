@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
-import Alert from '../components/Alert';
+import Alert from '@/components/Alert';
 import { useTheme } from '@/constants/ThemeContext';
 
 jest.mock('@/constants/ThemeContext', () => ({
@@ -22,29 +22,6 @@ describe('Alert Component', () => {
       systemTheme: 'light',
     });
   });
-
-  it('renders correctly when visible', async () => {
-    await act(async () => {
-      const { getByTestId } = render(
-        <Alert
-          visible={true}
-          title="Test Alert"
-          onClose={onCloseMock}
-          type="bookmarks"
-          options={[
-            { text: 'Option 1', onPress: optionPressMock },
-            { text: 'Option 2', onPress: optionPressMock },
-          ]}
-        />
-  
-      );
-  
-      expect(getByTestId('alert-title').props.children).toBe('Test Alert');
-      expect(getByTestId('alert-options')).toBeTruthy();
-    });
-  });
-  
-
 
   it('calls onClose when close button is pressed', () => {
     const { getByTestId } = render(

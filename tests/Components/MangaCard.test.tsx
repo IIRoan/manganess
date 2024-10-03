@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import MangaCard from '../components/MangaCard';
+import MangaCard from '../../components/MangaCard';
 import { useTheme } from '@/constants/ThemeContext';
 
 jest.mock('@/constants/ThemeContext', () => ({

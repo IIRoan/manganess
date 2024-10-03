@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { GenreTag } from '../components/GanreTag';
+import { GenreTag } from '@/components/GanreTag';
 import { useTheme } from '@/constants/ThemeContext';
 
 jest.mock('@/constants/ThemeContext', () => ({
@@ -13,6 +13,9 @@ describe('GenreTag Component', () => {
     jest.mocked(useTheme).mockReturnValue({
       theme: 'light',
       systemTheme: 'light',
+      setTheme: jest.fn(),
+      toggleTheme: jest.fn(),
+      actualTheme: 'light',
     });
   });
 

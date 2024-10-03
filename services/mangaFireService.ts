@@ -168,7 +168,7 @@ export const markChapterAsRead = async (id: string, chapterNumber: string, manga
   }
 };
 
-const getBookmarkStatus = async (id: string): Promise<string | null> => {
+export const getBookmarkStatus = async (id: string): Promise<string | null> => {
   try {
     return await AsyncStorage.getItem(`bookmark_${id}`);
   } catch (error) {
