@@ -178,7 +178,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 30 - (StatusBar.currentHeight || 0),
+    paddingTop: 20 - (StatusBar.currentHeight || 0),
     paddingBottom: 10,
     backgroundColor: colors.background,
   },

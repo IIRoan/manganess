@@ -171,7 +171,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     paddingHorizontal: 20,
-    marginTop: 30 - (StatusBar.currentHeight || 0), // Ensure 30 pixels from the top
+    marginTop: 20 - (StatusBar.currentHeight || 0), // Ensure 30 pixels from the top
     paddingBottom: 10,
   },
   sectionButtonsContainer: {

@@ -49,19 +49,19 @@ export const saveBookmark = async (
                     {
                         text: "No",
                         style: "cancel",
-                        onPress: () => updateAniListStatusAndAlert(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length)
+                        onPress: () => updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length)
                     },
                     {
                         text: "Yes",
                         onPress: async () => {
                             await markAllChaptersAsRead();
-                            await updateAniListStatusAndAlert(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
+                            await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
                         }
                     }
                 ]
             );
         } else {
-            await updateAniListStatusAndAlert(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
+            await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
         }
 
         // Set the bookmark changed flag
@@ -98,22 +98,3 @@ export const removeBookmark = async (
     }
 };
 
-const updateAniListStatusAndAlert = async (
-    mangaTitle: string,
-    status: BookmarkStatus,
-    readChapters: string[],
-    totalChapters: number
-) => {
-    const result = await updateAniListStatus(
-        mangaTitle,
-        status,
-        readChapters,
-        totalChapters
-    );
-
-    if (result.success) {
-        Alert.alert("Success", result.message);
-    } else {
-        Alert.alert("Note", result.message);
-    }
-};
