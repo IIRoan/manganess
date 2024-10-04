@@ -137,8 +137,8 @@ export default function SettingsScreen() {
             <Switch
               value={notificationsEnabled}
               onValueChange={toggleNotifications}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={notificationsEnabled ? colors.card : colors.text}
+              trackColor={{ false: colors.border, true: colors.tint }}
+              thumbColor={notificationsEnabled ? colors.primary : colors.text}
             />
           </View>
         </View>
@@ -163,8 +163,8 @@ export default function SettingsScreen() {
             <Switch
               value={enableDebugTab}
               onValueChange={toggleEnableDebugTab}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={enableDebugTab ? colors.card : colors.text}
+              trackColor={{ false: colors.border, true: colors.tint }}
+              thumbColor={enableDebugTab ? colors.primary : colors.text}
             />
           </View>
           <Text style={styles.optionText}>You need to restart the app for this setting to take effect.</Text>
@@ -191,11 +191,12 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     paddingHorizontal: 20,
   },
   title: {
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginTop: 40,
+    marginTop: 30,
     marginBottom: 20,
     color: colors.text,
+
   },
   section: {
     marginBottom: 30,

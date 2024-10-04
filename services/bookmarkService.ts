@@ -63,6 +63,9 @@ export const saveBookmark = async (
         } else {
             await updateAniListStatusAndAlert(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
         }
+
+        // Set the bookmark changed flag
+        await AsyncStorage.setItem('bookmarkChanged', 'true');
     } catch (error) {
         console.error('Error saving bookmark:', error);
         Alert.alert("Error", "Failed to update status. Please try again.");
@@ -87,6 +90,9 @@ export const removeBookmark = async (
 
         setBookmarkStatus(null);
         setIsAlertVisible(false);
+
+        // Set the bookmark changed flag
+        await AsyncStorage.setItem('bookmarkChanged', 'true');
     } catch (error) {
         console.error('Error removing bookmark:', error);
     }
