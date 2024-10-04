@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -49,6 +49,11 @@ export default function BookmarksScreen() {
       setIsLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    // Fetch bookmarks on initial load
+    fetchBookmarks();
+  }, [fetchBookmarks]);
 
   useFocusEffect(
     useCallback(() => {
