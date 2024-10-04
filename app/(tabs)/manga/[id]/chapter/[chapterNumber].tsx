@@ -40,15 +40,11 @@ export default function ReadChapterScreen() {
   useEffect(() => {
     const markChapterAsReadWithFallback = async () => {
       try {
-        // Try to get the title from AsyncStorage
         let title = await AsyncStorage.getItem(`title_${id}`);
-        
-        // If no title is found in AsyncStorage, use a fallback title by fetching it
         if (!title) {
           const mangaDetails = await fetchMangaDetails(id as string);
           title = mangaDetails.title;
         }
-        
         await markChapterAsRead(id as string, chapterNumber as string, title);
         setMangaTitle(title);
       } catch (error) {
@@ -58,8 +54,6 @@ export default function ReadChapterScreen() {
   
     markChapterAsReadWithFallback();
   }, [id, chapterNumber]);
-  
-  
 
   useFocusEffect(
     useCallback(() => {
@@ -95,6 +89,11 @@ export default function ReadChapterScreen() {
     }
   };
 
+  const handleNextChapterPress = () => {
+    const nextChapterNumber = (parseInt(chapterNumber as string, 10) + 1).toString();
+    router.navigate(`/manga/${id}/chapter/${nextChapterNumber}`);
+  };
+
   return (
     <View style={styles.container}>
       {isLoading && (
@@ -126,12 +125,14 @@ export default function ReadChapterScreen() {
           <TouchableOpacity testID="back-button" style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
+          <TouchableOpacity testID="next-chapter-button" style={styles.nextChapterButton} onPress={handleNextChapterPress}>
+            <Ionicons name="chevron-forward" size={18} color={colors.text} />
+          </TouchableOpacity>
         </>
       )}
     </View>
   );
 }
-
 
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
@@ -166,8 +167,16 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     top: 50,
     left: 10,
     zIndex: 1000,
-    color: colors.text,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  nextChapterButton: {
+    position: 'absolute',
+    top: 50,
+    right: 10,
+    zIndex: 1000,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)', // More transparent
     borderRadius: 20,
     padding: 8,
   },
