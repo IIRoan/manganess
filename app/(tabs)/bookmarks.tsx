@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, Dimensions } from 'react-native';
+import React, { useCallback, useState, useEffect } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -49,7 +49,29 @@ export default function BookmarksScreen() {
       setIsLoading(false);
     }
   }, []);
-  useFocusEffect(useCallback(() => { fetchBookmarks(); }, [fetchBookmarks]));
+
+  useEffect(() => {
+    // Fetch bookmarks on initial load
+    fetchBookmarks();
+  }, [fetchBookmarks]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const checkAndFetchBookmarks = async () => {
+        try {
+          const bookmarkChanged = await AsyncStorage.getItem('bookmarkChanged');
+          if (bookmarkChanged === 'true') {
+            await fetchBookmarks();
+            await AsyncStorage.setItem('bookmarkChanged', 'false'); // Reset the flag
+          }
+        } catch (error) {
+          console.error('Error checking bookmark changed flag:', error);
+        }
+      };
+
+      checkAndFetchBookmarks();
+    }, [fetchBookmarks])
+  );
 
   const handleBookmarkPress = (id: string) => {
     router.push(`/manga/${id}`);
@@ -66,7 +88,6 @@ export default function BookmarksScreen() {
       />
     </View>
   );
-
 
   const renderSectionButton = (title: string) => {
     let iconName: keyof typeof Ionicons.glyphMap;
@@ -138,17 +159,19 @@ export default function BookmarksScreen() {
     </SafeAreaView>
   );
 }
+
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: StatusBar.currentHeight || 0, // Ensure padding accounts for the status bar
   },
   header: {
     fontSize: 28,
     fontWeight: 'bold',
     color: colors.text,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    marginTop: 20 - (StatusBar.currentHeight || 0), // Ensure 30 pixels from the top
     paddingBottom: 10,
   },
   sectionButtonsContainer: {
@@ -223,5 +246,4 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     fontSize: 12,
     color: colors.tabIconDefault,
   },
-
 });

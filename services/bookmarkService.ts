@@ -49,20 +49,23 @@ export const saveBookmark = async (
                     {
                         text: "No",
                         style: "cancel",
-                        onPress: () => updateAniListStatusAndAlert(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length)
+                        onPress: () => updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length)
                     },
                     {
                         text: "Yes",
                         onPress: async () => {
                             await markAllChaptersAsRead();
-                            await updateAniListStatusAndAlert(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
+                            await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
                         }
                     }
                 ]
             );
         } else {
-            await updateAniListStatusAndAlert(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
+            await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
         }
+
+        // Set the bookmark changed flag
+        await AsyncStorage.setItem('bookmarkChanged', 'true');
     } catch (error) {
         console.error('Error saving bookmark:', error);
         Alert.alert("Error", "Failed to update status. Please try again.");
@@ -87,27 +90,11 @@ export const removeBookmark = async (
 
         setBookmarkStatus(null);
         setIsAlertVisible(false);
+
+        // Set the bookmark changed flag
+        await AsyncStorage.setItem('bookmarkChanged', 'true');
     } catch (error) {
         console.error('Error removing bookmark:', error);
     }
 };
 
-const updateAniListStatusAndAlert = async (
-    mangaTitle: string,
-    status: BookmarkStatus,
-    readChapters: string[],
-    totalChapters: number
-) => {
-    const result = await updateAniListStatus(
-        mangaTitle,
-        status,
-        readChapters,
-        totalChapters
-    );
-
-    if (result.success) {
-        Alert.alert("Success", result.message);
-    } else {
-        Alert.alert("Note", result.message);
-    }
-};
