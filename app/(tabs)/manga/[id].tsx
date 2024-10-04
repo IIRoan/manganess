@@ -399,14 +399,16 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         textAlign: 'center',
     },
     headerContainer: {
-        height: 300,
+        height: 325,
         position: 'relative',
         overflow: 'hidden',
     },
     bannerImage: {
         width: '100%',
-        height: '100%',
+        height: '200%', 
         resizeMode: 'cover',
+        position: 'absolute',
+        top: 0,
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,

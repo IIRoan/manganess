@@ -136,7 +136,10 @@ export async function updateAniListStatus(
     const isLoggedIn = await isLoggedInToAniList();
     if (!isLoggedIn) {
       console.log('User is not logged in to AniList. Skipping update.');
-      return { success: false, message: 'User is not logged in to AniList' };
+      return { 
+        success: false, 
+        message: `User is not logged in to AniList. Skipping update.` 
+      };
     }
 
     const anilistManga = await searchAnilistMangaByName(mangaTitle);

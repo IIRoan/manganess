@@ -193,7 +193,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    marginTop: 30,
+    marginTop: 20,
     marginBottom: 20,
     color: colors.text,
 
