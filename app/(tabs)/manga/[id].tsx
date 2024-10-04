@@ -104,7 +104,6 @@ export default function MangaDetailScreen() {
             fetchData();
 
             return () => {
-                // Cleanup function if needed
             };
         }, [id, fetchReadChapters])
     );
@@ -199,19 +198,19 @@ export default function MangaDetailScreen() {
 
     const handleLastReadChapterPress = () => {
         if (!lastReadChapter || lastReadChapter === 'Not started') {
-          // If no chapter has been read, navigate to the first chapter
-          if (mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
-            // Get the last element of the array, which is the first chapter
-            const firstChapter = mangaDetails.chapters[mangaDetails.chapters.length - 1];
-            handleChapterPress(firstChapter.number);
-          }
+            // If no chapter has been read, navigate to the first chapter
+            if (mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
+                // Get the last element of the array, which is the first chapter
+                const firstChapter = mangaDetails.chapters[mangaDetails.chapters.length - 1];
+                handleChapterPress(firstChapter.number);
+            }
         } else {
-          const chapterNumber = lastReadChapter.replace('Chapter ', '');
-          handleChapterPress(chapterNumber);
+            const chapterNumber = lastReadChapter.replace('Chapter ', '');
+            handleChapterPress(chapterNumber);
         }
-      };
-      
-      
+    };
+
+
 
     if (isLoading) {
         return (
@@ -310,7 +309,7 @@ export default function MangaDetailScreen() {
                                     <Text style={styles.sectionTitle}>Details</Text>
                                     <View style={styles.detailRow}>
                                         <Text style={styles.detailLabel}>Author</Text>
-                                        <Text style={styles.detailValue}>{mangaDetails.author.join(', ')}</Text>
+                                        <Text style={styles.detailValue}>{(mangaDetails.author || []).join(', ')}</Text>
                                     </View>
                                     <View style={styles.detailRow}>
                                         <Text style={styles.detailLabel}>Published</Text>
@@ -325,7 +324,7 @@ export default function MangaDetailScreen() {
                                     </View>
                                     <Text style={[styles.detailLabel, { marginTop: 10 }]}>Genres</Text>
                                     <View style={styles.genresContainer}>
-                                        {mangaDetails.genres.map((genre, index) => (
+                                        {(mangaDetails.genres || []).map((genre, index) => (
                                             <GenreTag key={index} genre={genre} />
                                         ))}
                                     </View>
@@ -400,14 +399,16 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
         textAlign: 'center',
     },
     headerContainer: {
-        height: 300,
+        height: 325,
         position: 'relative',
         overflow: 'hidden',
     },
     bannerImage: {
         width: '100%',
-        height: '100%',
+        height: '200%', 
         resizeMode: 'cover',
+        position: 'absolute',
+        top: 0,
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,

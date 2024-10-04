@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity }
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { getChapterUrl, markChapterAsRead, getInjectedJavaScript, fetchMangaDetails } from '@/services/mangaFireService';
+import { getChapterUrl, markChapterAsRead, getInjectedJavaScript, fetchMangaDetails, MangaDetails } from '@/services/mangaFireService';
 import { BackHandler } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
@@ -34,32 +34,27 @@ export default function ReadChapterScreen() {
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
+  const [mangaDetails, setMangaDetails] = useState(null as MangaDetails | null);
 
   const chapterUrl = getChapterUrl(id as string, chapterNumber as string);
 
   useEffect(() => {
     const markChapterAsReadWithFallback = async () => {
       try {
-        // Try to get the title from AsyncStorage
         let title = await AsyncStorage.getItem(`title_${id}`);
-        
-        // If no title is found in AsyncStorage, use a fallback title by fetching it
         if (!title) {
           const mangaDetails = await fetchMangaDetails(id as string);
           title = mangaDetails.title;
         }
-        
         await markChapterAsRead(id as string, chapterNumber as string, title);
         setMangaTitle(title);
       } catch (error) {
         console.error('Error marking chapter as read:', error);
       }
     };
-  
+
     markChapterAsReadWithFallback();
   }, [id, chapterNumber]);
-  
-  
 
   useFocusEffect(
     useCallback(() => {
@@ -72,6 +67,20 @@ export default function ReadChapterScreen() {
       return () => backHandler.remove();
     }, [id, router])
   );
+
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        const details = await fetchMangaDetails(id as string);
+        setMangaDetails(details as MangaDetails);
+      } catch (error) {
+        console.error('Error fetching manga details:', error);
+      }
+    };
+
+    fetchDetails();
+  }, [id]);
+
 
   const handleLoadEnd = () => setIsLoading(false);
   const handleBackPress = () => router.navigate(`/manga/${id}`);
@@ -92,6 +101,29 @@ export default function ReadChapterScreen() {
         }
         router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
       }
+    }
+  };
+
+  const handleNextChapterPress = () => {
+    if (!mangaDetails || !mangaDetails.chapters) {
+      console.log('Manga details not available');
+      return;
+    }
+
+    const currentChapterIndex = mangaDetails.chapters.findIndex(
+      chapter => chapter.number === chapterNumber
+    );
+
+    if (currentChapterIndex === -1 || currentChapterIndex === 0) {
+      console.log('No next chapter available');
+      return;
+    }
+
+    const nextChapter = mangaDetails.chapters[currentChapterIndex - 1];
+    if (nextChapter) {
+      router.navigate(`/manga/${id}/chapter/${nextChapter.number}`);
+    } else {
+      console.log('No next chapter available');
     }
   };
 
@@ -126,12 +158,23 @@ export default function ReadChapterScreen() {
           <TouchableOpacity testID="back-button" style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
+          <TouchableOpacity
+            testID="next-chapter-button"
+            style={[
+              styles.nextChapterButton,
+              (!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber) && styles.disabledButton
+            ]}
+            onPress={handleNextChapterPress}
+            disabled={!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber}
+          >
+            <Ionicons name="chevron-forward" size={18} color={colors.text} />
+          </TouchableOpacity>
+
         </>
       )}
     </View>
   );
 }
-
 
 const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   container: {
@@ -166,8 +209,19 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     top: 50,
     left: 10,
     zIndex: 1000,
-    color: colors.text,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  nextChapterButton: {
+    position: 'absolute',
+    top: 50,
+    right: 10,
+    zIndex: 1000,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)', // More transparent
     borderRadius: 20,
     padding: 8,
   },
