@@ -18,7 +18,7 @@ interface MangaItem {
   rank?: number;
 }
 
-
+const {height} = Dimensions.get('window');
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
 const MOST_VIEWED_CARD_WIDTH = 160;
@@ -169,7 +169,6 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
   container: {
     flex: 1,
     paddingTop: StatusBar.currentHeight || 0,
@@ -179,7 +178,8 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingTop: 30 - (StatusBar.currentHeight || 0),
+    paddingBottom: 10,
     backgroundColor: colors.background,
   },
   headerTitleContainer: {
@@ -187,7 +187,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: colors.text,
     marginRight: 10,
@@ -298,5 +298,4 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     width: '100%',
     aspectRatio: 3 / 4,
   },
-
 });

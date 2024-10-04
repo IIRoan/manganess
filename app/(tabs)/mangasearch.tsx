@@ -171,7 +171,7 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       flexDirection: 'row',
       alignItems: 'center',
       marginHorizontal: 20,
-      marginVertical: 20,
+      marginTop: 15,
       paddingHorizontal: 15,
       height: 50,
       borderRadius: 25,
@@ -183,6 +183,7 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       shadowOpacity: 0.1,
       shadowRadius: 4,
       elevation: 3,
+      marginBottom: 10,
     },
     searchIcon: {
       marginRight: 10,
