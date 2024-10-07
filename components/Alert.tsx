@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 type IconName = 'options' | 'key' | 'search' | 'repeat' | 'link' | 'at' | 'push' | 'map' | 'filter' | 'scale' | 'body' | 'code' | 'menu' | 'time' | 'ellipse' | 'image' | 'stop' | 'text' | 'alert' | 'book-outline' | 'book' | 'checkmark-circle-outline' | 'close-circle-outline';
 
-interface Option {
+export interface Option {
   text: string;
   onPress: () => void;
   icon?: IconName;

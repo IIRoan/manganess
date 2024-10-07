@@ -1,5 +1,3 @@
-// constants/Colors.ts
-
 export const Colors = {
   light: {
     primary: '#2E8B57',

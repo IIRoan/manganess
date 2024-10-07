@@ -46,7 +46,7 @@ type IconName =
     | 'checkmark-circle-outline'
     | 'close-circle-outline';
 
-interface Option {
+export interface Option {
     text: string;
     onPress: () => void;
     icon?: IconName;
