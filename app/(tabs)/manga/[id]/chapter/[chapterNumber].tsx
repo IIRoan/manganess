@@ -221,7 +221,7 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
     top: 50,
     right: 10,
     zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)', // More transparent
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
     borderRadius: 20,
     padding: 8,
   },
