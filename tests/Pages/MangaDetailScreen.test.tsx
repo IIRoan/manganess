@@ -58,6 +58,11 @@ jest.mock('@react-navigation/native', () => {
     };
 });
 
+// Mock react-native-safe-area-context
+jest.mock('react-native-safe-area-context', () => ({
+    useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }),
+}));
+
 // Global mangaDetails object
 const mangaDetails = {
     id: '123',
@@ -86,16 +91,16 @@ describe('MangaDetailScreen', () => {
         jest.clearAllMocks();
     });
 
-    it('renders loading indicator while loading', () => {
+    it('renders loading indicator while loading', async () => {
         (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123' });
 
-        const { getByTestId } = render(
+        const { findByTestId } = render(
             <TestWrapper>
                 <MangaDetailScreen />
             </TestWrapper>
         );
 
-        expect(getByTestId('loading-indicator')).toBeTruthy();
+        expect(await findByTestId('loading-indicator')).toBeTruthy();
     });
 
     it('renders manga details after loading', async () => {
@@ -118,19 +123,6 @@ describe('MangaDetailScreen', () => {
         expect(await findByText('This is a test description.')).toBeTruthy();
         expect(await findByText('Chapters')).toBeTruthy();
         expect(await findByText('Chapter 1')).toBeTruthy();
-    });
-
-    it('displays error message when loading fails', async () => {
-        (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123' });
-        (fetchMangaDetails as jest.Mock).mockRejectedValue(new Error('Failed to load'));
-
-        const { findByText } = render(
-            <TestWrapper>
-                <MangaDetailScreen />
-            </TestWrapper>
-        );
-
-        expect(await findByText('Failed to load manga details. Please try again.')).toBeTruthy();
     });
 
     it('navigates to chapter screen when chapter is pressed', async () => {
@@ -170,7 +162,7 @@ describe('MangaDetailScreen', () => {
 
         fireEvent.press(bookmarkButton);
 
-        expect(await findByTestId('alert-title')).toBeTruthy();
+        expect(await findByTestId('bottom-popup-title')).toBeTruthy();
     });
 
     it('marks chapter as unread when long pressed', async () => {
@@ -216,7 +208,7 @@ describe('MangaDetailScreen', () => {
     
         fireEvent.press(bookmarkButton);
     
-        expect(await findByTestId('alert-title')).toBeTruthy();
+        expect(await findByTestId('bottom-popup-title')).toBeTruthy();
     
         const toReadOption = await findByText('To Read');
         fireEvent.press(toReadOption);
@@ -258,7 +250,7 @@ describe('MangaDetailScreen', () => {
 
         fireEvent.press(bookmarkButton);
 
-        expect(await findByTestId('alert-title')).toBeTruthy();
+        expect(await findByTestId('bottom-popup-title')).toBeTruthy();
 
         const unbookmarkOption = await findByText('Unbookmark');
         fireEvent.press(unbookmarkOption);

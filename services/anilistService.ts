@@ -1,4 +1,3 @@
-// anilistService.ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthData } from './anilistOAuth'; 
 import { decode } from 'html-entities';
