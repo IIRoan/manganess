@@ -1,4 +1,3 @@
-// components/GenreTag.tsx
 import React from 'react';
 import { View, Text, StyleSheet, useColorScheme } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';

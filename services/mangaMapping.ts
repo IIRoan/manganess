@@ -29,10 +29,3 @@ export async function getAnilistIdFromInternalId(internalId: string): Promise<nu
   const mapping = await getMangaMapping(internalId);
   return mapping ? mapping.anilistId : null;
 }
-
-export async function searchAnilistManga(title: string): Promise<{ id: number, title: string } | null> {
-  // Implement AniList search API call here
-  // This is a placeholder implementation
-  console.log('Searching AniList for:', title);
-  return null;
-}
