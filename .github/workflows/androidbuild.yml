@@ -12,37 +12,72 @@ on:
         default: 'manual-build'
 
 jobs:
-  build:
+  start_build:
+    name: Start Build
     runs-on: ubuntu-latest
     steps:
-      - name: Start Build
-        run: echo "Starting build process..."
-
       - name: Checkout repository
         uses: actions/checkout@v3
-
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+      - name: Install dependencies
+        run: npm install
 
+  testing:
+    name: Testing
+    needs: start_build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm install
+      - name: Run tests
+        run: npm test
+
+  building:
+    name: Building
+    needs: testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
       - name: Setup EAS
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-
       - name: Install dependencies
         run: npm install
-
-      - name: Testing
-        run: npm test
-
-      - name: Building
+      - name: Build Android app
         run: eas build --platform android --profile preview --local --output ./app-release.apk
+      - name: Upload APK for next job
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: ./app-release.apk
 
-      - name: Uploading
+  uploading:
+    name: Uploading
+    needs: building
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK from previous job
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release
+      - name: Upload final APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.build_name || 'app-release' }}
-          path: ./app-release.apk
+          path: app-release.apk
