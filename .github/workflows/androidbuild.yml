@@ -24,6 +24,13 @@ jobs:
           node-version: '18'
       - name: Install dependencies
         run: npm install
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.OS }}-node-
 
   testing:
     name: Testing
@@ -36,6 +43,11 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+      - name: Restore cached dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
       - name: Install dependencies
         run: npm install
       - name: Run tests
@@ -52,6 +64,11 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '18'
+      - name: Restore cached dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.OS }}-node-${{ hashFiles('**/package-lock.json') }}
       - name: Setup EAS
         uses: expo/expo-github-action@v8
         with:
