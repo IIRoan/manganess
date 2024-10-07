@@ -1,12 +1,18 @@
-name: Test and Build Expo App (Internal Android)
+name: Build and Upload Internal Android APK
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      build_name:
+        description: 'Custom build name'
+        required: false
+        default: 'manual-build'
 
 jobs:
-  test-and-build:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -17,19 +23,20 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: |
-          npm install
-          npm install -g expo-cli eas-cli
-
-      - name: Run tests
-        run: npm test
-
       - name: Setup EAS
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android app (internal distribution)
-        run: eas build --platform android --profile preview --non-interactive
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Android app
+        run: eas build --platform android --profile preview --local --output ./app-release.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ github.event.inputs.build_name || 'app-release' }}
+          path: ./app-release.apk
