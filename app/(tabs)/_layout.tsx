@@ -5,10 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import OnboardingScreen from '../onboarding';
+import * as MangaUpdateService from '@/services/mangaUpdateService';
 
 const { width } = Dimensions.get('window');
 const TAB_BAR_WIDTH = width * 0.9;
-const TAB_WIDTH = TAB_BAR_WIDTH / 5; 
+const TAB_WIDTH = TAB_BAR_WIDTH / 5;
 
 export default function TabLayout() {
   const { theme } = useTheme();
@@ -17,9 +19,16 @@ export default function TabLayout() {
   const colors = Colors[colorScheme];
   const pathname = usePathname();
   const [enableDebugTab, setEnableDebugTab] = useState(false);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
 
   useEffect(() => {
     loadEnableDebugTabSetting();
+    checkOnboardingStatus();
+    MangaUpdateService.startUpdateService();
+
+    return () => {
+      MangaUpdateService.stopUpdateService();
+    };
   }, []);
 
   const loadEnableDebugTabSetting = async () => {
@@ -31,6 +40,16 @@ export default function TabLayout() {
     }
   };
 
+  const checkOnboardingStatus = async () => {
+    try {
+      const value = await AsyncStorage.getItem('onboardingCompleted');
+      setIsOnboardingCompleted(value === 'true');
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      setIsOnboardingCompleted(false);
+    }
+  };
+
   const shouldShowTabBar = () => {
     const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
     if (enableDebugTab) {
@@ -39,10 +58,20 @@ export default function TabLayout() {
     return allowedPaths.includes(pathname) || pathname.match(/^\/manga\/[^\/]+$/);
   };
 
+  if (isOnboardingCompleted === null) {
+    return null;
+  }
+
+  if (!isOnboardingCompleted) {
+    // Render the onboarding screen if the user hasn't completed the onboarding process
+    return <OnboardingScreen  />;
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.card }}>
       <Tabs
         screenOptions={({ route }) => ({
+          
           tabBarIcon: ({ focused, color, size }) => {
             let iconName;
 
