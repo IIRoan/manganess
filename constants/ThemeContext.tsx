@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { ColorScheme } from '@/constants/Colors';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -15,10 +16,35 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>('system');
+  const [theme, setThemeState] = useState<Theme>('system');
   const systemColorScheme = useColorScheme() as ColorScheme;
 
+  useEffect(() => {
+    loadSavedTheme();
+  }, []);
+
+  const loadSavedTheme = async () => {
+    try {
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme) {
+        setThemeState(savedTheme as Theme);
+      }
+    } catch (error) {
+      console.error('Error loading saved theme:', error);
+    }
+  };
+
+  const setTheme = async (newTheme: Theme) => {
+    try {
+      await AsyncStorage.setItem('theme', newTheme);
+      setThemeState(newTheme);
+    } catch (error) {
+      console.error('Error saving theme:', error);
+    }
+  };
+
   const toggleTheme = () => {
+    //@ts-ignore
     setTheme(prevTheme => {
       switch (prevTheme) {
         case 'light': return 'dark';

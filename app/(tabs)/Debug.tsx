@@ -7,6 +7,8 @@ import * as MangaUpdateService from '@/services/mangaUpdateService';
 import * as Notifications from 'expo-notifications';
 import * as AniListOAuth from '@/services/anilistOAuth';
 import { searchAnilistMangaByName, updateMangaStatus, syncAllMangaWithAniList } from '@/services/anilistService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -17,7 +19,7 @@ export default function DebugScreen() {
   const [user, setUser] = useState<any>(null);
   const [mangaId, setMangaId] = useState('chainsaw-man.0w5k');
   const [chapterNumber, setChapterNumber] = useState('176');
-
+  const router = useRouter();
   const [mangaName, setMangaName] = useState('');
   const [anilistResult, setAnilistResult] = useState<null | { id: number; title: string }>(null);
   const [markAsReadMangaName, setMarkAsReadMangaName] = useState('');
@@ -107,20 +109,30 @@ export default function DebugScreen() {
     }
   };
 
+  const showOnboarding = async () => {
+    try {
+      await AsyncStorage.removeItem('onboardingCompleted');
+      router.replace('/onboarding');
+    } catch (error) {
+      console.error('Error showing onboarding:', error);
+      Alert.alert('Error', 'Failed to show onboarding. Please try again.');
+    }
+  };
+
 
   const markMangaAsRead = async () => {
     if (!markAsReadMangaName.trim()) {
       Alert.alert("Error", "Please enter a manga name");
       return;
     }
-  
+
     try {
       const authData = await AniListOAuth.getAuthData();
       if (!authData) {
         Alert.alert("Error", "You are not logged in to AniList. Please log in first.");
         return;
       }
-  
+
       const result = await searchAnilistMangaByName(markAsReadMangaName);
       if (result) {
         await updateMangaStatus(result.id, 'COMPLETED', 0);
@@ -307,6 +319,13 @@ export default function DebugScreen() {
           >
             <Ionicons name="notifications-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Send Test Notification</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.option}
+            onPress={showOnboarding}
+          >
+            <Ionicons name="play-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Show Onboarding</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
