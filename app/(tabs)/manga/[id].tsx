@@ -6,9 +6,7 @@ import {
     TouchableOpacity,
     StyleSheet,
     Image,
-    useColorScheme,
-    FlatList,
-    Alert,
+    useColorScheme
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,11 +15,11 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import ExpandableText from '@/components/ExpandableText';
 import AlertComponent from '@/components/Alert';
-import BottomPopup, {Option} from '@/components/BottomPopup';
+import BottomPopup, { Option } from '@/components/BottomPopup';
+import { FlashList } from '@shopify/flash-list';
 import {
     fetchMangaDetails,
-    MangaDetails,
-    getChapterUrl,
+    MangaDetails
 } from '@/services/mangaFireService';
 import {
     fetchBookmarkStatus,
@@ -357,7 +355,8 @@ export default function MangaDetailScreen() {
                 options={bookmarkPopupConfig.options}
             />
 
-            <FlatList
+            <FlashList
+                estimatedItemSize={100}
                 ListHeaderComponent={() => (
                     <>
                         <View style={styles.headerContainer}>
@@ -513,6 +512,7 @@ export default function MangaDetailScreen() {
                 }}
                 ListFooterComponent={<View style={{ height: 70 }} />}
             />
+
         </View>
     );
 }

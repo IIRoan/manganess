@@ -1,9 +1,13 @@
-import { DarkTheme, DefaultTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider as NavigationThemeProvider,
+} from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import 'react-native-reanimated';
 import { useColorScheme } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 
@@ -16,7 +20,9 @@ function RootLayoutNav() {
   const activeTheme = theme === 'system' ? colorScheme : theme;
 
   return (
-    <NavigationThemeProvider value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <NavigationThemeProvider
+      value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}
+    >
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
@@ -40,8 +46,10 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <RootLayoutNav />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <RootLayoutNav />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
