@@ -10,7 +10,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
-
+import { useRootNavigationState } from 'expo-router';
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
@@ -31,11 +31,20 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const navigationState = useRootNavigationState();
+
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
+
+  if (!navigationState?.key) {
+    // Navigation state isn't ready yet
+    return null;
+  }
+
   useEffect(() => {
+    
     if (loaded) {
       SplashScreen.hideAsync();
     }
