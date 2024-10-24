@@ -371,6 +371,7 @@ export default function MangaDetailScreen() {
                             <View style={styles.headerContent}>
                                 <View style={styles.headerButtons}>
                                     <TouchableOpacity
+                                        testID="back-button"
                                         onPress={handleBackPress}
                                         style={styles.headerButton}
                                     >
