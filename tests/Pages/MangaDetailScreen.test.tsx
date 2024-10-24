@@ -84,7 +84,7 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('@shopify/flash-list', () => {
   const React = require('react');
   const { FlatList } = require('react-native');
-  const MockFlashList = React.forwardRef((props, ref) => {
+  const MockFlashList = React.forwardRef((props: React.JSX.IntrinsicAttributes, ref: any) => {
     return <FlatList {...props} ref={ref} />;
   });
 
@@ -202,7 +202,7 @@ describe('MangaDetailScreen', () => {
     expect(bottomPopupTitle.props.children).toContain('Bookmark Test Manga');
   });
 
-  it('marks chapter as unread when long pressed', async () => {
+  it('marks chapters as read up to selected chapter when long pressed', async () => {
     (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123' });
     (fetchMangaDetails as jest.Mock).mockResolvedValue(mangaDetails);
     (getLastReadChapter as jest.Mock).mockResolvedValue('Chapter 1');
@@ -218,18 +218,50 @@ describe('MangaDetailScreen', () => {
     await waitFor(() => expect(fetchMangaDetails).toHaveBeenCalled());
 
     const chapterItems = await findAllByTestId('chapter-item');
+    const secondChapterItem = chapterItems[1]; // Chapter 2
+
+    fireEvent(secondChapterItem, 'onLongPress');
+
+    // Verify alert content
+    const alertTitle = await findByText('Mark Chapters as Read');
+    expect(alertTitle).toBeTruthy();
+
+    const alertMessage = await findByText('Do you want to mark all chapters up to chapter 2 as read?');
+    expect(alertMessage).toBeTruthy();
+
+    // Find and click the "Yes" button
+    const yesButton = await findByText('Yes');
+    fireEvent.press(yesButton);
+
+    // Verify that AsyncStorage.setItem was called with chapters 1 and 2
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      'manga_123_read_chapters',
+      JSON.stringify(['1', '2'])
+    );
+  });
+
+  it('does not show mark as read dialog for already read chapters', async () => {
+    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123' });
+    (fetchMangaDetails as jest.Mock).mockResolvedValue(mangaDetails);
+    (getLastReadChapter as jest.Mock).mockResolvedValue('Chapter 2');
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(JSON.stringify(['1', '2']));
+    (fetchBookmarkStatus as jest.Mock).mockResolvedValue(null);
+
+    const { findAllByTestId, queryByText } = render(
+      <TestWrapper>
+        <MangaDetailScreen />
+      </TestWrapper>
+    );
+
+    await waitFor(() => expect(fetchMangaDetails).toHaveBeenCalled());
+
+    const chapterItems = await findAllByTestId('chapter-item');
     const firstChapterItem = chapterItems[0];
 
     fireEvent(firstChapterItem, 'onLongPress');
 
-    // Since the AlertComponent is being used, we need to find the alert title
-    const alertTitle = await findByText('Mark as Unread');
-    expect(alertTitle).toBeTruthy();
-
-    const yesButton = await findByText('Yes');
-    fireEvent.press(yesButton);
-
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('manga_123_read_chapters', JSON.stringify([]));
+    // Verify that the alert dialog is not shown for already read chapters
+    expect(queryByText('Mark Chapters as Read')).toBeNull();
   });
 
   it('saves bookmark when bookmark option is selected', async () => {
@@ -295,7 +327,6 @@ describe('MangaDetailScreen', () => {
       expect.any(Function)
     );
   });
-
   it('handles last read chapter navigation', async () => {
     (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123' });
     (useRouter as jest.Mock).mockReturnValue({ navigate: jest.fn() });
@@ -304,7 +335,7 @@ describe('MangaDetailScreen', () => {
     (getLastReadChapter as jest.Mock).mockResolvedValue('Chapter 1');
     (fetchBookmarkStatus as jest.Mock).mockResolvedValue(null);
 
-    const { findByText } = render(
+    const { findByTestId } = render(
       <TestWrapper>
         <MangaDetailScreen />
       </TestWrapper>
@@ -312,8 +343,9 @@ describe('MangaDetailScreen', () => {
 
     await waitFor(() => expect(fetchMangaDetails).toHaveBeenCalled());
 
-    const lastReadButton = await findByText('Continue from Chapter 1');
-    fireEvent.press(lastReadButton);
+    // Find the last read chapter bar by test ID
+    const lastReadBar = await findByTestId('last-read-chapter-bar');
+    fireEvent.press(lastReadBar);
 
     expect(mockNavigate).toHaveBeenCalledWith('/manga/123/chapter/1');
   });
@@ -334,7 +366,7 @@ describe('MangaDetailScreen', () => {
     (getLastReadChapter as jest.Mock).mockResolvedValue(null);
     (fetchBookmarkStatus as jest.Mock).mockResolvedValue(null);
 
-    const { findByText } = render(
+    const { findByTestId } = render(
       <TestWrapper>
         <MangaDetailScreen />
       </TestWrapper>
@@ -342,7 +374,8 @@ describe('MangaDetailScreen', () => {
 
     await waitFor(() => expect(fetchMangaDetails).toHaveBeenCalled());
 
-    const startReadingButton = await findByText('Start reading');
+    // Find the start reading button by test ID
+    const startReadingButton = await findByTestId('last-read-chapter-bar');
     fireEvent.press(startReadingButton);
 
     // Should navigate to the first chapter (number 1)

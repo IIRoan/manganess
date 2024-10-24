@@ -8,6 +8,7 @@ import {
     Image,
     useColorScheme
 } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import ExpandableText from '@/components/ExpandableText';
 import AlertComponent from '@/components/Alert';
+import SwipeableChapterItem from '@/components/SwipeChapterItem';
 import BottomPopup, { Option } from '@/components/BottomPopup';
 import { FlashList } from '@shopify/flash-list';
 import {
@@ -63,6 +65,7 @@ export default function MangaDetailScreen() {
         theme === 'system' ? systemColorScheme : (theme as ColorScheme);
     const colors = Colors[colorScheme];
     const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
+    const [currentlyOpenSwipeable, setCurrentlyOpenSwipeable] = useState<Swipeable | null>(null);
 
     // State for the general alert (e.g., marking chapters as unread)
     const [isAlertVisible, setIsAlertVisible] = useState(false);
@@ -202,39 +205,62 @@ export default function MangaDetailScreen() {
 
     const handleChapterLongPress = async (chapterNumber: string) => {
         const isRead = readChapters.includes(chapterNumber);
-        if (isRead) {
-            setIsAlertVisible(true);
-            setAlertConfig({
-                type: 'confirm',
-                title: 'Mark as Unread',
-                message: `Do you want to mark chapter ${chapterNumber} as unread?`,
-                options: [
-                    {
-                        text: 'Cancel',
-                        onPress: () => { },
-                    },
-                    {
-                        text: 'Yes',
-                        onPress: async () => {
-                            try {
-                                const key = `manga_${id}_read_chapters`;
-                                const updatedReadChapters = readChapters.filter(
-                                    (ch) => ch !== chapterNumber
-                                );
-                                await AsyncStorage.setItem(
-                                    key,
-                                    JSON.stringify(updatedReadChapters)
-                                );
-                                setReadChapters(updatedReadChapters);
-                            } catch (error) {
-                                console.error('Error marking chapter as unread:', error);
-                            }
-                        },
-                    },
-                ],
-            });
+        if (!isRead) {
+          setIsAlertVisible(true);
+          setAlertConfig({
+            type: 'confirm',
+            title: 'Mark Chapters as Read',
+            message: `Do you want to mark all chapters up to chapter ${chapterNumber} as read?`,
+            options: [
+              {
+                text: 'Cancel',
+                onPress: () => {},
+              },
+              {
+                text: 'Yes',
+                onPress: async () => {
+                  try {
+                    // Get all chapters up to the selected chapter
+                    const chaptersToMark = mangaDetails?.chapters
+                      .filter(ch => {
+                        // Compare chapter numbers numerically
+                        const currentChapter = parseFloat(ch.number);
+                        const selectedChapter = parseFloat(chapterNumber);
+                        return currentChapter <= selectedChapter;
+                      })
+                      .map(ch => ch.number) || [];
+      
+                    // Save to AsyncStorage
+                    const key = `manga_${id}_read_chapters`;
+                    const updatedReadChapters = Array.from(new Set([...readChapters, ...chaptersToMark]));
+                    await AsyncStorage.setItem(key, JSON.stringify(updatedReadChapters));
+                    setReadChapters(updatedReadChapters);
+                  } catch (error) {
+                    console.error('Error marking chapters as read:', error);
+                  }
+                },
+              },
+            ],
+          });
         }
-    };
+      };
+
+    const handleMarkAsUnread = useCallback(async (chapterNumber: string) => {
+        try {
+            const key = `manga_${id}_read_chapters`;
+            const updatedReadChapters = readChapters.filter(
+                (ch) => ch !== chapterNumber
+            );
+            await AsyncStorage.setItem(
+                key,
+                JSON.stringify(updatedReadChapters)
+            );
+            setReadChapters(updatedReadChapters);
+        } catch (error) {
+            console.error('Error marking chapter as unread:', error);
+        }
+    }, [id, readChapters]);
+
 
     const handleSaveBookmark = async (status: BookmarkStatus) => {
         if (!mangaDetails) return;
@@ -422,6 +448,7 @@ export default function MangaDetailScreen() {
                                         lastReadChapter={lastReadChapter}
                                         onPress={handleLastReadChapterPress}
                                         colors={colors}
+                                        readChapters={readChapters}
                                     />
                                 </View>
                                 <View style={styles.detailsContainer}>
@@ -466,53 +493,29 @@ export default function MangaDetailScreen() {
                     </>
                 )}
                 data={mangaDetails.chapters}
-                keyExtractor={(item, index) =>
-                    `chapter-${item.number}-${index}`
-                }
+                extraData={readChapters}
+                keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
                 renderItem={({ item: chapter, index }) => {
                     const isRead = readChapters.includes(chapter.number);
                     const isLastItem = index === mangaDetails.chapters.length - 1;
                     return (
-                        <TouchableOpacity
-                            testID="chapter-item"
-                            style={[
-                                styles.chapterItem,
-                                isLastItem && styles.lastChapterItem,
-                            ]}
+                        <SwipeableChapterItem
+                            chapter={chapter}
+                            isRead={isRead}
+                            isLastItem={isLastItem}
                             onPress={() => handleChapterPress(chapter.number)}
                             onLongPress={() => handleChapterLongPress(chapter.number)}
-                        >
-                            <View style={styles.chapterInfo}>
-                                <Text
-                                    style={[
-                                        styles.chapterTitle,
-                                        isRead && styles.readChapterTitle,
-                                    ]}
-                                >
-                                    {chapter.title}
-                                </Text>
-                                <Text style={styles.chapterDate}>{chapter.date}</Text>
-                            </View>
-                            <View style={styles.chapterStatus}>
-                                {isRead ? (
-                                    <Ionicons
-                                        name="checkmark-circle"
-                                        size={24}
-                                        color={colors.primary}
-                                    />
-                                ) : (
-                                    <Ionicons
-                                        name="ellipse-outline"
-                                        size={24}
-                                        color={colors.tabIconDefault}
-                                    />
-                                )}
-                            </View>
-                        </TouchableOpacity>
+                            onUnread={() => handleMarkAsUnread(chapter.number)}
+                            colors={colors}
+                            styles={styles}
+                            currentlyOpenSwipeable={currentlyOpenSwipeable}
+                            setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeable}
+                        />
                     );
                 }}
                 ListFooterComponent={<View style={{ height: 70 }} />}
             />
+
 
         </View>
     );
