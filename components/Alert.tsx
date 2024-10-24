@@ -75,13 +75,21 @@ const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, type, opti
             {options?.map((option, index) => (
               <TouchableOpacity
                 key={index}
-                style={styles.confirmButton}
+                style={[
+                  styles.confirmButton,
+                  index === 0 ? styles.cancelButton : styles.confirmActionButton
+                ]}
                 onPress={() => {
                   option.onPress();
                   onClose();
                 }}
               >
-                <Text style={styles.confirmButtonText}>{option.text}</Text>
+                <Text style={[
+                  styles.confirmButtonText,
+                  index === 0 ? styles.cancelButtonText : styles.confirmActionButtonText
+                ]}>
+                  {option.text}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -194,17 +202,32 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   confirmButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    gap: 12,
   },
   confirmButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 10,
+    flex: 1,
+    paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
+    alignItems: 'center',
   },
   confirmButtonText: {
-    color: colors.card,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  cancelButton: {
+    backgroundColor: colors.primary,
+  },
+  cancelButtonText: {
+    color: colors.card,
+  },
+  confirmActionButton: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  confirmActionButtonText: {
+    color: colors.text,
   },
 });
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -6,21 +6,35 @@ interface LastReadChapterBarProps {
   lastReadChapter: string | null;
   onPress: () => void;
   colors: any;
+  readChapters: string[];
 }
-
-const LastReadChapterBar: React.FC<LastReadChapterBarProps> = ({ lastReadChapter, onPress, colors }) => {
+const LastReadChapterBar: React.FC<LastReadChapterBarProps> = ({ 
+  lastReadChapter, 
+  onPress, 
+  colors 
+}) => {
   const isStartReading = !lastReadChapter || lastReadChapter === 'Not started';
 
   return (
-    <TouchableOpacity onPress={onPress} style={[styles.container, { backgroundColor: colors.background }]}>
+    <TouchableOpacity 
+      onPress={onPress} 
+      style={[styles.container, { backgroundColor: colors.background }]}
+      testID="last-read-chapter-bar"
+    >
       <View style={styles.content}>
-        <Ionicons name={isStartReading ? "play-circle-outline" : "bookmark"} size={20} color={colors.primary} />
+        <Ionicons 
+          name={isStartReading ? "play-circle-outline" : "bookmark"} 
+          size={20} 
+          color={colors.primary} 
+        />
         <Text style={[styles.text, { color: colors.text }]}>
           {isStartReading ? (
             "Start reading"
           ) : (
             <>
-              Continue from <Text style={[styles.chapterText, { color: colors.primary }]}>{lastReadChapter}</Text>
+              Continue from <Text style={[styles.chapterText, { color: colors.primary }]}>
+                {lastReadChapter}
+              </Text>
             </>
           )}
         </Text>
@@ -29,6 +43,7 @@ const LastReadChapterBar: React.FC<LastReadChapterBarProps> = ({ lastReadChapter
     </TouchableOpacity>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
