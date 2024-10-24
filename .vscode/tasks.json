@@ -1,0 +1,35 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Development Server",
+            "type": "npm",
+            "script": "start",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "group": "develop"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "isBackground": true
+        },
+        {
+            "label": "Start Test UI",
+            "type": "npm",
+            "script": "test:ui",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "group": "develop"
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+            },
+            "isBackground": true
+        }
+    ]
+}
