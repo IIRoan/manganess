@@ -28,6 +28,8 @@ import {
     saveBookmark,
     removeBookmark,
     BookmarkStatus,
+    getBookmarkPopupConfig,
+    getChapterLongPressAlertConfig,
 } from '@/services/bookmarkService';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 import { GenreTag } from '@/components/GanreTag';
@@ -155,95 +157,32 @@ export default function MangaDetailScreen() {
 
     const handleBookmark = () => {
         if (!mangaDetails) return;
-        setIsBookmarkPopupVisible(true); // Show the new BottomPopup
-        setBookmarkPopupConfig({
-            title: bookmarkStatus
-                ? `Update Bookmark for ${mangaDetails.title}`
-                : `Bookmark ${mangaDetails.title}`,
-            options: bookmarkStatus
-                ? [
-                    {
-                        text: 'To Read',
-                        onPress: () => handleSaveBookmark('To Read'),
-                        icon: 'book-outline',
-                    },
-                    {
-                        text: 'Reading',
-                        onPress: () => handleSaveBookmark('Reading'),
-                        icon: 'book',
-                    },
-                    {
-                        text: 'Read',
-                        onPress: () => handleSaveBookmark('Read'),
-                        icon: 'checkmark-circle-outline',
-                    },
-                    {
-                        text: 'Unbookmark',
-                        onPress: handleRemoveBookmark,
-                        icon: 'close-circle-outline',
-                    },
-                ]
-                : [
-                    {
-                        text: 'To Read',
-                        onPress: () => handleSaveBookmark('To Read'),
-                        icon: 'book-outline',
-                    },
-                    {
-                        text: 'Reading',
-                        onPress: () => handleSaveBookmark('Reading'),
-                        icon: 'book',
-                    },
-                    {
-                        text: 'Read',
-                        onPress: () => handleSaveBookmark('Read'),
-                        icon: 'checkmark-circle-outline',
-                    },
-                ],
-        });
+        const config = getBookmarkPopupConfig(
+            bookmarkStatus,
+            mangaDetails.title,
+            handleSaveBookmark,
+            handleRemoveBookmark
+        );
+
+        setBookmarkPopupConfig(config);
+        setIsBookmarkPopupVisible(true);
     };
 
-    const handleChapterLongPress = async (chapterNumber: string) => {
+    const handleChapterLongPress = (chapterNumber: string) => {
         const isRead = readChapters.includes(chapterNumber);
-        if (!isRead) {
-          setIsAlertVisible(true);
-          setAlertConfig({
-            type: 'confirm',
-            title: 'Mark Chapters as Read',
-            message: `Do you want to mark all chapters up to chapter ${chapterNumber} as read?`,
-            options: [
-              {
-                text: 'Cancel',
-                onPress: () => {},
-              },
-              {
-                text: 'Yes',
-                onPress: async () => {
-                  try {
-                    // Get all chapters up to the selected chapter
-                    const chaptersToMark = mangaDetails?.chapters
-                      .filter(ch => {
-                        // Compare chapter numbers numerically
-                        const currentChapter = parseFloat(ch.number);
-                        const selectedChapter = parseFloat(chapterNumber);
-                        return currentChapter <= selectedChapter;
-                      })
-                      .map(ch => ch.number) || [];
-      
-                    // Save to AsyncStorage
-                    const key = `manga_${id}_read_chapters`;
-                    const updatedReadChapters = Array.from(new Set([...readChapters, ...chaptersToMark]));
-                    await AsyncStorage.setItem(key, JSON.stringify(updatedReadChapters));
-                    setReadChapters(updatedReadChapters);
-                  } catch (error) {
-                    console.error('Error marking chapters as read:', error);
-                  }
-                },
-              },
-            ],
-          });
+        const config = getChapterLongPressAlertConfig(
+            isRead,
+            chapterNumber,
+            mangaDetails,
+            id as string,
+            readChapters,
+            setReadChapters
+        );
+        if (config) {
+            setAlertConfig(config);
+            setIsAlertVisible(true);
         }
-      };
+    };
 
     const handleMarkAsUnread = useCallback(async (chapterNumber: string) => {
         try {
@@ -261,7 +200,6 @@ export default function MangaDetailScreen() {
         }
     }, [id, readChapters]);
 
-
     const handleSaveBookmark = async (status: BookmarkStatus) => {
         if (!mangaDetails) return;
         try {
@@ -271,14 +209,12 @@ export default function MangaDetailScreen() {
                 mangaDetails,
                 readChapters,
                 setBookmarkStatus,
-                setIsBookmarkPopupVisible, // Passing setIsBookmarkPopupVisible in place of setIsAlertVisible
-                markAllChaptersAsRead
+                setIsBookmarkPopupVisible,
+                setReadChapters
             );
         } catch (error) {
             console.error('Error saving bookmark:', error);
         }
-
-        // No need to setIsBookmarkPopupVisible(false) here as it's handled in saveBookmark
     };
 
     const handleRemoveBookmark = async () => {
@@ -286,29 +222,10 @@ export default function MangaDetailScreen() {
             await removeBookmark(
                 id as string,
                 setBookmarkStatus,
-                setIsBookmarkPopupVisible // Passing setIsBookmarkPopupVisible in place of setIsAlertVisible
+                setIsBookmarkPopupVisible
             );
         } catch (error) {
             console.error('Error removing bookmark:', error);
-        }
-
-        // No need to setIsBookmarkPopupVisible(false) here as it's handled in removeBookmark
-    };
-
-    const markAllChaptersAsRead = async () => {
-        try {
-            if (mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
-                const key = `manga_${id}_read_chapters`;
-                const allChapterNumbers = mangaDetails.chapters.map(
-                    (chapter) => chapter.number
-                );
-                await AsyncStorage.setItem(key, JSON.stringify(allChapterNumbers));
-                setReadChapters(allChapterNumbers);
-            } else {
-                console.log('No chapters to mark as read');
-            }
-        } catch (error) {
-            console.error('Error marking all chapters as read:', error);
         }
     };
 
@@ -357,6 +274,7 @@ export default function MangaDetailScreen() {
             </View>
         );
     }
+
 
     return (
         <View style={styles.container}>

@@ -12,6 +12,8 @@ import {
   fetchBookmarkStatus,
   saveBookmark,
   removeBookmark,
+  getBookmarkPopupConfig,
+  getChapterLongPressAlertConfig,
 } from '@/services/bookmarkService';
 import { getLastReadChapter } from '@/services/readChapterService';
 import { useTheme } from '@/constants/ThemeContext';
@@ -36,11 +38,15 @@ jest.mock('@/services/mangaFireService', () => ({
   markChapterAsRead: jest.fn(),
 }));
 
-jest.mock('@/services/bookmarkService', () => ({
-  fetchBookmarkStatus: jest.fn(),
-  saveBookmark: jest.fn(),
-  removeBookmark: jest.fn(),
-}));
+jest.mock('@/services/bookmarkService', () => {
+  const actual = jest.requireActual('@/services/bookmarkService');
+  return {
+    ...actual,
+    fetchBookmarkStatus: jest.fn(),
+    saveBookmark: jest.fn(),
+    removeBookmark: jest.fn(),
+  };
+});
 
 jest.mock('@/services/readChapterService', () => ({
   getLastReadChapter: jest.fn(),
@@ -106,8 +112,8 @@ const mangaDetails: MangaDetails = {
   reviewCount: '100',
   bannerImage: 'http://example.com/image.jpg',
   chapters: [
-    { number: '1', title: 'Chapter 1', date: '2020-01-01', url: '/chapter/1' },
     { number: '2', title: 'Chapter 2', date: '2020-02-01', url: '/chapter/2' },
+    { number: '1', title: 'Chapter 1', date: '2020-01-01', url: '/chapter/1' },
   ],
 };
 
@@ -176,7 +182,7 @@ describe('MangaDetailScreen', () => {
     const firstChapterItem = chapterItems[0];
     fireEvent.press(firstChapterItem);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/manga/123/chapter/1');
+    expect(mockNavigate).toHaveBeenCalledWith('/manga/123/chapter/2');
   });
 
   it('shows bottom popup when bookmark button is pressed', async () => {
@@ -185,7 +191,7 @@ describe('MangaDetailScreen', () => {
     (getLastReadChapter as jest.Mock).mockResolvedValue('Chapter 1');
     (fetchBookmarkStatus as jest.Mock).mockResolvedValue(null);
 
-    const { findByTestId } = render(
+    const { findByTestId, getByTestId } = render(
       <TestWrapper>
         <MangaDetailScreen />
       </TestWrapper>
@@ -218,9 +224,9 @@ describe('MangaDetailScreen', () => {
     await waitFor(() => expect(fetchMangaDetails).toHaveBeenCalled());
 
     const chapterItems = await findAllByTestId('chapter-item');
-    const secondChapterItem = chapterItems[1]; // Chapter 2
+    const firstChapterItem = chapterItems[0]; // Chapter 2
 
-    fireEvent(secondChapterItem, 'onLongPress');
+    fireEvent(firstChapterItem, 'onLongPress');
 
     // Verify alert content
     const alertTitle = await findByText('Mark Chapters as Read');
@@ -327,10 +333,11 @@ describe('MangaDetailScreen', () => {
       expect.any(Function)
     );
   });
+
   it('handles last read chapter navigation', async () => {
     (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123' });
-    (useRouter as jest.Mock).mockReturnValue({ navigate: jest.fn() });
-    const mockNavigate = useRouter().navigate as jest.Mock;
+    const mockNavigate = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({ navigate: mockNavigate });
     (fetchMangaDetails as jest.Mock).mockResolvedValue(mangaDetails);
     (getLastReadChapter as jest.Mock).mockResolvedValue('Chapter 1');
     (fetchBookmarkStatus as jest.Mock).mockResolvedValue(null);
@@ -360,8 +367,8 @@ describe('MangaDetailScreen', () => {
     };
 
     (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123' });
-    (useRouter as jest.Mock).mockReturnValue({ navigate: jest.fn() });
-    const mockNavigate = useRouter().navigate as jest.Mock;
+    const mockNavigate = jest.fn();
+    (useRouter as jest.Mock).mockReturnValue({ navigate: mockNavigate });
     (fetchMangaDetails as jest.Mock).mockResolvedValue(mangaDetailsWithChapters);
     (getLastReadChapter as jest.Mock).mockResolvedValue(null);
     (fetchBookmarkStatus as jest.Mock).mockResolvedValue(null);
