@@ -1,40 +1,51 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { 
-  View, 
-  TextInput, 
-  FlatList, 
-  StyleSheet, 
-  Text, 
-  TouchableOpacity, 
-  SafeAreaView, 
-  Platform, 
-  StatusBar, 
+import {
+  View,
+  TextInput,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  SafeAreaView,
+  StatusBar,
   Keyboard,
   ActivityIndicator,
-  useWindowDimensions
+  useWindowDimensions,
+  Platform
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
 import { searchManga, MangaItem } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
 
+/* Type Definitions */
+interface LastReadChapters {
+  [key: string]: string | null;
+}
+
 export default function MangaSearchScreen() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  // Theme and layout settings
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const { width, height } = useWindowDimensions();
   const styles = getStyles(colors, width, height);
+  
+  // Router and Input Ref
+  const router = useRouter();
   const inputRef = useRef<TextInput>(null);
-  const [lastReadChapters, setLastReadChapters] = useState<{[key: string]: string | null}>({});
+  
+  // State variables
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>({});
 
+  // Focus input field on screen focus
   useFocusEffect(
     useCallback(() => {
       if (searchQuery === '') {
@@ -43,6 +54,7 @@ export default function MangaSearchScreen() {
     }, [searchQuery])
   );
 
+  // Search function to handle input
   const onChangeSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
     if (query.length > 2) {
@@ -62,20 +74,21 @@ export default function MangaSearchScreen() {
     }
   }, []);
 
-  const handleMangaPress = useCallback((item: MangaItem) => {
-    router.navigate({
-      pathname: "/manga/[id]",
-      params: {
-        id: item.id,
-        title: item.title,
-        bannerImage: item.banner
-      }
-    });
-  }, [router]);
+  // Handle manga item press
+  const handleMangaPress = useCallback(
+    (item: MangaItem) => {
+      router.navigate({
+        pathname: '/manga/[id]',
+        params: { id: item.id, title: item.title, bannerImage: item.banner },
+      });
+    },
+    [router]
+  );
 
+  // Fetch last read chapters
   useEffect(() => {
     const fetchLastReadChapters = async () => {
-      const chapters: {[key: string]: string} = {};
+      const chapters: LastReadChapters = {};
       for (const item of searchResults) {
         chapters[item.id] = await getLastReadChapter(item.id);
       }
@@ -87,8 +100,9 @@ export default function MangaSearchScreen() {
     }
   }, [searchResults]);
 
-  const renderMangaCard = useCallback(({ item }: { item: MangaItem }) => {
-    return (
+  // Render function for MangaCard component
+  const renderMangaCard = useCallback(
+    ({ item }: { item: MangaItem }) => (
       <View style={styles.cardWrapper}>
         <MangaCard
           key={item.id}
@@ -99,32 +113,34 @@ export default function MangaSearchScreen() {
           style={styles.card}
         />
         <View style={styles.titleContainer}>
-          <Text style={styles.mangaTitle} numberOfLines={2}>{item.title}</Text>
+          <Text style={styles.mangaTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
         </View>
       </View>
-    );
-  }, [handleMangaPress, lastReadChapters, styles]);
+    ),
+    [handleMangaPress, lastReadChapters, styles]
+  );
 
+  // Key extractor for FlatList
   const keyExtractor = useCallback((item: MangaItem) => item.id, []);
 
+  // Handle keyboard dismiss on scroll
   const handleScrollBegin = () => {
     Keyboard.dismiss();
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{
-        title: 'Manga Search',
-        headerTintColor: colors.text,
-        headerShown: false,
-      }} />
+      <Stack.Screen
+        options={{
+          title: 'Manga Search',
+          headerTintColor: colors.text,
+          headerShown: false,
+        }}
+      />
       <View style={styles.searchContainer}>
-        <Ionicons
-          name="search"
-          size={20}
-          color={colors.text}
-          style={styles.searchIcon}
-        />
+        <Ionicons name="search" size={20} color={colors.text} style={styles.searchIcon} />
         <TextInput
           ref={inputRef}
           style={styles.searchBar}
@@ -157,6 +173,7 @@ export default function MangaSearchScreen() {
   );
 }
 
+// Styles with responsiveness adjustments
 const getStyles = (colors: typeof Colors.light, width: number, height: number) => {
   const isLandscape = width > height;
   const cardWidth = isLandscape ? (width - 60) / 4 : (width - 48) / 2;
@@ -171,7 +188,6 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       flexDirection: 'row',
       alignItems: 'center',
       marginHorizontal: 20,
-      marginTop: 15,
       paddingHorizontal: 15,
       height: 50,
       borderRadius: 25,
