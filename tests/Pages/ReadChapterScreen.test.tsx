@@ -1,17 +1,33 @@
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import ReadChapterScreen from '@/app/(tabs)/manga/[id]/chapter/[chapterNumber]';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import {
+  useLocalSearchParams,
+  useRouter,
+  useFocusEffect,
+} from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getChapterUrl, markChapterAsRead, getInjectedJavaScript, fetchMangaDetails } from '@/services/mangaFireService';
+import {
+  getChapterUrl,
+  markChapterAsRead,
+  getInjectedJavaScript,
+  fetchMangaDetails,
+} from '@/services/mangaFireService';
 import { useTheme } from '@/constants/ThemeContext';
 import { BackHandler } from 'react-native';
+import { useColorScheme } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Mock dependencies
 jest.mock('expo-router', () => ({
   useLocalSearchParams: jest.fn(),
   useRouter: jest.fn(),
-  useFocusEffect: jest.fn((callback: any) => callback()),
+  useFocusEffect: jest.fn((callback) => callback()),
+}));
+
+jest.mock('react-native/Libraries/Settings/Settings', () => ({
+  get: jest.fn(),
+  set: jest.fn(),
 }));
 
 jest.mock('react-native-webview', () => {
@@ -31,9 +47,8 @@ jest.mock('@/services/mangaFireService', () => ({
 }));
 
 jest.mock('react-native/Libraries/Utilities/BackHandler', () => ({
-    addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
-  }));
-  
+  addEventListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+}));
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
@@ -41,7 +56,19 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 jest.mock('@/constants/ThemeContext', () => ({
-  useTheme: jest.fn().mockReturnValue({ actualTheme: 'light' }),
+  useTheme: jest.fn(),
+}));
+
+jest.mock('react-native', () => {
+  const actualReactNative = jest.requireActual('react-native');
+  return {
+    ...actualReactNative,
+    useColorScheme: jest.fn(),
+  };
+});
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: jest.fn(),
 }));
 
 describe('ReadChapterScreen', () => {
@@ -50,7 +77,13 @@ describe('ReadChapterScreen', () => {
   });
 
   it('renders loading indicator while loading', () => {
-    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123', chapterNumber: '1' });
+    (useLocalSearchParams as jest.Mock).mockReturnValue({
+      id: '123',
+      chapterNumber: '1',
+    });
+    (useTheme as jest.Mock).mockReturnValue({ theme: 'light' });
+    (useColorScheme as jest.Mock).mockReturnValue('light');
+    (useSafeAreaInsets as jest.Mock).mockReturnValue({ top: 0 });
 
     const { getByTestId } = render(<ReadChapterScreen />);
 
@@ -58,8 +91,17 @@ describe('ReadChapterScreen', () => {
   });
 
   it('renders WebView after loading', async () => {
-    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123', chapterNumber: '1' });
-    (getChapterUrl as jest.Mock).mockReturnValue('https://example.com/read/123/en/chapter-1');
+    (useLocalSearchParams as jest.Mock).mockReturnValue({
+      id: '123',
+      chapterNumber: '1',
+    });
+    (useRouter as jest.Mock).mockReturnValue({ navigate: jest.fn() });
+    (useTheme as jest.Mock).mockReturnValue({ theme: 'light' });
+    (useColorScheme as jest.Mock).mockReturnValue('light');
+    (useSafeAreaInsets as jest.Mock).mockReturnValue({ top: 0 });
+    (getChapterUrl as jest.Mock).mockReturnValue(
+      'https://example.com/read/123/en/chapter-1'
+    );
     (getInjectedJavaScript as jest.Mock).mockReturnValue('');
     (fetchMangaDetails as jest.Mock).mockResolvedValue({ title: 'Sample Manga' });
     (markChapterAsRead as jest.Mock).mockResolvedValue(undefined);
@@ -70,7 +112,7 @@ describe('ReadChapterScreen', () => {
     const webView = getByTestId('chapter-webview');
 
     // Simulate onLoadEnd to fire handleLoadEnd function
-    act(() => {
+    await act(async () => {
       if (webView.props.onLoadEnd) {
         webView.props.onLoadEnd();
       }
@@ -84,10 +126,21 @@ describe('ReadChapterScreen', () => {
   });
 
   it('displays error message when loading fails', async () => {
-    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123', chapterNumber: '1' });
-    (getChapterUrl as jest.Mock).mockReturnValue('https://example.com/read/123/en/chapter-1');
+    (useLocalSearchParams as jest.Mock).mockReturnValue({
+      id: '123',
+      chapterNumber: '1',
+    });
+    (useRouter as jest.Mock).mockReturnValue({ navigate: jest.fn() });
+    (useTheme as jest.Mock).mockReturnValue({ theme: 'light' });
+    (useColorScheme as jest.Mock).mockReturnValue('light');
+    (useSafeAreaInsets as jest.Mock).mockReturnValue({ top: 0 });
+    (getChapterUrl as jest.Mock).mockReturnValue(
+      'https://example.com/read/123/en/chapter-1'
+    );
     (getInjectedJavaScript as jest.Mock).mockReturnValue('');
-    (fetchMangaDetails as jest.Mock).mockRejectedValue(new Error('Failed to fetch manga details'));
+    (fetchMangaDetails as jest.Mock).mockRejectedValue(
+      new Error('Failed to fetch manga details')
+    );
     (markChapterAsRead as jest.Mock).mockResolvedValue(undefined);
     (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(null);
 
@@ -102,15 +155,25 @@ describe('ReadChapterScreen', () => {
     });
 
     await waitFor(() => {
-      expect(getByText('Failed to load chapter. Please try again.')).toBeTruthy();
+      expect(
+        getByText('Failed to load chapter. Please try again.')
+      ).toBeTruthy();
     });
   });
 
   it('navigates back when back button is pressed', () => {
     const mockNavigate = jest.fn();
-    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123', chapterNumber: '1' });
+    (useLocalSearchParams as jest.Mock).mockReturnValue({
+      id: '123',
+      chapterNumber: '1',
+    });
     (useRouter as jest.Mock).mockReturnValue({ navigate: mockNavigate });
-    (getChapterUrl as jest.Mock).mockReturnValue('https://example.com/read/123/en/chapter-1');
+    (useTheme as jest.Mock).mockReturnValue({ theme: 'light' });
+    (useColorScheme as jest.Mock).mockReturnValue('light');
+    (useSafeAreaInsets as jest.Mock).mockReturnValue({ top: 0 });
+    (getChapterUrl as jest.Mock).mockReturnValue(
+      'https://example.com/read/123/en/chapter-1'
+    );
     (getInjectedJavaScript as jest.Mock).mockReturnValue('');
 
     const { getByTestId } = render(<ReadChapterScreen />);
@@ -123,9 +186,17 @@ describe('ReadChapterScreen', () => {
 
   it('handles navigation state change and navigates to new chapter', async () => {
     const mockReplace = jest.fn();
-    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123', chapterNumber: '1' });
+    (useLocalSearchParams as jest.Mock).mockReturnValue({
+      id: '123',
+      chapterNumber: '1',
+    });
     (useRouter as jest.Mock).mockReturnValue({ replace: mockReplace });
-    (getChapterUrl as jest.Mock).mockReturnValue('https://example.com/read/123/en/chapter-1');
+    (useTheme as jest.Mock).mockReturnValue({ theme: 'light' });
+    (useColorScheme as jest.Mock).mockReturnValue('light');
+    (useSafeAreaInsets as jest.Mock).mockReturnValue({ top: 0 });
+    (getChapterUrl as jest.Mock).mockReturnValue(
+      'https://example.com/read/123/en/chapter-1'
+    );
     (getInjectedJavaScript as jest.Mock).mockReturnValue('');
     (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(null);
     (fetchMangaDetails as jest.Mock).mockResolvedValue({ title: 'Sample Manga' });
@@ -148,7 +219,11 @@ describe('ReadChapterScreen', () => {
         await onNavigationStateChange(navState);
       });
 
-      expect(markChapterAsRead).toHaveBeenCalledWith('123', '2', 'Sample Manga');
+      expect(markChapterAsRead).toHaveBeenCalledWith(
+        '123',
+        '2',
+        'Sample Manga'
+      );
       expect(mockReplace).toHaveBeenCalledWith('/manga/123/chapter/2');
     }
   });
@@ -156,17 +231,27 @@ describe('ReadChapterScreen', () => {
   it('handles hardware back press and navigates back', () => {
     const mockNavigate = jest.fn();
     const mockRemove = jest.fn();
-    (useLocalSearchParams as jest.Mock).mockReturnValue({ id: '123', chapterNumber: '1' });
+    (useLocalSearchParams as jest.Mock).mockReturnValue({
+      id: '123',
+      chapterNumber: '1',
+    });
     (useRouter as jest.Mock).mockReturnValue({ navigate: mockNavigate });
-    (BackHandler.addEventListener as jest.Mock).mockReturnValue({ remove: mockRemove });
+    (useTheme as jest.Mock).mockReturnValue({ theme: 'light' });
+    (useColorScheme as jest.Mock).mockReturnValue('light');
+    (useSafeAreaInsets as jest.Mock).mockReturnValue({ top: 0 });
+    (BackHandler.addEventListener as jest.Mock).mockReturnValue({
+      remove: mockRemove,
+    });
 
     render(<ReadChapterScreen />);
 
-    const backHandlerCallback = (BackHandler.addEventListener as jest.Mock).mock.calls[0][1];
+    const backHandlerCallback = (
+      BackHandler.addEventListener as jest.Mock
+    ).mock.calls[0][1];
 
     const shouldPreventDefault = backHandlerCallback();
 
     expect(shouldPreventDefault).toBe(true);
-    expect(mockNavigate).toHaveBeenCalledWith('/manga/123');
+    expect(mockNavigate).toHaveBeenCalledWith(`/manga/123`);
   });
 });

@@ -1,15 +1,41 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Platform, TouchableOpacity } from 'react-native';
-import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  BackHandler,
+  Platform,
+  useColorScheme,
+} from 'react-native';
+import {
+  useLocalSearchParams,
+  useRouter,
+  useFocusEffect,
+} from 'expo-router';
+import {
+  WebView,
+  WebViewNavigation,
+  WebViewMessageEvent,
+} from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { getChapterUrl, markChapterAsRead, getInjectedJavaScript, fetchMangaDetails, MangaDetails } from '@/services/mangaFireService';
-import { BackHandler } from 'react-native';
+import {
+  getChapterUrl,
+  markChapterAsRead,
+  getInjectedJavaScript,
+  fetchMangaDetails,
+  MangaDetails,
+} from '@/services/mangaFireService';
 import { useTheme } from '@/constants/ThemeContext';
-import { Colors } from '@/constants/Colors';
+import { Colors, ColorScheme } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const CustomWebView = (props: any) => {
+/* Type Definitions */
+interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {}
+
+const CustomWebView: React.FC<CustomWebViewProps> = (props) => {
   const webViewRef = useRef<WebView>(null);
 
   const handleMessage = (event: WebViewMessageEvent) => {
@@ -17,36 +43,42 @@ const CustomWebView = (props: any) => {
   };
 
   return (
-    <WebView
-      ref={webViewRef}
-      onMessage={handleMessage}
-      {...props}
-    />
+    <WebView ref={webViewRef} onMessage={handleMessage} {...props} />
   );
 };
 
 export default function ReadChapterScreen() {
-  const { id, chapterNumber } = useLocalSearchParams();
+  const { id, chapterNumber } = useLocalSearchParams<{
+    id: string;
+    chapterNumber: string;
+  }>();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
-  const { actualTheme } = useTheme();
-  const colors = Colors[actualTheme];
+  const { theme } = useTheme();
+  const systemColorScheme = useColorScheme() as ColorScheme;
+  const colorScheme =
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
+  const colors = Colors[colorScheme];
   const styles = getStyles(colors);
-  const [mangaDetails, setMangaDetails] = useState(null as MangaDetails | null);
+  
+  const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
 
-  const chapterUrl = getChapterUrl(id as string, chapterNumber as string);
+  // Safe area insets
+  const insets = useSafeAreaInsets();
+
+  const chapterUrl = getChapterUrl(id, chapterNumber);
 
   useEffect(() => {
     const markChapterAsReadWithFallback = async () => {
       try {
         let title = await AsyncStorage.getItem(`title_${id}`);
         if (!title) {
-          const mangaDetails = await fetchMangaDetails(id as string);
-          title = mangaDetails.title;
+          const details = await fetchMangaDetails(id);
+          title = details.title;
         }
-        await markChapterAsRead(id as string, chapterNumber as string, title);
+        await markChapterAsRead(id, chapterNumber, title);
         setMangaTitle(title);
       } catch (error) {
         console.error('Error marking chapter as read:', error);
@@ -63,7 +95,10 @@ export default function ReadChapterScreen() {
         return true;
       };
 
-      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress
+      );
       return () => backHandler.remove();
     }, [id, router])
   );
@@ -71,8 +106,8 @@ export default function ReadChapterScreen() {
   useEffect(() => {
     const fetchDetails = async () => {
       try {
-        const details = await fetchMangaDetails(id as string);
-        setMangaDetails(details as MangaDetails);
+        const details = await fetchMangaDetails(id);
+        setMangaDetails(details);
       } catch (error) {
         console.error('Error fetching manga details:', error);
       }
@@ -81,9 +116,10 @@ export default function ReadChapterScreen() {
     fetchDetails();
   }, [id]);
 
-
   const handleLoadEnd = () => setIsLoading(false);
+
   const handleBackPress = () => router.navigate(`/manga/${id}`);
+
   const handleError = () => {
     setError('Failed to load chapter. Please try again.');
     setIsLoading(false);
@@ -95,9 +131,11 @@ export default function ReadChapterScreen() {
       if (newChapterMatch) {
         const newChapterNumber = newChapterMatch[1];
         if (mangaTitle) {
-          await markChapterAsRead(id as string, newChapterNumber, mangaTitle);
+          await markChapterAsRead(id, newChapterNumber, mangaTitle);
         } else {
-          console.error('Manga title not available for marking new chapter as read');
+          console.error(
+            'Manga title not available for marking new chapter as read'
+          );
         }
         router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
       }
@@ -111,7 +149,7 @@ export default function ReadChapterScreen() {
     }
 
     const currentChapterIndex = mangaDetails.chapters.findIndex(
-      chapter => chapter.number === chapterNumber
+      (chapter) => chapter.number === chapterNumber
     );
 
     if (currentChapterIndex === -1 || currentChapterIndex === 0) {
@@ -128,10 +166,14 @@ export default function ReadChapterScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {isLoading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator testID="loading-indicator" size="large" color={colors.primary} />
+          <ActivityIndicator
+            testID="loading-indicator"
+            size="large"
+            color={colors.primary}
+          />
         </View>
       )}
       {error ? (
@@ -155,74 +197,85 @@ export default function ReadChapterScreen() {
             decelerationRate="normal"
             nestedScrollEnabled={true}
           />
-          <TouchableOpacity testID="back-button" style={styles.backButton} onPress={handleBackPress}>
+          <TouchableOpacity
+            testID="back-button"
+            style={styles.backButton}
+            onPress={handleBackPress}
+          >
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <TouchableOpacity
             testID="next-chapter-button"
             style={[
               styles.nextChapterButton,
-              (!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber) && styles.disabledButton
+              (!mangaDetails ||
+                !mangaDetails.chapters ||
+                mangaDetails.chapters[0].number === chapterNumber) &&
+                styles.disabledButton,
             ]}
             onPress={handleNextChapterPress}
-            disabled={!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber}
+            disabled={
+              !mangaDetails ||
+              !mangaDetails.chapters ||
+              mangaDetails.chapters[0].number === chapterNumber
+            }
           >
             <Ionicons name="chevron-forward" size={18} color={colors.text} />
           </TouchableOpacity>
-
         </>
       )}
     </View>
   );
 }
 
-const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  webView: {
-    flex: 1,
-  },
-  loadingContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 18,
-    textAlign: 'center',
-    color: colors.error,
-  },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 10,
-    zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 20,
-    padding: 8,
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  nextChapterButton: {
-    position: 'absolute',
-    top: 50,
-    right: 10,
-    zIndex: 1000,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    borderRadius: 20,
-    padding: 8,
-  },
-});
+const getStyles = (colors: typeof Colors.light) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    webView: {
+      flex: 1,
+    },
+    loadingContainer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    errorText: {
+      fontSize: 18,
+      textAlign: 'center',
+      color: colors.error,
+    },
+    backButton: {
+      position: 'absolute',
+      top: 50,
+      left: 10,
+      zIndex: 1000,
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      borderRadius: 20,
+      padding: 8,
+    },
+    nextChapterButton: {
+      position: 'absolute',
+      top: 50,
+      right: 10,
+      zIndex: 1000,
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      borderRadius: 20,
+      padding: 8,
+    },
+    disabledButton: {
+      opacity: 0.5,
+    },
+  });
