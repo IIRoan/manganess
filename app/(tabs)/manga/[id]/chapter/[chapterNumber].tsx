@@ -33,7 +33,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /* Type Definitions */
-interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {}
+interface CustomWebViewProps extends React.ComponentProps<typeof WebView> { }
 
 const CustomWebView: React.FC<CustomWebViewProps> = (props) => {
   const webViewRef = useRef<WebView>(null);
@@ -62,7 +62,7 @@ export default function ReadChapterScreen() {
     theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
-  
+
   const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
 
   // Safe area insets
@@ -164,16 +164,11 @@ export default function ReadChapterScreen() {
       console.log('No next chapter available');
     }
   };
-
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {isLoading && (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            testID="loading-indicator"
-            size="large"
-            color={colors.primary}
-          />
+          <ActivityIndicator testID="loading-indicator" size="large" color={colors.primary} />
         </View>
       )}
       {error ? (
@@ -197,31 +192,21 @@ export default function ReadChapterScreen() {
             decelerationRate="normal"
             nestedScrollEnabled={true}
           />
-          <TouchableOpacity
-            testID="back-button"
-            style={styles.backButton}
-            onPress={handleBackPress}
-          >
+          <TouchableOpacity testID="back-button" style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <TouchableOpacity
             testID="next-chapter-button"
             style={[
               styles.nextChapterButton,
-              (!mangaDetails ||
-                !mangaDetails.chapters ||
-                mangaDetails.chapters[0].number === chapterNumber) &&
-                styles.disabledButton,
+              (!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber) && styles.disabledButton
             ]}
             onPress={handleNextChapterPress}
-            disabled={
-              !mangaDetails ||
-              !mangaDetails.chapters ||
-              mangaDetails.chapters[0].number === chapterNumber
-            }
+            disabled={!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber}
           >
             <Ionicons name="chevron-forward" size={18} color={colors.text} />
           </TouchableOpacity>
+
         </>
       )}
     </View>
