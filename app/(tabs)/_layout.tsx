@@ -1,24 +1,41 @@
-import { Tabs, usePathname } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { useColorScheme, View, StyleSheet, Dimensions } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  useColorScheme,
+} from 'react-native';
+import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '@/constants/ThemeContext';
+import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
 import * as MangaUpdateService from '@/services/mangaUpdateService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width } = Dimensions.get('window');
-const TAB_BAR_WIDTH = width * 0.9;
-const TAB_WIDTH = TAB_BAR_WIDTH / 5;
+/* Type Definitions */
+// No custom types are needed in this component.
 
 export default function TabLayout() {
+  // Theme and color scheme
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
-  const colorScheme = theme === 'system' ? systemColorScheme : theme as ColorScheme;
+  const colorScheme =
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
+
+  // Safe area insets
+  const insets = useSafeAreaInsets();
+
+  // Screen dimensions
+  const { width } = Dimensions.get('window');
+  const TAB_BAR_WIDTH = width * 0.9;
+  const TAB_WIDTH = TAB_BAR_WIDTH / 5;
+
+  // State variables
   const pathname = usePathname();
-  const [enableDebugTab, setEnableDebugTab] = useState(false);
+  const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -36,7 +53,7 @@ export default function TabLayout() {
       const value = await AsyncStorage.getItem('enableDebugTab');
       setEnableDebugTab(value === 'true');
     } catch (error) {
-      console.error('Error loading enable Debug tab setting:', error);
+      console.error('Error loading enable debug tab setting:', error);
     }
   };
 
@@ -55,7 +72,9 @@ export default function TabLayout() {
     if (enableDebugTab) {
       allowedPaths.push('/Debug');
     }
-    return allowedPaths.includes(pathname) || pathname.match(/^\/manga\/[^\/]+$/);
+    return (
+      allowedPaths.includes(pathname) || /^\/manga\/[^\/]+$/.test(pathname)
+    );
   };
 
   if (isOnboardingCompleted === null) {
@@ -64,33 +83,47 @@ export default function TabLayout() {
 
   if (!isOnboardingCompleted) {
     // Render the onboarding screen if the user hasn't completed the onboarding process
-    return <OnboardingScreen  />;
+    return <OnboardingScreen />;
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.card }}>
+    <View style={[styles.container, { backgroundColor: colors.card }]}>
       <Tabs
         screenOptions={({ route }) => ({
-          
           tabBarIcon: ({ focused, color, size }) => {
-            let iconName;
+            let iconName: keyof typeof Ionicons.glyphMap;
 
-            if (route.name === 'index') {
-              iconName = focused ? 'home' : 'home-outline';
-            } else if (route.name === 'mangasearch') {
-              iconName = focused ? 'search' : 'search-outline';
-            } else if (route.name === 'bookmarks') {
-              iconName = focused ? 'bookmark' : 'bookmark-outline';
-            } else if (route.name === 'settings') {
-              iconName = focused ? 'settings' : 'settings-outline';
-            } else if (route.name === 'Debug') {
-              iconName = focused ? 'bug' : 'bug-outline';
+            switch (route.name) {
+              case 'index':
+                iconName = focused ? 'home' : 'home-outline';
+                break;
+              case 'mangasearch':
+                iconName = focused ? 'search' : 'search-outline';
+                break;
+              case 'bookmarks':
+                iconName = focused ? 'bookmark' : 'bookmark-outline';
+                break;
+              case 'settings':
+                iconName = focused ? 'settings' : 'settings-outline';
+                break;
+              case 'Debug':
+                iconName = focused ? 'bug' : 'bug-outline';
+                break;
+              default:
+                iconName = 'help-outline';
             }
 
             return (
               <View style={styles.iconContainer}>
-                <Ionicons name={iconName as any} size={size} color={color} />
-                {focused && <View style={[styles.activeIndicator, { backgroundColor: colors.primary }]} />}
+                <Ionicons name={iconName} size={size} color={color} />
+                {focused && (
+                  <View
+                    style={[
+                      styles.activeIndicator,
+                      { backgroundColor: colors.primary },
+                    ]}
+                  />
+                )}
               </View>
             );
           },
@@ -98,7 +131,7 @@ export default function TabLayout() {
           tabBarInactiveTintColor: colors.tabIconDefault,
           tabBarStyle: {
             position: 'absolute',
-            bottom: 25,
+            bottom: insets.bottom + 25, // Adjust bottom position using safe area insets
             left: (width - TAB_BAR_WIDTH) / 2,
             right: (width - TAB_BAR_WIDTH) / 2,
             backgroundColor: colors.card,
@@ -131,24 +164,28 @@ export default function TabLayout() {
         <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
         <Tabs.Screen name="bookmarks" options={{ title: 'Bookmarks' }} />
         <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
-        
-        <Tabs.Screen 
-          name="Debug" 
-          options={{ 
+        <Tabs.Screen
+          name="Debug"
+          options={{
             title: 'Debug',
             href: enableDebugTab ? undefined : null,
-          }} 
+          }}
         />
-        
         {/* Hide all other routes */}
         <Tabs.Screen name="manga/[id]" options={{ href: null }} />
-        <Tabs.Screen name="manga/[id]/chapter/[chapterNumber]" options={{ href: null }} />
+        <Tabs.Screen
+          name="manga/[id]/chapter/[chapterNumber]"
+          options={{ href: null }}
+        />
       </Tabs>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   tabBarShadow: {
     shadowColor: '#000',
     shadowOffset: {
