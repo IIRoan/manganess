@@ -47,7 +47,8 @@
           "icon": "./assets/images/nessie.png",
           "color": "#ffffff"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
