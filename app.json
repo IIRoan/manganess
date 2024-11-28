@@ -27,8 +27,6 @@
     },
     "android": {
       "userInterfaceStyle": "automatic",
-      "compileSdkVersion": 33,
-      "buildToolsVersion": "33.0.0",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
