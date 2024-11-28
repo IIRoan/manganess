@@ -1,73 +1,54 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-  BackHandler,
-  Platform,
-  useColorScheme,
-} from 'react-native';
-import {
-  useLocalSearchParams,
-  useRouter,
-  useFocusEffect,
-} from 'expo-router';
-import {
-  WebView,
-  WebViewNavigation,
-  WebViewMessageEvent,
-} from 'react-native-webview';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, BackHandler, Platform, useColorScheme } from 'react-native';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  getChapterUrl,
-  markChapterAsRead,
-  getInjectedJavaScript,
-  fetchMangaDetails,
-  MangaDetails,
-} from '@/services/mangaFireService';
+import { getChapterUrl, markChapterAsRead, getInjectedJavaScript, fetchMangaDetails, MangaDetails } from '@/services/mangaFireService';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/* Type Definitions */
-interface CustomWebViewProps extends React.ComponentProps<typeof WebView> { }
+interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {}
 
 const CustomWebView: React.FC<CustomWebViewProps> = (props) => {
   const webViewRef = useRef<WebView>(null);
+  const [webViewKey, setWebViewKey] = useState(1);
+
+  useEffect(() => {
+    if (Platform.OS === "ios") {
+      setTimeout(() => setWebViewKey(key => key + 1), 50);
+    }
+  }, []);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     console.log('message', event.nativeEvent.data);
   };
 
   return (
-    <WebView ref={webViewRef} onMessage={handleMessage} {...props} />
+    <WebView 
+      ref={webViewRef} 
+      key={webViewKey}
+      onMessage={handleMessage} 
+      {...props} 
+    />
   );
 };
 
 export default function ReadChapterScreen() {
-  const { id, chapterNumber } = useLocalSearchParams<{
-    id: string;
-    chapterNumber: string;
-  }>();
+  const { id, chapterNumber } = useLocalSearchParams<{ id: string; chapterNumber: string }>();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
+  const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
+  
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
-  const colorScheme =
-    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
+  const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
-
-  const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
-
-  // Safe area insets
   const insets = useSafeAreaInsets();
-
   const chapterUrl = getChapterUrl(id, chapterNumber);
 
   useEffect(() => {
@@ -84,24 +65,8 @@ export default function ReadChapterScreen() {
         console.error('Error marking chapter as read:', error);
       }
     };
-
     markChapterAsReadWithFallback();
   }, [id, chapterNumber]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        router.navigate(`/manga/${id}`);
-        return true;
-      };
-
-      const backHandler = BackHandler.addEventListener(
-        'hardwareBackPress',
-        onBackPress
-      );
-      return () => backHandler.remove();
-    }, [id, router])
-  );
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -112,14 +77,22 @@ export default function ReadChapterScreen() {
         console.error('Error fetching manga details:', error);
       }
     };
-
     fetchDetails();
   }, [id]);
 
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        router.navigate(`/manga/${id}`);
+        return true;
+      };
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => backHandler.remove();
+    }, [id, router])
+  );
+
   const handleLoadEnd = () => setIsLoading(false);
-
   const handleBackPress = () => router.navigate(`/manga/${id}`);
-
   const handleError = () => {
     setError('Failed to load chapter. Please try again.');
     setIsLoading(false);
@@ -132,10 +105,6 @@ export default function ReadChapterScreen() {
         const newChapterNumber = newChapterMatch[1];
         if (mangaTitle) {
           await markChapterAsRead(id, newChapterNumber, mangaTitle);
-        } else {
-          console.error(
-            'Manga title not available for marking new chapter as read'
-          );
         }
         router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
       }
@@ -143,27 +112,20 @@ export default function ReadChapterScreen() {
   };
 
   const handleNextChapterPress = () => {
-    if (!mangaDetails || !mangaDetails.chapters) {
-      console.log('Manga details not available');
-      return;
-    }
+    if (!mangaDetails?.chapters) return;
 
     const currentChapterIndex = mangaDetails.chapters.findIndex(
-      (chapter) => chapter.number === chapterNumber
+      chapter => chapter.number === chapterNumber
     );
 
-    if (currentChapterIndex === -1 || currentChapterIndex === 0) {
-      console.log('No next chapter available');
-      return;
-    }
+    if (currentChapterIndex === -1 || currentChapterIndex === 0) return;
 
     const nextChapter = mangaDetails.chapters[currentChapterIndex - 1];
     if (nextChapter) {
       router.navigate(`/manga/${id}/chapter/${nextChapter.number}`);
-    } else {
-      console.log('No next chapter available');
     }
   };
+
   return (
     <View style={styles.container}>
       {isLoading && (
@@ -188,8 +150,7 @@ export default function ReadChapterScreen() {
             domStorageEnabled={true}
             originWhitelist={['*']}
             onNavigationStateChange={handleNavigationStateChange}
-            allowsBackForwardNavigationGestures={Platform.OS === 'ios'}
-            decelerationRate="normal"
+            decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.98}
             nestedScrollEnabled={true}
           />
           <TouchableOpacity testID="back-button" style={styles.backButton} onPress={handleBackPress}>
@@ -199,14 +160,13 @@ export default function ReadChapterScreen() {
             testID="next-chapter-button"
             style={[
               styles.nextChapterButton,
-              (!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber) && styles.disabledButton
+              (!mangaDetails?.chapters || mangaDetails.chapters[0].number === chapterNumber) && styles.disabledButton
             ]}
             onPress={handleNextChapterPress}
-            disabled={!mangaDetails || !mangaDetails.chapters || mangaDetails.chapters[0].number === chapterNumber}
+            disabled={!mangaDetails?.chapters || mangaDetails.chapters[0].number === chapterNumber}
           >
             <Ionicons name="chevron-forward" size={18} color={colors.text} />
           </TouchableOpacity>
-
         </>
       )}
     </View>

@@ -30,7 +30,7 @@
     "expo-notifications": "~0.28.18",
     "expo-router": "~3.5.23",
     "expo-splash-screen": "~0.27.6",
-    "expo-updates": "~0.25.26",
+    "expo-updates": "~0.26.9",
     "expo-web-browser": "~13.0.3",
     "html-entities": "^2.5.2",
     "react": "18.3.1",

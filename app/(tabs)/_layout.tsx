@@ -13,6 +13,8 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
 import * as MangaUpdateService from '@/services/mangaUpdateService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Updates from 'expo-updates';
+import { Alert } from 'react-native';
 
 /* Type Definitions */
 // No custom types are needed in this component.
@@ -42,7 +44,8 @@ export default function TabLayout() {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
     MangaUpdateService.startUpdateService();
-
+    checkForUpdates();
+  
     return () => {
       MangaUpdateService.stopUpdateService();
     };
@@ -64,6 +67,27 @@ export default function TabLayout() {
     } catch (error) {
       console.error('Error checking onboarding status:', error);
       setIsOnboardingCompleted(false);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        Alert.alert(
+          'Update Available',
+          'A new version is available. The app will now restart.',
+          [
+            {
+              text: 'OK',
+              onPress: () => Updates.reloadAsync()
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.log('Error checking updates:', error);
     }
   };
 
