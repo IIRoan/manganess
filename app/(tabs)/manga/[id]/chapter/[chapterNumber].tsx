@@ -9,11 +9,19 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {}
-
+interface CustomWebViewProps extends React.ComponentProps<typeof WebView> { }
 const CustomWebView: React.FC<CustomWebViewProps> = (props) => {
   const webViewRef = useRef<WebView>(null);
   const [webViewKey, setWebViewKey] = useState(1);
+
+  const onShouldStartLoadWithRequest = (request: any) => {
+    const allowedHost = "mangafire.to";
+    if (request.url.startsWith(`https://${allowedHost}`)) {
+      return true;
+    }
+    console.warn("Blocked navigation to:", request.url);
+    return false;
+  };
 
   useEffect(() => {
     if (Platform.OS === "ios") {
@@ -26,15 +34,15 @@ const CustomWebView: React.FC<CustomWebViewProps> = (props) => {
   };
 
   return (
-    <WebView 
-      ref={webViewRef} 
+    <WebView
+      ref={webViewRef}
       key={webViewKey}
-      onMessage={handleMessage} 
-      {...props} 
+      onMessage={handleMessage}
+      onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+      {...props}
     />
   );
 };
-
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{ id: string; chapterNumber: string }>();
   const router = useRouter();
@@ -42,7 +50,7 @@ export default function ReadChapterScreen() {
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
   const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
-  
+
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
