@@ -4,7 +4,6 @@ import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 
 export default function OnboardingScreen() {
@@ -21,83 +20,10 @@ export default function OnboardingScreen() {
     { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
   ];
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [notificationsDisabled, setNotificationsDisabled] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const state = await AsyncStorage.getItem('notificationsEnabled');
-        setNotificationsEnabled(state !== 'false');
-        setNotificationsDisabled(state === 'false');
-      } catch (error) {
-        console.error('Error loading notification state:', error);
-      }
-    })();
-  }, []);
-
-  const toggleNotificationSettings = async () => {
-    try {
-      let newState;
-      if (notificationsEnabled) {
-        // Disable notifications
-        newState = false;
-        await Notifications.cancelAllScheduledNotificationsAsync();
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MIN,
-          vibrationPattern: [0],
-          lightColor: Colors.light.text,
-        });
-      } else {
-        // Enable notifications
-        newState = true;
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#FF231F7C',
-        });
-      }
-
-      await AsyncStorage.setItem('notificationsEnabled', newState.toString());
-      setNotificationsEnabled(newState);
-      setNotificationsDisabled(!newState);
-
-    } catch (error) {
-      console.error('Error toggling notification settings:', error);
-      Alert.alert('Error', 'Failed to toggle notification settings.');
-    }
-  };
-
-  const requestNotificationPermission = async () => {
-    try {
-      if (Platform.OS === 'android') {
-        // Create a notification channel for Android 13 and above
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#FF231F7C',
-        });
-      }
-  
-      const { status } = await Notifications.requestPermissionsAsync();
-      const enabled = status === 'granted';
-      setNotificationsEnabled(enabled);
-      await AsyncStorage.setItem('notificationsEnabled', enabled.toString());
-    } catch (error) {
-      console.error('Error requesting notification permissions:', error);
-    }
-  };
 
   const completeOnboarding = async () => {
     try {
       await AsyncStorage.setItem('onboardingCompleted', 'true');
-      // Request notification permission if enabled
-      if (notificationsEnabled) {
-        await requestNotificationPermission();
-      }
       // Navigate to the main app screen
       router.replace('/');
     } catch (error) {
@@ -146,29 +72,6 @@ export default function OnboardingScreen() {
             </TouchableOpacity>
           ))}
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Enable Notifications</Text>
-          <TouchableOpacity
-            style={[styles.option, notificationsEnabled && styles.activeOption]}
-            onPress={toggleNotificationSettings}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={24}
-              color={colors.primary}
-            />
-            <Text style={[styles.optionText, notificationsEnabled && styles.activeOptionText]}>
-              {notificationsEnabled ? 'Notifications Enabled' : 'Enable Notifications'}
-            </Text>
-            <Ionicons
-              name={notificationsEnabled ? 'checkmark-circle' : 'checkmark-circle-outline'}
-              size={24}
-              color={colors.primary}
-            />
-          </TouchableOpacity>
-        </View>
-
         <TouchableOpacity
           style={styles.completeButton}
           onPress={completeOnboarding}

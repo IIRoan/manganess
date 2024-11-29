@@ -7,9 +7,6 @@
     "icon": "./assets/images/adaptive-icon.png",
     "scheme": "com.iroan.manganess",
     "userInterfaceStyle": "automatic",
-    "notification": {
-      "icon": "./assets/images/nessie.png"
-    },
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
@@ -41,13 +38,6 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/nessie.png",
-          "color": "#ffffff"
-        }
-      ],
       "expo-font"
     ],
     "experiments": {

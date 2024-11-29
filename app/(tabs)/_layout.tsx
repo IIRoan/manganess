@@ -11,7 +11,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
-import * as MangaUpdateService from '@/services/mangaUpdateService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
 import { Alert } from 'react-native';
@@ -43,12 +42,7 @@ export default function TabLayout() {
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
-    MangaUpdateService.startUpdateService();
     checkForUpdates();
-  
-    return () => {
-      MangaUpdateService.stopUpdateService();
-    };
   }, []);
 
   const loadEnableDebugTabSetting = async () => {

@@ -14,7 +14,6 @@ import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /* Type Definitions */
@@ -34,7 +33,6 @@ export default function SettingsScreen() {
   // Safe area insets
   const insets = useSafeAreaInsets();
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
 
   const themeOptions: ThemeOption[] = [
@@ -45,7 +43,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     // Load settings when the component mounts
-    loadNotificationState();
     loadEnableDebugTabSetting();
   }, []);
 
@@ -66,31 +63,6 @@ export default function SettingsScreen() {
       setEnableDebugTab(value);
     } catch (error) {
       console.error('Error toggling enable debug tab setting:', error);
-    }
-  };
-
-  const loadNotificationState = async () => {
-    try {
-      const state = await AsyncStorage.getItem('notificationsEnabled');
-      setNotificationsEnabled(state !== 'false');
-    } catch (error) {
-      console.error('Error loading notification state:', error);
-    }
-  };
-
-  const toggleNotifications = async (value: boolean) => {
-    try {
-      await AsyncStorage.setItem('notificationsEnabled', value.toString());
-      setNotificationsEnabled(value);
-      if (value) {
-        // Re-enable notifications
-        await Notifications.requestPermissionsAsync();
-      } else {
-        // Disable notifications
-        await Notifications.cancelAllScheduledNotificationsAsync();
-      }
-    } catch (error) {
-      console.error('Error toggling notifications:', error);
     }
   };
 
@@ -148,20 +120,6 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notifications</Text>
-          <View style={styles.option}>
-            <Ionicons name="notifications-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Enable Notifications</Text>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={toggleNotifications}
-              trackColor={{ false: colors.border, true: colors.tint }}
-              thumbColor={notificationsEnabled ? colors.primary : colors.text}
-            />
-          </View>
         </View>
 
         <View style={styles.section}>
