@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "userInterfaceStyle": "automatic",
+      "usesNonExemptEncryption": false,
       "bundleIdentifier": "com.iroan.manganess",
       "infoPlist": {
         "UIBackgroundModes": [

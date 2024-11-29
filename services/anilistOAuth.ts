@@ -1,140 +1,135 @@
 import * as WebBrowser from 'expo-web-browser';
-import * as Crypto from 'expo-crypto';
-import * as AuthSession from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-WebBrowser.maybeCompleteAuthSession();
+const debug = (message: string, data?: any) => {
+  console.log(`[AniList OAuth] ${message}`, data || '');
+};
 
-const ANILIST_CLIENT_ID = '20599'; 
+const ANILIST_CLIENT_ID = '20599';
 const ANILIST_AUTH_URL = 'https://anilist.co/api/v2/oauth/authorize';
-const ANILIST_TOKEN_URL = 'https://anilist.co/api/v2/oauth/token';
 const ANILIST_API_URL = 'https://graphql.anilist.co';
-const ANILIST_CLIENT_SECRET = process.env.EXPO_PUBLIC_ANILIST_CLIENT_SECRET;
-
 
 interface AuthData {
   accessToken: string;
   expiresAt: number;
 }
 
+const parseHashParams = (hash: string) => {
+  return hash.split('&').reduce((params: any, param) => {
+    const [key, value] = param.split('=');
+    params[key] = value;
+    return params;
+  }, {});
+};
+
 export async function loginWithAniList(): Promise<AuthData> {
   try {
-    console.log('Starting AniList login process');
+    debug('Starting login process');
+    
+    const redirectUri = Constants.appOwnership === 'expo' 
+      ? 'https://auth.expo.io/@iroan/manganess'
+      : 'com.iroan.manganess://oauth';
+    
+    const authUrl = `${ANILIST_AUTH_URL}?client_id=${ANILIST_CLIENT_ID}&response_type=token`;
+    
+    debug('Auth URL:', authUrl);
+    debug('Redirect URI:', redirectUri);
 
-    const redirectUri = AuthSession.makeRedirectUri({
-      native: 'com.iroan.manganess://Debug',
-    });
-    console.log('Redirect URI:', redirectUri);
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+    debug('Auth result:', result);
 
-    const codeVerifier = Crypto.randomUUID();
-    const codeChallenge = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      codeVerifier,
-      { encoding: Crypto.CryptoEncoding.BASE64 }
-    );
+    if (result.type === 'success' && result.url) {
+      const hashPart = result.url.split('#')[1];
+      debug('URL hash part:', hashPart);
 
-    console.log('Code Verifier:', codeVerifier);
-    console.log('Code Challenge:', codeChallenge);
+      if (!hashPart) {
+        throw new Error('No hash fragment in redirect URL');
+      }
 
-    const request = new AuthSession.AuthRequest({
-      clientId: ANILIST_CLIENT_ID,
-      scopes: [],
-      redirectUri,
-      responseType: AuthSession.ResponseType.Code,
-      codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
-      codeChallenge,
-      usePKCE: true,
-    });
+      const params = parseHashParams(hashPart);
+      debug('Parsed params:', params);
 
-    const result = await request.promptAsync({
-      authorizationEndpoint: ANILIST_AUTH_URL,
-    });
+      if (!params.access_token) {
+        throw new Error('No access token in response');
+      }
 
-    console.log('Auth result:', JSON.stringify(result, null, 2));
-
-    if (result.type === 'success' && result.params.code) {
-      console.log('Received authorization code:', result.params.code);
-      const tokenResult = await exchangeCodeForToken(result.params.code, codeVerifier, redirectUri);
-      console.log('Token exchange result:', JSON.stringify(tokenResult, null, 2));
-      
       const authData: AuthData = {
-        accessToken: tokenResult.access_token,
-        expiresAt: Date.now() + tokenResult.expires_in * 1000,
+        accessToken: params.access_token,
+        expiresAt: Date.now() + (params.expires_in ? parseInt(params.expires_in) * 1000 : 365 * 24 * 60 * 60 * 1000)
       };
 
+      debug('Saving auth data');
       await saveAuthData(authData);
+
       return authData;
-    } else if (result.type === 'error') {
-      console.error('Authorization error:', result.error);
-      throw new Error(`Authorization failed: ${result.error?.description || 'Unknown error'}`);
-    } else {
-      console.error('Login failed. Result:', JSON.stringify(result, null, 2));
-      throw new Error('Login failed');
     }
+
+    throw new Error(`Authentication failed: ${result.type}`);
   } catch (error) {
-    console.error('AniList login error:', error);
+    debug('Login error:', error);
     throw error;
   }
 }
-async function exchangeCodeForToken(code: string, codeVerifier: string, redirectUri: string): Promise<any> {
-  console.log('Exchanging code for token');
-  console.log('Code:', code);
-  console.log('Code Verifier:', codeVerifier);
-  console.log('Redirect URI:', redirectUri);
-
-  const response = await fetch(ANILIST_TOKEN_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      grant_type: 'authorization_code',
-      client_id: ANILIST_CLIENT_ID,
-      client_secret: ANILIST_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      code: code,
-      code_verifier: codeVerifier,
-    }),
-  });
-
-  const responseText = await response.text();
-  console.log('Token exchange response:', responseText);
-
-  if (!response.ok) {
-    throw new Error(`Failed to exchange code for token: ${response.status} ${response.statusText}`);
-  }
-
-  const tokenData = JSON.parse(responseText);
-  await AsyncStorage.setItem('anilistToken', tokenData.access_token);
-
-  return tokenData;
-}
 
 async function saveAuthData(authData: AuthData): Promise<void> {
-  await AsyncStorage.setItem('anilistAuth', JSON.stringify(authData));
+  try {
+    debug('Saving auth data');
+    await AsyncStorage.setItem('anilistAuth', JSON.stringify(authData));
+    debug('Auth data saved successfully');
+  } catch (error) {
+    debug('Error saving auth data:', error);
+    throw error;
+  }
 }
 
 export async function getAuthData(): Promise<AuthData | null> {
-  const authDataString = await AsyncStorage.getItem('anilistAuth');
-  if (authDataString) {
-    const authData: AuthData = JSON.parse(authDataString);
-    if (Date.now() < authData.expiresAt) {
-      return authData;
+  try {
+    debug('Getting auth data from storage');
+    const authDataString = await AsyncStorage.getItem('anilistAuth');
+    
+    if (authDataString) {
+      const authData: AuthData = JSON.parse(authDataString);
+      debug('Auth data found, checking expiration');
+      
+      if (Date.now() < authData.expiresAt) {
+        debug('Auth data valid');
+        return authData;
+      }
+      
+      debug('Auth data expired');
+    } else {
+      debug('No auth data found');
     }
+    
+    return null;
+  } catch (error) {
+    debug('Error getting auth data:', error);
+    return null;
   }
-  return null;
 }
 
 export async function logout(): Promise<void> {
-  await AsyncStorage.removeItem('anilistAuth');
+  try {
+    debug('Logging out');
+    await AsyncStorage.removeItem('anilistAuth');
+    debug('Logged out successfully');
+  } catch (error) {
+    debug('Error during logout:', error);
+    throw error;
+  }
 }
 
 export async function makeAniListRequest(query: string, variables: any = {}): Promise<any> {
+  debug('Making API request', { query, variables });
+  
   const authData = await getAuthData();
   if (!authData) {
+    debug('No auth data found for request');
     throw new Error('User is not logged in');
   }
 
+  debug('Sending request to AniList API');
   const response = await fetch(ANILIST_API_URL, {
     method: 'POST',
     headers: {
@@ -148,14 +143,19 @@ export async function makeAniListRequest(query: string, variables: any = {}): Pr
     }),
   });
 
+  const data = await response.json();
+  debug('API response received:', data);
+
   if (!response.ok) {
-    throw new Error('Failed to make AniList API request');
+    debug('API request failed:', data.errors);
+    throw new Error(data.errors?.[0]?.message || 'Failed to make AniList API request');
   }
 
-  return response.json();
+  return data;
 }
 
 export async function getCurrentUser(): Promise<any> {
+  debug('Getting current user');
   const query = `
     query {
       Viewer {

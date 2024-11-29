@@ -15,6 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as AniListOAuth from '@/services/anilistOAuth';
+import { syncAllMangaWithAniList } from '@/services/anilistService';
+import { ActivityIndicator } from 'react-native';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -29,6 +32,8 @@ export default function SettingsScreen() {
   const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
+  const [user, setUser] = useState<any>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Safe area insets
   const insets = useSafeAreaInsets();
@@ -44,6 +49,8 @@ export default function SettingsScreen() {
   useEffect(() => {
     // Load settings when the component mounts
     loadEnableDebugTabSetting();
+    checkLoginStatus();
+
   }, []);
 
   const loadEnableDebugTabSetting = async () => {
@@ -89,6 +96,65 @@ export default function SettingsScreen() {
     );
   };
 
+  //Anilist Functions
+
+  const checkLoginStatus = async () => {
+    const authData = await AniListOAuth.getAuthData();
+    if (authData) {
+      try {
+        const userData = await AniListOAuth.getCurrentUser();
+        setUser(userData.data.Viewer);
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    }
+  };
+
+  const handleAniListLogin = async () => {
+    try {
+      const authData = await AniListOAuth.loginWithAniList();
+      if (authData) {
+        const userData = await AniListOAuth.getCurrentUser();
+        setUser(userData.data.Viewer);
+        Alert.alert("Success", "Successfully logged in to AniList!");
+      }
+    } catch (error: unknown) {
+      console.error('AniList login error:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('cancelled')) {
+          Alert.alert("Cancelled", "Login was cancelled by user");
+        } else {
+          Alert.alert("Error", `Failed to login with AniList: ${error.message}`);
+        }
+      }
+    }
+  };
+
+  const handleAniListLogout = async () => {
+    try {
+      await AniListOAuth.logout();
+      setUser(null);
+    } catch (error: unknown) {
+      console.error('AniList logout error:', error);
+      Alert.alert("Error", "Failed to logout");
+    }
+  };
+
+  const handleSyncAllManga = async () => {
+    try {
+      setIsSyncing(true);
+      const results = await syncAllMangaWithAniList();
+      Alert.alert("Sync Results", results.join('\n'));
+    } catch (error) {
+      console.error('Error syncing manga:', error);
+      Alert.alert("Error", `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView style={styles.scrollView}>
@@ -120,7 +186,46 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
+
         </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>AniList Integration</Text>
+          {user ? (
+            <>
+              <View style={styles.userInfo}>
+                <Image source={{ uri: user.avatar.large }} style={styles.avatar} />
+                <Text style={styles.username}>{user.name}</Text>
+              </View>
+              <TouchableOpacity style={styles.option} onPress={handleAniListLogout}>
+                <Ionicons name="log-out-outline" size={24} color={colors.text} />
+                <Text style={styles.optionText}>Logout from AniList</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.syncButton, isSyncing && styles.disabledButton]}
+                onPress={handleSyncAllManga}
+                disabled={isSyncing}
+              >
+                <View style={styles.buttonContent}>
+                  <Ionicons name="sync-outline" size={24} color={colors.card} />
+                  <Text style={styles.syncButtonText}>Sync All Manga with AniList</Text>
+                  {isSyncing && <ActivityIndicator size="small" color={colors.card} style={styles.spinner} />}
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.loginButton} onPress={handleAniListLogin}>
+              <View style={styles.buttonContent}>
+                <Ionicons name="reader" size={24} color={colors.card} />
+                <Text style={styles.loginButtonText}>Login with AniList</Text>
+              </View>
+            </TouchableOpacity>
+            
+          )}
+          <Text style={styles.noteText}>
+            Note Anilist integration is still W.I.P
+          </Text>
+        </View>
+
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Data Management</Text>
@@ -226,5 +331,59 @@ const getStyles = (colors: typeof Colors.light) =>
       marginLeft: 15,
       color: colors.notification,
       fontWeight: '600',
+    },
+    userInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 15,
+      backgroundColor: colors.background,
+      padding: 10,
+      borderRadius: 10,
+    },
+    avatar: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      marginRight: 10,
+    },
+    username: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: colors.text,
+    },
+    loginButton: {
+      backgroundColor: colors.primary,
+      padding: 15,
+      borderRadius: 10,
+      marginTop: 10,
+    },
+    loginButtonText: {
+      color: colors.card,
+      fontSize: 16,
+      fontWeight: '600',
+      marginLeft: 10,
+    },
+    syncButton: {
+      backgroundColor: colors.primary,
+      padding: 15,
+      borderRadius: 10,
+      marginTop: 15,
+    },
+    syncButtonText: {
+      color: colors.card,
+      fontSize: 16,
+      fontWeight: '600',
+      marginLeft: 10,
+    },
+    buttonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    disabledButton: {
+      opacity: 0.7,
+    },
+    spinner: {
+      marginLeft: 10,
     },
   });
