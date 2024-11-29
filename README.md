@@ -1,50 +1,52 @@
-# Welcome to your Expo app 👋
+# MangaNess
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+MangaNess is a mobile application that allows users to read manga and manhwa. It provides a clean, ad-free reading experience with smooth scrolling, dark mode support, and responsive design for various device sizes. It also allows users to browse and search for manga titles, track read chapters, and save favorite manga for future reading.
 
-## Get started
+## Screenshots
+<img src="https://github.com/user-attachments/assets/23d987e0-3d10-4547-b7dd-3e1096963372" alt="Image1" height="500">
+<img src="https://github.com/user-attachments/assets/c0ae03c0-7828-4cba-b610-4a0a772381b5" alt="Image2" height="500">
+<img src="https://github.com/user-attachments/assets/b5dda7f4-5c2b-4e5f-9a18-e2ccf9732f8a" alt="Image3" height="500">
+<img src="https://github.com/user-attachments/assets/51f11e45-9bd2-4c3c-9c72-f850ae675404" alt="Image4" height="500">
+<img src="https://github.com/user-attachments/assets/6273c09e-2172-4e2b-90fc-a9b9d5b67233" alt="Image5" height="500">
+<img src="https://github.com/user-attachments/assets/32004e23-18d9-47b4-b1c8-377ceb9587e0" alt="Image6" height="500">
 
-1. Install dependencies
+## Features
 
-   ```bash
-   npm install
-   ```
+- Browse and search for manga titles
+- Read manga chapters with a clean, ad-free interface
+- Smooth vertical scrolling for comfortable reading
+- Track read chapters
+- Dark mode support
+- Responsive design for various device sizes
 
-2. Start the app
+## Technologies Used
 
-   ```bash
-    npx expo start
-   ```
+- React Native
+- TypeScript
+- Expo
+- WebView
+- React native AsyncStorage for local storage
 
-In the output, you'll find options to open the app in a
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Disclaimer
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+This app is for educational purposes only. Please support the original content creators and consider using official sources to read manga. I do not own any of the content in this app.
 
-## Get a fresh project
+## Setup
 
-When you're ready, run:
+1. Clone the repository
+2. Install dependencies
+3. Run the app (only via mobile emulator either IOS or Android)
 
 ```bash
-npm run reset-project
+git clone https://github.com/IIRoan/manganess.git
+cd manganess
+npm install
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Build the app  
+```bash
+npx expo build:android
+npx expo build:ios
+```
