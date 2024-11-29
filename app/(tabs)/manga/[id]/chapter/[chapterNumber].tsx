@@ -1,48 +1,15 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, BackHandler, Platform, useColorScheme } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
+import { WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { getChapterUrl, markChapterAsRead, getInjectedJavaScript, fetchMangaDetails, MangaDetails } from '@/services/mangaFireService';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CustomWebView from '@/components/CustomWebView';
 
-interface CustomWebViewProps extends React.ComponentProps<typeof WebView> { }
-const CustomWebView: React.FC<CustomWebViewProps> = (props) => {
-  const webViewRef = useRef<WebView>(null);
-  const [webViewKey, setWebViewKey] = useState(1);
-
-  const onShouldStartLoadWithRequest = (request: any) => {
-    const allowedHost = "mangafire.to";
-    if (request.url.startsWith(`https://${allowedHost}`)) {
-      return true;
-    }
-    console.warn("Blocked navigation to:", request.url);
-    return false;
-  };
-
-  useEffect(() => {
-    if (Platform.OS === "ios") {
-      setTimeout(() => setWebViewKey(key => key + 1), 50);
-    }
-  }, []);
-
-  const handleMessage = (event: WebViewMessageEvent) => {
-    console.log('message', event.nativeEvent.data);
-  };
-
-  return (
-    <WebView
-      ref={webViewRef}
-      key={webViewKey}
-      onMessage={handleMessage}
-      onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
-      {...props}
-    />
-  );
-};
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{ id: string; chapterNumber: string }>();
   const router = useRouter();
@@ -149,14 +116,15 @@ export default function ReadChapterScreen() {
         <>
           <CustomWebView
             source={{ uri: chapterUrl }}
+            currentUrl={chapterUrl}
             style={styles.webView}
             onLoadEnd={handleLoadEnd}
             onError={handleError}
             testID="chapter-webview"
             injectedJavaScript={getInjectedJavaScript(colors.card)}
+            allowedHosts={['mangafire.to']}
             javaScriptEnabled={true}
             domStorageEnabled={true}
-            originWhitelist={['*']}
             onNavigationStateChange={handleNavigationStateChange}
             decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.98}
             nestedScrollEnabled={true}
