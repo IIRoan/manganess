@@ -1,11 +1,10 @@
 {
-  "name": "manganess",
+  "name": "manganessie",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.12",
   "scripts": {
     "start": "expo start",
     "startlocal": "expo start --localhost",
-    "build" : "eas build -p android --profile preview",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",

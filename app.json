@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "MangaNess",
-    "slug": "MangaNess",
-    "version": "1.0.0",
+    "name": "MangaNessie",
+    "slug": "MangaNessie",
+    "version": "1.12",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "com.iroan.manganess",
+    "scheme": "com.iroan.manganessie",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -16,7 +16,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#121212"
       },
-      "package": "com.iiroan.manganess"
+      "package": "com.iroan.manganessie"
     },
     "plugins": [
       "expo-router",
