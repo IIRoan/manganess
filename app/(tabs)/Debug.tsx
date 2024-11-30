@@ -17,27 +17,56 @@ export default function DebugScreen() {
 
   const checkForUpdates = async () => {
     try {
+      Alert.alert("Checking", "Checking for updates...");
+      
       const update = await Updates.checkForUpdateAsync();
+      
       if (update.isAvailable) {
-        await Updates.fetchUpdateAsync();
-        Alert.alert(
-          "Update Available",
-          "An update has been downloaded. The app will now restart to apply the update.",
-          [
-            {
-              text: "OK",
-              onPress: () => Updates.reloadAsync()
-            }
-          ]
-        );
+        Alert.alert("Update Found", "Downloading update...");
+        
+        try {
+          await Updates.fetchUpdateAsync();
+          
+          Alert.alert(
+            "Update Ready",
+            "An update has been downloaded. Restart now to apply it?",
+            [
+              {
+                text: "Later",
+                style: "cancel"
+              },
+              {
+                text: "Restart",
+                onPress: async () => {
+                  await Updates.reloadAsync();
+                }
+              }
+            ]
+          );
+        } catch (fetchError) {
+          Alert.alert(
+            "Download Failed",
+            "Failed to download the update. Please try again later."
+          );
+          console.error('Error fetching update:', fetchError);
+        }
       } else {
-        Alert.alert("No Update", "You're running the latest version!");
+        // Using the correct properties from Updates
+        Alert.alert(
+          "No Update Available", 
+          `You're running the latest version!\n\n` +
+          `Update ID: ${Updates.updateId || 'None'}\n` +
+          `Is Embedded: ${Updates.isEmbeddedLaunch}\n` +
+          `Channel: ${Updates.channel || 'None'}\n` +
+          `Runtime Version: ${Updates.runtimeVersion || 'None'}`
+        );
       }
     } catch (error) {
       console.error('Error checking for updates:', error);
       Alert.alert(
         "Error",
-        "Failed to check for updates. Please ensure you're connected to the internet."
+        `Failed to check for updates: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+        `Please ensure you're connected to the internet.`
       );
     }
   };
