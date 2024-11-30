@@ -39,11 +39,13 @@
       }
     },
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "sdkVersion"
     },
     "updates": {
       "enabled": true,
-      "url": "https://u.expo.dev/3dbcb41a-87c8-4040-89b2-790d144729fe"
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/3dbcb41a-87c8-4040-89b2-790d144729fe",
+      "checkAutomatically": "ON_ERROR_RECOVERY"
     }
   }
 }
