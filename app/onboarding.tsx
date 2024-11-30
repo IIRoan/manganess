@@ -44,7 +44,7 @@ export default function OnboardingScreen() {
           />
         </View>
 
-        <Text style={styles.title}>Welcome to MangaNess</Text>
+        <Text style={styles.title}>Welcome to MangaNessie</Text>
 
         <Text style={styles.description}>
           Explore the world of manga at your fingertips.
