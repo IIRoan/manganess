@@ -19,6 +19,9 @@ import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
 import { ActivityIndicator } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -35,10 +38,7 @@ export default function SettingsScreen() {
   const styles = getStyles(colors);
   const [user, setUser] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-
-  // Safe area insets
   const insets = useSafeAreaInsets();
-
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
 
   const themeOptions: ThemeOption[] = [
@@ -48,10 +48,8 @@ export default function SettingsScreen() {
   ];
 
   useEffect(() => {
-    // Load settings when the component mounts
     loadEnableDebugTabSetting();
     checkLoginStatus();
-
   }, []);
 
   const loadEnableDebugTabSetting = async () => {
@@ -74,6 +72,66 @@ export default function SettingsScreen() {
     }
   };
 
+  const exportData = async () => {
+    try {
+      // Get all AsyncStorage data
+      const keys = await AsyncStorage.getAllKeys();
+      const items = await AsyncStorage.multiGet(keys);
+      const exportData = Object.fromEntries(items);
+      
+      // Create JSON file
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const fileName = `manganessie_${new Date().toISOString().split('T')[0]}.json`;
+      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+      
+      // Write file
+      await FileSystem.writeAsStringAsync(filePath, jsonString);
+
+      // Share file
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(filePath, {
+          mimeType: 'application/json',
+          dialogTitle: 'Export App Data'
+        });
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Error', 'Failed to export data');
+    }
+  };
+
+  const importData = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json'
+      });
+
+      if (result.canceled) return;
+
+      const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const importedData = JSON.parse(fileContent);
+
+      Alert.alert(
+        'Import Data',
+        'This will replace all existing data. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Import',
+            onPress: async () => {
+              await AsyncStorage.clear();
+              await AsyncStorage.multiSet(Object.entries(importedData));
+              Alert.alert('Success', 'Data imported! Please restart the app');
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Import error:', error);
+      Alert.alert('Error', 'Failed to import data');
+    }
+  };
+
   const clearAsyncStorage = () => {
     Alert.alert(
       'Clear App Data',
@@ -84,12 +142,11 @@ export default function SettingsScreen() {
           text: 'OK',
           onPress: async () => {
             try {
-              const keys = await AsyncStorage.getAllKeys();
-              await AsyncStorage.multiRemove(keys);
+              await AsyncStorage.clear();
               Alert.alert('Success', 'All app data has been cleared.');
             } catch (error) {
               console.error('Error clearing AsyncStorage:', error);
-              Alert.alert('Error', 'Failed to clear app data. Please try again.');
+              Alert.alert('Error', 'Failed to clear app data.');
             }
           },
         },
@@ -98,7 +155,6 @@ export default function SettingsScreen() {
   };
 
   //Anilist Functions
-
   const checkLoginStatus = async () => {
     const authData = await AniListOAuth.getAuthData();
     if (authData) {
@@ -154,8 +210,6 @@ export default function SettingsScreen() {
     }
   };
 
-
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScrollView style={styles.scrollView}>
@@ -187,8 +241,8 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
-
         </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>AniList Integration</Text>
           {user ? (
@@ -225,19 +279,25 @@ export default function SettingsScreen() {
                 <Text style={styles.loginButtonText}>Login with AniList</Text>
               </View>
             </TouchableOpacity>
-
           )}
           <Text style={styles.noteText}>
-            Note Anilist integration is still W.I.P
+            Note: AniList integration is still W.I.P
           </Text>
         </View>
 
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Data Management</Text>
-          <TouchableOpacity style={styles.clearDataButton} onPress={clearAsyncStorage}>
+          <TouchableOpacity style={styles.option} onPress={exportData}>
+            <Ionicons name="download-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Export App Data</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.option} onPress={importData}>
+            <Ionicons name="cloud-upload" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Import App Data</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.option} onPress={clearAsyncStorage}>
             <Ionicons name="trash-outline" size={24} color={colors.notification} />
-            <Text style={styles.clearDataText}>Clear App Data</Text>
+            <Text style={styles.optionText}>Clear App Data</Text>
           </TouchableOpacity>
         </View>
 
@@ -391,5 +451,21 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     spinner: {
       marginLeft: 10,
+    },
+    dataButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      padding: 15,
+      borderRadius: 10,
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    dataButtonText: {
+      fontSize: 16,
+      marginLeft: 15,
+      color: colors.text,
+      fontWeight: '600',
     },
   });
