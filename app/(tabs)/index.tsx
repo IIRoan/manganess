@@ -136,7 +136,7 @@ export default function HomeScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>MangaNessie</Text>
+            <Text style={styles.headerTitle}>MangaNess</Text>
             <View style={styles.nessieContainer}>
               <NessieAnimation />
             </View>

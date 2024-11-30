@@ -81,7 +81,7 @@ export default function SettingsScreen() {
       
       // Create JSON file
       const jsonString = JSON.stringify(exportData, null, 2);
-      const fileName = `manganessie_${new Date().toISOString().split('T')[0]}.json`;
+      const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
       const filePath = `${FileSystem.documentDirectory}${fileName}`;
       
       // Write file
