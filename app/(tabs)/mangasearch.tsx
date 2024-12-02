@@ -74,6 +74,14 @@ export default function MangaSearchScreen() {
     }
   }, []);
 
+  // Clear search
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    setSearchResults([]);
+    inputRef.current?.focus();
+  }, [])
+
+
   // Handle manga item press
   const handleMangaPress = useCallback(
     (item: MangaItem) => {
@@ -139,7 +147,7 @@ export default function MangaSearchScreen() {
           headerShown: false,
         }}
       />
-      <View style={styles.searchContainer}>
+     <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color={colors.text} style={styles.searchIcon} />
         <TextInput
           ref={inputRef}
@@ -149,6 +157,11 @@ export default function MangaSearchScreen() {
           value={searchQuery}
           onChangeText={onChangeSearch}
         />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+            <Ionicons name="close-sharp" size={20} color={colors.text} />
+          </TouchableOpacity>
+        )}
       </View>
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -208,6 +221,10 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       flex: 1,
       fontSize: 16,
       color: colors.text,
+    },
+    clearButton: {
+      padding: 5,
+      marginLeft: 5,
     },
     loadingContainer: {
       flex: 1,
