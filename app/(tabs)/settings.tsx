@@ -78,12 +78,12 @@ export default function SettingsScreen() {
       const keys = await AsyncStorage.getAllKeys();
       const items = await AsyncStorage.multiGet(keys);
       const exportData = Object.fromEntries(items);
-      
+
       // Create JSON file
       const jsonString = JSON.stringify(exportData, null, 2);
       const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
       const filePath = `${FileSystem.documentDirectory}${fileName}`;
-      
+
       // Write file
       await FileSystem.writeAsStringAsync(filePath, jsonString);
 
@@ -212,7 +212,10 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+      >
         <Text style={styles.title}>Settings</Text>
 
         <View style={styles.section}>
@@ -317,6 +320,8 @@ export default function SettingsScreen() {
             You need to restart the app for this setting to take effect.
           </Text>
         </View>
+        {/* Add bottom padding space */}
+        <View style={styles.bottomSpacing} />
       </ScrollView>
       <Image
         source={require('@/assets/images/nessie.png')}
@@ -375,9 +380,15 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.text,
       marginTop: 10,
     },
+    scrollViewContent: {
+      paddingBottom: 120,
+    },
+    bottomSpacing: {
+      height: 80,
+    },
     nessieImage: {
       position: 'absolute',
-      bottom: 40,
+      bottom: 90,
       left: 20,
       width: 80,
       height: 80,
