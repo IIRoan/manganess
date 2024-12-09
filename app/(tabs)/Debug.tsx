@@ -34,27 +34,41 @@ export default function DebugScreen() {
     setShowAlert(true);
   };
 
-  const checkForUpdates = async () => {
-    try {
-      if (isExpoGo) {
-        showAlertWithConfig({
-          title: "Expo Go Detected",
-          message: "You're running in Expo Go, which automatically handles updates when you reload the app.\n\n" +
-                  "Current Environment Info:\n" +
-                  `Platform: ${Platform.OS}\n` +
-                  `Expo Go: Yes\n` +
-                  `Runtime Version: ${Updates.runtimeVersion || 'None'}\n` +
-                  `Update Channel: ${Updates.channel || 'development'}`,
-          options: [
-            {
-              text: "OK",
-              onPress: () => setShowAlert(false)
-            }
-          ]
-        });
-        return;
-      }
+  const checkExpoStatus = async () => {
+    showAlertWithConfig({
+      title: "Expo Environment Info",
+      message: "Current Environment Details:\n" +
+              `Platform: ${Platform.OS}\n` +
+              `Expo Go: ${isExpoGo ? 'Yes' : 'No'}\n` +
+              `Runtime Version: ${Updates.runtimeVersion || 'None'}\n` +
+              `Update Channel: ${Updates.channel || 'development'}\n` +
+              `Update ID: ${Updates.updateId || 'None'}\n` +
+              `Is Embedded: ${Updates.isEmbeddedLaunch}`,
+      options: [
+        {
+          text: "OK",
+          onPress: () => setShowAlert(false)
+        }
+      ]
+    });
+  };
 
+  const checkForUpdates = async () => {
+    if (isExpoGo) {
+      showAlertWithConfig({
+        title: "Not Available",
+        message: "Update checking is not available in Expo Go. Please use the 'Check Expo Status' button instead.",
+        options: [
+          {
+            text: "OK",
+            onPress: () => setShowAlert(false)
+          }
+        ]
+      });
+      return;
+    }
+
+    try {
       showAlertWithConfig({
         title: "Checking",
         message: "Checking for updates...",
@@ -115,11 +129,7 @@ export default function DebugScreen() {
       } else {
         showAlertWithConfig({
           title: "No Update Available",
-          message: `You're running the latest version!\n\n` +
-                  `Update ID: ${Updates.updateId || 'None'}\n` +
-                  `Is Embedded: ${Updates.isEmbeddedLaunch}\n` +
-                  `Channel: ${Updates.channel || 'None'}\n` +
-                  `Runtime Version: ${Updates.runtimeVersion || 'None'}`,
+          message: "You're running the latest version!",
           options: [
             {
               text: "OK",
@@ -258,18 +268,28 @@ export default function DebugScreen() {
         <Text style={styles.title}>Debug</Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Debug Actions</Text>
+          <Text style={styles.sectionTitle}>Updates</Text>
           
+          <TouchableOpacity 
+            style={styles.option} 
+            onPress={checkExpoStatus}
+          >
+            <Ionicons name="information-circle-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Check Expo Status</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.option} 
             onPress={checkForUpdates}
           >
             <Ionicons name="refresh-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>
-              {isExpoGo ? "Check Expo Go Status" : "Check for Updates"}
-            </Text>
+            <Text style={styles.optionText}>Check for Updates</Text>
           </TouchableOpacity>
+        </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Debug Actions</Text>
+          
           <TouchableOpacity style={styles.option} onPress={showOnboarding}>
             <Ionicons name="play-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Show Onboarding</Text>
