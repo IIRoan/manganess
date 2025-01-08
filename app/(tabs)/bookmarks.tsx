@@ -60,7 +60,7 @@ export default function BookmarksScreen() {
         const currentIndex = currentIndexRef.current;
         let newIndex = currentIndex;
 
-        if (Math.abs(gestureState.dx) > SCREEN_WIDTH * 0.2) {
+        if (Math.abs(gestureState.dx) > SCREEN_WIDTH * 0.14) {
           if (gestureState.dx > 0 && currentIndex > 0) {
             newIndex = currentIndex - 1;
           } else if (gestureState.dx < 0 && currentIndex < SECTIONS.length - 1) {
