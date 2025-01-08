@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,20 +7,24 @@ import {
   StyleSheet,
   ActivityIndicator,
   SafeAreaView,
-  StatusBar,
+  Animated,
+  Dimensions,
+  PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
-import { Colors, ColorScheme } from '@/constants/Colors';
-import { Image } from 'react-native';
+import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { getLastReadChapter } from '@/services/readChapterService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/* Type Definitions */
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SECTIONS = ['Reading', 'To Read', 'Read'] as const;
+type Section = typeof SECTIONS[number];
+
 interface BookmarkItem {
   id: string;
   title: string;
@@ -32,16 +36,60 @@ interface BookmarkItem {
 export default function BookmarksScreen() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<'Reading' | 'To Read' | 'Read'>('Reading');
+  const [activeSection, setActiveSection] = useState<Section>('Reading');
+  const translateX = useRef(new Animated.Value(0)).current;
+  const currentIndexRef = useRef(0);
   const router = useRouter();
 
   // Theme and styling
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
-
-  // Safe area insets
   const insets = useSafeAreaInsets();
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const newTranslateX = -currentIndexRef.current * SCREEN_WIDTH + gestureState.dx;
+        translateX.setValue(newTranslateX);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const currentIndex = currentIndexRef.current;
+        let newIndex = currentIndex;
+
+        if (Math.abs(gestureState.dx) > SCREEN_WIDTH * 0.14) {
+          if (gestureState.dx > 0 && currentIndex > 0) {
+            newIndex = currentIndex - 1;
+          } else if (gestureState.dx < 0 && currentIndex < SECTIONS.length - 1) {
+            newIndex = currentIndex + 1;
+          }
+        }
+
+        animateToSection(newIndex);
+        setActiveSection(SECTIONS[newIndex]);
+        currentIndexRef.current = newIndex;
+      },
+    })
+  ).current;
+
+  const animateToSection = (index: number) => {
+    Animated.spring(translateX, {
+      toValue: -index * SCREEN_WIDTH,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 40,
+    }).start();
+  };
+
+  const handleSectionPress = (section: Section) => {
+    const newIndex = SECTIONS.indexOf(section);
+    animateToSection(newIndex);
+    setActiveSection(section);
+    currentIndexRef.current = newIndex;
+  };
 
   // Fetch bookmarks from AsyncStorage
   const fetchBookmarks = useCallback(async () => {
@@ -71,7 +119,6 @@ export default function BookmarksScreen() {
   }, []);
 
   useEffect(() => {
-    // Fetch bookmarks on initial load
     fetchBookmarks();
   }, [fetchBookmarks]);
 
@@ -82,7 +129,7 @@ export default function BookmarksScreen() {
           const bookmarkChanged = await AsyncStorage.getItem('bookmarkChanged');
           if (bookmarkChanged === 'true') {
             await fetchBookmarks();
-            await AsyncStorage.setItem('bookmarkChanged', 'false'); // Reset the flag
+            await AsyncStorage.setItem('bookmarkChanged', 'false');
           }
         } catch (error) {
           console.error('Error checking bookmark changed flag:', error);
@@ -109,7 +156,7 @@ export default function BookmarksScreen() {
     </View>
   );
 
-  const renderSectionButton = (title: 'Reading' | 'To Read' | 'Read') => {
+  const renderSectionButton = (title: Section) => {
     let iconName: keyof typeof Ionicons.glyphMap;
     switch (title) {
       case 'To Read':
@@ -131,7 +178,7 @@ export default function BookmarksScreen() {
           styles.sectionButton,
           activeSection === title && styles.activeSectionButton,
         ]}
-        onPress={() => setActiveSection(title)}
+        onPress={() => handleSectionPress(title)}
       >
         <Ionicons
           name={iconName}
@@ -151,7 +198,27 @@ export default function BookmarksScreen() {
     );
   };
 
-  const filteredBookmarks = bookmarks.filter((item) => item.status === activeSection);
+  const renderSection = (section: Section) => {
+    const filteredBookmarks = bookmarks.filter((item) => item.status === section);
+    
+    return (
+      <View style={styles.sectionContainer}>
+        {filteredBookmarks.length === 0 ? (
+          <Text style={styles.emptyText}>No {section.toLowerCase()} manga found.</Text>
+        ) : (
+          <FlatList
+            data={filteredBookmarks}
+            renderItem={renderBookmarkItem}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            columnWrapperStyle={styles.columnWrapper}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.contentContainer}
+          />
+        )}
+      </View>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -165,23 +232,23 @@ export default function BookmarksScreen() {
     <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
       <Text style={styles.header}>My Bookmarks</Text>
       <View style={styles.sectionButtonsContainer}>
-        {renderSectionButton('Reading')}
-        {renderSectionButton('To Read')}
-        {renderSectionButton('Read')}
+        {SECTIONS.map((section) => renderSectionButton(section))}
       </View>
-      {bookmarks.length === 0 ? (
-        <Text style={styles.emptyText}>No bookmarks found.</Text>
-      ) : (
-        <FlatList
-          data={filteredBookmarks}
-          renderItem={renderBookmarkItem}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.contentContainer}
-        />
-      )}
+      <Animated.View
+        style={[
+          styles.sectionsContainer,
+          {
+            transform: [{ translateX }],
+          },
+        ]}
+        {...panResponder.panHandlers}
+      >
+        {SECTIONS.map((section) => (
+          <View key={section} style={styles.sectionWrapper}>
+            {renderSection(section)}
+          </View>
+        ))}
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -204,6 +271,7 @@ const getStyles = (colors: typeof Colors.light) =>
       justifyContent: 'space-between',
       paddingHorizontal: 20,
       marginBottom: 20,
+      zIndex: 1,
     },
     sectionButton: {
       flexDirection: 'row',
@@ -226,6 +294,17 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     activeSectionButtonText: {
       color: colors.card,
+    },
+    sectionsContainer: {
+      flex: 1,
+      flexDirection: 'row',
+      width: SCREEN_WIDTH * 3,
+    },
+    sectionWrapper: {
+      width: SCREEN_WIDTH,
+    },
+    sectionContainer: {
+      flex: 1,
     },
     contentContainer: {
       paddingHorizontal: 15,
@@ -254,4 +333,3 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.text,
     },
   });
-
