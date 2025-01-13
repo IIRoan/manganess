@@ -1,11 +1,16 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Platform, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
+import { imageCache } from '@/services/CacheImages';
+import Alert from '@/components/Alert';
+import axios from 'axios';
+import { MANGA_API_URL } from '@/constants/Config';
+
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -14,92 +19,499 @@ export default function DebugScreen() {
   const colors = Colors[colorScheme as keyof typeof Colors] || Colors.light;
   const styles = getStyles(colors);
   const router = useRouter();
+  const [showAlert, setShowAlert] = React.useState(false);
+  const [alertConfig, setAlertConfig] = React.useState({
+    title: '',
+    message: '',
+    options: [] as { text: string; onPress: () => void }[]
+  });
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [log, setLog] = useState<string[]>([]);
 
-  const checkForUpdates = async () => {
+  const addLog = (message: string) => {
+    console.log(message); // Console logging for development
+    setLog(prev => [...prev, `[${new Date().toISOString()}] ${message}`]);
+  };
+
+
+  const showAlertWithConfig = (config: {
+    title: string;
+    message: string;
+    options: { text: string; onPress: () => void }[];
+  }) => {
+    setAlertConfig(config);
+    setShowAlert(true);
+  };
+
+  const checkExpoStatus = async () => {
     try {
-      Alert.alert("Checking", "Checking for updates...");
-      
-      const update = await Updates.checkForUpdateAsync();
-      
-      if (update.isAvailable) {
-        Alert.alert("Update Found", "Downloading update...");
-        
-        try {
-          await Updates.fetchUpdateAsync();
-          
-          Alert.alert(
-            "Update Ready",
-            "An update has been downloaded. Restart now to apply it?",
-            [
-              {
-                text: "Later",
-                style: "cancel"
-              },
-              {
-                text: "Restart",
-                onPress: async () => {
-                  await Updates.reloadAsync();
-                }
-              }
-            ]
-          );
-        } catch (fetchError) {
-          Alert.alert(
-            "Download Failed",
-            "Failed to download the update. Please try again later."
-          );
-          console.error('Error fetching update:', fetchError);
-        }
-      } else {
-        // Using the correct properties from Updates
-        Alert.alert(
-          "No Update Available", 
-          `You're running the latest version!\n\n` +
-          `Update ID: ${Updates.updateId || 'None'}\n` +
-          `Is Embedded: ${Updates.isEmbeddedLaunch}\n` +
-          `Channel: ${Updates.channel || 'None'}\n` +
-          `Runtime Version: ${Updates.runtimeVersion || 'None'}`
-        );
-      }
+      const status = {
+        platform: Platform.OS,
+        isExpoGo: !Updates.isEmbeddedLaunch,
+        runtimeVersion: Updates.runtimeVersion,
+        channel: Updates.channel,
+        updateId: Updates.updateId,
+      };
+
+      showAlertWithConfig({
+        title: "Expo Status",
+        message: Object.entries(status)
+          .map(([key, value]) => `${key}: ${value || 'Not available'}`)
+          .join('\n'),
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
     } catch (error) {
-      console.error('Error checking for updates:', error);
-      Alert.alert(
-        "Error",
-        `Failed to check for updates: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-        `Please ensure you're connected to the internet.`
-      );
+      showAlertWithConfig({
+        title: "Error",
+        message: "Failed to get Expo status",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
     }
   };
 
-  const showOnboarding = async () => {
-    try {
-      await AsyncStorage.removeItem('onboardingCompleted');
-      router.replace('/onboarding');
-    } catch (error) {
-      console.error('Error showing onboarding:', error);
-      Alert.alert('Error', 'Failed to show onboarding. Please try again.');
+  const checkForUpdates = async () => {
+    if (!Updates.isEmbeddedLaunch) {
+      showAlertWithConfig({
+        title: "Not Available",
+        message: "Updates are not available in Expo Go",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
+      return;
     }
+
+    try {
+      showAlertWithConfig({
+        title: "Checking",
+        message: "Checking for updates...",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
+
+      const update = await Updates.checkForUpdateAsync();
+
+      if (!update.isAvailable) {
+        showAlertWithConfig({
+          title: "No Updates",
+          message: "You're on the latest version",
+          options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+        });
+        return;
+      }
+
+      showAlertWithConfig({
+        title: "Update Available",
+        message: "Would you like to download and install the update?",
+        options: [
+          { text: "Cancel", onPress: () => setShowAlert(false) },
+          {
+            text: "Update",
+            onPress: async () => {
+              try {
+                await Updates.fetchUpdateAsync();
+                showAlertWithConfig({
+                  title: "Update Ready",
+                  message: "Restart now to apply the update?",
+                  options: [
+                    { text: "Later", onPress: () => setShowAlert(false) },
+                    { text: "Restart", onPress: () => Updates.reloadAsync() }
+                  ]
+                });
+              } catch (error) {
+                showAlertWithConfig({
+                  title: "Error",
+                  message: "Failed to download update",
+                  options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+                });
+              }
+            }
+          }
+        ]
+      });
+    } catch (error) {
+      showAlertWithConfig({
+        title: "Error",
+        message: "Failed to check for updates",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
+    }
+  };
+
+
+  const showOnboarding = async () => {
+    showAlertWithConfig({
+      title: "Show Onboarding",
+      message: "Are you sure you want to reset and show the onboarding screen?",
+      options: [
+        {
+          text: "Cancel",
+          onPress: () => setShowAlert(false)
+        },
+        {
+          text: "Reset",
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('onboardingCompleted');
+              router.replace('/onboarding');
+            } catch (error) {
+              console.error('Error showing onboarding:', error);
+              showAlertWithConfig({
+                title: "Error",
+                message: "Failed to show onboarding. Please try again.",
+                options: [
+                  {
+                    text: "OK",
+                    onPress: () => setShowAlert(false)
+                  }
+                ]
+              });
+            }
+          }
+        }
+      ]
+    });
+  };
+
+  const checkImageCache = async () => {
+    try {
+      const { size, count } = await imageCache.getCacheSize();
+      const sizeInMB = (size / (1024 * 1024)).toFixed(2);
+
+      showAlertWithConfig({
+        title: "Image Cache Info",
+        message: `Cached Images: ${count}\n` +
+          `Total Size: ${sizeInMB} MB`,
+        options: [
+          {
+            text: "OK",
+            onPress: () => setShowAlert(false)
+          }
+        ]
+      });
+    } catch (error) {
+      console.error('Error checking cache:', error);
+      showAlertWithConfig({
+        title: "Error",
+        message: "Failed to get cache information",
+        options: [
+          {
+            text: "OK",
+            onPress: () => setShowAlert(false)
+          }
+        ]
+      });
+    }
+  };
+
+  const clearImageCache = async () => {
+    showAlertWithConfig({
+      title: "Clear Image Cache",
+      message: "Are you sure you want to clear the image cache? All cached images will need to be downloaded again.",
+      options: [
+        {
+          text: "Cancel",
+          onPress: () => setShowAlert(false)
+        },
+        {
+          text: "Clear",
+          onPress: async () => {
+            try {
+              await imageCache.clearCache();
+              showAlertWithConfig({
+                title: "Success",
+                message: "Image cache cleared successfully",
+                options: [
+                  {
+                    text: "OK",
+                    onPress: () => setShowAlert(false)
+                  }
+                ]
+              });
+            } catch (error) {
+              console.error('Error clearing cache:', error);
+              showAlertWithConfig({
+                title: "Error",
+                message: "Failed to clear image cache",
+                options: [
+                  {
+                    text: "OK",
+                    onPress: () => setShowAlert(false)
+                  }
+                ]
+              });
+            }
+          }
+        }
+      ]
+    });
+  };
+
+  const showLog = () => {
+    showAlertWithConfig({
+      title: "Debug Log",
+      message: log.join('\n'),
+      options: [
+        {
+          text: "Clear Log",
+          onPress: () => {
+            setLog([]);
+            setShowAlert(false);
+          }
+        },
+        {
+          text: "Close",
+          onPress: () => setShowAlert(false)
+        }
+      ]
+    });
+  };
+
+  // Generate random IP-like X-Forwarded-For header
+  const generateRandomIP = () => {
+    return Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join('.');
+  };
+
+  const generateSuspiciousHeaders = () => {
+    // Create headers that might trigger Cloudflare's suspicion
+    return {
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'X-Forwarded-For': generateRandomIP(),
+      'X-Requested-With': 'XMLHttpRequest',
+      'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      'Via': '1.1 chrome-compression-proxy',
+      'CF-IPCountry': 'XX',
+      'CF-Connecting-IP': generateRandomIP(),
+      'X-Real-IP': generateRandomIP()
+    };
+  };
+
+  const sendSuspiciousRequest = async (endpoint: string) => {
+    const headers = generateSuspiciousHeaders();
+    addLog(`Sending request to ${endpoint} with suspicious headers`);
+    try {
+      const response = await axios.get(`${MANGA_API_URL}${endpoint}`, {
+        headers,
+        timeout: 5000,
+        validateStatus: status => status < 500 // Accept any status < 500
+      });
+
+      addLog(`Response status: ${response.status}`);
+      if (response.data?.includes('cf-browser-verification')) {
+        addLog('Cloudflare verification detected in response!');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.data?.includes('cf-browser-verification')) {
+          addLog('Cloudflare verification detected in error response!');
+          return true;
+        }
+        addLog(`Request failed: ${error.response?.status || error.message}`);
+      }
+      return false;
+    }
+  };
+
+  const triggerCloudflare = async () => {
+    showAlertWithConfig({
+      title: "Trigger Cloudflare",
+      message: "This will attempt to trigger Cloudflare's browser verification using suspicious request patterns. Continue?",
+      options: [
+        {
+          text: "Cancel",
+          onPress: () => setShowAlert(false)
+        },
+        {
+          text: "Continue",
+          onPress: async () => {
+            setIsTriggering(true);
+            setShowAlert(false);
+            setLog([]);
+
+            try {
+              addLog('Starting Cloudflare trigger attempt using suspicious patterns');
+
+              const endpoints = [
+                '/home',
+                '/search?q=test',
+                '/manga/random',
+                '/latest'
+              ];
+
+              // Try different suspicious patterns
+              for (let i = 0; i < 3; i++) {
+                addLog(`\nAttempt ${i + 1}:`);
+
+                for (const endpoint of endpoints) {
+                  const triggered = await sendSuspiciousRequest(endpoint);
+                  if (triggered) {
+                    setIsTriggering(false);
+                    showAlertWithConfig({
+                      title: "Success",
+                      message: "Cloudflare protection triggered! Would you like to view the debug log?",
+                      options: [
+                        {
+                          text: "View Log",
+                          onPress: showLog
+                        },
+                        {
+                          text: "Close",
+                          onPress: () => setShowAlert(false)
+                        }
+                      ]
+                    });
+                    return;
+                  }
+
+                  // Add a delay between requests
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                // Send a request with a known crawler User-Agent
+                const crawlerAgents = [
+                  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                  'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)',
+                  'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)',
+                ];
+
+                for (const agent of crawlerAgents) {
+                  addLog(`Trying crawler User-Agent: ${agent}`);
+                  const triggered = await sendSuspiciousRequest('/home');
+                  if (triggered) {
+                    setIsTriggering(false);
+                    showAlertWithConfig({
+                      title: "Success",
+                      message: "Cloudflare protection triggered! Would you like to view the debug log?",
+                      options: [
+                        {
+                          text: "View Log",
+                          onPress: showLog
+                        },
+                        {
+                          text: "Close",
+                          onPress: () => setShowAlert(false)
+                        }
+                      ]
+                    });
+                    return;
+                  }
+                }
+              }
+
+              setIsTriggering(false);
+              showAlertWithConfig({
+                title: "Completed",
+                message: "All attempts completed. Would you like to view the debug log?",
+                options: [
+                  {
+                    text: "View Log",
+                    onPress: showLog
+                  },
+                  {
+                    text: "Close",
+                    onPress: () => setShowAlert(false)
+                  }
+                ]
+              });
+            } catch (error: unknown) {
+              addLog(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+              setIsTriggering(false);
+              showAlertWithConfig({
+                title: "Error",
+                message: "An unexpected error occurred. Would you like to view the debug log?",
+                options: [
+                  {
+                    text: "View Log",
+                    onPress: showLog
+                  },
+                  {
+                    text: "Close",
+                    onPress: () => setShowAlert(false)
+                  }
+                ]
+              });
+            }
+          }
+        }
+      ]
+    });
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
-        <Text style={styles.title}>Debug</Text>
+        <Text style={styles.title}>Debug Menu</Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Debug Actions</Text>
-          
+          <Text style={styles.sectionTitle}>System</Text>
+
+          <TouchableOpacity style={styles.option} onPress={checkExpoStatus}>
+            <Ionicons name="information-circle-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Check Expo Status</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.option} onPress={checkForUpdates}>
             <Ionicons name="refresh-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Check for Updates</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Debug Actions</Text>
 
           <TouchableOpacity style={styles.option} onPress={showOnboarding}>
             <Ionicons name="play-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Show Onboarding</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.option, isTriggering && styles.optionDisabled]}
+            onPress={isTriggering ? undefined : triggerCloudflare}
+          >
+            <Ionicons name="shield-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Trigger Cloudflare Check</Text>
+            {isTriggering && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
+          </TouchableOpacity>
+
+          {log.length > 0 && (
+            <TouchableOpacity style={styles.option} onPress={showLog}>
+              <Ionicons name="document-text-outline" size={24} color={colors.text} />
+              <Text style={styles.optionText}>View Debug Log</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Cache Management</Text>
+
+          <TouchableOpacity style={styles.option} onPress={checkImageCache}>
+            <Ionicons name="information-circle-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>View Cache Info</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.option} onPress={clearImageCache}>
+            <Ionicons name="trash-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Clear Image Cache</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Alert
+        visible={showAlert}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type="confirm"
+        onClose={() => setShowAlert(false)}
+        options={alertConfig.options}
+      />
     </SafeAreaView>
   );
 }
@@ -113,6 +525,12 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  optionDisabled: {
+    opacity: 0.7,
+  },
+  spinner: {
+    marginLeft: 10,
   },
   title: {
     fontSize: 34,

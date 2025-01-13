@@ -10,6 +10,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme, Platform, StatusBar } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
+import React from 'react';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,6 +34,14 @@ function RootLayoutNav() {
       >
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen 
+            name="cloudflare" 
+            options={{ 
+              headerShown: true,
+              title: 'Cloudflare Verification',
+              presentation: 'modal'
+            }} 
+          />
         </Stack>
       </NavigationThemeProvider>
     </>

@@ -22,6 +22,7 @@ import { MANGA_API_URL } from '@/constants/Config';
 import MangaCard from '@/components/MangaCard';
 import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 
 /* Type Definitions */
 interface MangaItem {
@@ -38,6 +39,7 @@ export default function HomeScreen() {
   const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
+  const { checkForCloudflare, resetCloudflareDetection } = useCloudflareDetection();
 
   // Safe area insets
   const insets = useSafeAreaInsets();
@@ -48,11 +50,12 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Dimensions for responsive design
-  const { width } = Dimensions.get('window');
-  const CARD_WIDTH = (width - 60) / 2;
-  const MOST_VIEWED_CARD_WIDTH = 160;
-  const MOST_VIEWED_CARD_HEIGHT = 260;
+  // Reset cloudflare detection when component unmounts
+  useEffect(() => {
+    return () => {
+      resetCloudflareDetection();
+    };
+  }, []);
 
   useEffect(() => {
     fetchMangaData();
@@ -73,8 +76,10 @@ export default function HomeScreen() {
 
       const html = response.data as string;
 
-      if (html.includes('cf-browser-verification') || html.includes('cf_captcha_kind')) {
-        throw new Error('Cloudflare WAF detected');
+      // Check for Cloudflare verification
+      if (checkForCloudflare(html)) {
+        // The hook will handle navigation to the cloudflare page
+        return;
       }
 
       const parsedMostViewed = parseMostViewedManga(html);
@@ -84,11 +89,7 @@ export default function HomeScreen() {
       setNewReleases(parsedNewReleases);
     } catch (error) {
       console.error('Error fetching manga data:', error);
-      setError(
-        error instanceof Error && error.message === 'Cloudflare WAF detected'
-          ? 'Cloudflare protection detected. Please try again later.'
-          : 'An error occurred while fetching manga data. Please try again.'
-      );
+      setError('An error occurred while fetching manga data. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -171,7 +172,7 @@ export default function HomeScreen() {
               <Text style={styles.sectionTitle}>New Releases</Text>
               <View style={styles.newReleaseGrid}>
                 {newReleases.map((item) => (
-                  <View key={item.id} style={styles.newReleaseItemWrapper}>
+                  <View key={item.id} style={styles.newReleaseWrapper}>
                     {renderNewReleaseItem({ item })}
                   </View>
                 ))}
@@ -260,12 +261,11 @@ const getStyles = (colors: typeof Colors.light) =>
     newReleaseGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      justifyContent: 'space-between',
       paddingHorizontal: 16,
     },
-    newReleaseItemWrapper: {
-      width: (Dimensions.get('window').width - 60) / 2,
-      marginBottom: 20,
+    newReleaseWrapper: {
+      width: '50%',
+      padding: 4,
     },
     content: {
       paddingBottom: 100,

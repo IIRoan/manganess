@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Dimensions,
   useColorScheme,
-  Alert
 } from 'react-native';
 import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,9 +13,13 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
+import { imageCache } from '@/services/CacheImages';
+import Alert from '@/components/Alert';
 
-/* Type Definitions */
-// No custom types are needed in this component.
+interface UpdateMetadata {
+  message?: string;
+  commitMessage?: string;
+}
 
 export default function TabLayout() {
   // Theme and color scheme
@@ -35,6 +38,8 @@ export default function TabLayout() {
   const TAB_WIDTH = TAB_BAR_WIDTH / 5;
 
   // State variables
+  const [updateMessage, setUpdateMessage] = useState<string>('');
+  const [showUpdateAlert, setShowUpdateAlert] = useState(false);
   const pathname = usePathname();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
@@ -43,6 +48,7 @@ export default function TabLayout() {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
     checkForUpdates();
+    imageCache.initializeCache();
   }, []);
 
   const loadEnableDebugTabSetting = async () => {
@@ -68,24 +74,35 @@ export default function TabLayout() {
     try {
       const update = await Updates.checkForUpdateAsync();
       if (update.isAvailable) {
+        // Get the update metadata
+        let message = 'The app will now restart to apply the update.';
+        
+        try {
+          // Try to get the metadata from the update
+          const metadata = update.manifest?.extra?.expoClient?.extra as UpdateMetadata;
+          if (metadata?.commitMessage || metadata?.message) {
+            message += `\n\nChanges in this update:\n${metadata.commitMessage || metadata.message}`;
+          }
+        } catch (metadataError) {
+          console.log('Error parsing update metadata:', metadataError);
+        }
+
+        // Store the message
+        setUpdateMessage(message);
+        
+        // Download the update
         await Updates.fetchUpdateAsync();
-        Alert.alert(
-          'Update Available',
-          'The app will now restart to apply the update.',
-          [
-            {
-              text: 'OK',
-              onPress: async () => {
-                await Updates.reloadAsync();
-              },
-            },
-          ]
-        );
+        
+        // Show the alert
+        setShowUpdateAlert(true);
       }
     } catch (error) {
-      // Don't show error to user, just log it
       console.log('Error checking for updates:', error);
     }
+  };
+
+  const handleUpdate = async () => {
+    await Updates.reloadAsync();
   };
 
 
@@ -110,6 +127,23 @@ export default function TabLayout() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
+       <Alert
+        visible={showUpdateAlert}
+        title="Update Available"
+        message={updateMessage}
+        type="confirm"
+        onClose={() => setShowUpdateAlert(false)}
+        options={[
+          {
+            text: "Update Now",
+            onPress: handleUpdate
+          },
+          {
+            text: "Later",
+            onPress: () => setShowUpdateAlert(false)
+          }
+        ]}
+      />
       <Tabs
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
