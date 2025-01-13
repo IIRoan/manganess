@@ -23,7 +23,6 @@ export default function DebugScreen() {
     options: [] as { text: string; onPress: () => void }[]
   });
 
-  const isExpoGo = !Updates.isEmbeddedLaunch;
 
   const showAlertWithConfig = (config: {
     title: string;
@@ -35,35 +34,37 @@ export default function DebugScreen() {
   };
 
   const checkExpoStatus = async () => {
-    showAlertWithConfig({
-      title: "Expo Environment Info",
-      message: "Current Environment Details:\n" +
-              `Platform: ${Platform.OS}\n` +
-              `Expo Go: ${isExpoGo ? 'Yes' : 'No'}\n` +
-              `Runtime Version: ${Updates.runtimeVersion || 'None'}\n` +
-              `Update Channel: ${Updates.channel || 'development'}\n` +
-              `Update ID: ${Updates.updateId || 'None'}\n` +
-              `Is Embedded: ${Updates.isEmbeddedLaunch}`,
-      options: [
-        {
-          text: "OK",
-          onPress: () => setShowAlert(false)
-        }
-      ]
-    });
+    try {
+      const status = {
+        platform: Platform.OS,
+        isExpoGo: !Updates.isEmbeddedLaunch,
+        runtimeVersion: Updates.runtimeVersion,
+        channel: Updates.channel,
+        updateId: Updates.updateId,
+      };
+
+      showAlertWithConfig({
+        title: "Expo Status",
+        message: Object.entries(status)
+          .map(([key, value]) => `${key}: ${value || 'Not available'}`)
+          .join('\n'),
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
+    } catch (error) {
+      showAlertWithConfig({
+        title: "Error",
+        message: "Failed to get Expo status",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
+    }
   };
 
   const checkForUpdates = async () => {
-    if (isExpoGo) {
+    if (!Updates.isEmbeddedLaunch) {
       showAlertWithConfig({
         title: "Not Available",
-        message: "Update checking is not available in Expo Go. Please use the 'Check Expo Status' button instead.",
-        options: [
-          {
-            text: "OK",
-            onPress: () => setShowAlert(false)
-          }
-        ]
+        message: "Updates are not available in Expo Go",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
       });
       return;
     }
@@ -72,87 +73,58 @@ export default function DebugScreen() {
       showAlertWithConfig({
         title: "Checking",
         message: "Checking for updates...",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+      });
+
+      const update = await Updates.checkForUpdateAsync();
+
+      if (!update.isAvailable) {
+        showAlertWithConfig({
+          title: "No Updates",
+          message: "You're on the latest version",
+          options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+        });
+        return;
+      }
+
+      showAlertWithConfig({
+        title: "Update Available",
+        message: "Would you like to download and install the update?",
         options: [
+          { text: "Cancel", onPress: () => setShowAlert(false) },
           {
-            text: "OK",
-            onPress: () => setShowAlert(false)
+            text: "Update",
+            onPress: async () => {
+              try {
+                await Updates.fetchUpdateAsync();
+                showAlertWithConfig({
+                  title: "Update Ready",
+                  message: "Restart now to apply the update?",
+                  options: [
+                    { text: "Later", onPress: () => setShowAlert(false) },
+                    { text: "Restart", onPress: () => Updates.reloadAsync() }
+                  ]
+                });
+              } catch (error) {
+                showAlertWithConfig({
+                  title: "Error",
+                  message: "Failed to download update",
+                  options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+                });
+              }
+            }
           }
         ]
       });
-      
-      const update = await Updates.checkForUpdateAsync();
-      
-      if (update.isAvailable) {
-        showAlertWithConfig({
-          title: "Update Found",
-          message: "Downloading update...",
-          options: [
-            {
-              text: "OK",
-              onPress: () => setShowAlert(false)
-            }
-          ]
-        });
-        
-        try {
-          await Updates.fetchUpdateAsync();
-          
-          showAlertWithConfig({
-            title: "Update Ready",
-            message: "An update has been downloaded. Restart now to apply it?",
-            options: [
-              {
-                text: "Later",
-                onPress: () => setShowAlert(false)
-              },
-              {
-                text: "Restart",
-                onPress: async () => {
-                  await Updates.reloadAsync();
-                }
-              }
-            ]
-          });
-        } catch (fetchError) {
-          showAlertWithConfig({
-            title: "Download Failed",
-            message: "Failed to download the update. Please try again later.",
-            options: [
-              {
-                text: "OK",
-                onPress: () => setShowAlert(false)
-              }
-            ]
-          });
-          console.error('Error fetching update:', fetchError);
-        }
-      } else {
-        showAlertWithConfig({
-          title: "No Update Available",
-          message: "You're running the latest version!",
-          options: [
-            {
-              text: "OK",
-              onPress: () => setShowAlert(false)
-            }
-          ]
-        });
-      }
     } catch (error) {
-      console.error('Error checking for updates:', error);
       showAlertWithConfig({
         title: "Error",
-        message: `Failed to check for updates: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-                `Please ensure you're connected to the internet.`,
-        options: [
-          {
-            text: "OK",
-            onPress: () => setShowAlert(false)
-          }
-        ]
+        message: "Failed to check for updates",
+        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
       });
     }
   };
+
 
   const showOnboarding = async () => {
     showAlertWithConfig({
@@ -192,11 +164,11 @@ export default function DebugScreen() {
     try {
       const { size, count } = await imageCache.getCacheSize();
       const sizeInMB = (size / (1024 * 1024)).toFixed(2);
-      
+
       showAlertWithConfig({
         title: "Image Cache Info",
         message: `Cached Images: ${count}\n` +
-                `Total Size: ${sizeInMB} MB`,
+          `Total Size: ${sizeInMB} MB`,
         options: [
           {
             text: "OK",
@@ -265,23 +237,17 @@ export default function DebugScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
-        <Text style={styles.title}>Debug</Text>
+        <Text style={styles.title}>Debug Menu</Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Updates</Text>
-          
-          <TouchableOpacity 
-            style={styles.option} 
-            onPress={checkExpoStatus}
-          >
+          <Text style={styles.sectionTitle}>System</Text>
+
+          <TouchableOpacity style={styles.option} onPress={checkExpoStatus}>
             <Ionicons name="information-circle-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Check Expo Status</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.option} 
-            onPress={checkForUpdates}
-          >
+          <TouchableOpacity style={styles.option} onPress={checkForUpdates}>
             <Ionicons name="refresh-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Check for Updates</Text>
           </TouchableOpacity>
@@ -289,7 +255,7 @@ export default function DebugScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Debug Actions</Text>
-          
+
           <TouchableOpacity style={styles.option} onPress={showOnboarding}>
             <Ionicons name="play-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Show Onboarding</Text>
@@ -298,7 +264,7 @@ export default function DebugScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Cache Management</Text>
-          
+
           <TouchableOpacity style={styles.option} onPress={checkImageCache}>
             <Ionicons name="information-circle-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>View Cache Info</Text>

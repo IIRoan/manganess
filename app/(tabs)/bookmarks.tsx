@@ -174,6 +174,7 @@ export default function BookmarksScreen() {
 
     return (
       <TouchableOpacity
+        key={title}
         style={[
           styles.sectionButton,
           activeSection === title && styles.activeSectionButton,
