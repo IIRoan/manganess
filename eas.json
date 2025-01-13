@@ -22,6 +22,15 @@
     },
     "production": {
       "channel": "production"
+    },
+    "testing": {
+      "distribution": "internal",
+      "ios": {
+        "buildConfiguration": "Debug"
+      },
+      "android": {
+        "buildType": "apk"
+      }
     }
   }
 }
