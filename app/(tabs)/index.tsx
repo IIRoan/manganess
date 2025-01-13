@@ -172,7 +172,7 @@ export default function HomeScreen() {
               <Text style={styles.sectionTitle}>New Releases</Text>
               <View style={styles.newReleaseGrid}>
                 {newReleases.map((item) => (
-                  <View key={item.id} style={styles.newReleaseItemWrapper}>
+                  <View key={item.id} style={styles.newReleaseWrapper}>
                     {renderNewReleaseItem({ item })}
                   </View>
                 ))}
@@ -261,12 +261,11 @@ const getStyles = (colors: typeof Colors.light) =>
     newReleaseGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      justifyContent: 'space-between',
       paddingHorizontal: 16,
     },
-    newReleaseItemWrapper: {
-      width: (Dimensions.get('window').width - 60) / 2,
-      marginBottom: 20,
+    newReleaseWrapper: {
+      width: '50%',
+      padding: 4,
     },
     content: {
       paddingBottom: 100,
