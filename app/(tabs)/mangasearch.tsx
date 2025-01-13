@@ -142,7 +142,7 @@ export default function MangaSearchScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Manga Search',
+          title: 'Search',
           headerTintColor: colors.text,
           headerShown: false,
         }}
