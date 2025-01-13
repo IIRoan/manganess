@@ -34,6 +34,14 @@ function RootLayoutNav() {
       >
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen 
+            name="cloudflare" 
+            options={{ 
+              headerShown: true,
+              title: 'Cloudflare Verification',
+              presentation: 'modal'
+            }} 
+          />
         </Stack>
       </NavigationThemeProvider>
     </>
