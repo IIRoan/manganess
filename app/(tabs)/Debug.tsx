@@ -70,15 +70,6 @@ export default function DebugScreen() {
   };
 
   const checkForUpdates = async () => {
-    if (!Updates.isEmbeddedLaunch) {
-      showAlertWithConfig({
-        title: "Not Available",
-        message: "Updates are not available in Expo Go",
-        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
-      });
-      return;
-    }
-
     try {
       showAlertWithConfig({
         title: "Checking",
@@ -86,9 +77,27 @@ export default function DebugScreen() {
         options: [{ text: "OK", onPress: () => setShowAlert(false) }]
       });
 
-      const update = await Updates.checkForUpdateAsync();
+      // Instead of checking isEmbeddedLaunch, check if the update functionality is available
+      let updateAvailable = false;
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        updateAvailable = update.isAvailable;
+      } catch (error) {
+        // If the check fails, it might mean we're in development or the update API is not available
+        console.log('Update check error:', error);
+        showAlertWithConfig({
+          title: "Update Check Failed",
+          message: Platform.select({
+            android: "Updates are only available in release builds downloaded from app stores or custom distribution.",
+            ios: "Updates are only available in release builds downloaded from the App Store or TestFlight.",
+            default: "Updates are not available in this environment."
+          }),
+          options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+        });
+        return;
+      }
 
-      if (!update.isAvailable) {
+      if (!updateAvailable) {
         showAlertWithConfig({
           title: "No Updates",
           message: "You're on the latest version",
@@ -118,7 +127,11 @@ export default function DebugScreen() {
               } catch (error) {
                 showAlertWithConfig({
                   title: "Error",
-                  message: "Failed to download update",
+                  message: Platform.select({
+                    android: "Failed to download update. Please check your internet connection and try again.",
+                    ios: "Failed to download update. Please check your internet connection and try again.",
+                    default: "Failed to download update."
+                  }),
                   options: [{ text: "OK", onPress: () => setShowAlert(false) }]
                 });
               }
@@ -129,7 +142,7 @@ export default function DebugScreen() {
     } catch (error) {
       showAlertWithConfig({
         title: "Error",
-        message: "Failed to check for updates",
+        message: "Failed to check for updates. Please try again later.",
         options: [{ text: "OK", onPress: () => setShowAlert(false) }]
       });
     }
