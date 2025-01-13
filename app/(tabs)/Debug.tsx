@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, useColorScheme, Platform, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -8,6 +8,9 @@ import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { imageCache } from '@/services/CacheImages';
 import Alert from '@/components/Alert';
+import axios from 'axios';
+import { MANGA_API_URL } from '@/constants/Config';
+
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -22,6 +25,13 @@ export default function DebugScreen() {
     message: '',
     options: [] as { text: string; onPress: () => void }[]
   });
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [log, setLog] = useState<string[]>([]);
+
+  const addLog = (message: string) => {
+    console.log(message); // Console logging for development
+    setLog(prev => [...prev, `[${new Date().toISOString()}] ${message}`]);
+  };
 
 
   const showAlertWithConfig = (config: {
@@ -234,6 +244,207 @@ export default function DebugScreen() {
     });
   };
 
+  const showLog = () => {
+    showAlertWithConfig({
+      title: "Debug Log",
+      message: log.join('\n'),
+      options: [
+        {
+          text: "Clear Log",
+          onPress: () => {
+            setLog([]);
+            setShowAlert(false);
+          }
+        },
+        {
+          text: "Close",
+          onPress: () => setShowAlert(false)
+        }
+      ]
+    });
+  };
+
+  // Generate random IP-like X-Forwarded-For header
+  const generateRandomIP = () => {
+    return Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join('.');
+  };
+
+  const generateSuspiciousHeaders = () => {
+    // Create headers that might trigger Cloudflare's suspicion
+    return {
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'X-Forwarded-For': generateRandomIP(),
+      'X-Requested-With': 'XMLHttpRequest',
+      'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      'Via': '1.1 chrome-compression-proxy',
+      'CF-IPCountry': 'XX',
+      'CF-Connecting-IP': generateRandomIP(),
+      'X-Real-IP': generateRandomIP()
+    };
+  };
+
+  const sendSuspiciousRequest = async (endpoint: string) => {
+    const headers = generateSuspiciousHeaders();
+    addLog(`Sending request to ${endpoint} with suspicious headers`);
+    try {
+      const response = await axios.get(`${MANGA_API_URL}${endpoint}`, {
+        headers,
+        timeout: 5000,
+        validateStatus: status => status < 500 // Accept any status < 500
+      });
+
+      addLog(`Response status: ${response.status}`);
+      if (response.data?.includes('cf-browser-verification')) {
+        addLog('Cloudflare verification detected in response!');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.data?.includes('cf-browser-verification')) {
+          addLog('Cloudflare verification detected in error response!');
+          return true;
+        }
+        addLog(`Request failed: ${error.response?.status || error.message}`);
+      }
+      return false;
+    }
+  };
+
+  const triggerCloudflare = async () => {
+    showAlertWithConfig({
+      title: "Trigger Cloudflare",
+      message: "This will attempt to trigger Cloudflare's browser verification using suspicious request patterns. Continue?",
+      options: [
+        {
+          text: "Cancel",
+          onPress: () => setShowAlert(false)
+        },
+        {
+          text: "Continue",
+          onPress: async () => {
+            setIsTriggering(true);
+            setShowAlert(false);
+            setLog([]);
+
+            try {
+              addLog('Starting Cloudflare trigger attempt using suspicious patterns');
+
+              const endpoints = [
+                '/home',
+                '/search?q=test',
+                '/manga/random',
+                '/latest'
+              ];
+
+              // Try different suspicious patterns
+              for (let i = 0; i < 3; i++) {
+                addLog(`\nAttempt ${i + 1}:`);
+
+                for (const endpoint of endpoints) {
+                  const triggered = await sendSuspiciousRequest(endpoint);
+                  if (triggered) {
+                    setIsTriggering(false);
+                    showAlertWithConfig({
+                      title: "Success",
+                      message: "Cloudflare protection triggered! Would you like to view the debug log?",
+                      options: [
+                        {
+                          text: "View Log",
+                          onPress: showLog
+                        },
+                        {
+                          text: "Close",
+                          onPress: () => setShowAlert(false)
+                        }
+                      ]
+                    });
+                    return;
+                  }
+
+                  // Add a delay between requests
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                // Send a request with a known crawler User-Agent
+                const crawlerAgents = [
+                  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                  'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)',
+                  'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)',
+                ];
+
+                for (const agent of crawlerAgents) {
+                  addLog(`Trying crawler User-Agent: ${agent}`);
+                  const triggered = await sendSuspiciousRequest('/home');
+                  if (triggered) {
+                    setIsTriggering(false);
+                    showAlertWithConfig({
+                      title: "Success",
+                      message: "Cloudflare protection triggered! Would you like to view the debug log?",
+                      options: [
+                        {
+                          text: "View Log",
+                          onPress: showLog
+                        },
+                        {
+                          text: "Close",
+                          onPress: () => setShowAlert(false)
+                        }
+                      ]
+                    });
+                    return;
+                  }
+                }
+              }
+
+              setIsTriggering(false);
+              showAlertWithConfig({
+                title: "Completed",
+                message: "All attempts completed. Would you like to view the debug log?",
+                options: [
+                  {
+                    text: "View Log",
+                    onPress: showLog
+                  },
+                  {
+                    text: "Close",
+                    onPress: () => setShowAlert(false)
+                  }
+                ]
+              });
+            } catch (error: unknown) {
+              addLog(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+              setIsTriggering(false);
+              showAlertWithConfig({
+                title: "Error",
+                message: "An unexpected error occurred. Would you like to view the debug log?",
+                options: [
+                  {
+                    text: "View Log",
+                    onPress: showLog
+                  },
+                  {
+                    text: "Close",
+                    onPress: () => setShowAlert(false)
+                  }
+                ]
+              });
+            }
+          }
+        }
+      ]
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
@@ -260,6 +471,22 @@ export default function DebugScreen() {
             <Ionicons name="play-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Show Onboarding</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.option, isTriggering && styles.optionDisabled]}
+            onPress={isTriggering ? undefined : triggerCloudflare}
+          >
+            <Ionicons name="shield-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Trigger Cloudflare Check</Text>
+            {isTriggering && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
+          </TouchableOpacity>
+
+          {log.length > 0 && (
+            <TouchableOpacity style={styles.option} onPress={showLog}>
+              <Ionicons name="document-text-outline" size={24} color={colors.text} />
+              <Text style={styles.optionText}>View Debug Log</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -298,6 +525,12 @@ const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  optionDisabled: {
+    opacity: 0.7,
+  },
+  spinner: {
+    marginLeft: 10,
   },
   title: {
     fontSize: 34,
