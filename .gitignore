@@ -22,6 +22,3 @@ android
 env.ts
 .idea/
 
-package-lock.json
-pnpm-lock.yaml
-package-lock.json
