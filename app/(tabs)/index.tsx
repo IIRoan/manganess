@@ -7,7 +7,6 @@ import {
   FlatList,
   ActivityIndicator,
   ScrollView,
-  Dimensions,
   Image,
   useColorScheme,
 } from 'react-native';
@@ -24,7 +23,7 @@ import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireServ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 
-/* Type Definitions */
+// Types
 interface MangaItem {
   id: string;
   title: string;
@@ -33,6 +32,7 @@ interface MangaItem {
 }
 
 export default function HomeScreen() {
+  // Hooks
   const router = useRouter();
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -40,27 +40,23 @@ export default function HomeScreen() {
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
   const { checkForCloudflare, resetCloudflareDetection } = useCloudflareDetection();
-
-  // Safe area insets
   const insets = useSafeAreaInsets();
 
-  // State variables
+  // State
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [newReleases, setNewReleases] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset cloudflare detection when component unmounts
+  // Effects
   useEffect(() => {
+    fetchMangaData();
     return () => {
       resetCloudflareDetection();
     };
   }, []);
 
-  useEffect(() => {
-    fetchMangaData();
-  }, []);
-
+  // Data Fetching
   const fetchMangaData = async () => {
     try {
       setIsLoading(true);
@@ -76,9 +72,7 @@ export default function HomeScreen() {
 
       const html = response.data as string;
 
-      // Check for Cloudflare verification
       if (checkForCloudflare(html)) {
-        // The hook will handle navigation to the cloudflare page
         return;
       }
 
@@ -94,6 +88,14 @@ export default function HomeScreen() {
       setIsLoading(false);
     }
   };
+
+  // Render Helpers
+  const renderSectionTitle = (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
+    <View style={styles.sectionTitleContainer}>
+      <Ionicons name={iconName} size={24} color={colors.primary} style={styles.sectionIcon} />
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
 
   const renderMostViewedItem = ({ item }: { item: MangaItem }) => (
     <TouchableOpacity
@@ -132,6 +134,7 @@ export default function HomeScreen() {
     </View>
   );
 
+  // Main Render
   return (
     <View style={[styles.safeArea, { paddingTop: insets.top }]}>
       <View style={styles.container}>
@@ -158,7 +161,7 @@ export default function HomeScreen() {
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Top 10 Most Viewed Manga</Text>
+              {renderSectionTitle('Trending Now', 'trophy')}
               <FlatList
                 data={mostViewedManga}
                 renderItem={renderMostViewedItem}
@@ -169,7 +172,7 @@ export default function HomeScreen() {
               />
             </View>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>New Releases</Text>
+              {renderSectionTitle('New Releases', 'sparkles')}
               <View style={styles.newReleaseGrid}>
                 {newReleases.map((item) => (
                   <View key={item.id} style={styles.newReleaseWrapper}>
@@ -185,8 +188,11 @@ export default function HomeScreen() {
   );
 }
 
+
+// Styles
 const getStyles = (colors: typeof Colors.light) =>
   StyleSheet.create({
+    // Layout
     safeArea: {
       flex: 1,
       backgroundColor: colors.background,
@@ -194,6 +200,14 @@ const getStyles = (colors: typeof Colors.light) =>
     container: {
       flex: 1,
     },
+    content: {
+      paddingBottom: 100,
+    },
+    section: {
+      marginBottom: 24,
+    },
+
+    // Header
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -216,6 +230,24 @@ const getStyles = (colors: typeof Colors.light) =>
       justifyContent: 'center',
       alignItems: 'center',
     },
+
+    // Section Titles
+    sectionTitleContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      marginBottom: 16,
+    },
+    sectionIcon: {
+      marginRight: 8,
+    },
+    sectionTitle: {
+      fontSize: 22,
+      fontWeight: 'bold',
+      color: colors.text,
+    },
+
+    // Most Viewed Section
     mostViewedList: {
       paddingLeft: 16,
       paddingRight: 8,
@@ -244,6 +276,27 @@ const getStyles = (colors: typeof Colors.light) =>
       padding: 10,
       backgroundColor: `${colors.background}CC`,
     },
+
+    // New Releases Section
+    newReleaseGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: 16,
+    },
+    newReleaseWrapper: {
+      width: '50%',
+      padding: 4,
+    },
+    cardWrapper: {
+      width: '100%',
+      marginBottom: 16,
+    },
+    card: {
+      width: '100%',
+      aspectRatio: 3 / 4,
+    },
+
+    // Common Components
     titleContainer: {
       flex: 1,
       marginRight: 10,
@@ -258,32 +311,8 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 16,
       fontWeight: 'bold',
     },
-    newReleaseGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      paddingHorizontal: 16,
-    },
-    newReleaseWrapper: {
-      width: '50%',
-      padding: 4,
-    },
-    content: {
-      paddingBottom: 100,
-    },
-    section: {
-      marginBottom: 24,
-    },
-    sectionTitle: {
-      fontSize: 22,
-      fontWeight: 'bold',
-      marginBottom: 16,
-      paddingHorizontal: 16,
-      color: colors.text,
-    },
-    cardWrapper: {
-      width: '100%',
-      marginBottom: 16,
-    },
+
+    // Loading & Error States
     loader: {
       flex: 1,
       justifyContent: 'center',
@@ -311,9 +340,5 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.card,
       fontSize: 16,
       fontWeight: 'bold',
-    },
-    card: {
-      width: '100%',
-      aspectRatio: 3 / 4,
     },
   });
