@@ -226,29 +226,33 @@ export default function MangaSearchScreen() {
   );
 }
 
-const getStyles = (colors: typeof Colors.light, width: number, height: number) => {
+const getStyles = (
+  colors: typeof Colors.light,
+  width: number,
+  height: number
+) => {
   const cardWidth = (width - 48) / 2; // 48 = padding (16) * 2 + gap between cards (16)
   const imageHeight = (cardWidth * 3) / 2; // 3:2 aspect ratio
 
   return StyleSheet.create({
-    // Main container
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
-
-    // Header styles
     header: {
       backgroundColor: colors.background,
-      paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
       shadowColor: colors.text,
       shadowOffset: { width: 0, height: 2 },
       shadowRadius: 4,
+      elevation: 3,
       zIndex: 1,
     },
     searchContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       padding: 16,
       gap: 12,
     },
@@ -257,8 +261,8 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
     },
     searchInputContainer: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.card,
       borderRadius: 24,
       borderWidth: 1,
@@ -278,14 +282,17 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
     clearButton: {
       padding: 4,
     },
-
-    // Grid layout styles
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
     gridContainer: {
       padding: 16,
       paddingBottom: 32,
     },
     columnWrapper: {
-      justifyContent: 'space-between',
+      justifyContent: "space-between",
     },
     gridItem: {
       width: cardWidth,
@@ -294,7 +301,7 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
-      overflow: 'hidden',
+      overflow: "hidden",
     },
     gridItemLeft: {
       marginRight: 8,
@@ -302,72 +309,56 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
     gridItemRight: {
       marginLeft: 8,
     },
-
-    // Image container styles
     imageContainer: {
-      width: '100%',
+      width: "100%",
       height: imageHeight,
-      position: 'relative',
+      position: "relative",
     },
     coverImage: {
-      width: '100%',
-      height: '100%',
+      width: "100%",
+      height: "100%",
     },
-
-    // Content container styles
+    typeBadge: {
+      position: "absolute",
+      top: 8,
+      left: 8,
+      backgroundColor: colors.card + "E6",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    typeText: {
+      fontSize: 10,
+      color: colors.primary,
+      fontWeight: "600",
+    },
     contentContainer: {
       padding: 8,
-      flex: 1,
     },
     title: {
       fontSize: 14,
-      fontWeight: '600',
+      fontWeight: "600",
       color: colors.text,
       marginBottom: 4,
       lineHeight: 20,
     },
-    bottomRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-end',
-      marginTop: 'auto',
-    },
     chapterInfo: {
-      flex: 1,
-      marginRight: 8,
+      marginTop: 4,
     },
     chapterText: {
       fontSize: 12,
       color: colors.text,
-      fontWeight: '500',
+      fontWeight: "500",
     },
     dateText: {
       fontSize: 10,
       color: colors.tabIconDefault,
       marginTop: 2,
     },
-    typeBadge: {
-      backgroundColor: colors.primary + '20',
-      paddingHorizontal: 6,
-      paddingVertical: 3,
-      borderRadius: 8,
-    },
-    typeText: {
-      fontSize: 10,
-      color: colors.primary,
-      fontWeight: '600',
-    },
-
-    // Loading and empty state styles
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
     emptyStateContainer: {
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       padding: 16,
       marginTop: height * 0.2,
     },
@@ -375,21 +366,21 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       width: 64,
       height: 64,
       borderRadius: 32,
-      backgroundColor: colors.primary + '20',
-      alignItems: 'center',
-      justifyContent: 'center',
+      backgroundColor: colors.primary + "20",
+      alignItems: "center",
+      justifyContent: "center",
       marginBottom: 16,
     },
     emptyStateTitle: {
       fontSize: 18,
-      fontWeight: '600',
+      fontWeight: "600",
       color: colors.text,
       marginBottom: 8,
     },
     emptyStateText: {
       fontSize: 14,
       color: colors.tabIconDefault,
-      textAlign: 'center',
+      textAlign: "center",
       maxWidth: 250,
     },
   });
