@@ -87,6 +87,7 @@ export default function MangaSearchScreen() {
     if (!dateString) return "";
     return dateString;
   };
+
   const renderSearchResult = useCallback(
     ({ item, index }: { item: MangaItem; index: number }) => {
       const isEven = index % 2 === 0;
@@ -114,7 +115,7 @@ export default function MangaSearchScreen() {
               {item.latestChapter && (
                 <View style={styles.chapterInfo}>
                   <Text style={styles.chapterText}>
-                    Ch. {item.latestChapter.number}
+                    Chapters: {item.latestChapter.number}
                   </Text>
                   <Text style={styles.dateText}>
                     {formatDate(item.latestChapter.date)}
@@ -140,7 +141,7 @@ export default function MangaSearchScreen() {
         </View>
         <Text style={styles.emptyStateTitle}>Find Your Next Read</Text>
         <Text style={styles.emptyStateText}>
-          Search by title to discover your next favorite manga series
+          Search by title to discover your next favorite manga/manhwa
         </Text>
       </View>
     ),
@@ -231,8 +232,8 @@ const getStyles = (
   width: number,
   height: number
 ) => {
-  const cardWidth = (width - 48) / 2; // 48 = padding (16) * 2 + gap between cards (16)
-  const imageHeight = (cardWidth * 3) / 2; // 3:2 aspect ratio
+  const cardWidth = (width - 48) / 2;
+  const imageHeight = (cardWidth * 3) / 2;
 
   return StyleSheet.create({
     container: {
@@ -253,7 +254,8 @@ const getStyles = (
     searchContainer: {
       flexDirection: "row",
       alignItems: "center",
-      padding: 16,
+      padding: 12,
+      paddingTop: 8,
       gap: 12,
     },
     backButton: {
@@ -318,22 +320,28 @@ const getStyles = (
       width: "100%",
       height: "100%",
     },
+    contentContainer: {
+      padding: 12,
+    },
+    bottomRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+      marginTop: 8,
+    },
     typeBadge: {
-      position: "absolute",
-      top: 8,
-      left: 8,
-      backgroundColor: colors.card + "E6",
-      paddingHorizontal: 8,
+      backgroundColor: colors.primary + "20",
+      paddingHorizontal: 10,
       paddingVertical: 4,
-      borderRadius: 12,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.primary + "40",
     },
     typeText: {
-      fontSize: 10,
+      fontSize: 12,
       color: colors.primary,
       fontWeight: "600",
-    },
-    contentContainer: {
-      padding: 8,
+      textTransform: "uppercase",
     },
     title: {
       fontSize: 14,
@@ -343,7 +351,8 @@ const getStyles = (
       lineHeight: 20,
     },
     chapterInfo: {
-      marginTop: 4,
+      flex: 1,
+      marginRight: 8,
     },
     chapterText: {
       fontSize: 12,
