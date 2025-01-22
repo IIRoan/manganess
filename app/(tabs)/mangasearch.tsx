@@ -255,7 +255,7 @@ const getStyles = (
       flexDirection: "row",
       alignItems: "center",
       padding: 12,
-      paddingTop: 8,
+      paddingTop: 0,
       gap: 12,
     },
     backButton: {
