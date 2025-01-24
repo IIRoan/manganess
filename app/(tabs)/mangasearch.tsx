@@ -26,46 +26,54 @@ export default function MangaSearchScreen() {
   const colors = Colors[actualTheme];
   const { width, height } = useWindowDimensions();
   const styles = getStyles(colors, width, height);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Replace the existing onChangeSearch with this:
-  const onChangeSearch = useCallback((query: string) => {
-    setSearchQuery(query);
-    setIsSearching(query.length > 0);
-    
-    if (query.length <= 2) {
-      setSearchResults([]);
-    }
-  }, []);
-
-  // Add this new effect to handle the debounced search
   useEffect(() => {
     const performSearch = async () => {
       if (debouncedSearchQuery.length > 2) {
         setIsLoading(true);
+        
+        // Cancel previous request
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        
+        // Create new abort controller
+        abortControllerRef.current = new AbortController();
+        
         try {
           const results = await searchManga(debouncedSearchQuery);
           setSearchResults(results);
-        } catch (err) {
-          console.error(err);
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name !== 'AbortError') {
+            console.error('Search error:', err);
+          }
         } finally {
           setIsLoading(false);
         }
+      } else {
+        setSearchResults([]);
       }
     };
 
     performSearch();
+    
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [debouncedSearchQuery]);
-
-  const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -74,6 +82,11 @@ export default function MangaSearchScreen() {
       }
     }, [searchQuery])
   );
+
+  const onChangeSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    setIsSearching(query.length > 0);
+  }, []);
 
   const clearSearch = useCallback(() => {
     setSearchQuery("");
@@ -121,16 +134,18 @@ export default function MangaSearchScreen() {
             />
           </View>
           <View style={styles.contentContainer}>
-            <Text style={styles.title} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <View style={styles.bottomRow}>
+            <View style={styles.upperContent}>
+              <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
+                {item.title}
+              </Text>
+            </View>
+            <View style={styles.lowerContent}>
               {item.latestChapter && (
                 <View style={styles.chapterInfo}>
-                  <Text style={styles.chapterText}>
-                    Chapters: {item.latestChapter.number}
+                  <Text style={styles.chapterText} numberOfLines={1}>
+                    Ch. {item.latestChapter.number}
                   </Text>
-                  <Text style={styles.dateText}>
+                  <Text style={styles.dateText} numberOfLines={1}>
                     {formatDate(item.latestChapter.date)}
                   </Text>
                 </View>
@@ -145,6 +160,7 @@ export default function MangaSearchScreen() {
     },
     [handleMangaPress, styles]
   );
+
 
   const EmptyState = useCallback(
     () => (
@@ -200,15 +216,8 @@ export default function MangaSearchScreen() {
               onChangeText={onChangeSearch}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity
-                onPress={clearSearch}
-                style={styles.clearButton}
-              >
-                <Ionicons
-                  name="close"
-                  size={20}
-                  color={colors.tabIconDefault}
-                />
+              <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                <Ionicons name="close" size={20} color={colors.tabIconDefault} />
               </TouchableOpacity>
             )}
           </View>
@@ -258,10 +267,6 @@ const getStyles = (
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
       paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
-      shadowColor: colors.text,
-      shadowOffset: { width: 0, height: 2 },
-      shadowRadius: 4,
-      elevation: 3,
       zIndex: 1,
     },
     searchContainer: {
@@ -272,7 +277,8 @@ const getStyles = (
       gap: 12,
     },
     backButton: {
-      padding: 4,
+      padding: 8,
+      marginLeft: 4,
     },
     searchInputContainer: {
       flex: 1,
@@ -295,7 +301,7 @@ const getStyles = (
       paddingVertical: 8,
     },
     clearButton: {
-      padding: 4,
+      padding: 8,
     },
     loadingContainer: {
       flex: 1,
@@ -327,20 +333,38 @@ const getStyles = (
     imageContainer: {
       width: "100%",
       height: imageHeight,
-      position: "relative",
     },
     coverImage: {
       width: "100%",
       height: "100%",
+      backgroundColor: colors.border,
     },
     contentContainer: {
       padding: 12,
+      height: 120,
+      justifyContent: "space-between",
     },
-    bottomRow: {
+    upperContent: {
+      flex: 1.2,
+      marginBottom: 2,
+      justifyContent: "flex-start",
+    },
+    lowerContent: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-end",
-      marginTop: 8,
+      minHeight: 40,
+    },
+    title: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.text,
+      lineHeight: 20,
+    },
+    chapterInfo: {
+      flex: 1,
+      marginRight: 8,
+      justifyContent: "flex-end",
     },
     typeBadge: {
       backgroundColor: colors.primary + "20",
@@ -349,23 +373,13 @@ const getStyles = (
       borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.primary + "40",
+      alignSelf: "flex-end",
     },
     typeText: {
       fontSize: 12,
       color: colors.primary,
       fontWeight: "600",
       textTransform: "uppercase",
-    },
-    title: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: colors.text,
-      marginBottom: 4,
-      lineHeight: 20,
-    },
-    chapterInfo: {
-      flex: 1,
-      marginRight: 8,
     },
     chapterText: {
       fontSize: 12,
