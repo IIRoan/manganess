@@ -10,6 +10,7 @@ import { imageCache } from '@/services/CacheImages';
 import Alert from '@/components/Alert';
 import axios from 'axios';
 import { MANGA_API_URL } from '@/constants/Config';
+import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 
 
 export default function DebugScreen() {
@@ -458,6 +459,29 @@ export default function DebugScreen() {
     });
   };
 
+  const { checkForCloudflare } = useCloudflareDetection();
+
+  const simulateCloudflare = () => {
+    showAlertWithConfig({
+      title: "Simulate Cloudflare",
+      message: "This will simulate a Cloudflare detection. Continue?",
+      options: [
+        {
+          text: "Cancel",
+          onPress: () => setShowAlert(false)
+        },
+        {
+          text: "Continue",
+          onPress: () => {
+            // Simulate Cloudflare by passing HTML with the verification string
+            checkForCloudflare('<div class="cf-browser-verification">test</div>', '/debug');
+            setShowAlert(false);
+          }
+        }
+      ]
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
@@ -485,6 +509,8 @@ export default function DebugScreen() {
             <Text style={styles.optionText}>Show Onboarding</Text>
           </TouchableOpacity>
 
+          
+
           <TouchableOpacity
             style={[styles.option, isTriggering && styles.optionDisabled]}
             onPress={isTriggering ? undefined : triggerCloudflare}
@@ -494,6 +520,11 @@ export default function DebugScreen() {
             {isTriggering && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.option} onPress={simulateCloudflare}>
+            <Ionicons name="shield-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Simulate Cloudflare</Text>
+          </TouchableOpacity>
+          
           {log.length > 0 && (
             <TouchableOpacity style={styles.option} onPress={showLog}>
               <Ionicons name="document-text-outline" size={24} color={colors.text} />

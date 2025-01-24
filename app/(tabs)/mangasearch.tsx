@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   TextInput,
@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "@/constants/Colors";
 import { useTheme } from "@/constants/ThemeContext";
 import { searchManga, MangaItem } from "@/services/mangaFireService";
+import { useDebounce } from '@/hooks/useDebounce';
 
 export default function MangaSearchScreen() {
   const { actualTheme } = useTheme();
@@ -31,6 +32,37 @@ export default function MangaSearchScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
+  // Replace the existing onChangeSearch with this:
+  const onChangeSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    setIsSearching(query.length > 0);
+    
+    if (query.length <= 2) {
+      setSearchResults([]);
+    }
+  }, []);
+
+  // Add this new effect to handle the debounced search
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.length > 2) {
+        setIsLoading(true);
+        try {
+          const results = await searchManga(debouncedSearchQuery);
+          setSearchResults(results);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery]);
+
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -42,25 +74,6 @@ export default function MangaSearchScreen() {
       }
     }, [searchQuery])
   );
-
-  const onChangeSearch = useCallback(async (query: string) => {
-    setSearchQuery(query);
-    setIsSearching(query.length > 0);
-
-    if (query.length > 2) {
-      setIsLoading(true);
-      try {
-        const results = await searchManga(query);
-        setSearchResults(results);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      setSearchResults([]);
-    }
-  }, []);
 
   const clearSearch = useCallback(() => {
     setSearchQuery("");
