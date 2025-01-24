@@ -8,6 +8,7 @@ import CustomWebView from '@/components/CustomWebView';
 import { Ionicons } from '@expo/vector-icons';
 import { WebViewNavigation } from 'react-native-webview';
 import { useColorScheme } from 'react-native';
+import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 
 export default function CloudflarePage() {
   const router = useRouter();
@@ -30,11 +31,14 @@ export default function CloudflarePage() {
     setIsLoading(false);
   };
 
+  const { handleVerificationComplete } = useCloudflareDetection();
+
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
     // Check if we're no longer on a Cloudflare page
     if (!navState.url.includes('cf-browser-verification') && 
         !navState.url.includes('cf_captcha_kind')) {
       setVerificationComplete(true);
+      handleVerificationComplete(); // This will route back to the previous page
     }
   };
 
