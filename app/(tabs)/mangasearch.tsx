@@ -1,295 +1,274 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react"
 import {
   View,
   TextInput,
   StyleSheet,
   Text,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   useWindowDimensions,
   Platform,
   Image,
   Animated,
-} from "react-native";
-import { Stack, useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
-import { Colors } from "@/constants/Colors";
-import { useTheme } from "@/constants/ThemeContext";
-import { searchManga, MangaItem } from "@/services/mangaFireService";
-import { useDebounce } from '@/hooks/useDebounce';
+} from "react-native"
+import { Stack, useRouter } from "expo-router"
+import { useFocusEffect } from "@react-navigation/native"
+import { Ionicons } from "@expo/vector-icons"
+import { Colors } from "@/constants/Colors"
+import { useTheme } from "@/constants/ThemeContext"
+import { searchManga, type MangaItem } from "@/services/mangaFireService"
+import { useDebounce } from "@/hooks/useDebounce"
+import { BlurView } from "expo-blur"
+import { LinearGradient } from "expo-linear-gradient"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 export default function MangaSearchScreen() {
-  const { actualTheme } = useTheme();
-  const colors = Colors[actualTheme];
-  const { width, height } = useWindowDimensions();
-  const styles = getStyles(colors, width, height);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { actualTheme } = useTheme()
+  const colors = Colors[actualTheme]
+  const { width, height } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
+  const styles = getStyles(colors, width, height, insets)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
-  const router = useRouter();
-  const inputRef = useRef<TextInput>(null);
-  const scrollY = useRef(new Animated.Value(0)).current;
+  const router = useRouter()
+  const inputRef = useRef<TextInput>(null)
+  const scrollY = useRef(new Animated.Value(0)).current
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("")
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
+  const [searchResults, setSearchResults] = useState<MangaItem[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
 
   useEffect(() => {
     const performSearch = async () => {
       if (debouncedSearchQuery.length > 2) {
-        setIsLoading(true);
-        
-        // Cancel previous request
+        setIsLoading(true)
+
         if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
+          abortControllerRef.current.abort()
         }
-        
-        // Create new abort controller
-        abortControllerRef.current = new AbortController();
-        
+
+        abortControllerRef.current = new AbortController()
+
         try {
-          const results = await searchManga(debouncedSearchQuery);
-          setSearchResults(results);
+          const results = await searchManga(debouncedSearchQuery)
+          setSearchResults(results)
         } catch (err: unknown) {
-          if (err instanceof Error && err.name !== 'AbortError') {
-            console.error('Search error:', err);
+          if (err instanceof Error && err.name !== "AbortError") {
+            console.error("Search error:", err)
           }
         } finally {
-          setIsLoading(false);
+          setIsLoading(false)
         }
       } else {
-        setSearchResults([]);
+        setSearchResults([])
       }
-    };
+    }
 
-    performSearch();
-    
+    performSearch()
+
     return () => {
       if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+        abortControllerRef.current.abort()
       }
-    };
-  }, [debouncedSearchQuery]);
+    }
+  }, [debouncedSearchQuery])
 
   useFocusEffect(
     useCallback(() => {
       if (searchQuery === "") {
-        inputRef.current?.focus();
+        inputRef.current?.focus()
       }
-    }, [searchQuery])
-  );
+    }, [searchQuery]),
+  )
 
   const onChangeSearch = useCallback((query: string) => {
-    setSearchQuery(query);
-    setIsSearching(query.length > 0);
-  }, []);
+    setSearchQuery(query)
+    setIsSearching(query.length > 0)
+  }, [])
 
   const clearSearch = useCallback(() => {
-    setSearchQuery("");
-    setSearchResults([]);
-    setIsSearching(false);
-    inputRef.current?.focus();
-  }, []);
+    setSearchQuery("")
+    setSearchResults([])
+    setIsSearching(false)
+    inputRef.current?.focus()
+  }, [])
 
   const handleBack = useCallback(() => {
-    router.back();
-  }, [router]);
+    router.back()
+  }, [router])
 
   const handleMangaPress = useCallback(
     (item: MangaItem) => {
       router.push({
         pathname: "/manga/[id]",
         params: { id: item.id },
-      });
+      })
     },
-    [router]
-  );
+    [router],
+  )
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "";
-    return dateString;
-  };
+  const formatDate = useCallback((dateString: string) => {
+    if (!dateString) return ""
+    return dateString
+  }, [])
 
   const renderSearchResult = useCallback(
     ({ item, index }: { item: MangaItem; index: number }) => {
-      const isEven = index % 2 === 0;
       return (
-        <TouchableOpacity
+        <Animated.View
           style={[
-            styles.gridItem,
-            isEven ? styles.gridItemLeft : styles.gridItemRight,
+            styles.cardContainer,
+            {
+              transform: [
+                {
+                  translateY: scrollY.interpolate({
+                    inputRange: [0, 100],
+                    outputRange: [0, index % 2 === 0 ? 50 : 25],
+                    extrapolate: "clamp",
+                  }),
+                },
+              ],
+            },
           ]}
-          onPress={() => handleMangaPress(item)}
-          activeOpacity={0.7}
         >
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: item.imageUrl || "/placeholder.svg" }}
-              style={styles.coverImage}
-              resizeMode="cover"
-            />
-          </View>
-          <View style={styles.contentContainer}>
-            <View style={styles.upperContent}>
-              <Text style={styles.title} numberOfLines={2} ellipsizeMode="tail">
-                {item.title}
-              </Text>
-            </View>
-            <View style={styles.lowerContent}>
-              {item.latestChapter && (
-                <View style={styles.chapterInfo}>
-                  <Text style={styles.chapterText} numberOfLines={1}>
-                    Ch. {item.latestChapter.number}
-                  </Text>
-                  <Text style={styles.dateText} numberOfLines={1}>
-                    {formatDate(item.latestChapter.date)}
-                  </Text>
+          <TouchableOpacity style={styles.card} onPress={() => handleMangaPress(item)} activeOpacity={0.9}>
+            <Image source={{ uri: item.imageUrl || "/placeholder.svg" }} style={styles.cardImage} resizeMode="cover" />
+            <LinearGradient
+              colors={["transparent", actualTheme === "dark" ? "rgba(0,0,0,0.9)" : "rgba(255,255,255,0.9)"]}
+              style={styles.cardGradient}
+            >
+              <View style={styles.cardContent}>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <View style={styles.cardFooter}>
+                  {item.latestChapter && (
+                    <View style={styles.chapterBadge}>
+                      <Text style={styles.chapterText}>Ch. {item.latestChapter.number}</Text>
+                      <Text style={styles.dateText}>{formatDate(item.latestChapter.date)}</Text>
+                    </View>
+                  )}
+                  <View style={styles.typeBadge}>
+                    <Text style={styles.typeText}>{item.type}</Text>
+                  </View>
                 </View>
-              )}
-              <View style={styles.typeBadge}>
-                <Text style={styles.typeText}>{item.type}</Text>
               </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-      );
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+      )
     },
-    [handleMangaPress, styles]
-  );
-
+    [handleMangaPress, styles, actualTheme, scrollY, formatDate],
+  )
 
   const EmptyState = useCallback(
     () => (
       <View style={styles.emptyStateContainer}>
         <View style={styles.emptyStateIcon}>
-          <Ionicons name="search" size={32} color={colors.primary} />
+          <Ionicons name="book-outline" size={48} color={colors.primary} />
         </View>
-        <Text style={styles.emptyStateTitle}>Find Your Next Read</Text>
-        <Text style={styles.emptyStateText}>
-          Search by title to discover your next favorite manga/manhwa
-        </Text>
+        <Text style={styles.emptyStateTitle}>Discover New Stories</Text>
+        <Text style={styles.emptyStateText}>Search for manga, manhwa, and more from our vast collection</Text>
       </View>
     ),
-    [styles, colors.primary]
-  );
+    [styles, colors.primary],
+  )
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Animated.View
-        style={[
-          styles.header,
-          {
-            shadowOpacity: scrollY.interpolate({
-              inputRange: [0, 20],
-              outputRange: [0, 0.1],
-              extrapolate: "clamp",
-            }),
-          },
-        ]}
-      >
+    <View style={styles.rootContainer}>
+      <StatusBar barStyle={actualTheme === "dark" ? "light-content" : "dark-content"} />
+      <Stack.Screen options={{ headerShown: false }} />
+      
+      <View style={[styles.headerWrapper, { backgroundColor: colors.card }]}>
+        <View style={{ height: insets.top * 0.5, backgroundColor: colors.card }} />
         <View style={styles.searchContainer}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.searchInputContainer}>
-            <Ionicons
-              name="search"
-              size={20}
-              color={colors.tabIconDefault}
-              style={styles.searchIcon}
-            />
+            <Ionicons name="search" size={20} color={colors.tabIconDefault} style={styles.searchIcon} />
             <TextInput
               ref={inputRef}
               style={styles.searchInput}
-              placeholder="Search manga..."
+              placeholder="Search manga or manhwa..."
               placeholderTextColor={colors.tabIconDefault}
               value={searchQuery}
               onChangeText={onChangeSearch}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                <Ionicons name="close" size={20} color={colors.tabIconDefault} />
+                <Ionicons name="close-circle-outline" size={20} color={colors.tabIconDefault} />
               </TouchableOpacity>
             )}
           </View>
         </View>
-      </Animated.View>
+      </View>
 
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <Animated.FlatList
-          data={isSearching ? searchResults : []}
-          renderItem={renderSearchResult}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          contentContainerStyle={styles.gridContainer}
-          columnWrapperStyle={styles.columnWrapper}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true }
-          )}
-          ListEmptyComponent={isSearching ? null : EmptyState}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        />
-      )}
-    </SafeAreaView>
-  );
+      <View style={styles.contentContainer}>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <Animated.FlatList
+            data={isSearching ? searchResults : []}
+            renderItem={renderSearchResult}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            contentContainerStyle={styles.gridContainer}
+            columnWrapperStyle={styles.columnWrapper}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+            ListEmptyComponent={isSearching ? null : EmptyState}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          />
+        )}
+      </View>
+    </View>
+  )
 }
 
-const getStyles = (
-  colors: typeof Colors.light,
-  width: number,
-  height: number
-) => {
-  const cardWidth = (width - 48) / 2;
-  const imageHeight = (cardWidth * 3) / 2;
+const getStyles = (colors: typeof Colors.light, width: number, height: number, insets: any) => {
+  const cardWidth = (width - 48) / 2
+  const cardHeight = cardWidth * 1.5
 
   return StyleSheet.create({
-    container: {
+    rootContainer: {
       flex: 1,
       backgroundColor: colors.background,
     },
-    header: {
-      backgroundColor: colors.background,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
-      zIndex: 1,
+    headerWrapper: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
     },
     searchContainer: {
       flexDirection: "row",
       alignItems: "center",
-      padding: 12,
-      paddingTop: 0,
+      padding: 16,
       gap: 12,
+      backgroundColor: colors.card,
+    },
+    contentContainer: {
+      flex: 1,
+      marginTop: insets.top * 0.3 + 76,
     },
     backButton: {
       padding: 8,
-      marginLeft: 4,
     },
     searchInputContainer: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: colors.card,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 12,
       paddingHorizontal: 16,
-      height: 48,
+      height: 44,
     },
     searchIcon: {
       marginRight: 8,
@@ -310,76 +289,57 @@ const getStyles = (
     },
     gridContainer: {
       padding: 16,
-      paddingBottom: 32,
+      paddingBottom: 150,
     },
+    
     columnWrapper: {
       justifyContent: "space-between",
     },
-    gridItem: {
+    cardContainer: {
       width: cardWidth,
+      height: cardHeight,
       marginBottom: 16,
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      overflow: "hidden",
     },
-    gridItemLeft: {
-      marginRight: 8,
-    },
-    gridItemRight: {
-      marginLeft: 8,
-    },
-    imageContainer: {
-      width: "100%",
-      height: imageHeight,
-    },
-    coverImage: {
+    card: {
       width: "100%",
       height: "100%",
-      backgroundColor: colors.border,
+      borderRadius: 16,
+      overflow: "hidden",
+      backgroundColor: colors.card,
     },
-    contentContainer: {
+    cardImage: {
+      width: "100%",
+      height: "100%",
+      position: "absolute",
+    },
+    cardGradient: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: "70%",
+      justifyContent: "flex-end",
       padding: 12,
-      height: 120,
-      justifyContent: "space-between",
     },
-    upperContent: {
-      flex: 1.2,
-      marginBottom: 2,
-      justifyContent: "flex-start",
+    cardContent: {
+      gap: 8,
     },
-    lowerContent: {
+    cardTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.text,
+      textShadowColor: "rgba(0,0,0,0.3)",
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+    },
+    cardFooter: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-end",
-      minHeight: 40,
     },
-    title: {
-      fontSize: 14,
-      fontWeight: "600",
-      color: colors.text,
-      lineHeight: 20,
-    },
-    chapterInfo: {
+    chapterBadge: {
       flex: 1,
       marginRight: 8,
-      justifyContent: "flex-end",
-    },
-    typeBadge: {
-      backgroundColor: colors.primary + "20",
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: colors.primary + "40",
-      alignSelf: "flex-end",
-    },
-    typeText: {
-      fontSize: 12,
-      color: colors.primary,
-      fontWeight: "600",
-      textTransform: "uppercase",
     },
     chapterText: {
       fontSize: 12,
@@ -391,6 +351,20 @@ const getStyles = (
       color: colors.tabIconDefault,
       marginTop: 2,
     },
+    typeBadge: {
+      backgroundColor: colors.primary + "20",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.primary + "40",
+    },
+    typeText: {
+      fontSize: 12,
+      color: colors.primary,
+      fontWeight: "600",
+      textTransform: "uppercase",
+    },
     emptyStateContainer: {
       flex: 1,
       alignItems: "center",
@@ -399,25 +373,25 @@ const getStyles = (
       marginTop: height * 0.2,
     },
     emptyStateIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+      width: 80,
+      height: 80,
+      borderRadius: 40,
       backgroundColor: colors.primary + "20",
       alignItems: "center",
       justifyContent: "center",
       marginBottom: 16,
     },
     emptyStateTitle: {
-      fontSize: 18,
+      fontSize: 24,
       fontWeight: "600",
       color: colors.text,
       marginBottom: 8,
     },
     emptyStateText: {
-      fontSize: 14,
+      fontSize: 16,
       color: colors.tabIconDefault,
       textAlign: "center",
       maxWidth: 250,
     },
-  });
-};
+  })
+}
