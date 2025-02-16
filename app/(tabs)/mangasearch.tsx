@@ -118,26 +118,24 @@ export default function MangaSearchScreen() {
   const renderSearchResult = useCallback(
     ({ item, index }: { item: MangaItem; index: number }) => {
       return (
-        <Animated.View
-          style={[
-            styles.cardContainer,
-            {
-              transform: [
-                {
-                  translateY: scrollY.interpolate({
-                    inputRange: [0, 100],
-                    outputRange: [0, index % 2 === 0 ? 50 : 25],
-                    extrapolate: "clamp",
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <TouchableOpacity style={styles.card} onPress={() => handleMangaPress(item)} activeOpacity={0.9}>
-            <Image source={{ uri: item.imageUrl || "/placeholder.svg" }} style={styles.cardImage} resizeMode="cover" />
+        <View style={styles.cardContainer}>
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => handleMangaPress(item)}
+            activeOpacity={0.9}
+          >
+            <Image
+              source={{ uri: item.imageUrl || "/placeholder.svg" }}
+              style={styles.cardImage}
+              resizeMode="cover"
+            />
             <LinearGradient
-              colors={["transparent", actualTheme === "dark" ? "rgba(0,0,0,0.9)" : "rgba(255,255,255,0.9)"]}
+              colors={[
+                "transparent",
+                actualTheme === "dark"
+                  ? "rgba(0,0,0,0.9)"
+                  : "rgba(255,255,255,0.9)",
+              ]}
               style={styles.cardGradient}
             >
               <View style={styles.cardContent}>
@@ -147,8 +145,12 @@ export default function MangaSearchScreen() {
                 <View style={styles.cardFooter}>
                   {item.latestChapter && (
                     <View style={styles.chapterBadge}>
-                      <Text style={styles.chapterText}>Ch. {item.latestChapter.number}</Text>
-                      <Text style={styles.dateText}>{formatDate(item.latestChapter.date)}</Text>
+                      <Text style={styles.chapterText}>
+                        Ch. {item.latestChapter.number}
+                      </Text>
+                      <Text style={styles.dateText}>
+                        {formatDate(item.latestChapter.date)}
+                      </Text>
                     </View>
                   )}
                   <View style={styles.typeBadge}>
@@ -158,7 +160,7 @@ export default function MangaSearchScreen() {
               </View>
             </LinearGradient>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       )
     },
     [handleMangaPress, styles, actualTheme, scrollY, formatDate],
@@ -171,7 +173,9 @@ export default function MangaSearchScreen() {
           <Ionicons name="book-outline" size={48} color={colors.primary} />
         </View>
         <Text style={styles.emptyStateTitle}>Discover New Stories</Text>
-        <Text style={styles.emptyStateText}>Search for manga, manhwa, and more from our vast collection</Text>
+        <Text style={styles.emptyStateText}>
+          Search for manga, manhwa, and more from our vast collection
+        </Text>
       </View>
     ),
     [styles, colors.primary],
@@ -179,9 +183,11 @@ export default function MangaSearchScreen() {
 
   return (
     <View style={styles.rootContainer}>
-      <StatusBar barStyle={actualTheme === "dark" ? "light-content" : "dark-content"} />
+      <StatusBar
+        barStyle={actualTheme === "dark" ? "light-content" : "dark-content"}
+      />
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       <View style={[styles.headerWrapper, { backgroundColor: colors.card }]}>
         <View style={{ height: insets.top * 0.5, backgroundColor: colors.card }} />
         <View style={styles.searchContainer}>
@@ -189,7 +195,12 @@ export default function MangaSearchScreen() {
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.searchInputContainer}>
-            <Ionicons name="search" size={20} color={colors.tabIconDefault} style={styles.searchIcon} />
+            <Ionicons
+              name="search"
+              size={20}
+              color={colors.tabIconDefault}
+              style={styles.searchIcon}
+            />
             <TextInput
               ref={inputRef}
               style={styles.searchInput}
@@ -200,7 +211,11 @@ export default function MangaSearchScreen() {
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                <Ionicons name="close-circle-outline" size={20} color={colors.tabIconDefault} />
+                <Ionicons
+                  name="close-circle-outline"
+                  size={20}
+                  color={colors.tabIconDefault}
+                />
               </TouchableOpacity>
             )}
           </View>
@@ -220,7 +235,10 @@ export default function MangaSearchScreen() {
             numColumns={2}
             contentContainerStyle={styles.gridContainer}
             columnWrapperStyle={styles.columnWrapper}
-            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: true },
+            )}
             ListEmptyComponent={isSearching ? null : EmptyState}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -231,7 +249,12 @@ export default function MangaSearchScreen() {
   )
 }
 
-const getStyles = (colors: typeof Colors.light, width: number, height: number, insets: any) => {
+const getStyles = (
+  colors: typeof Colors.light,
+  width: number,
+  height: number,
+  insets: any,
+) => {
   const cardWidth = (width - 48) / 2
   const cardHeight = cardWidth * 1.5
 
@@ -241,7 +264,7 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number, i
       backgroundColor: colors.background,
     },
     headerWrapper: {
-      position: 'absolute',
+      position: "absolute",
       top: 0,
       left: 0,
       right: 0,
@@ -291,7 +314,7 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number, i
       padding: 16,
       paddingBottom: 150,
     },
-    
+
     columnWrapper: {
       justifyContent: "space-between",
     },
