@@ -10,6 +10,7 @@ import { imageCache } from '@/services/CacheImages';
 import Alert from '@/components/Alert';
 import axios from 'axios';
 import { MANGA_API_URL } from '@/constants/Config';
+import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 
 
 export default function DebugScreen() {
@@ -70,15 +71,6 @@ export default function DebugScreen() {
   };
 
   const checkForUpdates = async () => {
-    if (!Updates.isEmbeddedLaunch) {
-      showAlertWithConfig({
-        title: "Not Available",
-        message: "Updates are not available in Expo Go",
-        options: [{ text: "OK", onPress: () => setShowAlert(false) }]
-      });
-      return;
-    }
-
     try {
       showAlertWithConfig({
         title: "Checking",
@@ -86,9 +78,27 @@ export default function DebugScreen() {
         options: [{ text: "OK", onPress: () => setShowAlert(false) }]
       });
 
-      const update = await Updates.checkForUpdateAsync();
+      // Instead of checking isEmbeddedLaunch, check if the update functionality is available
+      let updateAvailable = false;
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        updateAvailable = update.isAvailable;
+      } catch (error) {
+        // If the check fails, it might mean we're in development or the update API is not available
+        console.log('Update check error:', error);
+        showAlertWithConfig({
+          title: "Update Check Failed",
+          message: Platform.select({
+            android: "Updates are only available in release builds downloaded from app stores or custom distribution.",
+            ios: "Updates are only available in release builds downloaded from the App Store or TestFlight.",
+            default: "Updates are not available in this environment."
+          }),
+          options: [{ text: "OK", onPress: () => setShowAlert(false) }]
+        });
+        return;
+      }
 
-      if (!update.isAvailable) {
+      if (!updateAvailable) {
         showAlertWithConfig({
           title: "No Updates",
           message: "You're on the latest version",
@@ -118,7 +128,11 @@ export default function DebugScreen() {
               } catch (error) {
                 showAlertWithConfig({
                   title: "Error",
-                  message: "Failed to download update",
+                  message: Platform.select({
+                    android: "Failed to download update. Please check your internet connection and try again.",
+                    ios: "Failed to download update. Please check your internet connection and try again.",
+                    default: "Failed to download update."
+                  }),
                   options: [{ text: "OK", onPress: () => setShowAlert(false) }]
                 });
               }
@@ -129,7 +143,7 @@ export default function DebugScreen() {
     } catch (error) {
       showAlertWithConfig({
         title: "Error",
-        message: "Failed to check for updates",
+        message: "Failed to check for updates. Please try again later.",
         options: [{ text: "OK", onPress: () => setShowAlert(false) }]
       });
     }
@@ -445,6 +459,29 @@ export default function DebugScreen() {
     });
   };
 
+  const { checkForCloudflare } = useCloudflareDetection();
+
+  const simulateCloudflare = () => {
+    showAlertWithConfig({
+      title: "Simulate Cloudflare",
+      message: "This will simulate a Cloudflare detection. Continue?",
+      options: [
+        {
+          text: "Cancel",
+          onPress: () => setShowAlert(false)
+        },
+        {
+          text: "Continue",
+          onPress: () => {
+            // Simulate Cloudflare by passing HTML with the verification string
+            checkForCloudflare('<div class="cf-browser-verification">test</div>', '/debug');
+            setShowAlert(false);
+          }
+        }
+      ]
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
@@ -472,6 +509,8 @@ export default function DebugScreen() {
             <Text style={styles.optionText}>Show Onboarding</Text>
           </TouchableOpacity>
 
+          
+
           <TouchableOpacity
             style={[styles.option, isTriggering && styles.optionDisabled]}
             onPress={isTriggering ? undefined : triggerCloudflare}
@@ -481,6 +520,11 @@ export default function DebugScreen() {
             {isTriggering && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.option} onPress={simulateCloudflare}>
+            <Ionicons name="shield-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Simulate Cloudflare</Text>
+          </TouchableOpacity>
+          
           {log.length > 0 && (
             <TouchableOpacity style={styles.option} onPress={showLog}>
               <Ionicons name="document-text-outline" size={24} color={colors.text} />
