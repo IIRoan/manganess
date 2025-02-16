@@ -14,12 +14,6 @@ import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
 import { imageCache } from '@/services/CacheImages';
-import Alert from '@/components/Alert';
-
-interface UpdateMetadata {
-  message?: string;
-  commitMessage?: string;
-}
 
 export default function TabLayout() {
   // Theme and color scheme
@@ -74,26 +68,8 @@ export default function TabLayout() {
     try {
       const update = await Updates.checkForUpdateAsync();
       if (update.isAvailable) {
-        // Get the update metadata
-        let message = 'The app will now restart to apply the update.';
-        
-        try {
-          // Try to get the metadata from the update
-          const metadata = update.manifest?.extra?.expoClient?.extra as UpdateMetadata;
-          if (metadata?.commitMessage || metadata?.message) {
-            message += `\n\nChanges in this update:\n${metadata.commitMessage || metadata.message}`;
-          }
-        } catch (metadataError) {
-          console.log('Error parsing update metadata:', metadataError);
-        }
-
-        // Store the message
-        setUpdateMessage(message);
-        
-        // Download the update
+        setUpdateMessage('The app will now restart to apply the update.');
         await Updates.fetchUpdateAsync();
-        
-        // Show the alert
         setShowUpdateAlert(true);
       }
     } catch (error) {
@@ -127,23 +103,6 @@ export default function TabLayout() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
-       <Alert
-        visible={showUpdateAlert}
-        title="Update Available"
-        message={updateMessage}
-        type="confirm"
-        onClose={() => setShowUpdateAlert(false)}
-        options={[
-          {
-            text: "Update Now",
-            onPress: handleUpdate
-          },
-          {
-            text: "Later",
-            onPress: () => setShowUpdateAlert(false)
-          }
-        ]}
-      />
       <Tabs
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
@@ -230,6 +189,14 @@ export default function TabLayout() {
         <Tabs.Screen name="manga/[id]" options={{ href: null }} />
         <Tabs.Screen
           name="manga/[id]/chapter/[chapterNumber]"
+          options={{ href: null }}
+        />
+        <Tabs.Screen
+          name="manga/[id]/chapter/[chapterNumber].styles"
+          options={{ href: null }}
+        />
+        <Tabs.Screen
+          name="manga/[id].styles"
           options={{ href: null }}
         />
       </Tabs>

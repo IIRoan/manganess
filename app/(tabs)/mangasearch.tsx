@@ -11,7 +11,8 @@ import {
   Keyboard,
   ActivityIndicator,
   useWindowDimensions,
-  Platform
+  Platform,
+  Animated,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -19,8 +20,9 @@ import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-import { searchManga, MangaItem } from '@/services/mangaFireService';
+import { searchManga, type MangaItem } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
+import { useDebounce } from '@/hooks/useDebounce';
 
 /* Type Definitions */
 interface LastReadChapters {
@@ -37,9 +39,11 @@ export default function MangaSearchScreen() {
   // Router and Input Ref
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
-  
+  const scrollY = useRef(new Animated.Value(0)).current;
+
   // State variables
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,32 +59,39 @@ export default function MangaSearchScreen() {
   );
 
   // Search function to handle input
-  const onChangeSearch = useCallback(async (query: string) => {
-    setSearchQuery(query);
-    if (query.length > 2) {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const results = await searchManga(query);
-        setSearchResults(results);
-      } catch (err) {
-        setError('Failed to fetch manga. Please try again.');
-        console.error(err);
-      } finally {
-        setIsLoading(false);
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.length > 2) {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+          const results = await searchManga(debouncedSearchQuery);
+          setSearchResults(results);
+        } catch (err) {
+          setError('Failed to fetch manga. Please try again.');
+          console.error(err);
+        } finally {
+          setIsLoading(false);
+        }
+      } else if (debouncedSearchQuery.length === 0) {
+        setSearchResults([]);
       }
-    } else {
-      setSearchResults([]);
-    }
-  }, []);
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery]);
 
   // Clear search
   const clearSearch = useCallback(() => {
     setSearchQuery('');
     setSearchResults([]);
     inputRef.current?.focus();
-  }, [])
+  }, []);
 
+  const handleBack = useCallback(() => {
+    router.back();
+  }, [router]);
 
   // Handle manga item press
   const handleMangaPress = useCallback(
@@ -133,10 +144,20 @@ export default function MangaSearchScreen() {
   // Key extractor for FlatList
   const keyExtractor = useCallback((item: MangaItem) => item.id, []);
 
-  // Handle keyboard dismiss on scroll
-  const handleScrollBegin = () => {
-    Keyboard.dismiss();
-  };
+  const EmptyState = useCallback(
+    () => (
+      <View style={styles.emptyStateContainer}>
+        <View style={styles.emptyStateIcon}>
+          <Ionicons name="book-outline" size={48} color={colors.primary} />
+        </View>
+        <Text style={styles.emptyStateTitle}>Discover New Stories</Text>
+        <Text style={styles.emptyStateText}>
+          Search for manga, manhwa, and more
+        </Text>
+      </View>
+    ),
+    [styles, colors.primary]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -147,41 +168,63 @@ export default function MangaSearchScreen() {
           headerShown: false,
         }}
       />
-     <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={colors.text} style={styles.searchIcon} />
-        <TextInput
-          ref={inputRef}
-          style={styles.searchBar}
-          placeholder="Search manga"
-          placeholderTextColor={colors.tabIconDefault}
-          value={searchQuery}
-          onChangeText={onChangeSearch}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-            <Ionicons name="close-sharp" size={20} color={colors.text} />
+      <View style={styles.headerWrapper}>
+        <View style={{ height: 32, backgroundColor: colors.card }} />
+        <View style={styles.searchContainer}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
+          <View style={styles.searchInputContainer}>
+            <Ionicons
+              name="search"
+              size={20}
+              color={colors.tabIconDefault}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              ref={inputRef}
+              style={styles.searchInput}
+              placeholder="Search manga or manhwa..."
+              placeholderTextColor={colors.tabIconDefault}
+              value={searchQuery}
+              onChangeText={(query) => setSearchQuery(query)}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                <Ionicons
+                  name="close-circle-outline"
+                  size={20}
+                  color={colors.tabIconDefault}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </View>
+      
+      <View style={styles.contentContainer}>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <Animated.FlatList
+            data={searchResults}
+            renderItem={renderMangaCard}
+            keyExtractor={keyExtractor}
+            numColumns={2}
+            contentContainerStyle={styles.gridContainer}
+            columnWrapperStyle={styles.columnWrapper}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: true }
+            )}
+            ListEmptyComponent={EmptyState}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          />
         )}
       </View>
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : searchResults.length === 0 && searchQuery.length > 2 ? (
-        <Text style={styles.emptyText}>No results found.</Text>
-      ) : (
-        <FlatList
-          data={searchResults}
-          renderItem={renderMangaCard}
-          keyExtractor={keyExtractor}
-          numColumns={2}
-          columnWrapperStyle={styles.columnWrapper}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.contentContainer}
-          onScrollBeginDrag={handleScrollBegin}
-          keyboardShouldPersistTaps="handled"
-        />
-      )}
     </SafeAreaView>
   );
 }
@@ -197,59 +240,67 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       backgroundColor: colors.background,
       paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
-    searchContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginHorizontal: 20,
-      paddingHorizontal: 15,
-      height: 50,
-      borderRadius: 25,
+    headerWrapper: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
       backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
-      shadowColor: colors.text,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-      marginBottom: 10,
+    },
+    contentContainer: {
+      flex: 1,
+      marginTop: 46,
+    },
+    searchContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 16,
+      gap: 12,
+      backgroundColor: colors.card,
+    },
+    backButton: {
+      padding: 8,
+    },
+    searchInputContainer: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      height: 44,
     },
     searchIcon: {
-      marginRight: 10,
+      marginRight: 8,
     },
-    searchBar: {
+    searchInput: {
       flex: 1,
       fontSize: 16,
       color: colors.text,
+      paddingVertical: 8,
     },
     clearButton: {
-      padding: 5,
-      marginLeft: 5,
+      padding: 8,
     },
     loadingContainer: {
       flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
+      justifyContent: "center",
+      alignItems: "center",
     },
-    emptyText: {
-      fontSize: 18,
-      textAlign: 'center',
-      marginTop: 40,
-      color: colors.text,
-    },
-    contentContainer: {
-      paddingHorizontal: 16,
-      paddingBottom: 80,
+    gridContainer: {
+      padding: 16,
+      paddingBottom: 150,
     },
     columnWrapper: {
-      justifyContent: 'space-between',
+      justifyContent: "space-between",
     },
     cardWrapper: {
       width: cardWidth,
       marginBottom: 16,
     },
     card: {
-      width: '100%',
+      width: "100%",
       aspectRatio: 3 / 4,
     },
     titleContainer: {
@@ -258,8 +309,36 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
     mangaTitle: {
       color: colors.text,
       fontSize: 14,
-      fontWeight: 'bold',
-      textAlign: 'center',
+      fontWeight: "bold",
+      textAlign: "center",
+    },
+    emptyStateContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16,
+      marginTop: height * 0.2,
+    },
+    emptyStateIcon: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: colors.primary + "20",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 16,
+    },
+    emptyStateTitle: {
+      fontSize: 24,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 8,
+    },
+    emptyStateText: {
+      fontSize: 16,
+      color: colors.tabIconDefault,
+      textAlign: "center",
+      maxWidth: 250,
     },
   });
 };
