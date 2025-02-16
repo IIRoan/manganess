@@ -192,7 +192,11 @@ export default function TabLayout() {
           options={{ href: null }}
         />
         <Tabs.Screen
-          name="manga/[id]/chapter/ReadChapterScreen.styles"
+          name="manga/[id]/chapter/[chapterNumber].styles"
+          options={{ href: null }}
+        />
+        <Tabs.Screen
+          name="manga/[id].styles"
           options={{ href: null }}
         />
       </Tabs>
