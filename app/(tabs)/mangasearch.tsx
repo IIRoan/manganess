@@ -22,6 +22,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { searchManga, type MangaItem } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
+import { useDebounce } from '@/hooks/useDebounce';
 
 /* Type Definitions */
 interface LastReadChapters {
@@ -42,6 +43,7 @@ export default function MangaSearchScreen() {
 
   // State variables
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,24 +59,28 @@ export default function MangaSearchScreen() {
   );
 
   // Search function to handle input
-  const onChangeSearch = useCallback(async (query: string) => {
-    setSearchQuery(query);
-    if (query.length > 2) {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const results = await searchManga(query);
-        setSearchResults(results);
-      } catch (err) {
-        setError('Failed to fetch manga. Please try again.');
-        console.error(err);
-      } finally {
-        setIsLoading(false);
+  useEffect(() => {
+    const performSearch = async () => {
+      if (debouncedSearchQuery.length > 2) {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+          const results = await searchManga(debouncedSearchQuery);
+          setSearchResults(results);
+        } catch (err) {
+          setError('Failed to fetch manga. Please try again.');
+          console.error(err);
+        } finally {
+          setIsLoading(false);
+        }
+      } else if (debouncedSearchQuery.length === 0) {
+        setSearchResults([]);
       }
-    } else {
-      setSearchResults([]);
-    }
-  }, []);
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery]);
 
   // Clear search
   const clearSearch = useCallback(() => {
@@ -138,11 +144,6 @@ export default function MangaSearchScreen() {
   // Key extractor for FlatList
   const keyExtractor = useCallback((item: MangaItem) => item.id, []);
 
-  // Handle keyboard dismiss on scroll
-  const handleScrollBegin = () => {
-    Keyboard.dismiss();
-  };
-
   const EmptyState = useCallback(
     () => (
       <View style={styles.emptyStateContainer}>
@@ -151,7 +152,7 @@ export default function MangaSearchScreen() {
         </View>
         <Text style={styles.emptyStateTitle}>Discover New Stories</Text>
         <Text style={styles.emptyStateText}>
-          Search for manga, manhwa, and more from our vast collection
+          Search for manga, manhwa, and more
         </Text>
       </View>
     ),
@@ -186,7 +187,7 @@ export default function MangaSearchScreen() {
               placeholder="Search manga or manhwa..."
               placeholderTextColor={colors.tabIconDefault}
               value={searchQuery}
-              onChangeText={onChangeSearch}
+              onChangeText={(query) => setSearchQuery(query)}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
@@ -247,15 +248,16 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       zIndex: 10,
       backgroundColor: colors.card,
     },
+    contentContainer: {
+      flex: 1,
+      marginTop: 46,
+    },
     searchContainer: {
       flexDirection: "row",
       alignItems: "center",
       padding: 16,
       gap: 12,
       backgroundColor: colors.card,
-    },
-    contentContainer: {
-      flex: 1,
     },
     backButton: {
       padding: 8,
