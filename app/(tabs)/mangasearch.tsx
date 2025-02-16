@@ -8,7 +8,6 @@ import {
   StatusBar,
   ActivityIndicator,
   useWindowDimensions,
-  Platform,
   Image,
   Animated,
 } from "react-native"
@@ -19,7 +18,6 @@ import { Colors } from "@/constants/Colors"
 import { useTheme } from "@/constants/ThemeContext"
 import { searchManga, type MangaItem } from "@/services/mangaFireService"
 import { useDebounce } from "@/hooks/useDebounce"
-import { BlurView } from "expo-blur"
 import { LinearGradient } from "expo-linear-gradient"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -131,10 +129,9 @@ export default function MangaSearchScreen() {
             />
             <LinearGradient
               colors={[
-                "transparent",
-                actualTheme === "dark"
-                  ? "rgba(0,0,0,0.9)"
-                  : "rgba(255,255,255,0.9)",
+                'transparent',
+                'rgba(0,0,0,0.75)',
+                'rgba(0,0,0,0.95)', 
               ]}
               style={styles.cardGradient}
             >
@@ -336,24 +333,27 @@ const getStyles = (
       position: "absolute",
     },
     cardGradient: {
-      position: "absolute",
+      position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
-      height: "70%",
-      justifyContent: "flex-end",
+      height: '75%',
+      justifyContent: 'flex-end',
       padding: 12,
     },
     cardContent: {
       gap: 8,
     },
+
     cardTitle: {
       fontSize: 16,
-      fontWeight: "600",
-      color: colors.text,
-      textShadowColor: "rgba(0,0,0,0.3)",
+      fontWeight: '700',
+      color: '#FFFFFF',
+      letterSpacing: 0.25,
+      lineHeight: 22,
+      textShadowColor: 'rgba(0,0,0,0.75)',
       textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 2,
+      textShadowRadius: 4,
     },
     cardFooter: {
       flexDirection: "row",
