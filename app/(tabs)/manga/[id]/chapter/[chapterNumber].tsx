@@ -38,7 +38,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomWebView from '@/components/CustomWebView';
-import getStyles from './ReadChapterScreen.styles';
+import getStyles from './[chapterNumber].styles';
 
 const HEADER_HEIGHT = 44;
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);

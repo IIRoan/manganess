@@ -4,21 +4,14 @@ import { decode } from 'html-entities';
 import { MANGA_API_URL } from '@/constants/Config';
 import { searchAnilistMangaByName, updateMangaStatus, isLoggedInToAniList } from '@/services/anilistService';
 
-type MangaType = 'Manga' | 'One-Shot' | 'Doujinshi' | 'Novel' | 'Manhwa' | 'Manhua';
-
 export interface MangaItem {
   id: string;
   title: string;
   banner: string;
   imageUrl: string;
   link: string;
-  type: MangaType;
-  latestChapter?: {
-    number: string;
-    date: string;
-  };
+  type: string;
 }
-
 
 export interface MangaDetails {
   title: string;
@@ -36,6 +29,7 @@ export interface MangaDetails {
 
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
+
 export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
   try {
     const response = await axios.get(`${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword)}`, {
@@ -45,62 +39,20 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
     });
 
     const html = response.data as string;
-    const mangaRegex = /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>.*?(<ul class="content"[^>]*>.*?<\/ul>)?/gs;
+    const mangaRegex = /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
     const matches = [...html.matchAll(mangaRegex)];
 
     return matches.map(match => {
       const link = match[1];
       const id = link.split('/').pop() || '';
-      const rawType = decode(match[3].trim());
-
-      // Normalize the type to match our defined types
-      let normalizedType: MangaType = 'Manga'; // default type
-      switch (rawType.toLowerCase()) {
-        case 'manga':
-          normalizedType = 'Manga';
-          break;
-        case 'manhwa':
-          normalizedType = 'Manhwa';
-          break;
-        case 'manhua':
-          normalizedType = 'Manhua';
-          break;
-        case 'novel':
-          normalizedType = 'Novel';
-          break;
-        case 'one_shot':
-        case 'one-shot':
-          normalizedType = 'One-Shot';
-          break;
-        case 'doujinshi':
-          normalizedType = 'Doujinshi';
-          break;
-      }
-
-      const mangaItem: MangaItem = {
+      return {
         id,
         link: `${MANGA_API_URL}${link}`,
         title: decode(match[4].trim()),
         banner: match[2],
         imageUrl: match[2],
-        type: normalizedType,
+        type: decode(match[3].trim()),
       };
-
-      // Extract latest chapter information if available
-      if (match[5]) {
-        const chapterListHtml = match[5];
-        const latestChapterRegex = /<a href="[^"]+\/chapter-([^"]+)">[^<]*<span>Chap [^<]+ <b>[^<]+<\/b><\/span>\s*<span>([^<]+)<\/span>/;
-        const latestChapterMatch = chapterListHtml.match(latestChapterRegex);
-
-        if (latestChapterMatch) {
-          mangaItem.latestChapter = {
-            number: latestChapterMatch[1],
-            date: latestChapterMatch[2].trim()
-          };
-        }
-      }
-
-      return mangaItem;
     });
   } catch (error) {
     console.error('Error searching manga:', error);
@@ -270,48 +222,18 @@ export const parseNewReleases = (html: string): MangaItem[] => {
 
     // Check if this home-swiper contains the "New Release" heading
     if (swiperContent.includes('<h2>New Release</h2>')) {
-      // Extract individual manga items with type and chapter info
-      const itemRegex = /<div class="swiper-slide unit[^"]*">\s*<a href="\/manga\/([^"]+)">\s*<div class="poster">\s*<div><img src="([^"]+)" alt="([^"]+)"><\/div>\s*<\/div>\s*<span>([^<]+)<\/span>\s*<\/a>(?:.*?<span class="type">([^<]+)<\/span>)?(?:.*?<ul class="content"[^>]*>(.*?)<\/ul>)?/gs;
+      // Extract individual manga items
+      const itemRegex = /<div class="swiper-slide unit[^"]*">\s*<a href="\/manga\/([^"]+)">\s*<div class="poster">\s*<div><img src="([^"]+)" alt="([^"]+)"><\/div>\s*<\/div>\s*<span>([^<]+)<\/span>\s*<\/a>\s*<\/div>/g;
       const matches = Array.from(swiperContent.matchAll(itemRegex));
 
-      return matches.map(match => {
-        const rawType = match[5] ? decode(match[5].trim()) : 'manga';
-        let normalizedType: MangaType = 'Manga';
-        
-        // Normalize the type
-        switch (rawType.toLowerCase()) {
-          case 'manhwa': normalizedType = 'Manhwa'; break;
-          case 'manhua': normalizedType = 'Manhua'; break;
-          case 'novel': normalizedType = 'Novel'; break;
-          case 'one_shot':
-          case 'one-shot': normalizedType = 'One-Shot'; break;
-          case 'doujinshi': normalizedType = 'Doujinshi'; break;
-          default: normalizedType = 'Manga';
-        }
-
-        const mangaItem: MangaItem = {
-          id: match[1],
-          imageUrl: match[2],
-          title: decode(match[4].trim()),
-          banner: '',
-          link: `/manga/${match[1]}`,
-          type: normalizedType
-        };
-
-        // Extract latest chapter if available
-        if (match[6]) {
-          const chapterRegex = /<a href="[^"]+\/chapter-([^"]+)">[^<]*<span>Chap [^<]+ <b>[^<]+<\/b><\/span>\s*<span>([^<]+)<\/span>/;
-          const chapterMatch = match[6].match(chapterRegex);
-          if (chapterMatch) {
-            mangaItem.latestChapter = {
-              number: chapterMatch[1],
-              date: chapterMatch[2].trim()
-            };
-          }
-        }
-
-        return mangaItem;
-      });
+      return matches.map(match => ({
+        id: match[1],
+        imageUrl: match[2],
+        title: decode(match[4].trim()),
+        banner: '',
+        link: `/manga/${match[1]}`, 
+        type: 'manga' 
+      }));
     }
   }
 
@@ -320,49 +242,17 @@ export const parseNewReleases = (html: string): MangaItem[] => {
 };
 
 export const parseMostViewedManga = (html: string): MangaItem[] => {
-  const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?(?:<span class="type">([^<]+)<\/span>)?(?:<ul class="content"[^>]*>(.*?)<\/ul>)?.*?<\/a>/gs;
+  const regex = /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
   const matches = [...html.matchAll(regex)];
-
-  return matches.slice(0, 10).map(match => {
-    const rawType = match[5] ? decode(match[5].trim()) : 'manga';
-    let normalizedType: MangaType = 'Manga';
-    
-    // Normalize the type
-    switch (rawType.toLowerCase()) {
-      case 'manhwa': normalizedType = 'Manhwa'; break;
-      case 'manhua': normalizedType = 'Manhua'; break;
-      case 'novel': normalizedType = 'Novel'; break;
-      case 'one_shot':
-      case 'one-shot': normalizedType = 'One-Shot'; break;
-      case 'doujinshi': normalizedType = 'Doujinshi'; break;
-      default: normalizedType = 'Manga';
-    }
-
-
-    const mangaItem: MangaItem = {
-      id: match[1],
-      rank: parseInt(match[2]),
-      imageUrl: match[3],
-      title: decode(match[4]),
-      banner: '',
-      link: `/manga/${match[1]}`,
-      type: normalizedType
-    };
-
-    // Extract latest chapter if available
-    if (match[6]) {
-      const chapterRegex = /<a href="[^"]+\/chapter-([^"]+)">[^<]*<span>Chap [^<]+ <b>[^<]+<\/b><\/span>\s*<span>([^<]+)<\/span>/;
-      const chapterMatch = match[6].match(chapterRegex);
-      if (chapterMatch) {
-        mangaItem.latestChapter = {
-          number: chapterMatch[1],
-          date: chapterMatch[2].trim()
-        };
-      }
-    }
-
-    return mangaItem;
-  });
+  return matches.slice(0, 10).map(match => ({
+    id: match[1],
+    rank: parseInt(match[2]),
+    imageUrl: match[3],
+    title: decode(match[4]),
+    banner: '',
+    link: `/manga/${match[1]}`,
+    type: 'manga'
+  }));
 };
 
 
