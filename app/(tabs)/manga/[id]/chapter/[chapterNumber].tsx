@@ -248,33 +248,27 @@ export default function ReadChapterScreen() {
   };
 
   const injectedJS = `
-    ${getInjectedJavaScript(Colors[colorScheme].card)}
-    (function() {
-      var tapped = false;
-      var touchStartX = 0;
-      var touchStartY = 0;
-      var touchStartTime = 0;
-      document.addEventListener('touchstart', function(e) {
-        tapped = true;
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchStartTime = new Date().getTime();
-      });
-      document.addEventListener('touchmove', function(e) {
-        var dx = Math.abs(e.touches[0].clientX - touchStartX);
-        var dy = Math.abs(e.touches[0].clientY - touchStartY);
-        if (dx > 5 || dy > 5) {
-          tapped = false;
-        }
-      });
-      document.addEventListener('touchend', function(e) {
-        var duration = new Date().getTime() - touchStartTime;
-        if (tapped && duration < 200) {
-          window.ReactNativeWebView.postMessage('toggleControls');
-        }
-      });
-    })();
-  `;
+  ${getInjectedJavaScript(Colors[colorScheme].card)}
+  (function() {
+    var tapThreshold = 60;
+    var windowWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+
+    document.addEventListener('click', function(e) {
+      var tapX = e.clientX || e.pageX;
+      var isRightEdgeTap = tapX > windowWidth - tapThreshold;
+      var isLeftEdgeTap = tapX < tapThreshold;
+
+      // Check if the click target is a navigation element (e.g., a link or button)
+      var isNavigationElement = e.target.tagName === 'A' || e.target.tagName === 'BUTTON';
+
+      if (!isRightEdgeTap && !isLeftEdgeTap && !isNavigationElement) {
+        window.ReactNativeWebView.postMessage('toggleControls');
+      }
+    });
+  })();
+`;
+
+
 
   const closeBottomSheet = () => {
     bottomSheetRef.current?.close();
@@ -334,12 +328,12 @@ export default function ReadChapterScreen() {
 
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
-    <ExpoStatusBar
-      style={colorScheme === 'dark' ? 'light' : 'dark'}
-      backgroundColor={statusBarBackgroundColor}
-      translucent={true} 
-      hidden={!isControlsVisible}
-    />
+      <ExpoStatusBar
+        style={colorScheme === 'dark' ? 'light' : 'dark'}
+        backgroundColor={statusBarBackgroundColor}
+        translucent={true}
+        hidden={!isControlsVisible}
+      />
 
       {isLoading && (
         <View style={styles.loadingContainer}>
@@ -372,7 +366,7 @@ export default function ReadChapterScreen() {
               domStorageEnabled={true}
               decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.90}
               nestedScrollEnabled={true}
-              overScrollMode="never" 
+              overScrollMode="never"
             />
           </View>
           {isSwipingBack && <SwipeBackIndicator swipeProgress={swipeProgress} />}
