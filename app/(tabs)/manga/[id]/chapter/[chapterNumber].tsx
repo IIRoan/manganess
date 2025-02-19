@@ -13,6 +13,8 @@ import {
   Platform,
   useColorScheme,
   Animated,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import {
   useLocalSearchParams,
@@ -23,8 +25,9 @@ import { WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { BlurView } from 'expo-blur';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   getChapterUrl,
@@ -35,13 +38,11 @@ import {
 } from '@/services/mangaFireService';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CustomWebView from '@/components/CustomWebView';
 import getStyles from './[chapterNumber].styles';
+import SwipeBackIndicator from '@/components/SwipeBackIndicator';
 
-const HEADER_HEIGHT = 44;
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+const { width, height } = Dimensions.get('window');
 
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{
@@ -49,27 +50,26 @@ export default function ReadChapterScreen() {
     chapterNumber: string;
   }>();
   const router = useRouter();
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
   const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
+  const [isSwipingBack, setIsSwipingBack] = useState(false);
+
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const snapPoints = ['60%', '90%'];
   const controlsTimeout = useRef<NodeJS.Timeout>();
-
-  const [imagesLoaded, setImagesLoaded] = useState(0);
-  const [totalImages, setTotalImages] = useState(0);
-  const [shouldLoadEnd, setShouldLoadEnd] = useState(false);
-
+  const swipeProgress = useRef(new Animated.Value(0)).current;
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
     theme === 'system' ? systemColorScheme : (theme as ColorScheme);
+  const styles = getStyles(colorScheme);
   const insets = useSafeAreaInsets();
-  const mergedStyles = getStyles(colorScheme);
 
   const chapterUrl = getChapterUrl(id, chapterNumber);
   const currentChapterIndex = mangaDetails?.chapters?.findIndex(
@@ -84,7 +84,6 @@ export default function ReadChapterScreen() {
     currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
     mangaDetails?.chapters?.[currentChapterIndex + 1];
 
-  // Auto-hide the controls after 3 seconds
   const startControlsTimer = useCallback(() => {
     if (controlsTimeout.current) {
       clearTimeout(controlsTimeout.current);
@@ -99,6 +98,8 @@ export default function ReadChapterScreen() {
   }, [controlsOpacity]);
 
   const showControls = useCallback(() => {
+    if (isBottomSheetOpen) return;
+
     setIsControlsVisible(true);
     Animated.timing(controlsOpacity, {
       toValue: 1,
@@ -106,53 +107,62 @@ export default function ReadChapterScreen() {
       useNativeDriver: true,
     }).start();
     startControlsTimer();
-  }, [controlsOpacity, startControlsTimer]);
+  }, [controlsOpacity, startControlsTimer, isBottomSheetOpen]);
+
+  const hideControls = useCallback(() => {
+    if (controlsTimeout.current) {
+      clearTimeout(controlsTimeout.current);
+    }
+    Animated.timing(controlsOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => setIsControlsVisible(false));
+  }, [controlsOpacity]);
+
+  const handleBottomSheetChange = useCallback(
+    (index: number) => {
+      setIsBottomSheetOpen(index >= 0);
+      index >= 0 ? hideControls() : showControls();
+    },
+    [hideControls, showControls]
+  );
 
   const toggleControls = useCallback(() => {
-    if (isControlsVisible) {
-      if (controlsTimeout.current) {
-        clearTimeout(controlsTimeout.current);
-      }
-      Animated.timing(controlsOpacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => setIsControlsVisible(false));
-    } else {
-      showControls();
-    }
-  }, [isControlsVisible, controlsOpacity, showControls]);
+    if (isBottomSheetOpen) return;
+    isControlsVisible ? hideControls() : showControls();
+  }, [isControlsVisible, hideControls, showControls, isBottomSheetOpen]);
 
-  // Mark the chapter as read (using fallback if needed)
-  useEffect(() => {
-    const markChapterAsReadWithFallback = async () => {
-      try {
-        let title = await AsyncStorage.getItem(`title_${id}`);
-        if (!title) {
-          const details = await fetchMangaDetails(id);
-          title = details.title;
-        }
-        await markChapterAsRead(id, chapterNumber, title);
-        setMangaTitle(title);
-      } catch (error) {
-        console.error('Error marking chapter as read:', error);
+  const markChapterAsReadWithFallback = useCallback(async () => {
+    try {
+      let title = await AsyncStorage.getItem(`title_${id}`);
+      if (!title) {
+        const details = await fetchMangaDetails(id);
+        title = details.title;
       }
-    };
-    markChapterAsReadWithFallback();
+      await markChapterAsRead(id, chapterNumber, title);
+      setMangaTitle(title);
+    } catch (error) {
+      console.error('Error marking chapter as read:', error);
+    }
   }, [id, chapterNumber]);
 
-  // Fetch manga details
-  useEffect(() => {
-    const fetchDetails = async () => {
-      try {
-        const details = await fetchMangaDetails(id);
-        setMangaDetails(details);
-      } catch (error) {
-        console.error('Error fetching manga details:', error);
-      }
-    };
-    fetchDetails();
+  const fetchDetails = useCallback(async () => {
+    try {
+      const details = await fetchMangaDetails(id);
+      setMangaDetails(details);
+    } catch (error) {
+      console.error('Error fetching manga details:', error);
+    }
   }, [id]);
+
+  useEffect(() => {
+    markChapterAsReadWithFallback();
+  }, [markChapterAsReadWithFallback]);
+
+  useEffect(() => {
+    fetchDetails();
+  }, [fetchDetails]);
 
   useFocusEffect(
     useCallback(() => {
@@ -175,20 +185,21 @@ export default function ReadChapterScreen() {
     setIsLoading(false);
   };
 
-  const handleNavigationStateChange = async (
-    navState: WebViewNavigation
-  ) => {
-    if (navState.url !== chapterUrl) {
-      const newChapterMatch = navState.url.match(/\/chapter-(\d+)/);
-      if (newChapterMatch) {
-        const newChapterNumber = newChapterMatch[1];
-        if (mangaTitle) {
-          await markChapterAsRead(id, newChapterNumber, mangaTitle);
+  const handleNavigationStateChange = useCallback(
+    async (navState: WebViewNavigation) => {
+      if (navState.url !== chapterUrl) {
+        const newChapterMatch = navState.url.match(/\/chapter-(\d+)/);
+        if (newChapterMatch) {
+          const newChapterNumber = newChapterMatch[1];
+          if (mangaTitle) {
+            await markChapterAsRead(id, newChapterNumber, mangaTitle);
+          }
+          router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
         }
-        router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
       }
-    }
-  };
+    },
+    [chapterUrl, id, mangaTitle, router]
+  );
 
   const handleChapterPress = (chapterNum: string) => {
     bottomSheetRef.current?.close();
@@ -201,89 +212,139 @@ export default function ReadChapterScreen() {
       <TouchableOpacity
         key={chapter.number}
         style={[
-          mergedStyles.chapterItem,
-          chapter.number === chapterNumber && mergedStyles.currentChapter,
+          styles.chapterItem,
+          chapter.number === chapterNumber && styles.currentChapter,
         ]}
         onPress={() => handleChapterPress(chapter.number)}
       >
-        <Text style={mergedStyles.chapterText}>
-          Chapter {chapter.number}
-        </Text>
-        {chapter.number === chapterNumber && (
-          <Ionicons
-            name="bookmark"
-            size={20}
-            color={Colors[colorScheme].primary}
-          />
+        <View style={styles.chapterItemLeft}>
+          <Text style={styles.chapterNumber}>Chapter {chapter.number}</Text>
+          <Text style={styles.chapterDate}>{chapter.date || 'No date'}</Text>
+        </View>
+        {chapter.number === chapterNumber ? (
+          <View style={styles.readIndicator} />
+        ) : (
+          <View style={styles.unreadIndicator} />
         )}
       </TouchableOpacity>
     ));
   };
 
-  const handleNextChapter = () => {
-    if (!hasNextChapter || !mangaDetails?.chapters) return;
-    const nextChapter = mangaDetails.chapters[currentChapterIndex! - 1];
-    router.navigate(`/manga/${id}/chapter/${nextChapter.number}`);
+  const navigateChapter = (chapterOffset: number) => {
+    if (!mangaDetails?.chapters || currentChapterIndex === undefined) return;
+    const newChapter = mangaDetails.chapters[currentChapterIndex + chapterOffset];
+    if (newChapter) {
+      router.navigate(`/manga/${id}/chapter/${newChapter.number}`);
+    }
   };
 
-  const handlePreviousChapter = () => {
-    if (!hasPreviousChapter || !mangaDetails?.chapters) return;
-    const prevChapter = mangaDetails.chapters[currentChapterIndex! + 1];
-    router.navigate(`/manga/${id}/chapter/${prevChapter.number}`);
-  };
+  const handleNextChapter = () => navigateChapter(-1);
+  const handlePreviousChapter = () => navigateChapter(1);
 
-  // Detect tap events from the injected JS inside the WebView.
-  // A quick tap posts the "toggleControls" message.
   const handleWebViewMessage = (event: any) => {
-    const message = event.nativeEvent.data;
-    if (message === 'toggleControls') {
+    if (event.nativeEvent.data === 'toggleControls') {
       toggleControls();
     }
   };
 
-  /* 
-    Merge our injected JavaScript with the original script from 
-    getInjectedJavaScript. The embedded code listens for touch events 
-    and posts a message only when there is a quick tap (minimal movement).
-  */
   const injectedJS = `
-    ${getInjectedJavaScript(Colors[colorScheme].card)}
-    (function() {
-      var tapped = false;
-      var touchStartX = 0;
-      var touchStartY = 0;
-      var touchStartTime = 0;
-      document.addEventListener('touchstart', function(e) {
-        tapped = true;
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchStartTime = new Date().getTime();
-      });
-      document.addEventListener('touchmove', function(e) {
-        var dx = Math.abs(e.touches[0].clientX - touchStartX);
-        var dy = Math.abs(e.touches[0].clientY - touchStartY);
-        if (dx > 5 || dy > 5) {
-          tapped = false;
+  ${getInjectedJavaScript(Colors[colorScheme].card)}
+  (function() {
+    var tapThreshold = 60; 
+    var windowWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+    var windowHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+    var topControlThreshold = windowHeight * 0.4; // 40% of the screen height
+
+    document.addEventListener('click', function(e) {
+      var tapX = e.clientX || e.pageX;
+      var tapY = e.clientY || e.pageY;
+      var isRightEdgeTap = tapX > windowWidth - tapThreshold;
+      var isLeftEdgeTap = tapX < tapThreshold;
+      var isTopControlArea = tapY < topControlThreshold;
+
+      // Check if the click target is a navigation element (e.g., a link or button)
+      var isNavigationElement = e.target.tagName === 'A' || e.target.tagName === 'BUTTON';
+
+      if (isTopControlArea) {
+        window.ReactNativeWebView.postMessage('toggleControls');
+      } else if (!isLeftEdgeTap && !isNavigationElement && isRightEdgeTap) {
+        //Right edge tap on bottom 60%
+      } else if (!isLeftEdgeTap && !isNavigationElement && !isRightEdgeTap) {
+        window.ReactNativeWebView.postMessage('toggleControls');
+      }
+    });
+  })();
+`;
+
+
+
+  const closeBottomSheet = () => {
+    bottomSheetRef.current?.close();
+  };
+
+  const swipeThreshold = 50;
+  const swipeRegionWidth = 50;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (evt, gestureState) => {
+        const { locationX } = evt.nativeEvent;
+        return locationX <= swipeRegionWidth;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const { locationX } = evt.nativeEvent;
+        return locationX <= swipeRegionWidth;
+      },
+      onPanResponderGrant: () => {
+        setIsSwipingBack(true);
+        swipeProgress.setValue(0);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const progress = Math.min(gestureState.dx / swipeThreshold, 1);
+        swipeProgress.setValue(progress);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        setIsSwipingBack(false);
+        if (gestureState.dx > swipeThreshold) {
+          Animated.timing(swipeProgress, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: false,
+          }).start(() => {
+            handleBackPress();
+          });
+        } else {
+          Animated.timing(swipeProgress, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false,
+          }).start();
         }
-      });
-      document.addEventListener('touchend', function(e) {
-        var duration = new Date().getTime() - touchStartTime;
-        if (tapped && duration < 200) {
-          window.ReactNativeWebView.postMessage('toggleControls');
-        }
-      });
-    })();
-  `;
+      },
+      onPanResponderTerminate: () => {
+        setIsSwipingBack(false);
+        Animated.timing(swipeProgress, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false,
+        }).start();
+      },
+    })
+  ).current;
+
+  const statusBarBackgroundColor = isControlsVisible ? 'transparent' : Colors[colorScheme].card;
 
   return (
-    <View style={mergedStyles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
       <ExpoStatusBar
         style={colorScheme === 'dark' ? 'light' : 'dark'}
-        backgroundColor="transparent"
-        translucent
+        backgroundColor={statusBarBackgroundColor}
+        translucent={true}
+        hidden={!isControlsVisible}
       />
+
       {isLoading && (
-        <View style={mergedStyles.loadingContainer}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator
             testID="loading-indicator"
             size="large"
@@ -292,16 +353,16 @@ export default function ReadChapterScreen() {
         </View>
       )}
       {error ? (
-        <View style={mergedStyles.errorContainer}>
-          <Text style={mergedStyles.errorText}>{error}</Text>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : (
         <>
-          <View style={mergedStyles.webViewContainer}>
+          <View style={styles.webViewContainer}>
             <CustomWebView
               source={{ uri: chapterUrl }}
               currentUrl={chapterUrl}
-              style={mergedStyles.webView}
+              style={styles.webView}
               onLoadEnd={handleLoadEnd}
               onError={handleError}
               testID="chapter-webview"
@@ -311,113 +372,131 @@ export default function ReadChapterScreen() {
               allowedHosts={['mangafire.to']}
               javaScriptEnabled={true}
               domStorageEnabled={true}
-              decelerationRate={
-                Platform.OS === 'ios' ? 'normal' : 0.98
-              }
+              decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.9}
               nestedScrollEnabled={true}
+              overScrollMode="never"
             />
           </View>
+          {isSwipingBack && <SwipeBackIndicator swipeProgress={swipeProgress} />}
 
-          <AnimatedBlurView
-            intensity={80}
-            tint={colorScheme === 'dark' ? 'dark' : 'light'}
+          <Animated.View
             style={[
-              mergedStyles.controls,
+              styles.controlsWrapper,
               {
                 opacity: controlsOpacity,
-                height: HEADER_HEIGHT + insets.top,
-                paddingTop: insets.top
+                transform: [
+                  {
+                    translateY: controlsOpacity.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-20, 0],
+                    }),
+                  },
+                ],
               },
             ]}
             pointerEvents={isControlsVisible ? 'auto' : 'none'}
           >
-            <View style={mergedStyles.controlsRow}>
-              <View style={mergedStyles.leftControls}>
-                <TouchableOpacity
-                  testID="back-button"
-                  style={mergedStyles.controlButton}
-                  onPress={handleBackPress}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={24}
-                    color={Colors[colorScheme].text}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={mergedStyles.titleButton}
-                  onPress={() => bottomSheetRef.current?.expand()}
-                >
-                  <Text style={mergedStyles.titleText} numberOfLines={1}>
-                    {mangaTitle || 'Loading...'}
-                  </Text>
-                  <Text style={mergedStyles.chapterText}>
-                    Chapter {chapterNumber}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <View style={mergedStyles.rightControls}>
-                <TouchableOpacity
-                  style={[
-                    mergedStyles.controlButton,
-                    !hasPreviousChapter && mergedStyles.disabledButton,
-                  ]}
-                  onPress={handlePreviousChapter}
-                  disabled={!hasPreviousChapter}
-                >
-                  <Ionicons
-                    name="chevron-back-outline"
-                    size={24}
-                    color={Colors[colorScheme].text}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    mergedStyles.controlButton,
-                    !hasNextChapter && mergedStyles.disabledButton,
-                  ]}
-                  onPress={handleNextChapter}
-                  disabled={!hasNextChapter}
-                >
-                  <Ionicons
-                    name="chevron-forward-outline"
-                    size={24}
-                    color={Colors[colorScheme].text}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={mergedStyles.controlButton}
-                  onPress={() => bottomSheetRef.current?.expand()}
-                >
-                  <Ionicons
-                    name="list-outline"
-                    size={24}
-                    color={Colors[colorScheme].text}
-                  />
-                </TouchableOpacity>
+            <View style={[styles.controls, { paddingTop: insets.top }]}>
+              <View style={styles.controlsContent}>
+                <View style={styles.leftControls}>
+                  <TouchableOpacity
+                    onPress={handleBackPress}
+                    style={styles.backButton}
+                  >
+                    <Ionicons
+                      name="arrow-back"
+                      size={20}
+                      color={Colors[colorScheme].text}
+                    />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      bottomSheetRef.current?.expand();
+                      handleBottomSheetChange(1);
+                    }}
+                    style={styles.titleContainer}
+                  >
+                    <View style={styles.chapterRow}>
+                      <Text style={styles.chapterText}>
+                        Chapter {chapterNumber}
+                      </Text>
+                      <Ionicons
+                        name="menu"
+                        size={16}
+                        color={Colors[colorScheme].text + '66'}
+                        style={styles.menuIcon}
+                      />
+                    </View>
+                    <Text style={styles.titleText} numberOfLines={1}>
+                      {mangaTitle || 'Loading...'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.rightControls}>
+                  <TouchableOpacity
+                    onPress={handlePreviousChapter}
+                    disabled={!hasPreviousChapter}
+                    style={[
+                      styles.navigationButton,
+                      styles.navigationButtonLeft,
+                      !hasPreviousChapter && styles.disabledButton,
+                    ]}
+                  >
+                    <Ionicons
+                      name="chevron-back"
+                      size={22}
+                      color={Colors[colorScheme].text}
+                    />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleNextChapter}
+                    disabled={!hasNextChapter}
+                    style={[
+                      styles.navigationButton,
+                      styles.navigationButtonRight,
+                      !hasNextChapter && styles.disabledButton,
+                    ]}
+                  >
+                    <Ionicons
+                      name="chevron-forward"
+                      size={22}
+                      color={Colors[colorScheme].text}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </AnimatedBlurView>
+          </Animated.View>
 
           <BottomSheet
             ref={bottomSheetRef}
-            snapPoints={snapPoints}
+            snapPoints={['60%', '80%']}
             index={-1}
             enablePanDownToClose
-            backgroundStyle={mergedStyles.bottomSheetBackground}
-            handleIndicatorStyle={mergedStyles.bottomSheetIndicator}
+            onChange={handleBottomSheetChange}
+            backgroundStyle={styles.bottomSheetBackground}
+            handleIndicatorStyle={styles.bottomSheetIndicator}
           >
-            <BottomSheetScrollView
-              contentContainerStyle={mergedStyles.bottomSheetContent}
-            >
-              <Text style={mergedStyles.bottomSheetTitle}>
-                {mangaTitle}
-              </Text>
-              <Text style={mergedStyles.currentChapterTitle}>
-                Current: Chapter {chapterNumber}
-              </Text>
-              {renderChapterList()}
-            </BottomSheetScrollView>
+            <View style={styles.bottomSheetContainer}>
+              <BottomSheetScrollView
+                contentContainerStyle={styles.bottomSheetContent}
+              >
+                <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
+                <Text style={styles.currentChapterTitle}>
+                  Current: Chapter {chapterNumber}
+                </Text>
+                {renderChapterList()}
+              </BottomSheetScrollView>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={closeBottomSheet}
+              >
+                <Text style={styles.closeButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
           </BottomSheet>
         </>
       )}

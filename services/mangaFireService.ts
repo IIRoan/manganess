@@ -231,8 +231,8 @@ export const parseNewReleases = (html: string): MangaItem[] => {
         imageUrl: match[2],
         title: decode(match[4].trim()),
         banner: '',
-        link: `/manga/${match[1]}`, 
-        type: 'manga' 
+        link: `/manga/${match[1]}`,
+        type: 'manga'
       }));
     }
   }
