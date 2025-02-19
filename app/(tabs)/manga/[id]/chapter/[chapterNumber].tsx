@@ -44,6 +44,17 @@ import SwipeBackIndicator from '@/components/SwipeBackIndicator';
 
 const { width, height } = Dimensions.get('window');
 
+// Minimum touch target size (in dp)
+const MIN_TOUCHABLE_SIZE = 48;
+
+// Helper function to ensure touchable size
+const ensureMinimumSize = (size: number) => {
+  return Math.max(size, MIN_TOUCHABLE_SIZE);
+};
+
+// Width of the swipe-back region (in pixels)
+const SWIPE_REGION_WIDTH = 50;
+
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{
     id: string;
@@ -289,11 +300,13 @@ export default function ReadChapterScreen() {
     PanResponder.create({
       onStartShouldSetPanResponder: (evt, gestureState) => {
         const { locationX } = evt.nativeEvent;
-        return locationX <= swipeRegionWidth;
+        // Only activate PanResponder if the touch is near the left edge
+        return locationX <= SWIPE_REGION_WIDTH;
       },
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         const { locationX } = evt.nativeEvent;
-        return locationX <= swipeRegionWidth;
+        // Continue PanResponder only if the touch is near the left edge
+        return locationX <= SWIPE_REGION_WIDTH;
       },
       onPanResponderGrant: () => {
         setIsSwipingBack(true);
@@ -333,6 +346,9 @@ export default function ReadChapterScreen() {
   ).current;
 
   const statusBarBackgroundColor = isControlsVisible ? 'transparent' : Colors[colorScheme].card;
+
+  const enhancedBackButtonSize = ensureMinimumSize(40);
+  const enhancedNavigationButtonSize = ensureMinimumSize(44);
 
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
@@ -374,7 +390,6 @@ export default function ReadChapterScreen() {
               domStorageEnabled={true}
               decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.9}
               nestedScrollEnabled={true}
-              overScrollMode="never"
             />
           </View>
           {isSwipingBack && <SwipeBackIndicator swipeProgress={swipeProgress} />}
@@ -384,14 +399,6 @@ export default function ReadChapterScreen() {
               styles.controlsWrapper,
               {
                 opacity: controlsOpacity,
-                transform: [
-                  {
-                    translateY: controlsOpacity.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-20, 0],
-                    }),
-                  },
-                ],
               },
             ]}
             pointerEvents={isControlsVisible ? 'auto' : 'none'}
@@ -401,7 +408,13 @@ export default function ReadChapterScreen() {
                 <View style={styles.leftControls}>
                   <TouchableOpacity
                     onPress={handleBackPress}
-                    style={styles.backButton}
+                    style={[styles.backButton, { width: enhancedBackButtonSize, height: enhancedBackButtonSize, alignItems: 'center', justifyContent: 'center' }]} // Apply enhanced size
+                    hitSlop={{
+                      top: 20,
+                      bottom: 20,
+                      left: 20,
+                      right: 20,
+                    }}
                   >
                     <Ionicons
                       name="arrow-back"
@@ -442,7 +455,14 @@ export default function ReadChapterScreen() {
                       styles.navigationButton,
                       styles.navigationButtonLeft,
                       !hasPreviousChapter && styles.disabledButton,
+                      { width: enhancedNavigationButtonSize, height: enhancedNavigationButtonSize, alignItems: 'center', justifyContent: 'center' }
                     ]}
+                    hitSlop={{
+                      top: 10,
+                      bottom: 10,
+                      left: 10,
+                      right: 10,
+                    }}
                   >
                     <Ionicons
                       name="chevron-back"
@@ -458,7 +478,14 @@ export default function ReadChapterScreen() {
                       styles.navigationButton,
                       styles.navigationButtonRight,
                       !hasNextChapter && styles.disabledButton,
+                      { width: enhancedNavigationButtonSize, height: enhancedNavigationButtonSize, alignItems: 'center', justifyContent: 'center' }
                     ]}
+                    hitSlop={{
+                      top: 10,
+                      bottom: 10,
+                      left: 10,
+                      right: 10,
+                    }}
                   >
                     <Ionicons
                       name="chevron-forward"
