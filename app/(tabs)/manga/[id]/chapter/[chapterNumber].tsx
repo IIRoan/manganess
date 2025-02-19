@@ -250,18 +250,26 @@ export default function ReadChapterScreen() {
   const injectedJS = `
   ${getInjectedJavaScript(Colors[colorScheme].card)}
   (function() {
-    var tapThreshold = 60;
+    var tapThreshold = 60; 
     var windowWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+    var windowHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+    var topControlThreshold = windowHeight * 0.4; // 40% of the screen height
 
     document.addEventListener('click', function(e) {
       var tapX = e.clientX || e.pageX;
+      var tapY = e.clientY || e.pageY;
       var isRightEdgeTap = tapX > windowWidth - tapThreshold;
       var isLeftEdgeTap = tapX < tapThreshold;
+      var isTopControlArea = tapY < topControlThreshold;
 
       // Check if the click target is a navigation element (e.g., a link or button)
       var isNavigationElement = e.target.tagName === 'A' || e.target.tagName === 'BUTTON';
 
-      if (!isRightEdgeTap && !isLeftEdgeTap && !isNavigationElement) {
+      if (isTopControlArea) {
+        window.ReactNativeWebView.postMessage('toggleControls');
+      } else if (!isLeftEdgeTap && !isNavigationElement && isRightEdgeTap) {
+        //Right edge tap on bottom 60%
+      } else if (!isLeftEdgeTap && !isNavigationElement && !isRightEdgeTap) {
         window.ReactNativeWebView.postMessage('toggleControls');
       }
     });
@@ -364,7 +372,7 @@ export default function ReadChapterScreen() {
               allowedHosts={['mangafire.to']}
               javaScriptEnabled={true}
               domStorageEnabled={true}
-              decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.90}
+              decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.9}
               nestedScrollEnabled={true}
               overScrollMode="never"
             />
