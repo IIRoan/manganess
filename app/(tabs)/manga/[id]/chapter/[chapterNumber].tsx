@@ -15,7 +15,6 @@ import {
   Animated,
   PanResponder,
   Dimensions,
-  StyleSheet,
 } from 'react-native';
 import {
   useLocalSearchParams,
@@ -41,53 +40,9 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import CustomWebView from '@/components/CustomWebView';
 import getStyles from './[chapterNumber].styles';
+import SwipeBackIndicator from '@/components/SwipeBackIndicator';
 
 const { width, height } = Dimensions.get('window');
-
-interface SwipeBackIndicatorProps {
-  swipeProgress: Animated.Value;
-}
-
-const SwipeBackIndicator: React.FC<SwipeBackIndicatorProps> = ({
-  swipeProgress,
-}) => {
-  const colorScheme = useColorScheme() as ColorScheme;
-  const arrowColor = Colors[colorScheme].primary;
-
-  const arrowStyle = {
-    transform: [
-      {
-        translateX: swipeProgress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-50, 0],
-        }),
-      },
-    ],
-    opacity: swipeProgress.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, 1],
-    }),
-  };
-
-  return (
-    <Animated.View style={[indicatorStyles.container, arrowStyle]}>
-      <Ionicons name="arrow-back" size={30} color={arrowColor} />
-    </Animated.View>
-  );
-};
-
-const indicatorStyles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 50,
-    height: height,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-  },
-});
 
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{
@@ -375,13 +330,17 @@ export default function ReadChapterScreen() {
     })
   ).current;
 
+  const statusBarBackgroundColor = isControlsVisible ? 'transparent' : Colors[colorScheme].card;
+
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
-      <ExpoStatusBar
-        style={colorScheme === 'dark' ? 'light' : 'dark'}
-        backgroundColor="transparent"
-        translucent
-      />
+    <ExpoStatusBar
+      style={colorScheme === 'dark' ? 'light' : 'dark'}
+      backgroundColor={statusBarBackgroundColor}
+      translucent={true} 
+      hidden={!isControlsVisible}
+    />
+
       {isLoading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator
@@ -411,8 +370,9 @@ export default function ReadChapterScreen() {
               allowedHosts={['mangafire.to']}
               javaScriptEnabled={true}
               domStorageEnabled={true}
-              decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.98}
+              decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.90}
               nestedScrollEnabled={true}
+              overScrollMode="never" 
             />
           </View>
           {isSwipingBack && <SwipeBackIndicator swipeProgress={swipeProgress} />}
