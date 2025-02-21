@@ -13,7 +13,15 @@ import {
 import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getDebugTabEnabled,
+  setDebugTabEnabled,
+  exportAppData,
+  importAppData,
+  clearAppData,
+  migrateToNewStorage,
+  refreshMangaImages
+} from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
@@ -54,9 +62,9 @@ export default function SettingsScreen() {
 
   const loadEnableDebugTabSetting = async () => {
     try {
-      const value = await AsyncStorage.getItem('enableDebugTab');
-      console.log('Loaded enableDebugTab:', value);
-      setEnableDebugTab(value === 'true');
+      const enabled = await getDebugTabEnabled();
+      console.log('Loaded enableDebugTab:', enabled);
+      setEnableDebugTab(enabled);
     } catch (error) {
       console.error('Error loading enable debug tab setting:', error);
     }
@@ -64,23 +72,20 @@ export default function SettingsScreen() {
 
   const toggleEnableDebugTab = async (value: boolean) => {
     try {
-      await AsyncStorage.setItem('enableDebugTab', value.toString());
-      console.log('Saved enableDebugTab:', value.toString());
+      await setDebugTabEnabled(value);
+      console.log('Saved enableDebugTab:', value);
       setEnableDebugTab(value);
     } catch (error) {
       console.error('Error toggling enable debug tab setting:', error);
     }
   };
 
-  const exportData = async () => {
+  const handleExportData = async () => {
     try {
-      // Get all AsyncStorage data
-      const keys = await AsyncStorage.getAllKeys();
-      const items = await AsyncStorage.multiGet(keys);
-      const exportData = Object.fromEntries(items);
-
+      const exportedData = await exportAppData();
+      
       // Create JSON file
-      const jsonString = JSON.stringify(exportData, null, 2);
+      const jsonString = JSON.stringify(exportedData, null, 2);
       const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
       const filePath = `${FileSystem.documentDirectory}${fileName}`;
 
@@ -100,7 +105,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const importData = async () => {
+  const handleImportData = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/json'
@@ -119,8 +124,7 @@ export default function SettingsScreen() {
           {
             text: 'Import',
             onPress: async () => {
-              await AsyncStorage.clear();
-              await AsyncStorage.multiSet(Object.entries(importedData));
+              await importAppData(importedData);
               Alert.alert('Success', 'Data imported! Please restart the app');
             },
           },
@@ -132,7 +136,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const clearAsyncStorage = () => {
+  const handleClearData = () => {
     Alert.alert(
       'Clear App Data',
       'Are you sure you want to clear all app data? This action cannot be undone.',
@@ -142,10 +146,10 @@ export default function SettingsScreen() {
           text: 'OK',
           onPress: async () => {
             try {
-              await AsyncStorage.clear();
+              await clearAppData();
               Alert.alert('Success', 'All app data has been cleared.');
             } catch (error) {
-              console.error('Error clearing AsyncStorage:', error);
+              console.error('Error clearing app data:', error);
               Alert.alert('Error', 'Failed to clear app data.');
             }
           },
@@ -290,17 +294,48 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Data Management</Text>
-          <TouchableOpacity style={styles.option} onPress={exportData}>
+          <TouchableOpacity style={styles.option} onPress={handleExportData}>
             <Ionicons name="download-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Export App Data</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.option} onPress={importData}>
+          <TouchableOpacity style={styles.option} onPress={handleImportData}>
             <Ionicons name="cloud-upload" size={24} color={colors.text} />
             <Text style={styles.optionText}>Import App Data</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.option} onPress={clearAsyncStorage}>
+          <TouchableOpacity style={styles.option} onPress={handleClearData}>
             <Ionicons name="trash-outline" size={24} color={colors.notification} />
             <Text style={styles.optionText}>Clear App Data</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.option} onPress={async () => {
+            try {
+              const result = await refreshMangaImages();
+              Alert.alert(
+                result.success ? 'Success' : 'Error',
+                result.message
+              );
+            } catch (error) {
+              Alert.alert('Error', 'Failed to refresh manga images');
+            }
+          }}>
+            <Ionicons name="refresh-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Refresh Manga Images</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.option, { borderBottomWidth: 0 }]}
+            onPress={async () => {
+              try {
+                const result = await migrateToNewStorage();
+                Alert.alert(
+                  result.success ? 'Success' : 'Error',
+                  result.message
+                );
+              } catch (error) {
+                Alert.alert('Error', 'Failed to migrate data');
+              }
+            }}
+          >
+            <Ionicons name="sync-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Migrate to New Storage Format</Text>
           </TouchableOpacity>
         </View>
 

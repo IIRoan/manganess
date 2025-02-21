@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, use
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setOnboardingCompleted } from '@/services/settingsService';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { imageCache } from '@/services/CacheImages';
@@ -163,7 +163,7 @@ export default function DebugScreen() {
           text: "Reset",
           onPress: async () => {
             try {
-              await AsyncStorage.removeItem('onboardingCompleted');
+              await setOnboardingCompleted(); // This will reset onboarding status
               router.replace('/onboarding');
             } catch (error) {
               console.error('Error showing onboarding:', error);

@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getAuthData } from './anilistOAuth'; 
+import { getAuthData } from './anilistOAuth';
 import { decode } from 'html-entities';
+import { getMangaData } from './bookmarkService';
+import { saveMangaMapping as saveMapping, getAnilistIdFromInternalId as getMapping } from './mangaMappingService';
+
 const ANILIST_API_URL = 'https://graphql.anilist.co';
 
 interface AnilistManga {
@@ -11,7 +14,6 @@ interface AnilistManga {
     native: string;
   };
 }
-
 
 export const isLoggedInToAniList = async (): Promise<boolean> => {
   try {
@@ -71,9 +73,9 @@ export async function searchAnilistMangaByName(name: string): Promise<AnilistMan
   }
 }
 
-export async function saveMangaMapping(internalId: string, anilistId: number): Promise<void> {
+export async function saveMangaMapping(internalId: string, anilistId: number, title: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(`manga_mapping_${internalId}`, anilistId.toString());
+    await saveMapping(internalId, anilistId, title);
   } catch (error) {
     console.error('Error saving manga mapping:', error);
   }
@@ -81,8 +83,7 @@ export async function saveMangaMapping(internalId: string, anilistId: number): P
 
 export async function getAnilistIdFromInternalId(internalId: string): Promise<number | null> {
   try {
-    const anilistId = await AsyncStorage.getItem(`manga_mapping_${internalId}`);
-    return anilistId ? parseInt(anilistId, 10) : null;
+    return await getMapping(internalId);
   } catch (error) {
     console.error('Error getting AniList ID:', error);
     return null;
@@ -123,7 +124,6 @@ export async function updateMangaStatus(mediaId: number, status: string, progres
     throw error;
   }
 }
-
 
 export async function updateAniListStatus(
   mangaTitle: string,
@@ -184,9 +184,6 @@ export async function updateAniListStatus(
   }
 }
 
-
-// large syncAllMangaWithAniList function
-
 export async function syncAllMangaWithAniList(): Promise<string[]> {
   const debug = (message: string, data?: any) => {
     console.log(`[Manga Sync] ${message}`, data || '');
@@ -215,21 +212,20 @@ export async function syncAllMangaWithAniList(): Promise<string[]> {
         debug(`Processing manga key: ${key}`);
         const id = key.replace('bookmark_', '');
         
-        // Fetch all manga data in parallel
-        const [status, title, readChaptersString] = await Promise.all([
-          AsyncStorage.getItem(key),
-          AsyncStorage.getItem(`title_${id}`),
-          AsyncStorage.getItem(`manga_${id}_read_chapters`)
-        ]);
-
-        if (!title || !status) {
-          debug(`Missing data for manga ${id}`, { title: !!title, status: !!status });
+        // Get manga data from our structured storage
+        const mangaData = await getMangaData(id);
+        
+        if (!mangaData?.title || !mangaData?.bookmarkStatus) {
+          debug(`Missing data for manga ${id}`, { 
+            title: !!mangaData?.title, 
+            status: !!mangaData?.bookmarkStatus 
+          });
           results.push(`Skipped manga with ID ${id}: Missing title or status`);
           failureCount++;
           continue;
         }
 
-        const decodedTitle = decode(title).trim();
+        const decodedTitle = decode(mangaData.title).trim();
         debug(`Searching for manga: ${decodedTitle}`);
 
         // Add retries for AniList search
@@ -259,13 +255,15 @@ export async function syncAllMangaWithAniList(): Promise<string[]> {
           'To Read': 'PLANNING',
           'Reading': 'CURRENT',
           'Read': 'COMPLETED'
-        }[status] || 'PLANNING';
+        }[mangaData.bookmarkStatus] || 'PLANNING';
 
-        const readChapters = readChaptersString ? JSON.parse(readChaptersString) : [];
-        const progress = readChapters.length;
+        const progress = mangaData.readChapters.length;
 
         debug(`Updating status for ${decodedTitle}`, { anilistStatus, progress });
         await updateMangaStatus(anilistManga.id, anilistStatus, progress);
+        
+        // Save the mapping for future use
+        await saveMangaMapping(id, anilistManga.id, decodedTitle);
         
         results.push(`Updated "${decodedTitle}" on AniList: Status=${anilistStatus}, Progress=${progress}`);
         successCount++;

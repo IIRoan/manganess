@@ -26,7 +26,7 @@ import { Ionicons } from '@expo/vector-icons';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMangaData } from '@/services/bookmarkService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -146,8 +146,11 @@ export default function ReadChapterScreen() {
 
   const markChapterAsReadWithFallback = useCallback(async () => {
     try {
-      let title = await AsyncStorage.getItem(`title_${id}`);
-      if (!title) {
+      let mangaData = await getMangaData(id);
+      let title;
+      if (mangaData?.title) {
+        title = mangaData.title;
+      } else {
         const details = await fetchMangaDetails(id);
         title = details.title;
       }

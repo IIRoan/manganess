@@ -12,6 +12,7 @@ import {
   PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMangaData, setMangaData } from '@/services/bookmarkService';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
@@ -91,26 +92,32 @@ export default function BookmarksScreen() {
     currentIndexRef.current = newIndex;
   };
 
-  // Fetch bookmarks from AsyncStorage
+  // Fetch bookmarks using the new structured storage
   const fetchBookmarks = useCallback(async () => {
     setIsLoading(true);
     try {
       const keys = await AsyncStorage.getItem('bookmarkKeys');
       const bookmarkKeys = keys ? JSON.parse(keys) : [];
       const bookmarkPromises = bookmarkKeys.map(async (key: string) => {
-        const status = (await AsyncStorage.getItem(key)) || '';
         const id = key.split('_')[1];
-        const title = (await AsyncStorage.getItem(`title_${id}`)) || '';
-        const lastReadChapter = await getLastReadChapter(id);
-        const imageUrl = (await AsyncStorage.getItem(`image_${id}`)) || '';
-        return { id, title, status, lastReadChapter, imageUrl };
+        const mangaData = await getMangaData(id);
+        if (!mangaData) return null;
+        
+        return {
+          id: mangaData.id,
+          title: mangaData.title,
+          status: mangaData.bookmarkStatus || '',
+          lastReadChapter: mangaData.lastReadChapter ? `Chapter ${mangaData.lastReadChapter}` : 'Not started',
+          imageUrl: mangaData.bannerImage
+        };
       });
-      const bookmarkItems = await Promise.all(bookmarkPromises);
-      setBookmarks(
-        bookmarkItems.filter(
-          (item): item is BookmarkItem => item.title !== '' && item.imageUrl !== ''
-        )
-      );
+      
+      const bookmarkItems = (await Promise.all(bookmarkPromises))
+        .filter((item): item is BookmarkItem => 
+          item !== null && item.title !== '' && item.imageUrl !== ''
+        );
+      
+      setBookmarks(bookmarkItems);
     } catch (error) {
       console.error('Error fetching bookmarks:', error);
     } finally {
@@ -122,17 +129,31 @@ export default function BookmarksScreen() {
     fetchBookmarks();
   }, [fetchBookmarks]);
 
+  // Check for bookmark changes when screen is focused
   useFocusEffect(
     useCallback(() => {
       const checkAndFetchBookmarks = async () => {
         try {
-          const bookmarkChanged = await AsyncStorage.getItem('bookmarkChanged');
-          if (bookmarkChanged === 'true') {
-            await fetchBookmarks();
-            await AsyncStorage.setItem('bookmarkChanged', 'false');
+          const bookmarkKeys = await AsyncStorage.getItem('bookmarkKeys');
+          if (bookmarkKeys) {
+            const keys = JSON.parse(bookmarkKeys);
+            const promises = keys.map(async (key: string) => {
+              const id = key.split('_')[1];
+              const mangaData = await getMangaData(id);
+              return mangaData?.lastUpdated || 0;
+            });
+            
+            const lastUpdates = await Promise.all(promises);
+            const maxLastUpdate = Math.max(...lastUpdates);
+            
+            const lastCheck = parseInt(await AsyncStorage.getItem('lastBookmarkCheck') || '0');
+            if (maxLastUpdate > lastCheck) {
+              await fetchBookmarks();
+              await AsyncStorage.setItem('lastBookmarkCheck', maxLastUpdate.toString());
+            }
           }
         } catch (error) {
-          console.error('Error checking bookmark changed flag:', error);
+          console.error('Error checking bookmark updates:', error);
         }
       };
 

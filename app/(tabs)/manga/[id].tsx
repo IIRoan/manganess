@@ -16,7 +16,6 @@ import React, {
   } from 'react-native';
   import Swipeable from 'react-native-gesture-handler/Swipeable';
   import { useLocalSearchParams, useRouter } from 'expo-router';
-  import AsyncStorage from '@react-native-async-storage/async-storage';
   import { Ionicons } from '@expo/vector-icons';
   import { useTheme } from '@/constants/ThemeContext';
   import { Colors, ColorScheme } from '@/constants/Colors';
@@ -39,7 +38,11 @@ import React, {
   } from '@/services/bookmarkService';
   import { useNavigationHistory } from '@/hooks/useNavigationHistory';
   import { GenreTag } from '@/components/GanreTag';
-  import { getLastReadChapter } from '@/services/readChapterService';
+import { 
+  getLastReadChapter,
+  getReadChapters,
+  markChapterAsUnread
+} from '@/services/readChapterService';
   import { useFocusEffect } from '@react-navigation/native';
   import LastReadChapterBar from '@/components/LastReadChapterBar';
   import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -130,16 +133,10 @@ import React, {
       }
     };
   
-    const fetchReadChapters = useCallback(async () => {
+  const fetchReadChapters = useCallback(async () => {
       try {
-        const key = `manga_${id}_read_chapters`;
-        const storedChapters = await AsyncStorage.getItem(key);
-        if (storedChapters) {
-          const parsedChapters = JSON.parse(storedChapters);
-          setReadChapters(parsedChapters);
-        } else {
-          setReadChapters([]);
-        }
+        const chapters = await getReadChapters(id as string);
+        setReadChapters(chapters);
       } catch (error) {
         console.error('Error fetching read chapters:', error);
         throw new Error('Failed to load read chapters');
@@ -214,15 +211,15 @@ import React, {
       }
     };
   
-    const handleMarkAsUnread = useCallback(
+  const handleMarkAsUnread = useCallback(
       async (chapterNumber: string) => {
         try {
-          const key = `manga_${id}_read_chapters`;
-          const updatedReadChapters = readChapters.filter(
-            (ch) => ch !== chapterNumber
+          const updatedChapters = await markChapterAsUnread(
+            id as string,
+            chapterNumber,
+            readChapters
           );
-          await AsyncStorage.setItem(key, JSON.stringify(updatedReadChapters));
-          setReadChapters(updatedReadChapters);
+          setReadChapters(updatedChapters);
         } catch (error) {
           console.error('Error marking chapter as unread:', error);
         }
@@ -526,4 +523,3 @@ import React, {
       </View>
     );
   }
-  
