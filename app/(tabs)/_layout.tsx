@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { Tabs, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAppSettings, getDebugTabEnabled, isOnboardingCompleted as checkOnboarding } from '@/services/settingsService';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
@@ -47,8 +47,8 @@ export default function TabLayout() {
 
   const loadEnableDebugTabSetting = async () => {
     try {
-      const value = await AsyncStorage.getItem('enableDebugTab');
-      setEnableDebugTab(value === 'true');
+      const enabled = await getDebugTabEnabled();
+      setEnableDebugTab(enabled);
     } catch (error) {
       console.error('Error loading enable debug tab setting:', error);
     }
@@ -56,8 +56,8 @@ export default function TabLayout() {
 
   const checkOnboardingStatus = async () => {
     try {
-      const value = await AsyncStorage.getItem('onboardingCompleted');
-      setIsOnboardingCompleted(value === 'true');
+      const completed = await checkOnboarding();
+      setIsOnboardingCompleted(completed);
     } catch (error) {
       console.error('Error checking onboarding status:', error);
       setIsOnboardingCompleted(false);
@@ -176,7 +176,7 @@ export default function TabLayout() {
       >
         <Tabs.Screen name="index" options={{ title: 'Home' }} />
         <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
-        <Tabs.Screen name="bookmarks" options={{ title: 'Bookmarks' }} />
+        <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
         <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
         <Tabs.Screen
           name="Debug"

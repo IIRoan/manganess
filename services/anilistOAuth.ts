@@ -1,6 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { saveAuthData, getAuthData, clearAuthData } from './anilistAuthService';
 
 const debug = (message: string, data?: any) => {
   console.log(`[AniList OAuth] ${message}`, data || '');
@@ -10,11 +10,6 @@ const ANILIST_CLIENT_ID = '20599';
 const ANILIST_AUTH_URL = 'https://anilist.co/api/v2/oauth/authorize';
 const ANILIST_API_URL = 'https://graphql.anilist.co';
 
-interface AuthData {
-  accessToken: string;
-  expiresAt: number;
-}
-
 const parseHashParams = (hash: string) => {
   return hash.split('&').reduce((params: any, param) => {
     const [key, value] = param.split('=');
@@ -23,7 +18,7 @@ const parseHashParams = (hash: string) => {
   }, {});
 };
 
-export async function loginWithAniList(): Promise<AuthData> {
+export async function loginWithAniList() {
   try {
     debug('Starting login process');
     
@@ -54,7 +49,7 @@ export async function loginWithAniList(): Promise<AuthData> {
         throw new Error('No access token in response');
       }
 
-      const authData: AuthData = {
+      const authData = {
         accessToken: params.access_token,
         expiresAt: Date.now() + (params.expires_in ? parseInt(params.expires_in) * 1000 : 365 * 24 * 60 * 60 * 1000)
       };
@@ -72,47 +67,12 @@ export async function loginWithAniList(): Promise<AuthData> {
   }
 }
 
-async function saveAuthData(authData: AuthData): Promise<void> {
-  try {
-    debug('Saving auth data');
-    await AsyncStorage.setItem('anilistAuth', JSON.stringify(authData));
-    debug('Auth data saved successfully');
-  } catch (error) {
-    debug('Error saving auth data:', error);
-    throw error;
-  }
-}
-
-export async function getAuthData(): Promise<AuthData | null> {
-  try {
-    debug('Getting auth data from storage');
-    const authDataString = await AsyncStorage.getItem('anilistAuth');
-    
-    if (authDataString) {
-      const authData: AuthData = JSON.parse(authDataString);
-      debug('Auth data found, checking expiration');
-      
-      if (Date.now() < authData.expiresAt) {
-        debug('Auth data valid');
-        return authData;
-      }
-      
-      debug('Auth data expired');
-    } else {
-      debug('No auth data found');
-    }
-    
-    return null;
-  } catch (error) {
-    debug('Error getting auth data:', error);
-    return null;
-  }
-}
+export { getAuthData };
 
 export async function logout(): Promise<void> {
   try {
     debug('Logging out');
-    await AsyncStorage.removeItem('anilistAuth');
+    await clearAuthData();
     debug('Logged out successfully');
   } catch (error) {
     debug('Error during logout:', error);

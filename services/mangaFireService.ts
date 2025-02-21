@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { decode } from 'html-entities';
 import { MANGA_API_URL } from '@/constants/Config';
 import { searchAnilistMangaByName, updateMangaStatus, isLoggedInToAniList } from '@/services/anilistService';
+import { getMangaData, setMangaData } from '@/services/bookmarkService';
 
 export interface MangaItem {
   id: string;
@@ -26,7 +26,6 @@ export interface MangaDetails {
   bannerImage: string;
   chapters: Array<{ number: string; title: string; date: string; url: string }>;
 }
-
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
 
@@ -81,21 +80,17 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const alternativeTitle = decode(html.match(/<h6>(.*?)<\/h6>/)?.[1] || '');
   const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
 
-
   const descriptionMatch = html.match(/<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/);
   let description = descriptionMatch
     ? decode(descriptionMatch[1].trim()) || 'No description available'
     : 'No description available';
 
-  // Process HTML tags in the description
   description = description
-    .replace(/<br\s*\/?>/gi, '\n') // Replace <br> tags with newlines
-    .replace(/<p>/gi, '') // Remove opening <p> tags
-    .replace(/<\/p>/gi, '\n\n') // Replace closing </p> tags with double newlines
-    .replace(/<(?:.|\n)*?>/gm, '') // Remove any remaining HTML tags
-    .trim(); // Trim any leading or trailing whitespace
-
-
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<p>/gi, '')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<(?:.|\n)*?>/gm, '')
+    .trim();
 
   const authorMatch = html.match(/<span>Author:<\/span>.*?<span>(.*?)<\/span>/s);
   const authors = authorMatch ? authorMatch[1].match(/<a[^>]*>(.*?)<\/a>/g)?.map(a => a.replace(/<[^>]*>/g, '')) || [] : [];
@@ -148,24 +143,39 @@ export const markChapterAsRead = async (id: string, chapterNumber: string, manga
   }
 
   try {
-    const key = `manga_${id}_read_chapters`;
-    const readChapters = await AsyncStorage.getItem(key) || '[]';
-    const chaptersArray = JSON.parse(readChapters);
-    if (!chaptersArray.includes(chapterNumber)) {
-      chaptersArray.push(chapterNumber);
-      await AsyncStorage.setItem(key, JSON.stringify(chaptersArray));
+    const mangaData = await getMangaData(id);
+    if (mangaData) {
+      const updatedReadChapters = Array.from(
+        new Set([...mangaData.readChapters, chapterNumber])
+      );
+      await setMangaData({
+        ...mangaData,
+        readChapters: updatedReadChapters,
+        lastReadChapter: chapterNumber,
+        lastUpdated: Date.now()
+      });
       console.log(`Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`);
+    } else {
+      // Create new manga data if it doesn't exist
+      await setMangaData({
+        id,
+        title: mangaTitle,
+        bannerImage: '',
+        bookmarkStatus: null,
+        readChapters: [chapterNumber],
+        lastReadChapter: chapterNumber,
+        lastUpdated: Date.now()
+      });
     }
   } catch (error) {
     console.error('Error marking chapter as read:', error);
   }
 };
 
-
-
 export const getBookmarkStatus = async (id: string): Promise<string | null> => {
   try {
-    return await AsyncStorage.getItem(`bookmark_${id}`);
+    const mangaData = await getMangaData(id);
+    return mangaData?.bookmarkStatus || null;
   } catch (error) {
     console.error('Error getting bookmark status:', error);
     return null;
@@ -179,7 +189,6 @@ export const updateAniListProgress = async (id: string, mangaTitle: string, prog
   }
 
   try {
-    // Check if the user is logged in to AniList
     const isLoggedIn = await isLoggedInToAniList();
     if (!isLoggedIn) {
       console.log('User is not logged in to AniList. Skipping update.');
@@ -213,16 +222,13 @@ export const updateAniListProgress = async (id: string, mangaTitle: string, prog
 };
 
 export const parseNewReleases = (html: string): MangaItem[] => {
-  // Find all home-swiper sections
   const homeSwiperRegex = /<section class="home-swiper">([\s\S]*?)<\/section>/g;
   const homeSwiperMatches = Array.from(html.matchAll(homeSwiperRegex));
 
   for (const match of homeSwiperMatches) {
     const swiperContent = match[1];
 
-    // Check if this home-swiper contains the "New Release" heading
     if (swiperContent.includes('<h2>New Release</h2>')) {
-      // Extract individual manga items
       const itemRegex = /<div class="swiper-slide unit[^"]*">\s*<a href="\/manga\/([^"]+)">\s*<div class="poster">\s*<div><img src="([^"]+)" alt="([^"]+)"><\/div>\s*<\/div>\s*<span>([^<]+)<\/span>\s*<\/a>\s*<\/div>/g;
       const matches = Array.from(swiperContent.matchAll(itemRegex));
 
@@ -255,10 +261,8 @@ export const parseMostViewedManga = (html: string): MangaItem[] => {
   }));
 };
 
-
 export const getInjectedJavaScript = (backgroundColor: string) => `
   (function() {
-    // Function to remove elements
     function removeElements(selectors) {
       selectors.forEach(selector => {
         const elements = document.querySelectorAll(selector);
@@ -266,7 +270,6 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
       });
     }
 
-    // Function to hide elements
     function hideElements(selectors) {
       selectors.forEach(selector => {
         const elements = document.querySelectorAll(selector);
@@ -279,7 +282,6 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
       });
     }
 
-    // Function to remove toast div
     function removeToast() {
       const toastDiv = document.getElementById('toast');
       if (toastDiv) {
@@ -287,60 +289,47 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
       }
     }
 
-    // Function to change background and remove background image
     function adjustBackground() {
       const bgSpan = document.querySelector('span.bg');
       if (bgSpan) {
         bgSpan.style.backgroundImage = 'none';
         bgSpan.style.backgroundColor = '${backgroundColor}';
       }
-      // Change the body background
       document.body.style.backgroundImage = 'none';
       document.body.style.backgroundColor = '${backgroundColor}';
     }
 
-    // Hide header, footer, and other unwanted elements
     removeElements(['header', 'footer', '.ad-container', '[id^="google_ads_"]', '[id^="adsbygoogle"]', 'iframe[src*="googleads"]', 'iframe[src*="doubleclick"]', '.navbar', '.nav-bar', '#navbar', '#nav-bar', '.top-bar', '#top-bar']);
-
-    // Hide toast and other dynamic elements
     hideElements(['#toast', '.toast', '.popup', '.modal', '#overlay', '.overlay', '.banner']);
 
-    // Remove ads and unwanted elements
     function cleanPage() {
       removeElements(['.ad-container', '[id^="google_ads_"]', '[id^="adsbygoogle"]', 'iframe[src*="googleads"]', 'iframe[src*="doubleclick"]']);
       hideElements(['#toast', '.toast', '.popup', '.modal', '#overlay', '.overlay', '.banner']);
       removeToast();
       adjustBackground();
     }
-    // Initial cleaning and background adjustment
+
     cleanPage();
 
-    // Set up a MutationObserver to remove ads and popups that might be dynamically added
     const observer = new MutationObserver(cleanPage);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Prevent popups and new window opening
     window.open = function() { return null; };
     window.alert = function() { return null; };
     window.confirm = function() { return null; };
     window.prompt = function() { return null; };
 
-    // Function to handle navigation
     function handleNavigation(e) {
       const target = e.target.closest('.number-nav a');
       if (target) {
         e.stopPropagation();
-        // Allow the default action for these buttons
         return true;
       }
-      // Prevent default for all other clicks
       e.preventDefault();
       e.stopPropagation();
       return false;
     }
 
-
-    // Block common tracking and ad scripts
     const scriptBlocker = {
       apply: function(target, thisArg, argumentsList) {
         const src = argumentsList[0].src || '';
@@ -352,6 +341,6 @@ export const getInjectedJavaScript = (backgroundColor: string) => `
     };
     document.createElement = new Proxy(document.createElement, scriptBlocker);
 
-    true; // This is required for the injected JavaScript to work
+    true;
   })();
 `;
