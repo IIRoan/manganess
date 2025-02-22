@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, use
 import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setOnboardingCompleted } from '@/services/settingsService';
 import { useRouter } from 'expo-router';
 
 export default function OnboardingScreen() {
@@ -23,7 +23,7 @@ export default function OnboardingScreen() {
 
   const completeOnboarding = async () => {
     try {
-      await AsyncStorage.setItem('onboardingCompleted', 'true');
+      await setOnboardingCompleted(true);
       // Navigate to the main app screen
       router.replace('/');
     } catch (error) {
