@@ -1,21 +1,76 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMangaData, setMangaData } from './bookmarkService';
 
-export const getLastReadChapter = async (mangaId: string): Promise<string> => {
-  try {
-    const key = `manga_${mangaId}_read_chapters`;
-    const readChapters = await AsyncStorage.getItem(key) || '[]';
-    const chaptersArray = JSON.parse(readChapters);
-
-    if (chaptersArray.length === 0) {
-      return 'Not started';
+export const getReadChapters = async (mangaId: string): Promise<string[]> => {
+    try {
+        const mangaData = await getMangaData(mangaId);
+        return mangaData?.readChapters || [];
+    } catch (error) {
+        console.error('Error getting read chapters:', error);
+        return [];
     }
+};
 
-    const numericChapters = chaptersArray.map((chapter: string) => parseFloat(chapter));
-    const lastReadChapter = Math.max(...numericChapters);
+export const getLastReadChapter = async (mangaId: string): Promise<string | null> => {
+    try {
+        const mangaData = await getMangaData(mangaId);
+        if (!mangaData?.lastReadChapter) {
+            return 'Not started';
+        }
+        return `Chapter ${mangaData.lastReadChapter}`;
+    } catch (error) {
+        console.error('Error getting last read chapter:', error);
+        return null;
+    }
+};
 
-    return `Chapter ${lastReadChapter}`;
-  } catch (error) {
-    console.error('Error getting last read chapter:', error);
-    return 'Unknown';
-  }
+export const markChapterAsRead = async (
+    mangaId: string,
+    chapterNumber: string,
+    currentReadChapters: string[]
+): Promise<string[]> => {
+    try {
+        const mangaData = await getMangaData(mangaId);
+        if (mangaData) {
+            const updatedReadChapters = Array.from(
+                new Set([...currentReadChapters, chapterNumber])
+            );
+            await setMangaData({
+                ...mangaData,
+                readChapters: updatedReadChapters,
+                lastReadChapter: chapterNumber,
+                lastUpdated: Date.now()
+            });
+            return updatedReadChapters;
+        }
+        return currentReadChapters;
+    } catch (error) {
+        console.error('Error marking chapter as read:', error);
+        return currentReadChapters;
+    }
+};
+
+export const markChapterAsUnread = async (
+    mangaId: string,
+    chapterNumber: string,
+    currentReadChapters: string[]
+): Promise<string[]> => {
+    try {
+        const mangaData = await getMangaData(mangaId);
+        if (mangaData) {
+            const updatedReadChapters = currentReadChapters.filter(
+                (chapter) => chapter !== chapterNumber
+            );
+            await setMangaData({
+                ...mangaData,
+                readChapters: updatedReadChapters,
+                lastUpdated: Date.now()
+            });
+            return updatedReadChapters;
+        }
+        return currentReadChapters;
+    } catch (error) {
+        console.error('Error marking chapter as unread:', error);
+        return currentReadChapters;
+    }
 };

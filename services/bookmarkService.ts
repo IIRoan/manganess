@@ -5,8 +5,53 @@ import { updateAniListStatus } from './anilistService';
 
 export type BookmarkStatus = "To Read" | "Reading" | "Read";
 
+interface MangaData {
+    id: string;
+    title: string;
+    bannerImage: string;
+    bookmarkStatus: BookmarkStatus | null;
+    readChapters: string[];
+    lastReadChapter?: string;
+    lastNotifiedChapter?: string;
+    lastUpdated: number;
+    totalChapters?: number;
+}
+
+const MANGA_STORAGE_PREFIX = 'manga_';
+
+export const getMangaData = async (id: string): Promise<MangaData | null> => {
+    try {
+        const value = await AsyncStorage.getItem(`${MANGA_STORAGE_PREFIX}${id}`);
+        return value ? JSON.parse(value) : null;
+    } catch (e) {
+        console.error('Error reading manga data:', e);
+        return null;
+    }
+};
+
+export const setMangaData = async (data: MangaData): Promise<void> => {
+    try {
+        await AsyncStorage.setItem(
+            `${MANGA_STORAGE_PREFIX}${data.id}`,
+            JSON.stringify(data)
+        );
+        // Update bookmarkKeys for backwards compatibility and listing
+        const keys = await AsyncStorage.getItem('bookmarkKeys');
+        const bookmarkKeys = keys ? JSON.parse(keys) : [];
+        if (data.bookmarkStatus && !bookmarkKeys.includes(`bookmark_${data.id}`)) {
+            bookmarkKeys.push(`bookmark_${data.id}`);
+            await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
+        }
+        // Set the bookmark changed flag
+        await AsyncStorage.setItem('bookmarkChanged', 'true');
+    } catch (e) {
+        console.error('Error saving manga data:', e);
+    }
+};
+
 export const fetchBookmarkStatus = async (id: string): Promise<string | null> => {
-    return await AsyncStorage.getItem(`bookmark_${id}`);
+    const mangaData = await getMangaData(id);
+    return mangaData?.bookmarkStatus || null;
 };
 
 const markAllChaptersAsRead = async (
@@ -15,12 +60,28 @@ const markAllChaptersAsRead = async (
     setReadChapters: (chapters: string[]) => void
 ) => {
     try {
-        if (mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
-            const key = `manga_${id}_read_chapters`;
+        if (mangaDetails?.chapters?.length > 0) {
             const allChapterNumbers = mangaDetails.chapters.map(
                 (chapter: any) => chapter.number
             );
-            await AsyncStorage.setItem(key, JSON.stringify(allChapterNumbers));
+            const mangaData = await getMangaData(id) || {
+                id,
+                title: decode(mangaDetails.title || ''),
+                bannerImage: mangaDetails.bannerImage || '',
+                bookmarkStatus: null,
+                readChapters: [],
+                lastUpdated: Date.now(),
+                totalChapters: mangaDetails.chapters.length
+            };
+            
+            // Get the highest chapter number to set as lastReadChapter
+            const lastChapter = Math.max(...allChapterNumbers.map((num: string) => parseFloat(num))).toString();
+            await setMangaData({
+                ...mangaData,
+                readChapters: allChapterNumbers,
+                lastReadChapter: lastChapter,
+                lastUpdated: Date.now()
+            });
             setReadChapters(allChapterNumbers);
         } else {
             console.log('No chapters to mark as read');
@@ -40,27 +101,23 @@ export const saveBookmark = async (
     setReadChapters: (chapters: string[]) => void
 ) => {
     try {
-        await AsyncStorage.setItem(`bookmark_${id}`, status);
+        const mangaData: MangaData = {
+            id,
+            title: decode(mangaDetails?.title || ''),
+            bannerImage: mangaDetails?.bannerImage || '',
+            bookmarkStatus: status,
+            readChapters,
+            lastUpdated: Date.now(),
+            totalChapters: mangaDetails?.chapters?.length
+        };
 
-        const decodedTitle = decode(mangaDetails?.title || '');
-        await AsyncStorage.setItem(`title_${id}`, decodedTitle);
-        await AsyncStorage.setItem(`image_${id}`, mangaDetails?.bannerImage || '');
-
-        const keys = await AsyncStorage.getItem('bookmarkKeys');
-        const bookmarkKeys = keys ? JSON.parse(keys) : [];
-        if (!bookmarkKeys.includes(`bookmark_${id}`)) {
-            bookmarkKeys.push(`bookmark_${id}`);
-            await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
+        if (status === "Reading" && mangaDetails?.chapters?.length > 0) {
+            mangaData.lastNotifiedChapter = mangaDetails.chapters[0].number;
         }
 
+        await setMangaData(mangaData);
         setBookmarkStatus(status);
         setIsAlertVisible(false);
-
-        if (status === "Reading" && mangaDetails && mangaDetails.chapters && mangaDetails.chapters.length > 0) {
-            const lastReleasedChapter = mangaDetails.chapters[0].number;
-            await AsyncStorage.setItem(`last_notified_chapter_${id}`, lastReleasedChapter);
-            console.log(`Set last notified chapter for ${id} to ${lastReleasedChapter}`);
-        }
 
         if (status === "Read") {
             Alert.alert(
@@ -70,7 +127,17 @@ export const saveBookmark = async (
                     {
                         text: "No",
                         style: "cancel",
-                        onPress: () => updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length)
+                        onPress: async () => {
+                            // Update lastReadChapter to the highest read chapter
+                            if (readChapters.length > 0) {
+                                const highestReadChapter = Math.max(...readChapters.map((num: string) => parseFloat(num))).toString();
+                                await setMangaData({
+                                    ...mangaData,
+                                    lastReadChapter: highestReadChapter
+                                });
+                            }
+                            await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
+                        }
                     },
                     {
                         text: "Yes",
@@ -84,9 +151,6 @@ export const saveBookmark = async (
         } else {
             await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
         }
-
-        // Set the bookmark changed flag
-        await AsyncStorage.setItem('bookmarkChanged', 'true');
     } catch (error) {
         console.error('Error saving bookmark:', error);
         Alert.alert("Error", "Failed to update status. Please try again.");
@@ -99,8 +163,7 @@ export const removeBookmark = async (
     setIsAlertVisible: (visible: boolean) => void
 ) => {
     try {
-        await AsyncStorage.removeItem(`bookmark_${id}`);
-        await AsyncStorage.removeItem(`title_${id}`);
+        await AsyncStorage.removeItem(`${MANGA_STORAGE_PREFIX}${id}`);
 
         const keys = await AsyncStorage.getItem('bookmarkKeys');
         if (keys) {
@@ -111,15 +174,12 @@ export const removeBookmark = async (
 
         setBookmarkStatus(null);
         setIsAlertVisible(false);
-
-        // Set the bookmark changed flag
         await AsyncStorage.setItem('bookmarkChanged', 'true');
     } catch (error) {
         console.error('Error removing bookmark:', error);
     }
 };
 
-// New function to get the bookmark popup configuration
 export const getBookmarkPopupConfig = (
     bookmarkStatus: string | null,
     mangaTitle: string,
@@ -173,7 +233,6 @@ export const getBookmarkPopupConfig = (
     };
 };
 
-// New function to handle chapter long press
 export const getChapterLongPressAlertConfig = (
     isRead: boolean,
     chapterNumber: string,
@@ -196,21 +255,25 @@ export const getChapterLongPressAlertConfig = (
                     text: 'Yes',
                     onPress: async () => {
                         try {
-                            // Get all chapters up to the selected chapter
                             const chaptersToMark = mangaDetails?.chapters
                                 .filter((ch: any) => {
-                                    // Compare chapter numbers numerically
                                     const currentChapter = parseFloat(ch.number);
                                     const selectedChapter = parseFloat(chapterNumber);
                                     return currentChapter <= selectedChapter;
                                 })
                                 .map((ch: any) => ch.number) || [];
 
-                            // Save to AsyncStorage
-                            const key = `manga_${id}_read_chapters`;
-                            const updatedReadChapters = Array.from(new Set([...readChapters, ...chaptersToMark]));
-                            await AsyncStorage.setItem(key, JSON.stringify(updatedReadChapters));
-                            setReadChapters(updatedReadChapters);
+                            const mangaData = await getMangaData(id);
+                            if (mangaData) {
+                                const updatedReadChapters = Array.from(new Set([...readChapters, ...chaptersToMark]));
+                                await setMangaData({
+                                    ...mangaData,
+                                    readChapters: updatedReadChapters,
+                                    lastReadChapter: chapterNumber,
+                                    lastUpdated: Date.now()
+                                });
+                                setReadChapters(updatedReadChapters);
+                            }
                         } catch (error) {
                             console.error('Error marking chapters as read:', error);
                         }
@@ -219,6 +282,5 @@ export const getChapterLongPressAlertConfig = (
             ],
         };
     }
-
     return null;
 };
