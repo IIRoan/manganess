@@ -23,7 +23,7 @@ export default function OnboardingScreen() {
 
   const completeOnboarding = async () => {
     try {
-      await setOnboardingCompleted();
+      await setOnboardingCompleted(true);
       // Navigate to the main app screen
       router.replace('/');
     } catch (error) {
