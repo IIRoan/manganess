@@ -99,6 +99,9 @@ export async function refreshMangaImages(): Promise<{ success: boolean; message:
     const mangaKeys = allKeys.filter(key => key.startsWith('manga_'));
     let updatedCount = 0;
 
+    // Clear the image cache before starting refresh
+    await imageCache.clearCache();
+
     for (const key of mangaKeys) {
       const mangaId = key.replace('manga_', '');
       const mangaData = await getMangaData(mangaId);
@@ -106,10 +109,7 @@ export async function refreshMangaImages(): Promise<{ success: boolean; message:
       if (mangaData) {
         try {
           const newMangaDetails = await fetchMangaDetails(mangaId);
-          if (newMangaDetails?.bannerImage && newMangaDetails.bannerImage !== mangaData.bannerImage) {
-            // Clear the entire image cache since we can't clear individual images
-            await imageCache.clearCache();
-
+          if (newMangaDetails?.bannerImage) {
             await setMangaData({
               ...mangaData,
               bannerImage: newMangaDetails.bannerImage,
@@ -144,6 +144,9 @@ export async function migrateToNewStorage(): Promise<{ success: boolean; message
     // Get bookmark keys
     const bookmarkKeys = allKeys.filter(key => key.startsWith('bookmark_'));
     
+    // Clear image cache before migration
+    await imageCache.clearCache();
+    
     // Process each bookmark
     for (const bookmarkKey of bookmarkKeys) {
       const id = bookmarkKey.replace('bookmark_', '');
@@ -159,11 +162,14 @@ export async function migrateToNewStorage(): Promise<{ success: boolean; message
       // Parse read chapters
       const readChapters = readChaptersStr[1] ? JSON.parse(readChaptersStr[1]) : [];
       
+      // Fetch latest manga details
+      const mangaDetails = await fetchMangaDetails(id);
+      
       // Create new manga data structure
       await setMangaData({
         id,
-        title: title[1] || '',
-        bannerImage: imageUrl[1] || '',
+        title: mangaDetails?.title || title[1] || '',
+        bannerImage: mangaDetails?.bannerImage || imageUrl[1] || '',
         bookmarkStatus: bookmarkStatus[1] as any || null,
         readChapters,
         lastReadChapter: readChapters.length > 0 ? readChapters[readChapters.length - 1] : undefined,

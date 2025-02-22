@@ -163,7 +163,7 @@ export default function DebugScreen() {
           text: "Reset",
           onPress: async () => {
             try {
-              await setOnboardingCompleted(); // This will reset onboarding status
+              await setOnboardingCompleted(false); // This will reset onboarding status
               router.replace('/onboarding');
             } catch (error) {
               console.error('Error showing onboarding:', error);

@@ -46,6 +46,8 @@ export default function SettingsScreen() {
   const styles = getStyles(colors);
   const [user, setUser] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
 
@@ -306,24 +308,34 @@ export default function SettingsScreen() {
             <Ionicons name="trash-outline" size={24} color={colors.notification} />
             <Text style={styles.optionText}>Clear App Data</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.option} onPress={async () => {
-            try {
-              const result = await refreshMangaImages();
-              Alert.alert(
-                result.success ? 'Success' : 'Error',
-                result.message
-              );
-            } catch (error) {
-              Alert.alert('Error', 'Failed to refresh manga images');
-            }
-          }}>
+          <TouchableOpacity 
+            style={styles.option} 
+            disabled={isRefreshing}
+            onPress={async () => {
+              try {
+                setIsRefreshing(true);
+                const result = await refreshMangaImages();
+                Alert.alert(
+                  result.success ? 'Success' : 'Error',
+                  result.message
+                );
+              } catch (error) {
+                Alert.alert('Error', 'Failed to refresh manga images');
+              } finally {
+                setIsRefreshing(false);
+              }
+            }}
+          >
             <Ionicons name="refresh-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Refresh Manga Images</Text>
+            {isRefreshing && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.option, { borderBottomWidth: 0 }]}
+            disabled={isMigrating}
             onPress={async () => {
               try {
+                setIsMigrating(true);
                 const result = await migrateToNewStorage();
                 Alert.alert(
                   result.success ? 'Success' : 'Error',
@@ -331,11 +343,14 @@ export default function SettingsScreen() {
                 );
               } catch (error) {
                 Alert.alert('Error', 'Failed to migrate data');
+              } finally {
+                setIsMigrating(false);
               }
             }}
           >
             <Ionicons name="sync-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Migrate to New Storage Format</Text>
+            {isMigrating && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
           </TouchableOpacity>
         </View>
 
