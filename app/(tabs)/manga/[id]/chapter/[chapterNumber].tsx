@@ -28,7 +28,6 @@ import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { getMangaData } from '@/services/bookmarkService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import {
   getChapterUrl,
   markChapterAsRead,
@@ -41,8 +40,8 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import CustomWebView from '@/components/CustomWebView';
 import getStyles from './[chapterNumber].styles';
 import SwipeBackIndicator from '@/components/SwipeBackIndicator';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
 
-const { width, height } = Dimensions.get('window');
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
@@ -54,6 +53,7 @@ const ensureMinimumSize = (size: number) => {
 
 // Width of the swipe-back region (in pixels)
 const SWIPE_REGION_WIDTH = 50;
+
 
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{
@@ -68,12 +68,10 @@ export default function ReadChapterScreen() {
   const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
-  const [isSwipingBack, setIsSwipingBack] = useState(false);
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
   const controlsTimeout = useRef<NodeJS.Timeout>();
-  const swipeProgress = useRef(new Animated.Value(0)).current;
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -220,6 +218,8 @@ export default function ReadChapterScreen() {
     router.navigate(`/manga/${id}/chapter/${chapterNum}`);
   };
 
+
+
   const renderChapterList = () => {
     if (!mangaDetails?.chapters) return null;
     return mangaDetails.chapters.map((chapter) => (
@@ -291,67 +291,18 @@ export default function ReadChapterScreen() {
 `;
 
 
-
   const closeBottomSheet = () => {
     bottomSheetRef.current?.close();
   };
 
-  const swipeThreshold = 50;
-  const swipeRegionWidth = 50;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: (evt, gestureState) => {
-        const { locationX } = evt.nativeEvent;
-        // Only activate PanResponder if the touch is near the left edge
-        return locationX <= SWIPE_REGION_WIDTH;
-      },
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        const { locationX } = evt.nativeEvent;
-        // Continue PanResponder only if the touch is near the left edge
-        return locationX <= SWIPE_REGION_WIDTH;
-      },
-      onPanResponderGrant: () => {
-        setIsSwipingBack(true);
-        swipeProgress.setValue(0);
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const progress = Math.min(gestureState.dx / swipeThreshold, 1);
-        swipeProgress.setValue(progress);
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        setIsSwipingBack(false);
-        if (gestureState.dx > swipeThreshold) {
-          Animated.timing(swipeProgress, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: false,
-          }).start(() => {
-            handleBackPress();
-          });
-        } else {
-          Animated.timing(swipeProgress, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: false,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        setIsSwipingBack(false);
-        Animated.timing(swipeProgress, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false,
-        }).start();
-      },
-    })
-  ).current;
 
   const statusBarBackgroundColor = isControlsVisible ? 'transparent' : Colors[colorScheme].card;
-
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
+
+  const { panResponder, isSwipingBack, swipeProgress } = useSwipeBack({
+    onSwipeBack: handleBackPress
+  });
 
   return (
     <View style={styles.container} {...panResponder.panHandlers}>

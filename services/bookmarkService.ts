@@ -253,10 +253,11 @@ export const getChapterLongPressAlertConfig = (
                             const mangaData = await getMangaData(id);
                             if (mangaData) {
                                 const updatedReadChapters = Array.from(new Set([...readChapters, ...chaptersToMark]));
+                                const highestChapter = Math.max(...updatedReadChapters.map(ch => parseFloat(ch))).toString();
                                 await setMangaData({
                                     ...mangaData,
                                     readChapters: updatedReadChapters,
-                                    lastReadChapter: chapterNumber,
+                                    lastReadChapter: highestChapter, // Using highest chapter number
                                     lastUpdated: Date.now()
                                 });
                                 setReadChapters(updatedReadChapters);
