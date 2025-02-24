@@ -1,14 +1,15 @@
+// constants/ThemeContext.tsx - Updated to use ThemeType from types
+
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 import { ColorScheme } from '@/constants/Colors';
 import { getAppSettings, setAppSettings } from '@/services/settingsService';
-
-export type Theme = 'light' | 'dark' | 'system';
+import { ThemeType } from '@/types';
 
 interface ThemeContextType {
-  theme: Theme;
+  theme: ThemeType;
   systemTheme: ColorScheme;
-  setTheme: (theme: Theme) => void;
+  setTheme: (theme: ThemeType) => void;
   toggleTheme: () => void;
   actualTheme: 'light' | 'dark';
 }
@@ -16,7 +17,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>('system');
+  const [theme, setThemeState] = useState<ThemeType>('system');
   const systemColorScheme = useColorScheme() as ColorScheme;
 
   useEffect(() => {
@@ -34,9 +35,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const setTheme = async (newTheme: Theme) => {
+  const setTheme = async (newTheme: ThemeType) => {
     try {
-      await setAppSettings({ theme: newTheme });
+      await setAppSettings({
+        theme: newTheme,
+        enableDebugTab: false,
+        onboardingCompleted: false
+      });
       setThemeState(newTheme);
     } catch (error) {
       console.error('Error saving theme:', error);
@@ -57,9 +62,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const actualTheme = theme === 'system' ? systemColorScheme : theme;
 
   return (
-    <ThemeContext.Provider value={{ 
-      theme, 
-      systemTheme: systemColorScheme, 
+    <ThemeContext.Provider value={{
+      theme,
+      systemTheme: systemColorScheme,
       setTheme,
       toggleTheme,
       actualTheme
@@ -76,3 +81,5 @@ export const useTheme = () => {
   }
   return context;
 };
+
+export type Theme = ThemeType;
