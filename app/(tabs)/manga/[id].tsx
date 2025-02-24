@@ -52,6 +52,8 @@ import {
   BookmarkStatus,
   Chapter
 } from '@/types';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
+import SwipeBackIndicator from '@/components/SwipeBackIndicator';
 
 /* Type Definitions */
 type BookmarkPopupConfig = {
@@ -105,6 +107,12 @@ export default function MangaDetailScreen() {
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
+
+  //For the swipe back animation
+  const { panResponder, isSwipingBack, swipeProgress } = useSwipeBack({
+    onSwipeBack: handleBackPress
+  });
+
 
   const fetchMangaDetailsData = async () => {
     try {
@@ -330,7 +338,8 @@ export default function MangaDetailScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
+
       {/* Alert component is used to display alerts */}
       {alertConfig && (
         <AlertComponent
@@ -487,7 +496,7 @@ export default function MangaDetailScreen() {
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
         />
-
+        {isSwipingBack && <SwipeBackIndicator swipeProgress={swipeProgress} />}
         {/* Scroll to Top Button */}
         <Animated.View
           style={[
