@@ -22,45 +22,12 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { Option, BottomPopupProps } from '@/types';
 
-type IconName =
-  | 'options'
-  | 'key'
-  | 'search'
-  | 'repeat'
-  | 'link'
-  | 'at'
-  | 'push'
-  | 'map'
-  | 'filter'
-  | 'scale'
-  | 'body'
-  | 'code'
-  | 'menu'
-  | 'time'
-  | 'ellipse'
-  | 'image'
-  | 'stop'
-  | 'text'
-  | 'alert'
-  | 'book-outline'
-  | 'book'
-  | 'checkmark-circle-outline'
-  | 'close-circle-outline';
+// Remove this type definition since we're importing it from @/types
+// export interface Option {...}
 
-export interface Option {
-  text: string;
-  onPress: () => void;
-  icon?: IconName;
-}
-
-interface BottomPopupProps {
-  visible: boolean;
-  title: string;
-  onClose: () => void;
-  options?: Option[];
-}
-
+// Use the imported BottomPopupProps type instead
 const BottomPopup: React.FC<BottomPopupProps> = ({
   visible,
   title,
