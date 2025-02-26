@@ -4,6 +4,7 @@ export interface AppSettings {
   theme: ThemeType;
   enableDebugTab: boolean;
   onboardingCompleted: boolean;
+  accentColor?: string;
 }
 
 export type ThemeType = 'light' | 'dark' | 'system';
