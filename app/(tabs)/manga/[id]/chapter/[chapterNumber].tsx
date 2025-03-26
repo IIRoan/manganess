@@ -8,7 +8,6 @@ import {
   Platform,
   useColorScheme,
   Animated,
-  // Removed PanResponder, Dimensions
 } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { WebViewNavigation } from "react-native-webview";
@@ -28,9 +27,11 @@ import {
 import { useTheme } from "@/constants/ThemeContext";
 import { Colors, ColorScheme } from "@/constants/Colors";
 import CustomWebView from "@/components/CustomWebView";
+import {
+  ChapterGuideOverlay,
+  hasSeenChapterGuide,
+} from "@/components/ChapterGuideOverlay";
 import getStyles from "./[chapterNumber].styles";
-// Removed SwipeBackIndicator import
-// Removed useSwipeBack import
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
@@ -39,8 +40,6 @@ const MIN_TOUCHABLE_SIZE = 48;
 const ensureMinimumSize = (size: number) => {
   return Math.max(size, MIN_TOUCHABLE_SIZE);
 };
-
-// Removed SWIPE_REGION_WIDTH constant
 
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{
@@ -55,6 +54,8 @@ export default function ReadChapterScreen() {
   const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [guideStep, setGuideStep] = useState(1);
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -80,7 +81,36 @@ export default function ReadChapterScreen() {
     currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
     mangaDetails?.chapters?.[currentChapterIndex + 1];
 
+  // Check if the user has seen the guide before
+  useEffect(() => {
+    const checkGuideStatus = async () => {
+      const hasSeen = await hasSeenChapterGuide();
+      setShowGuide(!hasSeen);
+      if (!hasSeen) {
+        // Ensure controls are visible when guide is active
+        setIsControlsVisible(true);
+      }
+    };
+    checkGuideStatus();
+  }, []);
+
+  // Handle guide step changes
+  const handleGuideStepChange = useCallback((step: number) => {
+    setGuideStep(step);
+    // For step 1, ensure controls are visible to demonstrate them
+    if (step === 1) {
+      setIsControlsVisible(true);
+      // Clear any existing timeout
+      if (controlsTimeout.current) {
+        clearTimeout(controlsTimeout.current);
+      }
+    }
+  }, []);
+
   const startControlsTimer = useCallback(() => {
+    // Don't auto-hide controls during guide
+    if (showGuide && guideStep === 1) return;
+
     if (controlsTimeout.current) {
       clearTimeout(controlsTimeout.current);
     }
@@ -91,7 +121,28 @@ export default function ReadChapterScreen() {
         useNativeDriver: true,
       }).start(() => setIsControlsVisible(false));
     }, 3000);
+  }, [controlsOpacity, showGuide, guideStep]);
+
+  const hideNavControls = useCallback(() => {
+    if (controlsTimeout.current) {
+      clearTimeout(controlsTimeout.current);
+    }
+    Animated.timing(controlsOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => setIsControlsVisible(false));
   }, [controlsOpacity]);
+
+  const showNavControls = useCallback(() => {
+    setIsControlsVisible(true);
+    Animated.timing(controlsOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+    startControlsTimer();
+  }, [controlsOpacity, startControlsTimer]);
 
   const showControls = useCallback(() => {
     if (isBottomSheetOpen) return;
@@ -106,6 +157,9 @@ export default function ReadChapterScreen() {
   }, [controlsOpacity, startControlsTimer, isBottomSheetOpen]);
 
   const hideControls = useCallback(() => {
+    // Don't hide controls during the first step of the guide
+    if (showGuide && guideStep === 1) return;
+
     if (controlsTimeout.current) {
       clearTimeout(controlsTimeout.current);
     }
@@ -114,7 +168,7 @@ export default function ReadChapterScreen() {
       duration: 200,
       useNativeDriver: true,
     }).start(() => setIsControlsVisible(false));
-  }, [controlsOpacity]);
+  }, [controlsOpacity, showGuide, guideStep]);
 
   const handleBottomSheetChange = useCallback(
     (index: number) => {
@@ -125,9 +179,18 @@ export default function ReadChapterScreen() {
   );
 
   const toggleControls = useCallback(() => {
-    if (isBottomSheetOpen) return;
+    // Don't toggle controls during the first step of the guide
+    if (isBottomSheetOpen || (showGuide && guideStep === 1)) return;
+
     isControlsVisible ? hideControls() : showControls();
-  }, [isControlsVisible, hideControls, showControls, isBottomSheetOpen]);
+  }, [
+    isControlsVisible,
+    hideControls,
+    showControls,
+    isBottomSheetOpen,
+    showGuide,
+    guideStep,
+  ]);
 
   const markChapterAsReadWithFallback = useCallback(async () => {
     try {
@@ -247,6 +310,12 @@ export default function ReadChapterScreen() {
     }
   };
 
+  const handleDismissGuide = () => {
+    setShowGuide(false);
+    // Ensure controls are visible after dismissing the guide
+    showControls();
+  };
+
   const injectedJS = `
   ${getInjectedJavaScript(Colors[colorScheme].card)}
   (function() {
@@ -286,16 +355,13 @@ export default function ReadChapterScreen() {
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
 
-  // Removed useSwipeBack hook call and related variables (panResponder, isSwipingBack, swipeProgress)
-
   return (
-    // Removed {...panResponder.panHandlers} from the View
     <View style={styles.container}>
       <ExpoStatusBar
         style={colorScheme === "dark" ? "light" : "dark"}
         backgroundColor={statusBarBackgroundColor}
         translucent={true}
-        hidden={!isControlsVisible}
+        hidden={!isControlsVisible && !showGuide}
       />
 
       {isLoading && (
@@ -331,18 +397,27 @@ export default function ReadChapterScreen() {
               nestedScrollEnabled={true}
             />
           </View>
-          {/* Removed SwipeBackIndicator component rendering */}
 
+          {/* Always render controls but control visibility with opacity and pointerEvents */}
           <Animated.View
             style={[
               styles.controlsWrapper,
               {
                 opacity: controlsOpacity,
+                zIndex: 150, // Higher z-index for controls
               },
             ]}
             pointerEvents={isControlsVisible ? "auto" : "none"}
           >
-            <View style={[styles.controls, { paddingTop: insets.top }]}>
+            <View
+              style={[
+                styles.controls,
+                {
+                  paddingTop: insets.top,
+                  backgroundColor: Colors[colorScheme].card + "E6",
+                },
+              ]}
+            >
               <View style={styles.controlsContent}>
                 <View style={styles.leftControls}>
                   <TouchableOpacity
@@ -355,7 +430,7 @@ export default function ReadChapterScreen() {
                         alignItems: "center",
                         justifyContent: "center",
                       },
-                    ]} // Apply enhanced size
+                    ]}
                     hitSlop={{
                       top: 20,
                       bottom: 20,
@@ -372,8 +447,11 @@ export default function ReadChapterScreen() {
 
                   <TouchableOpacity
                     onPress={() => {
-                      bottomSheetRef.current?.expand();
-                      handleBottomSheetChange(1);
+                      // Don't open chapter list during first step of the guide
+                      if (!showGuide || guideStep > 1) {
+                        bottomSheetRef.current?.expand();
+                        handleBottomSheetChange(1);
+                      }
                     }}
                     style={styles.titleContainer}
                   >
@@ -397,11 +475,14 @@ export default function ReadChapterScreen() {
                 <View style={styles.rightControls}>
                   <TouchableOpacity
                     onPress={handlePreviousChapter}
-                    disabled={!hasPreviousChapter}
+                    disabled={
+                      !hasPreviousChapter || (showGuide && guideStep === 1)
+                    }
                     style={[
                       styles.navigationButton,
                       styles.navigationButtonLeft,
-                      !hasPreviousChapter && styles.disabledButton,
+                      (!hasPreviousChapter || (showGuide && guideStep === 1)) &&
+                        styles.disabledButton,
                       {
                         width: enhancedNavigationButtonSize,
                         height: enhancedNavigationButtonSize,
@@ -425,11 +506,12 @@ export default function ReadChapterScreen() {
 
                   <TouchableOpacity
                     onPress={handleNextChapter}
-                    disabled={!hasNextChapter}
+                    disabled={!hasNextChapter || (showGuide && guideStep === 1)}
                     style={[
                       styles.navigationButton,
                       styles.navigationButtonRight,
-                      !hasNextChapter && styles.disabledButton,
+                      (!hasNextChapter || (showGuide && guideStep === 1)) &&
+                        styles.disabledButton,
                       {
                         width: enhancedNavigationButtonSize,
                         height: enhancedNavigationButtonSize,
@@ -454,6 +536,16 @@ export default function ReadChapterScreen() {
               </View>
             </View>
           </Animated.View>
+
+          {/* Chapter Guide Overlay */}
+          <ChapterGuideOverlay
+            visible={showGuide}
+            onDismiss={handleDismissGuide}
+            colors={Colors[colorScheme]}
+            onStepChange={handleGuideStepChange}
+            hideControls={hideNavControls}
+            showControls={showNavControls}
+          />
 
           <BottomSheet
             ref={bottomSheetRef}
