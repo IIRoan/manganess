@@ -135,7 +135,8 @@ export const saveBookmark = async (
                     }
                 ]
             );
-        } else {
+        } else if (status !== "On Hold") {
+            // Only update AniList if status is not "On Hold" since that status doesn't exist on AniList
             await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
         }
     } catch (error) {
@@ -190,6 +191,11 @@ export const getBookmarkPopupConfig = (
                     icon: 'book',
                 },
                 {
+                    text: 'On Hold',
+                    onPress: () => handleSaveBookmark('On Hold'),
+                    icon: 'pause-circle-outline',
+                },
+                {
                     text: 'Read',
                     onPress: () => handleSaveBookmark('Read'),
                     icon: 'checkmark-circle-outline',
@@ -210,6 +216,11 @@ export const getBookmarkPopupConfig = (
                     text: 'Reading',
                     onPress: () => handleSaveBookmark('Reading'),
                     icon: 'book',
+                },
+                {
+                    text: 'On Hold',
+                    onPress: () => handleSaveBookmark('On Hold'),
+                    icon: 'pause-circle-outline',
                 },
                 {
                     text: 'Read',
