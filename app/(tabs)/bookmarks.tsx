@@ -650,15 +650,15 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     searchContainer: {
       paddingHorizontal: 20,
-      marginVertical: 12,
+      marginVertical: 6,
     },
     searchInputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.card,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      height: 44,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      height: 36,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.1,
@@ -666,22 +666,22 @@ const getStyles = (colors: typeof Colors.light) =>
       elevation: 2,
     },
     searchIcon: {
-      marginRight: 8,
+      marginRight: 5,
     },
     searchInput: {
       flex: 1,
       fontSize: 15,
       color: colors.text,
-      paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+      paddingVertical: Platform.OS === 'ios' ? 5 : 3, 
     },
     clearButton: {
-      padding: 5,
-      marginLeft: 5,
+      padding: 3,
+      marginLeft: 3, 
     },
     sortOptionsContainerWrapper: {
       marginHorizontal: 20,
       borderRadius: 10,
-      marginBottom: 12,
+      marginBottom: 8,
       overflow: 'hidden',
       backgroundColor: colors.card,
       shadowColor: '#000',
@@ -717,7 +717,7 @@ const getStyles = (colors: typeof Colors.light) =>
       fontWeight: '600',
     },
     sectionButtonsContainer: {
-      marginBottom: 12,
+      marginBottom: 8,
       paddingBottom: 5,
     },
     sectionButtonsScroll: {
