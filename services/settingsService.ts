@@ -7,6 +7,7 @@ interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   enableDebugTab: boolean;
   onboardingCompleted: boolean;
+  accentColor?: string;
 }
 
 const SETTINGS_KEY = 'app_settings';
@@ -20,14 +21,16 @@ export async function getAppSettings(): Promise<AppSettings> {
     return {
       theme: 'system',
       enableDebugTab: false,
-      onboardingCompleted: false
+      onboardingCompleted: false,
+      accentColor: undefined
     };
   } catch (error) {
     console.error('Error getting app settings:', error);
     return {
       theme: 'system',
       enableDebugTab: false,
-      onboardingCompleted: false
+      onboardingCompleted: false,
+      accentColor: undefined
     };
   }
 }

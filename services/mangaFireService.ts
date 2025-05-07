@@ -148,10 +148,11 @@ export const markChapterAsRead = async (id: string, chapterNumber: string, manga
       const updatedReadChapters = Array.from(
         new Set([...mangaData.readChapters, chapterNumber])
       );
+      const highestChapter = Math.max(...updatedReadChapters.map(ch => parseFloat(ch))).toString();
       await setMangaData({
         ...mangaData,
         readChapters: updatedReadChapters,
-        lastReadChapter: chapterNumber,
+        lastReadChapter: highestChapter,
         lastUpdated: Date.now()
       });
       console.log(`Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`);

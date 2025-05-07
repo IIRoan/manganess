@@ -4,14 +4,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { useImageCache } from '@/services/CacheImages';
 import * as FileSystem from 'expo-file-system';
-
-interface MangaCardProps {
-  title: string;
-  imageUrl: string;
-  onPress: () => void;
-  lastReadChapter: string | null;
-  style?: ViewStyle;
-}
+import { MangaCardProps } from '@/types';
 
 const MangaCard: React.FC<MangaCardProps> = ({
   title,
@@ -29,17 +22,17 @@ const MangaCard: React.FC<MangaCardProps> = ({
 
   const getImageSource = () => {
     if (
-      cachedImagePath && 
-      typeof cachedImagePath === 'string' && 
+      cachedImagePath &&
+      typeof cachedImagePath === 'string' &&
       cachedImagePath.startsWith(FileSystem.cacheDirectory || '')
     ) {
-      return { 
-        uri: `file://${cachedImagePath}` 
+      return {
+        uri: `file://${cachedImagePath}`
       };
     }
-  
-    return { 
-      uri: cachedImagePath || imageUrl 
+
+    return {
+      uri: cachedImagePath || imageUrl
     };
   };
 

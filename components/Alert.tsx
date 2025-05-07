@@ -3,23 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, useColorScheme, Toucha
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-
-type IconName = 'options' | 'key' | 'search' | 'repeat' | 'link' | 'at' | 'push' | 'map' | 'filter' | 'scale' | 'body' | 'code' | 'menu' | 'time' | 'ellipse' | 'image' | 'stop' | 'text' | 'alert' | 'book-outline' | 'book' | 'checkmark-circle-outline' | 'close-circle-outline';
-
-export interface Option {
-  text: string;
-  onPress: () => void;
-  icon?: IconName;
-}
-
-interface CustomAlertProps {
-  visible: boolean;
-  title: string;
-  onClose: () => void;
-  type: 'bookmarks' | 'confirm';
-  options?: Option[];
-  message?: string;
-}
+import { Option, CustomAlertProps } from '@/types';
 
 const Alert: React.FC<CustomAlertProps> = ({ visible, title, onClose, type, options, message }) => {
   const { theme } = useTheme();

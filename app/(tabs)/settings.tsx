@@ -9,6 +9,7 @@ import {
   Image,
   Alert,
   Switch,
+  Platform,
 } from 'react-native';
 import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +31,7 @@ import Svg, { Path } from 'react-native-svg';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
+import CustomColorPicker from '@/components/CustomColorPicker';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -39,7 +41,7 @@ interface ThemeOption {
 }
 
 export default function SettingsScreen() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
@@ -50,6 +52,8 @@ export default function SettingsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
+  const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [selectedColor, setSelectedColor] = useState<string>(accentColor || colors.primary);
 
   const themeOptions: ThemeOption[] = [
     { label: 'Light', value: 'light', icon: 'sunny-outline' },
@@ -60,7 +64,12 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkLoginStatus();
-  }, []);
+
+    // Update selected color when accentColor changes
+    if (accentColor) {
+      setSelectedColor(accentColor);
+    }
+  }, [accentColor]);
 
   const loadEnableDebugTabSetting = async () => {
     try {
@@ -85,7 +94,7 @@ export default function SettingsScreen() {
   const handleExportData = async () => {
     try {
       const exportedData = await exportAppData();
-      
+
       // Create JSON file
       const jsonString = JSON.stringify(exportedData, null, 2);
       const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
@@ -216,8 +225,23 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleColorSelected = (color: string) => {
+    setSelectedColor(color);
+    setAccentColor(color);
+    setColorPickerVisible(false);
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Custom Color Picker */}
+      <CustomColorPicker
+        visible={colorPickerVisible}
+        onClose={() => setColorPickerVisible(false)}
+        onColorSelected={handleColorSelected}
+        initialColor={selectedColor}
+        colors={colors}
+      />
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
@@ -250,6 +274,26 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           ))}
+
+          <TouchableOpacity
+            style={[styles.option, { borderBottomWidth: 0 }]}
+            onPress={() => setColorPickerVisible(true)}
+          >
+            <Ionicons name="color-palette-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Accent Color</Text>
+            <View style={[styles.colorPreview, { backgroundColor: selectedColor }]} />
+          </TouchableOpacity>
+
+          {/* Reset accent color button */}
+          {accentColor && (
+            <TouchableOpacity
+              style={[styles.option, { borderBottomWidth: 0, marginTop: -10 }]}
+              onPress={() => setAccentColor(undefined)}
+            >
+              <Ionicons name="refresh-outline" size={24} color={colors.text} />
+              <Text style={styles.optionText}>Reset to Default Color</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -308,8 +352,8 @@ export default function SettingsScreen() {
             <Ionicons name="trash-outline" size={24} color={colors.notification} />
             <Text style={styles.optionText}>Clear App Data</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.option} 
+          <TouchableOpacity
+            style={styles.option}
             disabled={isRefreshing}
             onPress={async () => {
               try {
@@ -330,7 +374,7 @@ export default function SettingsScreen() {
             <Text style={styles.optionText}>Refresh Manga Images</Text>
             {isRefreshing && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.option, { borderBottomWidth: 0 }]}
             disabled={isMigrating}
             onPress={async () => {
@@ -362,8 +406,8 @@ export default function SettingsScreen() {
             <Switch
               value={enableDebugTab}
               onValueChange={toggleEnableDebugTab}
-              trackColor={{ false: colors.border, true: colors.tint }}
-              thumbColor={enableDebugTab ? colors.primary : colors.text}
+              trackColor={{ false: colors.border, true: accentColor || colors.primary }}
+              thumbColor={enableDebugTab && Platform.OS === 'android' ? '#FFFFFF' : undefined}
             />
           </View>
           <Text style={styles.noteText}>
@@ -391,6 +435,13 @@ const getStyles = (colors: typeof Colors.light) =>
     scrollView: {
       flex: 1,
       paddingHorizontal: 20,
+    },
+    colorPreview: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     title: {
       fontSize: 28,

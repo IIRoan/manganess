@@ -2,20 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { updateAniListStatus } from './anilistService';
-
-export type BookmarkStatus = "To Read" | "Reading" | "Read";
-
-interface MangaData {
-    id: string;
-    title: string;
-    bannerImage: string;
-    bookmarkStatus: BookmarkStatus | null;
-    readChapters: string[];
-    lastReadChapter?: string;
-    lastNotifiedChapter?: string;
-    lastUpdated: number;
-    totalChapters?: number;
-}
+import { BookmarkStatus, MangaData, AlertConfig } from '@/types';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
 
@@ -73,7 +60,7 @@ const markAllChaptersAsRead = async (
                 lastUpdated: Date.now(),
                 totalChapters: mangaDetails.chapters.length
             };
-            
+
             // Get the highest chapter number to set as lastReadChapter
             const lastChapter = Math.max(...allChapterNumbers.map((num: string) => parseFloat(num))).toString();
             await setMangaData({
@@ -148,7 +135,8 @@ export const saveBookmark = async (
                     }
                 ]
             );
-        } else {
+        } else if (status !== "On Hold") {
+            // Only update AniList if status is not "On Hold" since that status doesn't exist on AniList
             await updateAniListStatus(mangaDetails?.title, status, readChapters, mangaDetails?.chapters.length);
         }
     } catch (error) {
@@ -203,6 +191,11 @@ export const getBookmarkPopupConfig = (
                     icon: 'book',
                 },
                 {
+                    text: 'On Hold',
+                    onPress: () => handleSaveBookmark('On Hold'),
+                    icon: 'pause-circle-outline',
+                },
+                {
                     text: 'Read',
                     onPress: () => handleSaveBookmark('Read'),
                     icon: 'checkmark-circle-outline',
@@ -223,6 +216,11 @@ export const getBookmarkPopupConfig = (
                     text: 'Reading',
                     onPress: () => handleSaveBookmark('Reading'),
                     icon: 'book',
+                },
+                {
+                    text: 'On Hold',
+                    onPress: () => handleSaveBookmark('On Hold'),
+                    icon: 'pause-circle-outline',
                 },
                 {
                     text: 'Read',
@@ -249,7 +247,7 @@ export const getChapterLongPressAlertConfig = (
             options: [
                 {
                     text: 'Cancel',
-                    onPress: () => {},
+                    onPress: () => { },
                 },
                 {
                     text: 'Yes',
@@ -266,10 +264,11 @@ export const getChapterLongPressAlertConfig = (
                             const mangaData = await getMangaData(id);
                             if (mangaData) {
                                 const updatedReadChapters = Array.from(new Set([...readChapters, ...chaptersToMark]));
+                                const highestChapter = Math.max(...updatedReadChapters.map(ch => parseFloat(ch))).toString();
                                 await setMangaData({
                                     ...mangaData,
                                     readChapters: updatedReadChapters,
-                                    lastReadChapter: chapterNumber,
+                                    lastReadChapter: highestChapter, // Using highest chapter number
                                     lastUpdated: Date.now()
                                 });
                                 setReadChapters(updatedReadChapters);
