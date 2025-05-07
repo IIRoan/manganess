@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebViewNavigation } from 'react-native-webview';
 import { useColorScheme } from 'react-native';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
+import { ServiceResponse } from '@/types';
 
 export default function CloudflarePage() {
   const router = useRouter();
@@ -35,8 +36,8 @@ export default function CloudflarePage() {
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
     // Check if we're no longer on a Cloudflare page
-    if (!navState.url.includes('cf-browser-verification') && 
-        !navState.url.includes('cf_captcha_kind')) {
+    if (!navState.url.includes('cf-browser-verification') &&
+      !navState.url.includes('cf_captcha_kind')) {
       setVerificationComplete(true);
       handleVerificationComplete(); // This will route back to the previous page
     }
@@ -68,7 +69,7 @@ export default function CloudflarePage() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       )}
-      
+
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -90,7 +91,7 @@ export default function CloudflarePage() {
             onNavigationStateChange={handleNavigationStateChange}
             decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.98}
           />
-          
+
           <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -98,7 +99,7 @@ export default function CloudflarePage() {
           {verificationComplete && (
             <View style={styles.completeBanner}>
               <Text style={styles.completeText}>Verification Complete!</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.continueButton}
                 onPress={handleBackPress}
               >

@@ -1,68 +1,100 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
-import { ColorScheme } from '@/constants/Colors';
+import { ColorScheme, Colors, updateAccentColor } from '@/constants/Colors';
 import { getAppSettings, setAppSettings } from '@/services/settingsService';
-
-export type Theme = 'light' | 'dark' | 'system';
+import { ThemeType } from '@/types';
 
 interface ThemeContextType {
-  theme: Theme;
+  theme: ThemeType;
   systemTheme: ColorScheme;
-  setTheme: (theme: Theme) => void;
+  setTheme: (theme: ThemeType | ((prevTheme: ThemeType) => ThemeType)) => void;
   toggleTheme: () => void;
   actualTheme: 'light' | 'dark';
+  accentColor: string | undefined;
+  setAccentColor: (color: string | undefined) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>('system');
+  const [theme, setThemeState] = useState<ThemeType>('system');
+  const [accentColor, setAccentColorState] = useState<string | undefined>(undefined);
   const systemColorScheme = useColorScheme() as ColorScheme;
 
   useEffect(() => {
-    loadSavedTheme();
+    loadSavedSettings();
   }, []);
 
-  const loadSavedTheme = async () => {
+  const loadSavedSettings = async () => {
     try {
       const settings = await getAppSettings();
       if (settings?.theme) {
         setThemeState(settings.theme);
       }
+      if (settings?.accentColor) {
+        setAccentColorState(settings.accentColor);
+      }
     } catch (error) {
-      console.error('Error loading saved theme:', error);
+      console.error('Error loading saved settings:', error);
     }
   };
 
-  const setTheme = async (newTheme: Theme) => {
+  const setTheme = async (newTheme: ThemeType | ((prevTheme: ThemeType) => ThemeType)) => {
     try {
-      await setAppSettings({ theme: newTheme });
-      setThemeState(newTheme);
+      const currentSettings = await getAppSettings();
+
+      // Handle both direct value and function that uses previous value
+      const resolvedTheme = typeof newTheme === 'function'
+        ? newTheme(theme)
+        : newTheme;
+
+      await setAppSettings({
+        ...currentSettings,
+        theme: resolvedTheme
+      });
+      setThemeState(resolvedTheme);
     } catch (error) {
       console.error('Error saving theme:', error);
     }
   };
 
   const toggleTheme = () => {
-    //@ts-ignore
-    setTheme(prevTheme => {
+    setTheme((prevTheme: ThemeType): ThemeType => {
       switch (prevTheme) {
         case 'light': return 'dark';
         case 'dark': return 'system';
         case 'system': return 'light';
+        default: return 'system';
       }
     });
   };
 
-  const actualTheme = theme === 'system' ? systemColorScheme : theme;
+  const setAccentColor = async (color: string | undefined) => {
+    try {
+      const currentSettings = await getAppSettings();
+      await setAppSettings({
+        ...currentSettings,
+        accentColor: color
+      });
+
+      // Update colors object directly
+      updateAccentColor(color, theme === 'system' ? systemColorScheme : theme as ColorScheme);
+
+      setAccentColorState(color);
+    } catch (error) {
+      console.error('Error saving accent color:', error);
+    }
+  };
 
   return (
-    <ThemeContext.Provider value={{ 
-      theme, 
-      systemTheme: systemColorScheme, 
+    <ThemeContext.Provider value={{
+      theme,
+      systemTheme: systemColorScheme,
       setTheme,
       toggleTheme,
-      actualTheme
+      actualTheme: theme === 'system' ? systemColorScheme : theme as 'light' | 'dark',
+      accentColor,
+      setAccentColor
     }}>
       {children}
     </ThemeContext.Provider>
@@ -76,3 +108,5 @@ export const useTheme = () => {
   }
   return context;
 };
+
+export type Theme = ThemeType;

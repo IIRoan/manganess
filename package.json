@@ -2,6 +2,61 @@
   "name": "manganess",
   "main": "expo-router/entry",
   "version": "1.12",
+  "expo": {
+    "name": "manganess",
+    "slug": "manganess",
+    "version": "1.12",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "com.iroan.manganess",
+    "owner": "iroan",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#121212"
+      },
+      "package": "com.iroan.manganess"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#121212"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/e39fdc53-b1f4-4839-8e48-07a5e789d5eb",
+      "checkAutomatically": "ON_ERROR_RECOVERY"
+    },
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "listUnknownPackages": false
+      }
+    }
+  },
   "scripts": {
     "start": "expo start",
     "startlocal": "expo start --localhost",
@@ -25,28 +80,29 @@
     "@react-navigation/native": "^7.0.0",
     "@shopify/flash-list": "^1.7.2",
     "axios": "^1.7.8",
-    "expo": "~52.0.36",
+    "expo": "~52.0.46",
     "expo-blur": "~14.0.3",
-    "expo-constants": "~17.0.3",
+    "expo-constants": "~17.0.8",
     "expo-document-picker": "~13.0.1",
-    "expo-file-system": "~18.0.4",
+    "expo-file-system": "~18.0.12",
     "expo-font": "~13.0.1",
     "expo-haptics": "~14.0.0",
     "expo-linear-gradient": "^14.0.1",
     "expo-linking": "~7.0.3",
-    "expo-router": "~4.0.9",
+    "expo-router": "~4.0.21",
     "expo-sharing": "~13.0.0",
-    "expo-splash-screen": "~0.29.13",
+    "expo-splash-screen": "~0.29.24",
     "expo-status-bar": "~2.0.1",
     "expo-symbols": "~0.2.0",
-    "expo-system-ui": "~4.0.4",
-    "expo-updates": "~0.27.1",
+    "expo-system-ui": "~4.0.9",
+    "expo-updates": "~0.27.4",
     "expo-web-browser": "~14.0.1",
     "html-entities": "^2.5.2",
     "lodash": "^4.17.21",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-native": "0.76.7",
+    "react-native": "0.76.9",
+    "react-native-color-picker": "^0.6.0",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-reanimated": "~3.16.1",
     "react-native-safe-area-context": "4.12.0",
