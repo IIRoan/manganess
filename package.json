@@ -9,6 +9,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
+    "owner": "iroan",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -41,7 +42,6 @@
         "projectId": "e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
       }
     },
-    "owner": "iroan",
     "runtimeVersion": {
       "policy": "sdkVersion"
     },
