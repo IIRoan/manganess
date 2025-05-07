@@ -1,5 +1,38 @@
 {
   "expo": {
+    "name": "manganess",
+    "slug": "manganess",
+    "version": "1.12",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "com.iroan.manganess",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#121212"
+      },
+      "package": "com.iroan.manganess"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#121212"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
     "extra": {
       "eas": {
         "projectId": "e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
@@ -7,12 +40,13 @@
     },
     "owner": "iroan",
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "sdkVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
-    },
-    "android": {},
-    "ios": {}
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/e39fdc53-b1f4-4839-8e48-07a5e789d5eb",
+      "checkAutomatically": "ON_ERROR_RECOVERY"
+    }
   }
 }
