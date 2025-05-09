@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   Dimensions,
   useColorScheme,
+  TouchableOpacity,
+  Animated,
 } from 'react-native';
-import { Tabs, usePathname } from 'expo-router';
+import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getAppSettings, getDebugTabEnabled, isOnboardingCompleted as checkOnboarding } from '@/services/settingsService';
 import { useTheme } from '@/constants/ThemeContext';
@@ -14,36 +17,51 @@ import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Updates from 'expo-updates';
 import { imageCache } from '@/services/CacheImages';
+import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
 
 export default function TabLayout() {
-  // Theme and color scheme
+  const router = useRouter();
+  const navigation = useNavigation();
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
     theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
 
-  // Safe area insets
   const insets = useSafeAreaInsets();
 
-  // Screen dimensions
   const { width } = Dimensions.get('window');
   const TAB_BAR_WIDTH = width * 0.9;
   const TAB_WIDTH = TAB_BAR_WIDTH / 5;
 
-  // State variables
   const [updateMessage, setUpdateMessage] = useState<string>('');
   const [showUpdateAlert, setShowUpdateAlert] = useState(false);
   const pathname = usePathname();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
+  const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(null);
+  const buttonScale = useRef(new Animated.Value(1)).current;
+  
+  const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
 
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
     checkForUpdates();
     imageCache.initializeCache();
-  }, []);
+    
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshLastReadManga();
+    });
+    
+    return unsubscribe;
+  }, [navigation]);
+  
+  useEffect(() => {
+    if (pathname === '/' || pathname === '/bookmarks' || pathname === '/settings' || pathname === '/mangasearch') {
+      refreshLastReadManga();
+    }
+  }, [pathname]);
 
   const loadEnableDebugTabSetting = async () => {
     try {
@@ -51,6 +69,17 @@ export default function TabLayout() {
       setEnableDebugTab(enabled);
     } catch (error) {
       console.error('Error loading enable debug tab setting:', error);
+    }
+  };
+  
+  const refreshLastReadManga = async () => {
+    try {
+      const lastRead = await getLastReadManga();
+      console.log('Last read manga refreshed:', lastRead);
+      setLastReadManga(lastRead);
+      setLastReadUpdateCount(prev => prev + 1);
+    } catch (error) {
+      console.error('Error refreshing last read manga:', error);
     }
   };
 
@@ -77,10 +106,28 @@ export default function TabLayout() {
     }
   };
 
-  const handleUpdate = async () => {
-    await Updates.reloadAsync();
+  const handleLastButtonPress = () => {
+    Animated.sequence([
+      Animated.timing(buttonScale, {
+        toValue: 0.9,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(buttonScale, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    if (lastReadManga && lastReadManga.id) {
+      console.log('Navigating to manga:', lastReadManga);
+      router.push(`/manga/${lastReadManga.id}`);
+    } else {
+      console.log('No last read manga found, navigating to search');
+      router.push('/mangasearch');
+    }
   };
-
 
   const shouldShowTabBar = () => {
     const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
@@ -97,9 +144,10 @@ export default function TabLayout() {
   }
 
   if (!isOnboardingCompleted) {
-    // Render the onboarding screen if the user hasn't completed the onboarding process
     return <OnboardingScreen />;
   }
+
+  const tabBarBottomPosition = insets.bottom + 15;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
@@ -146,16 +194,16 @@ export default function TabLayout() {
           tabBarInactiveTintColor: colors.tabIconDefault,
           tabBarStyle: {
             position: 'absolute',
-            bottom: insets.bottom + 25,
+            bottom: tabBarBottomPosition,
             marginHorizontal: (width - TAB_BAR_WIDTH) / 2,
             backgroundColor: colors.card,
-            borderRadius: 25,
+            borderRadius: 35,
             height: 60,
             width: TAB_BAR_WIDTH,
             paddingBottom: 5,
             paddingTop: 5,
             display: shouldShowTabBar() ? 'flex' : 'none',
-            ...styles.tabBarShadow,
+            elevation: 4,
           },
           tabBarItemStyle: {
             height: 50,
@@ -185,7 +233,6 @@ export default function TabLayout() {
             href: enableDebugTab ? undefined : null,
           }}
         />
-        {/* Hide all other routes */}
         <Tabs.Screen name="manga/[id]" options={{ href: null }} />
         <Tabs.Screen
           name="manga/[id]/chapter/[chapterNumber]"
@@ -200,6 +247,32 @@ export default function TabLayout() {
           options={{ href: null }}
         />
       </Tabs>
+      
+      {shouldShowTabBar() && (
+        <Animated.View 
+          style={[
+            styles.lastButtonContainer,
+            { 
+              bottom: tabBarBottomPosition + 30,
+              transform: [{ scale: buttonScale }]
+            },
+          ]}
+        >
+          <TouchableOpacity 
+            style={[
+              styles.lastButton, 
+              { 
+                backgroundColor: colors.primary,
+                borderColor: colors.card,
+              }
+            ]}
+            onPress={handleLastButtonPress}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="book" size={24} color="white" />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -207,16 +280,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  tabBarShadow: {
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 2,
   },
   iconContainer: {
     alignItems: 'center',
@@ -231,4 +294,31 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
+  lastButtonContainer: {
+    position: 'absolute', 
+    alignSelf: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  lastButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    elevation: 0,
+  },
+  lastButtonLabel: {
+    position: 'absolute',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    top: 48,
+  },
+  lastButtonText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '700',
+  }
 });
