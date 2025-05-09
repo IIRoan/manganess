@@ -11,6 +11,7 @@ interface SwipeableChapterItemProps {
     };
     isRead: boolean;
     isLastItem: boolean;
+    isCurrentlyLastRead?: boolean;
     onPress: () => void;
     onLongPress: () => void;
     onUnread: () => void;
@@ -26,6 +27,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     chapter,
     isRead,
     isLastItem,
+    isCurrentlyLastRead = false,
     onPress,
     onLongPress,
     onUnread,
@@ -126,16 +128,22 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 <TouchableOpacity
                     onPress={onPress}
                     onLongPress={onLongPress}
-                    style={[parentStyles.chapterItem, styles.content]}
+                    style={[
+                        parentStyles.chapterItem, 
+                        styles.content,
+                        isCurrentlyLastRead && styles.lastReadChapterItem
+                    ]}
                 >
                     <View style={parentStyles.chapterInfo}>
                         <Text
                             style={[
                                 parentStyles.chapterTitle,
                                 isRead && parentStyles.readChapterTitle,
+                                isCurrentlyLastRead && styles.lastReadChapterText
                             ]}
                         >
                             {chapter.title}
+                            {isCurrentlyLastRead && ' (Last Read)'}
                         </Text>
                         <Text style={parentStyles.chapterDate}>{chapter.date}</Text>
                     </View>
@@ -143,7 +151,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                         <Ionicons
                             name="checkmark-circle"
                             size={24}
-                            color={colors.primary}
+                            color={isCurrentlyLastRead ? colors.primary : colors.primary + '99'}
                         />
                     </View>
                 </TouchableOpacity>
@@ -175,6 +183,12 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginTop: 4,
     },
+    lastReadChapterItem: {
+        backgroundColor: 'rgba(0, 128, 0, 0.05)',
+    },
+    lastReadChapterText: {
+        fontWeight: '700',
+    }
 });
 
 export default SwipeableChapterItem;

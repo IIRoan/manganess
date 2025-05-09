@@ -207,21 +207,36 @@ export default function MangaDetailScreen() {
     }
   };
 
-  const handleMarkAsUnread = useCallback(
-    async (chapterNumber: string) => {
-      try {
-        const updatedChapters = await markChapterAsUnread(
-          id as string,
-          chapterNumber,
-          readChapters
-        );
-        setReadChapters(updatedChapters);
-      } catch (error) {
-        console.error("Error marking chapter as unread:", error);
+const handleMarkAsUnread = useCallback(
+  async (chapterNumber: string) => {
+    try {
+      const result = await markChapterAsUnread(
+        id as string,
+        chapterNumber,
+        readChapters
+      );
+      
+      // Update the read chapters state
+      setReadChapters(result.updatedChapters);
+      
+      // Update the last read chapter display immediately
+      if (result.newLastReadChapter) {
+        setLastReadChapter(`Chapter ${result.newLastReadChapter}`);
+      } else {
+        setLastReadChapter('Not started');
       }
-    },
-    [id, readChapters]
-  );
+      
+      // Close any open swipeables
+      if (currentlyOpenSwipeable) {
+        currentlyOpenSwipeable.close();
+        setCurrentlyOpenSwipeable(null);
+      }
+    } catch (error) {
+      console.error("Error marking chapter as unread:", error);
+    }
+  },
+  [id, readChapters, currentlyOpenSwipeable]
+);
 
   const handleSaveBookmark = async (status: BookmarkStatus) => {
     if (!mangaDetails) return;
