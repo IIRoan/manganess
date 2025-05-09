@@ -143,7 +143,6 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                             ]}
                         >
                             {chapter.title}
-                            {isCurrentlyLastRead && ' (Last Read)'}
                         </Text>
                         <Text style={parentStyles.chapterDate}>{chapter.date}</Text>
                     </View>
