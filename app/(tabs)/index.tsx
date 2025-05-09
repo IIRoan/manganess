@@ -12,10 +12,11 @@ import {
   Dimensions,
   Platform,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/constants/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NessieAnimation } from '@/components/NessieAnimation';
@@ -25,11 +26,13 @@ import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireServ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
+import { BlurView } from 'expo-blur';
 
 // Constants
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const TRENDING_CARD_WIDTH = 180;
-const TRENDING_CARD_HEIGHT = 260;
+const TRENDING_CARD_WIDTH = 200;
+const TRENDING_CARD_HEIGHT = 280;
+const FEATURED_HEIGHT = 220;
 
 // Types
 interface MangaItem {
@@ -55,11 +58,12 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
 
   // Animations
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, 50, 100],
-    outputRange: [0, 0.5, 1],
+    outputRange: [0, 0.8, 1],
     extrapolate: 'clamp',
   });
 
@@ -116,6 +120,11 @@ export default function HomeScreen() {
 
       setMostViewedManga(parsedMostViewed);
       setNewReleases(parsedNewReleases);
+      
+      // Set featured manga from the first trending item
+      if (parsedMostViewed.length > 0) {
+        setFeaturedManga(parsedMostViewed[0]);
+      }
     } catch (error) {
       console.error('Error fetching manga data:', error);
       setError('An error occurred while fetching manga data. Please try again.');
@@ -151,7 +160,7 @@ export default function HomeScreen() {
     >
       <Image source={{ uri: item.imageUrl }} style={styles.trendingImage} />
       <LinearGradient
-        colors={['transparent', `rgba(0,0,0,0.9)`]}
+        colors={['transparent', 'rgba(0,0,0,0.9)']}
         style={styles.trendingGradient}
       >
         <View style={styles.trendingContent}>
@@ -176,6 +185,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => router.navigate(`/manga/${item.id}`)}
               activeOpacity={0.7}
+              style={styles.newReleaseCard}
             >
               <MangaCard
                 title={item.title}
@@ -196,14 +206,50 @@ export default function HomeScreen() {
     );
   };
 
+  const renderFeaturedManga = () => {
+    if (!featuredManga) return null;
+    
+    return (
+      <TouchableOpacity
+        style={styles.featuredContainer}
+        onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
+        activeOpacity={0.8}
+      >
+        <Image source={{ uri: featuredManga.imageUrl }} style={styles.featuredImage} />
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.8)']}
+          style={styles.featuredGradient}
+        >
+          <View style={styles.featuredContent}>
+            <View style={styles.featuredBadge}>
+              <MaterialCommunityIcons name="fire" size={16} color="#FFF" />
+              <Text style={styles.featuredBadgeText}>Featured</Text>
+            </View>
+            <Text style={styles.featuredTitle} numberOfLines={2}>
+              {featuredManga.title}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.readNowButton, { backgroundColor: themeColors.primary }]}
+              onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
+            >
+              <Text style={styles.readNowText}>Read Now</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
   // Main render
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+        <StatusBar barStyle={actualTheme === 'dark' ? 'light-content' : 'dark-content'} />
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color={themeColors.primary} />
+          <NessieAnimation imageSize={60} />
+          <ActivityIndicator size="large" color={themeColors.primary} style={styles.loadingIndicator} />
           <Text style={[styles.loadingText, { color: themeColors.text }]}>
-            Loading...
+            Loading your manga...
           </Text>
         </View>
       </View>
@@ -212,6 +258,8 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <StatusBar barStyle={actualTheme === 'dark' ? 'light-content' : 'dark-content'} />
+      
       {/* Animated Header */}
       <Animated.View
         style={[
@@ -221,40 +269,41 @@ export default function HomeScreen() {
               inputRange: [0, 50],
               outputRange: [insets.top, insets.top + 50],
             }),
-            backgroundColor: themeColors.card,
             opacity: headerOpacity,
             paddingTop: insets.top,
           }
         ]}
       >
-        <View style={styles.headerContent}>
-          <Animated.Text
-            style={[
-              styles.headerTitle,
-              {
-                color: themeColors.text,
-                transform: [
-                  { scale: titleScale },
-                  { translateY: titleTranslateY }
-                ]
-              }
-            ]}
-          >
-            MangaNess
-          </Animated.Text>
-          <TouchableOpacity
-            style={[styles.searchButton, { backgroundColor: themeColors.background + '50' }]}
-            onPress={() => router.navigate('/mangasearch')}
-          >
-            <Ionicons name="search" size={22} color={themeColors.text} />
-          </TouchableOpacity>
-        </View>
+        <BlurView intensity={80} style={styles.blurView} tint={actualTheme === 'dark' ? 'dark' : 'light'}>
+          <View style={styles.headerContent}>
+            <Animated.Text
+              style={[
+                styles.headerTitle,
+                {
+                  color: themeColors.text,
+                  transform: [
+                    { scale: titleScale },
+                    { translateY: titleTranslateY }
+                  ]
+                }
+              ]}
+            >
+              MangaNess
+            </Animated.Text>
+            <TouchableOpacity
+              style={[styles.searchButton, { backgroundColor: themeColors.card + '80' }]}
+              onPress={() => router.navigate('/mangasearch')}
+            >
+              <Ionicons name="search" size={22} color={themeColors.text} />
+            </TouchableOpacity>
+          </View>
+        </BlurView>
       </Animated.View>
 
       {/* Main Content */}
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top }]}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: false }
@@ -279,7 +328,7 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Simple search icon */}
+            {/* Search button */}
             <TouchableOpacity
               style={[styles.searchIconButton, { backgroundColor: themeColors.card }]}
               onPress={() => router.navigate('/mangasearch')}
@@ -302,11 +351,14 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
+            {/* Featured Manga */}
+            {renderFeaturedManga()}
+            
             {/* Trending Section */}
             <View style={styles.section}>
               {renderSectionTitle('Trending Now', 'trophy')}
               <FlatList
-                data={mostViewedManga}
+                data={mostViewedManga.slice(1)} // Skip the first one as it's featured
                 renderItem={renderTrendingItem}
                 keyExtractor={(item) => item.id}
                 horizontal
@@ -322,6 +374,25 @@ export default function HomeScreen() {
             <View style={styles.section}>
               {renderSectionTitle('New Releases', 'sparkles')}
               {renderNewReleaseGrid()}
+            </View>
+            
+            {/* Continue Reading Section (placeholder) */}
+            <View style={styles.section}>
+              {renderSectionTitle('Continue Reading', 'book')}
+              <View style={[styles.emptyStateContainer, { backgroundColor: themeColors.card + '50' }]}>
+                <Ionicons name="book-outline" size={40} color={themeColors.text + '70'} />
+                <Text style={[styles.emptyStateText, { color: themeColors.text + '90' }]}>
+                  Manga you're reading will appear here
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.browseButton, { backgroundColor: themeColors.primary + '20' }]}
+                  onPress={() => router.navigate('/mangasearch')}
+                >
+                  <Text style={[styles.browseButtonText, { color: themeColors.primary }]}>
+                    Browse Manga
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </>
         )}
@@ -341,11 +412,13 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 10,
     justifyContent: 'flex-end',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+  },
+  blurView: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   headerContent: {
     flexDirection: 'row',
@@ -358,8 +431,9 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   heroSection: {
-    marginBottom: 24,
+    marginBottom: 16,
     paddingHorizontal: 16,
+    paddingTop: 16,
   },
   headerRow: {
     flexDirection: 'row',
@@ -379,11 +453,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Simple search icon button
   searchIconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -417,6 +490,70 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+  // Featured manga
+  featuredContainer: {
+    height: FEATURED_HEIGHT,
+    marginHorizontal: 16,
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  featuredGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '70%',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  featuredContent: {
+    alignItems: 'flex-start',
+  },
+  featuredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 59, 48, 0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  featuredBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  featuredTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  readNowButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  readNowText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
   // Trending section
   trendingList: {
     paddingRight: 16,
@@ -429,9 +566,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
   },
   trendingImage: {
     width: '100%',
@@ -455,7 +592,7 @@ const styles = StyleSheet.create({
   trendingTitle: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     marginRight: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.7)',
@@ -484,6 +621,15 @@ const styles = StyleSheet.create({
     width: '50%',
     padding: 8,
   },
+  newReleaseCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   card: {
     width: '100%',
     aspectRatio: 3 / 4,
@@ -491,8 +637,33 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     marginTop: 8,
+    paddingHorizontal: 4,
+    paddingBottom: 4,
   },
   mangaTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  // Empty state for Continue Reading
+  emptyStateContainer: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  browseButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  browseButtonText: {
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -501,6 +672,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingIndicator: {
+    marginTop: 20,
   },
   loadingText: {
     marginTop: 16,
@@ -531,3 +705,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
