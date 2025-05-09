@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -22,13 +22,13 @@ import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireServ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
-import { MangaItem } from '@/types';
+import { MangaItem, MangaData } from '@/types';
+import { getRecentlyReadManga } from '@/services/readChapterService';
 
 const TRENDING_CARD_WIDTH = 200;
 const TRENDING_CARD_HEIGHT = 260;
 const FEATURED_HEIGHT = 280;
-
-
+const RECENTLY_READ_CARD_WIDTH = 160;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -44,9 +44,12 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
+  const [recentlyReadManga, setRecentlyReadManga] = useState<MangaData[]>([]);
+  const [isRecentMangaLoading, setIsRecentMangaLoading] = useState<boolean>(true);
 
   useEffect(() => {
     fetchMangaData();
+    fetchRecentlyReadManga();
     return () => {
       resetCloudflareDetection();
     };
@@ -91,9 +94,22 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchRecentlyReadManga = useCallback(async () => {
+    try {
+      setIsRecentMangaLoading(true);
+      const recentManga = await getRecentlyReadManga(6);
+      setRecentlyReadManga(recentManga);
+    } catch (error) {
+      console.error('Error fetching recently read manga:', error);
+    } finally {
+      setIsRecentMangaLoading(false);
+    }
+  }, []);
+
   const handleRefresh = () => {
     setIsRefreshing(true);
     fetchMangaData();
+    fetchRecentlyReadManga();
   };
 
   const renderSectionTitle = (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
@@ -132,6 +148,24 @@ export default function HomeScreen() {
       </LinearGradient>
     </TouchableOpacity>
   );
+  
+  const renderRecentlyReadItem = ({ item, index }: { item: MangaData; index: number }) => (
+    <TouchableOpacity
+      style={[
+        styles.recentlyReadItem,
+        { marginLeft: index === 0 ? 16 : 12 }
+      ]}
+      onPress={() => router.navigate(`/manga/${item.id}`)}
+      activeOpacity={0.7}
+    >
+      <MangaCard
+        title={item.title}
+        imageUrl={item.bannerImage}
+        onPress={() => router.navigate(`/manga/${item.id}`)}
+        lastReadChapter={item.lastReadChapter ? `Chapter ${item.lastReadChapter}` : 'Not started'}
+      />
+    </TouchableOpacity>
+  );
 
   const renderNewReleaseGrid = () => {
     return (
@@ -159,6 +193,46 @@ export default function HomeScreen() {
           </View>
         ))}
       </View>
+    );
+  };
+
+  const renderContinueReadingSection = () => {
+    if (isRecentMangaLoading) {
+      return (
+        <View style={[styles.loadingContainer, { height: 200, backgroundColor: 'transparent' }]}>
+          <ActivityIndicator size="small" color={themeColors.primary} />
+        </View>
+      );
+    }
+
+    if (recentlyReadManga.length === 0) {
+      return (
+        <View style={[styles.emptyStateContainer, { backgroundColor: themeColors.card + '50' }]}>
+          <Ionicons name="book-outline" size={40} color={themeColors.text + '70'} />
+          <Text style={[styles.emptyStateText, { color: themeColors.text + '90' }]}>
+            Manga you're reading will appear here
+          </Text>
+          <TouchableOpacity
+            style={[styles.browseButton, { backgroundColor: themeColors.primary + '20' }]}
+            onPress={() => router.navigate('/mangasearch')}
+          >
+            <Text style={[styles.browseButtonText, { color: themeColors.primary }]}>
+              Browse Manga
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={recentlyReadManga}
+        renderItem={renderRecentlyReadItem}
+        keyExtractor={(item) => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.recentlyReadList}
+      />
     );
   };
 
@@ -216,7 +290,7 @@ export default function HomeScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content]} // Removed explicit paddingTop here as it's handled by the first element (Featured)
+        contentContainerStyle={[styles.content]}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -227,7 +301,7 @@ export default function HomeScreen() {
         }
       >
         {error ? (
-          <View style={[styles.errorContainer, { paddingTop: insets.top + 20 }]}> {/* Adjust error container padding */}
+          <View style={[styles.errorContainer, { paddingTop: insets.top + 20 }]}>
             <Ionicons name="alert-circle-outline" size={48} color={themeColors.notification} />
             <Text style={[styles.errorText, { color: themeColors.notification }]}>{error}</Text>
             <TouchableOpacity
@@ -240,6 +314,11 @@ export default function HomeScreen() {
         ) : (
           <>
             {renderFeaturedManga()}
+
+            <View style={styles.section}>
+              {renderSectionTitle('Continue Reading', 'book')}
+              {renderContinueReadingSection()}
+            </View>
 
             <View style={styles.section}>
               {renderSectionTitle('Trending Now', 'trophy')}
@@ -259,24 +338,6 @@ export default function HomeScreen() {
             <View style={styles.section}>
               {renderSectionTitle('New Releases', 'sparkles')}
               {renderNewReleaseGrid()}
-            </View>
-
-            <View style={styles.section}>
-              {renderSectionTitle('Continue Reading', 'book')}
-              <View style={[styles.emptyStateContainer, { backgroundColor: themeColors.card + '50' }]}>
-                <Ionicons name="book-outline" size={40} color={themeColors.text + '70'} />
-                <Text style={[styles.emptyStateText, { color: themeColors.text + '90' }]}>
-                  Manga you're reading will appear here (W.I.P)
-                </Text>
-                <TouchableOpacity
-                  style={[styles.browseButton, { backgroundColor: themeColors.primary + '20' }]}
-                  onPress={() => router.navigate('/mangasearch')}
-                >
-                  <Text style={[styles.browseButtonText, { color: themeColors.primary }]}>
-                    Browse Manga
-                  </Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </>
         )}
@@ -520,5 +581,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  recentlyReadList: {
+    paddingRight: 16,
+    paddingBottom: 8,
+  },
+  recentlyReadItem: {
+    width: RECENTLY_READ_CARD_WIDTH,
+    marginRight: 12,
   },
 });
