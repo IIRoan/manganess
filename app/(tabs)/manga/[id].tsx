@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
@@ -140,15 +138,15 @@ export default function MangaDetailScreen() {
     }
   }, [id]);
 
-  const fetchLastReadChapter = async () => {
+  const fetchLastReadChapter = useCallback(async () => {
     try {
       const lastChapter = await getLastReadChapter(id as string);
       setLastReadChapter(lastChapter);
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching last read chapter:", err);
       throw new Error("Failed to load last read chapter");
     }
-  };
+  }, [id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -175,7 +173,7 @@ export default function MangaDetailScreen() {
       fetchData();
 
       return () => {};
-    }, [id, fetchReadChapters])
+    }, [id, fetchReadChapters, fetchLastReadChapter])
   );
 
   const handleBookmark = () => {
@@ -557,17 +555,19 @@ const handleMarkAsUnread = useCallback(
             </>
           )}
           data={mangaDetails.chapters}
-          extraData={readChapters}
+          extraData={[readChapters, lastReadChapter]}
           keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
           renderItem={({ item: chapter, index }) => {
             const isRead = readChapters.includes(chapter.number);
             const isLastItem = index === mangaDetails.chapters.length - 1;
+            const isCurrentlyLastRead = lastReadChapter === `Chapter ${chapter.number}`;
 
             return (
               <SwipeableChapterItem
                 chapter={chapter}
                 isRead={isRead}
                 isLastItem={isLastItem}
+                isCurrentlyLastRead={isCurrentlyLastRead}
                 onPress={() => handleChapterPress(chapter.number)}
                 onLongPress={() => handleChapterLongPress(chapter.number)}
                 onUnread={() => handleMarkAsUnread(chapter.number)}

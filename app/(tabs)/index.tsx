@@ -16,7 +16,6 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
-import { NessieAnimation } from '@/components/NessieAnimation';
 import { MANGA_API_URL } from '@/constants/Config';
 import MangaCard from '@/components/MangaCard';
 import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireService';
@@ -202,7 +201,6 @@ export default function HomeScreen() {
       <View style={[styles.container, { backgroundColor: themeColors.background }]}>
         <StatusBar barStyle={actualTheme === 'dark' ? 'light-content' : 'dark-content'} />
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-          <NessieAnimation imageSize={60} />
           <ActivityIndicator size="large" color={themeColors.primary} style={styles.loadingIndicator} />
           <Text style={[styles.loadingText, { color: themeColors.text }]}>
             Loading your manga...
