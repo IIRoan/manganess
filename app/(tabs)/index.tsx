@@ -42,6 +42,16 @@ interface MangaItem {
   rank?: number;
 }
 
+// New interface for recently read manga
+interface RecentlyReadManga extends MangaItem {
+  lastReadChapter?: {
+    id: string;
+    number: string;
+    title?: string;
+  } | null;
+  lastReadDate?: Date;
+}
+
 export default function HomeScreen() {
   // Hooks
   const router = useRouter();
@@ -59,11 +69,12 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
+  const [recentlyReadManga, setRecentlyReadManga] = useState<RecentlyReadManga[]>([]);
 
   // Animations
   const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 50, 100],
-    outputRange: [0, 0.8, 1],
+    inputRange: [0, 50, 100, 500],
+    outputRange: [0, 0.8, 1, 0],
     extrapolate: 'clamp',
   });
 
@@ -88,6 +99,7 @@ export default function HomeScreen() {
   // Effects
   useEffect(() => {
     fetchMangaData();
+    fetchRecentlyReadManga(); // Fetch recently read manga
     return () => {
       resetCloudflareDetection();
     };
@@ -132,6 +144,48 @@ export default function HomeScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
+  };
+
+  const fetchRecentlyReadManga = () => {
+    // This would typically come from local storage or an API
+    // For now, we'll use mock data
+    const mockRecentlyRead: RecentlyReadManga[] = [
+      {
+        id: 'manga-1',
+        title: 'One Piece',
+        imageUrl: 'https://m.media-amazon.com/images/I/51FXs5gTmdL._SY445_SX342_.jpg',
+        lastReadChapter: {
+          id: 'chapter-1052',
+          number: '1052',
+          title: 'New Era'
+        },
+        lastReadDate: new Date(Date.now() - 24 * 60 * 60 * 1000) // 1 day ago
+      },
+      {
+        id: 'manga-2',
+        title: 'My Hero Academia',
+        imageUrl: 'https://m.media-amazon.com/images/I/51FvP5QbUVL._SY445_SX342_.jpg',
+        lastReadChapter: {
+          id: 'chapter-352',
+          number: '352',
+          title: 'The Final Act'
+        },
+        lastReadDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) // 3 days ago
+      },
+      {
+        id: 'manga-3',
+        title: 'Jujutsu Kaisen',
+        imageUrl: 'https://m.media-amazon.com/images/I/51QUzC1L6HL._SY445_SX342_.jpg',
+        lastReadChapter: {
+          id: 'chapter-223',
+          number: '223',
+          title: 'Showdown'
+        },
+        lastReadDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // 7 days ago
+      }
+    ];
+    
+    setRecentlyReadManga(mockRecentlyRead);
   };
 
   const handleRefresh = () => {
@@ -237,6 +291,64 @@ export default function HomeScreen() {
           </View>
         </LinearGradient>
       </TouchableOpacity>
+    );
+  };
+
+  const renderRecentlyReadManga = () => {
+    if (recentlyReadManga.length === 0) {
+      return (
+        <View style={[styles.emptyStateContainer, { backgroundColor: themeColors.card + '50' }]}>
+          <Ionicons name="book-outline" size={40} color={themeColors.text + '70'} />
+          <Text style={[styles.emptyStateText, { color: themeColors.text + '90' }]}>
+            Manga you're reading will appear here
+          </Text>
+          <TouchableOpacity 
+            style={[styles.browseButton, { backgroundColor: themeColors.primary + '20' }]}
+            onPress={() => router.navigate('/mangasearch')}
+          >
+            <Text style={[styles.browseButtonText, { color: themeColors.primary }]}>
+              Browse Manga
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={recentlyReadManga}
+        renderItem={({ item, index }) => (
+          <TouchableOpacity
+            style={[
+              styles.recentlyReadItem,
+              { marginLeft: index === 0 ? 16 : 12 }
+            ]}
+            onPress={() => router.navigate(`/manga/${item.id}`)}
+            activeOpacity={0.7}
+          >
+            <Image source={{ uri: item.imageUrl }} style={styles.recentlyReadImage} />
+            <View style={[styles.recentlyReadContent, { backgroundColor: themeColors.card }]}>
+              <Text style={[styles.recentlyReadTitle, { color: themeColors.text }]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              {item.lastReadChapter && (
+                <View style={styles.chapterInfo}>
+                  <Text style={[styles.chapterText, { color: themeColors.text + '80' }]}>
+                    Chapter {item.lastReadChapter.number}
+                  </Text>
+                  <View style={[styles.continueButton, { backgroundColor: themeColors.primary }]}>
+                    <Text style={styles.continueText}>Continue</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
+        keyExtractor={(item) => item.id}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.recentlyReadList}
+      />
     );
   };
 
@@ -354,6 +466,12 @@ export default function HomeScreen() {
             {/* Featured Manga */}
             {renderFeaturedManga()}
             
+            {/* Continue Reading Section */}
+            <View style={styles.section}>
+              {renderSectionTitle('Continue Reading', 'book')}
+              {renderRecentlyReadManga()}
+            </View>
+            
             {/* Trending Section */}
             <View style={styles.section}>
               {renderSectionTitle('Trending Now', 'trophy')}
@@ -374,25 +492,6 @@ export default function HomeScreen() {
             <View style={styles.section}>
               {renderSectionTitle('New Releases', 'sparkles')}
               {renderNewReleaseGrid()}
-            </View>
-            
-            {/* Continue Reading Section (placeholder) */}
-            <View style={styles.section}>
-              {renderSectionTitle('Continue Reading', 'book')}
-              <View style={[styles.emptyStateContainer, { backgroundColor: themeColors.card + '50' }]}>
-                <Ionicons name="book-outline" size={40} color={themeColors.text + '70'} />
-                <Text style={[styles.emptyStateText, { color: themeColors.text + '90' }]}>
-                  Manga you're reading will appear here
-                </Text>
-                <TouchableOpacity 
-                  style={[styles.browseButton, { backgroundColor: themeColors.primary + '20' }]}
-                  onPress={() => router.navigate('/mangasearch')}
-                >
-                  <Text style={[styles.browseButtonText, { color: themeColors.primary }]}>
-                    Browse Manga
-                  </Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </>
         )}
@@ -644,6 +743,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  // Recently read manga styles
+  recentlyReadList: {
+    paddingRight: 16,
+    paddingBottom: 8,
+  },
+  recentlyReadItem: {
+    width: 280,
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    flexDirection: 'row',
+  },
+  recentlyReadImage: {
+    width: 80,
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  recentlyReadContent: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  recentlyReadTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  chapterInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  chapterText: {
+    fontSize: 14,
+  },
+  continueButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  continueText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   // Empty state for Continue Reading
   emptyStateContainer: {
     marginHorizontal: 16,
@@ -705,4 +855,3 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
