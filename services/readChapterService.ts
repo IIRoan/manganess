@@ -1,6 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMangaData, setMangaData } from './bookmarkService';
 
+const LAST_READ_MANGA_KEY = 'last_read_manga';
+
+export interface LastReadManga {
+  id: string;
+  title: string;
+  chapterNumber: string;
+  timestamp: number;
+}
+
 export const getReadChapters = async (mangaId: string): Promise<string[]> => {
     try {
         const mangaData = await getMangaData(mangaId);
@@ -42,6 +51,10 @@ export const markChapterAsRead = async (
                 lastReadChapter: highestChapter,
                 lastUpdated: Date.now()
             });
+            
+            // Update last read manga info whenever a chapter is marked as read
+            await setLastReadManga(mangaId, mangaData.title, chapterNumber);
+            
             return updatedReadChapters;
         }
         return currentReadChapters;
@@ -74,4 +87,34 @@ export const markChapterAsUnread = async (
         console.error('Error marking chapter as unread:', error);
         return currentReadChapters;
     }
+};
+
+export const setLastReadManga = async (id: string, title: string, chapterNumber: string): Promise<void> => {
+  try {
+    const lastReadManga: LastReadManga = {
+      id,
+      title,
+      chapterNumber,
+      timestamp: Date.now()
+    };
+    
+    console.log('Setting last read manga:', lastReadManga);
+    await AsyncStorage.setItem(LAST_READ_MANGA_KEY, JSON.stringify(lastReadManga));
+  } catch (error) {
+    console.error('Error setting last read manga:', error);
+  }
+};
+
+export const getLastReadManga = async (): Promise<LastReadManga | null> => {
+  try {
+    const data = await AsyncStorage.getItem(LAST_READ_MANGA_KEY);
+    if (!data) return null;
+    
+    const parsedData = JSON.parse(data) as LastReadManga;
+    console.log('Retrieved last read manga:', parsedData);
+    return parsedData;
+  } catch (error) {
+    console.error('Error getting last read manga:', error);
+    return null;
+  }
 };
