@@ -1,3 +1,5 @@
+// was used in the index but isn't anymore, not used rn
+
 import React, { useRef, useEffect, useCallback } from 'react';
 import { Animated, Easing, View, StyleSheet, ViewStyle } from 'react-native';
 

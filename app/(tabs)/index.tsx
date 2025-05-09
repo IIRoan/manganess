@@ -8,9 +8,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
-  Animated,
-  Dimensions,
-  Platform,
   RefreshControl,
   StatusBar,
 } from 'react-native';
@@ -26,18 +23,13 @@ import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireServ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
+import { MangaItem } from '@/types';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TRENDING_CARD_WIDTH = 200;
-const TRENDING_CARD_HEIGHT = 280;
-const FEATURED_HEIGHT = 220;
+const TRENDING_CARD_HEIGHT = 260;
+const FEATURED_HEIGHT = 280;
 
-interface MangaItem {
-  id: string;
-  title: string;
-  imageUrl: string;
-  rank?: number;
-}
+
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -176,7 +168,7 @@ export default function HomeScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.featuredContainer}
+        style={[styles.featuredContainer, { marginTop: insets.top + 16 }]} 
         onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
         activeOpacity={0.8}
       >
@@ -226,7 +218,7 @@ export default function HomeScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top }]}
+        contentContainerStyle={[styles.content]} // Removed explicit paddingTop here as it's handled by the first element (Featured)
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -236,26 +228,8 @@ export default function HomeScreen() {
           />
         }
       >
-        <View style={styles.heroSection}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerTitleContainer}>
-              <Text style={[styles.headerTitle, { color: themeColors.text }]}>MangaNess</Text>
-              <View style={styles.nessieContainer}>
-                <NessieAnimation imageSize={30} />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.searchIconButton, { backgroundColor: themeColors.card }]}
-              onPress={() => router.navigate('/mangasearch')}
-            >
-              <Ionicons name="search" size={22} color={themeColors.text} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {error ? (
-          <View style={styles.errorContainer}>
+          <View style={[styles.errorContainer, { paddingTop: insets.top + 20 }]}> {/* Adjust error container padding */}
             <Ionicons name="alert-circle-outline" size={48} color={themeColors.notification} />
             <Text style={[styles.errorText, { color: themeColors.notification }]}>{error}</Text>
             <TouchableOpacity
@@ -319,41 +293,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: 100,
-  },
-  heroSection: {
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginRight: 10,
-  },
-  nessieContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   section: {
     marginBottom: 24,
@@ -566,7 +505,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    marginTop: 40,
   },
   errorText: {
     fontSize: 16,
