@@ -31,13 +31,6 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
       };
     }
 
-    if (!Updates.isEmbeddedLaunch) {
-      return { 
-        success: false, 
-        message: 'Updates are not available in Expo Go' 
-      };
-    }
-
     console.log('Checking for updates...');
     const update = await Updates.checkForUpdateAsync();
     
