@@ -24,10 +24,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Option, BottomPopupProps } from '@/types';
 
-// Remove this type definition since we're importing it from @/types
-// export interface Option {...}
-
-// Use the imported BottomPopupProps type instead
 const BottomPopup: React.FC<BottomPopupProps> = ({
   visible,
   title,
