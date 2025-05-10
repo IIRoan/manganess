@@ -5,7 +5,7 @@ export interface UpdateStatus {
   isChecking: boolean;
   isUpdateAvailable: boolean;
   isDownloading: boolean;
-  countdown: number | null;
+  isReady: boolean;
   error: string | null;
 }
 
@@ -14,13 +14,16 @@ export interface UpdateResult {
   message: string;
 }
 
+export interface UpdateOptions {
+  silent?: boolean;
+  forceReload?: boolean;
+}
+
 /**
  * Checks if an update is available from Expo's update server
- * @returns Promise resolving to UpdateResult with update availability info
  */
 export const checkForUpdate = async (): Promise<UpdateResult> => {
   try {
-    // Skip update check in development mode
     if (__DEV__) {
       return { 
         success: false, 
@@ -28,7 +31,6 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
       };
     }
 
-    // Ensure the app is using Expo Updates
     if (!Updates.isEmbeddedLaunch) {
       return { 
         success: false, 
@@ -61,11 +63,9 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
 
 /**
  * Downloads the latest update from Expo's update server
- * @returns Promise resolving to UpdateResult with download status
  */
 export const downloadUpdate = async (): Promise<UpdateResult> => {
   try {
-    // Make sure we're not in development mode
     if (__DEV__) {
       return { 
         success: false, 
@@ -89,60 +89,48 @@ export const downloadUpdate = async (): Promise<UpdateResult> => {
 };
 
 /**
- * Applies the downloaded update and restarts the app with countdown
- * @param seconds Number of seconds to count down before restarting
- * @param onTick Callback fired each second during countdown
- * @returns Promise resolving when countdown completes
+ * Applies the update and restarts the app
  */
-export const applyUpdateWithCountdown = (
-  seconds: number = 5,
-  onTick?: (secondsRemaining: number) => void
-): Promise<void> => {
-  return new Promise((resolve) => {
-    let countdown = seconds;
+export const applyUpdate = async (): Promise<UpdateResult> => {
+  try {
+    if (__DEV__ || Platform.OS === 'web') {
+      return {
+        success: false,
+        message: 'Cannot apply updates in development or web mode'
+      };
+    }
     
-    // Start the countdown
-    const intervalId = setInterval(() => {
-      countdown -= 1;
-      
-      // Call the onTick callback with the current countdown value
-      if (onTick) {
-        onTick(countdown);
-      }
-      
-      // When countdown reaches zero, clear the interval and restart
-      if (countdown <= 0) {
-        clearInterval(intervalId);
-        
-        // Check if we're on a native platform and not in development mode
-        if (!__DEV__ && Platform.OS !== 'web') {
-          Updates.reloadAsync()
-            .catch(error => {
-              console.error('Error reloading app:', error);
-            });
-        }
-        
-        resolve();
-      }
-    }, 1000);
-  });
+    console.log('Reloading app with update...');
+    await Updates.reloadAsync();
+    
+    return {
+      success: true,
+      message: 'Update applied successfully'
+    };
+  } catch (error) {
+    console.error('Error applying update:', error);
+    return {
+      success: false,
+      message: `Error applying update: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
+  }
 };
 
 /**
- * Performs the complete update flow: check, download, and apply with countdown
- * @param countdownSeconds Number of seconds for the countdown
- * @param onStatusChange Callback fired on status changes
- * @returns Promise resolving to final UpdateResult
+ * Performs the complete update flow: check, download, and apply
+ * Can run silently in the background with optional immediate reload
  */
 export const performFullUpdateFlow = async (
-  countdownSeconds: number = 5,
+  options: UpdateOptions = {},
   onStatusChange?: (status: UpdateStatus) => void
 ): Promise<UpdateResult> => {
+  const { silent = false, forceReload = false } = options;
+  
   const updateStatus: UpdateStatus = {
     isChecking: false,
     isUpdateAvailable: false,
     isDownloading: false,
-    countdown: null,
+    isReady: false,
     error: null
   };
 
@@ -162,7 +150,7 @@ export const performFullUpdateFlow = async (
     if (!checkResult.success) {
       updateState({ 
         isChecking: false,
-        error: checkResult.message 
+        error: silent ? null : checkResult.message 
       });
       return checkResult;
     }
@@ -179,34 +167,32 @@ export const performFullUpdateFlow = async (
     if (!downloadResult.success) {
       updateState({ 
         isDownloading: false,
-        error: downloadResult.message 
+        error: silent ? null : downloadResult.message 
       });
       return downloadResult;
     }
     
-    updateState({ isDownloading: false });
+    updateState({ 
+      isDownloading: false,
+      isReady: true 
+    });
     
-    // Start countdown and apply update
-    updateState({ countdown: countdownSeconds });
-    
-    await applyUpdateWithCountdown(
-      countdownSeconds,
-      (secondsRemaining) => {
-        updateState({ countdown: secondsRemaining });
-      }
-    );
+    // Apply update immediately if forceReload is true
+    if (forceReload) {
+      return await applyUpdate();
+    }
     
     return {
       success: true,
-      message: 'Update applied successfully'
+      message: 'Update is ready to be applied'
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     updateState({
       isChecking: false,
       isDownloading: false,
-      countdown: null,
-      error: errorMessage
+      isReady: false,
+      error: silent ? null : errorMessage
     });
     
     return {

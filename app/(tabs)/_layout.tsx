@@ -42,7 +42,7 @@ export default function TabLayout() {
   const buttonScale = useRef(new Animated.Value(1)).current;
   
   const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
-  const { updateStatus, checkAndApplyUpdate } = useAppUpdates();
+  const { updateStatus, updateAndReload } = useAppUpdates();
 
   useEffect(() => {
     loadEnableDebugTabSetting();
@@ -63,15 +63,6 @@ export default function TabLayout() {
     }
   }, [pathname]);
 
-  useEffect(() => {
-    if (updateStatus.countdown !== null) {
-      Alert.alert(
-        'Applying Update',
-        `The app will restart in ${updateStatus.countdown} seconds to apply the update.`,
-        [{ text: 'OK' }]
-      );
-    }
-  }, [updateStatus.countdown]);
 
   const loadEnableDebugTabSetting = async () => {
     try {
@@ -102,23 +93,17 @@ export default function TabLayout() {
     }
   };
 
-  const checkForUpdates = async () => {
+  const checkForUpdates = useCallback(async () => {
     try {
-      const result = await checkAndApplyUpdate(5);
+      // This will check for updates, download them, and reload the app all in one call
+      await updateAndReload();
       
-      if (result.success && updateStatus.isUpdateAvailable) {
-        Alert.alert(
-          'Update Available',
-          'A new update is available. The app will restart in 5 seconds to apply the update.',
-          [{ text: 'OK' }]
-        );
-      } else if (!result.success && result.message !== 'App is up to date') {
-        console.log('Update check result:', result.message);
-      }
+      // No need for alerts since it happens in the background
+      // If there is an error or no update, it will be handled silently
     } catch (error) {
       console.error('Error in update process:', error);
     }
-  };
+  }, [updateAndReload]);
 
   const handleLastButtonPress = () => {
     Animated.sequence([
