@@ -162,7 +162,6 @@ export const getRecentlyReadManga = async (limit: number = 6): Promise<MangaData
     // Filter for manga data keys (manga_*)
     const mangaKeys = allKeys.filter(key => key.startsWith('manga_') && !key.includes('_read_chapters'));
     
-    // Retrieve all manga data in parallel
     const mangaDataArray = await Promise.all(
       mangaKeys.map(async (key) => {
         const data = await AsyncStorage.getItem(key);
@@ -170,12 +169,13 @@ export const getRecentlyReadManga = async (limit: number = 6): Promise<MangaData
       })
     );
     
-    // Filter out null values and manga with no readChapters or with empty readChapters arrays
+
     const validManga = mangaDataArray.filter(
       (manga): manga is MangaData => 
         manga !== null && 
         manga.readChapters && 
-        manga.readChapters.length > 0
+        manga.readChapters.length > 0 &&
+        !!manga.bannerImage
     );
     
     // Sort by lastUpdated timestamp (descending)

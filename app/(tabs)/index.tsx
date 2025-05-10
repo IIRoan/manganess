@@ -10,8 +10,10 @@ import {
   Image,
   RefreshControl,
   StatusBar,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -22,13 +24,17 @@ import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireServ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
-import { MangaItem, MangaData } from '@/types';
+import { MangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TRENDING_CARD_WIDTH = 200;
 const TRENDING_CARD_HEIGHT = 260;
 const FEATURED_HEIGHT = 280;
-const RECENTLY_READ_CARD_WIDTH = 160;
+const RECENTLY_READ_CARD_WIDTH = Math.min(160, (SCREEN_WIDTH - 64) / 2);
+
+const DEFAULT_MANGA_COVER = 'https://static.mangafire.to/default/img/no-image.jpg';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -44,18 +50,11 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
-  const [recentlyReadManga, setRecentlyReadManga] = useState<MangaData[]>([]);
+  
+  const [recentlyReadManga, setRecentlyReadManga] = useState<any[]>([]);
   const [isRecentMangaLoading, setIsRecentMangaLoading] = useState<boolean>(true);
 
-  useEffect(() => {
-    fetchMangaData();
-    fetchRecentlyReadManga();
-    return () => {
-      resetCloudflareDetection();
-    };
-  }, []);
-
-  const fetchMangaData = async () => {
+  const fetchMangaData = useCallback(async () => {
     try {
       setError(null);
       if (!isRefreshing) {
@@ -92,13 +91,19 @@ export default function HomeScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [isRefreshing, checkForCloudflare]);
 
   const fetchRecentlyReadManga = useCallback(async () => {
     try {
       setIsRecentMangaLoading(true);
       const recentManga = await getRecentlyReadManga(6);
-      setRecentlyReadManga(recentManga);
+      
+      const processedManga = recentManga.map(manga => ({
+        ...manga,
+        bannerImage: manga.bannerImage || DEFAULT_MANGA_COVER
+      }));
+      
+      setRecentlyReadManga(processedManga);
     } catch (error) {
       console.error('Error fetching recently read manga:', error);
     } finally {
@@ -106,22 +111,36 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const handleRefresh = () => {
+  useEffect(() => {
+    fetchMangaData();
+    fetchRecentlyReadManga();
+    return () => {
+      resetCloudflareDetection();
+    };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRecentlyReadManga();
+    }, [fetchRecentlyReadManga])
+  );
+
+  const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     fetchMangaData();
     fetchRecentlyReadManga();
-  };
+  }, [fetchMangaData, fetchRecentlyReadManga]);
 
-  const renderSectionTitle = (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
+  const renderSectionTitle = useCallback((title: string, iconName: keyof typeof Ionicons.glyphMap) => (
     <View style={styles.sectionTitleContainer}>
       <View style={[styles.iconBackground, { backgroundColor: themeColors.primary + '20' }]}>
         <Ionicons name={iconName} size={20} color={themeColors.primary} />
       </View>
       <Text style={[styles.sectionTitle, { color: themeColors.text }]}>{title}</Text>
     </View>
-  );
+  ), [themeColors]);
 
-  const renderTrendingItem = ({ item, index }: { item: MangaItem; index: number }) => (
+  const renderTrendingItem = useCallback(({ item, index }: { item: MangaItem; index: number }) => (
     <TouchableOpacity
       style={[
         styles.trendingItem,
@@ -147,27 +166,28 @@ export default function HomeScreen() {
         </View>
       </LinearGradient>
     </TouchableOpacity>
-  );
+  ), [router, themeColors.primary]);
   
-  const renderRecentlyReadItem = ({ item, index }: { item: MangaData; index: number }) => (
-    <TouchableOpacity
-      style={[
-        styles.recentlyReadItem,
-        { marginLeft: index === 0 ? 16 : 12 }
-      ]}
-      onPress={() => router.navigate(`/manga/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      <MangaCard
-        title={item.title}
-        imageUrl={item.bannerImage}
-        onPress={() => router.navigate(`/manga/${item.id}`)}
-        lastReadChapter={item.lastReadChapter ? `Chapter ${item.lastReadChapter}` : 'Not started'}
-      />
-    </TouchableOpacity>
-  );
+  const renderRecentlyReadItem = useCallback(({ item, index }: { item: any; index: number }) => {
+    const lastReadChapter = item.lastReadChapter ? `Chapter ${item.lastReadChapter}` : 'Not started';
+    
+    return (
+      <View style={[styles.recentlyReadItem, { marginLeft: index === 0 ? 16 : 12 }]}>
+        <MangaCard
+          title={item.title}
+          imageUrl={item.bannerImage}
+          onPress={() => router.navigate(`/manga/${item.id}`)}
+          lastReadChapter={lastReadChapter}
+          style={styles.recentlyReadCard}
+        />
+        <Text style={[styles.recentlyReadTitle, { color: themeColors.text }]} numberOfLines={2}>
+          {item.title}
+        </Text>
+      </View>
+    );
+  }, [router, themeColors.text]);
 
-  const renderNewReleaseGrid = () => {
+  const renderNewReleaseGrid = useCallback(() => {
     return (
       <View style={styles.newReleaseGrid}>
         {newReleases.map((item, index) => (
@@ -194,9 +214,9 @@ export default function HomeScreen() {
         ))}
       </View>
     );
-  };
+  }, [newReleases, router, themeColors.text]);
 
-  const renderContinueReadingSection = () => {
+  const renderContinueReadingSection = useCallback(() => {
     if (isRecentMangaLoading) {
       return (
         <View style={[styles.loadingContainer, { height: 200, backgroundColor: 'transparent' }]}>
@@ -232,11 +252,12 @@ export default function HomeScreen() {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.recentlyReadList}
+        decelerationRate="fast"
       />
     );
-  };
+  }, [isRecentMangaLoading, recentlyReadManga, themeColors, router, renderRecentlyReadItem]);
 
-  const renderFeaturedManga = () => {
+  const renderFeaturedManga = useCallback(() => {
     if (!featuredManga) return null;
 
     return (
@@ -268,7 +289,7 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
     );
-  };
+  }, [featuredManga, insets.top, router, themeColors.primary]);
 
   if (isLoading) {
     return (
@@ -589,5 +610,17 @@ const styles = StyleSheet.create({
   recentlyReadItem: {
     width: RECENTLY_READ_CARD_WIDTH,
     marginRight: 12,
+  },
+  recentlyReadCard: {
+    width: '100%',
+    aspectRatio: 3 / 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  recentlyReadTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 6,
+    textAlign: 'center',
   },
 });
