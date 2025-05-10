@@ -9,7 +9,6 @@ import {
   ScrollView,
   Image,
   RefreshControl,
-  StatusBar,
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -294,7 +293,6 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-        <StatusBar barStyle={actualTheme === 'dark' ? 'light-content' : 'dark-content'} />
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
           <ActivityIndicator size="large" color={themeColors.primary} style={styles.loadingIndicator} />
           <Text style={[styles.loadingText, { color: themeColors.text }]}>
@@ -307,7 +305,6 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <StatusBar barStyle={actualTheme === 'dark' ? 'light-content' : 'dark-content'} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
