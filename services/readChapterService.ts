@@ -195,7 +195,6 @@ export const getLastReadManga = async (): Promise<LastReadManga | null> => {
     if (!data) return null;
 
     const parsedData = JSON.parse(data) as LastReadManga;
-    console.log("Retrieved last read manga:", parsedData);
     return parsedData;
   } catch (error) {
     console.error("Error getting last read manga:", error);

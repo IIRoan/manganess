@@ -7,11 +7,18 @@ export const useNavigationHistory = () => {
     const router = useRouter();
 
     const handleBackPress = useCallback(async () => {
-        const previousRoute = await getPreviousRoute();
-        router.replace(previousRoute as any);
-    }, [router]);
+        try {
+            const previousRoute = await getPreviousRoute(pathname);
+            router.replace(previousRoute as any);
+        } catch (error) {
+            console.error('Error handling back press:', error);
+            // Fallback to search
+            router.replace('/mangasearch' as any);
+        }
+    }, [pathname, router]);
 
     useEffect(() => {
+        // Update history when pathname changes
         updateNavigationHistory(pathname);
     }, [pathname]);
 
