@@ -59,7 +59,7 @@ export default function ReadChapterScreen() {
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const controlsTimeout = useRef<NodeJS.Timeout>();
+  const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -93,6 +93,7 @@ export default function ReadChapterScreen() {
       // Reset status bar when leaving this screen
       return () => {
         StatusBar.setHidden(false);
+        StatusBar.setBarStyle(colorScheme === "dark" ? "light-content" : "dark-content");
         StatusBar.setTranslucent(true);
         StatusBar.setBackgroundColor("transparent");
       };
@@ -148,7 +149,7 @@ export default function ReadChapterScreen() {
         duration: 200,
         useNativeDriver: true,
       }).start(() => setIsControlsVisible(false));
-    }, 3000);
+    }, 3000) as unknown as NodeJS.Timeout;
   }, [controlsOpacity, showGuide, guideStep]);
 
   const hideNavControls = useCallback(() => {
