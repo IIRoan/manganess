@@ -42,7 +42,10 @@ export default function TabLayout() {
   const buttonScale = useRef(new Animated.Value(1)).current;
   
   const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
-  const { updateStatus, updateAndReload } = useAppUpdates();
+  const { updateStatus, updateAndReload, isUpdateInProgress } = useAppUpdates();
+  
+  const updateIndicatorOpacity = useRef(new Animated.Value(0)).current;
+  const updateIndicatorScale = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     loadEnableDebugTabSetting();
@@ -62,6 +65,36 @@ export default function TabLayout() {
       refreshLastReadManga();
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (isUpdateInProgress) {
+      Animated.parallel([
+        Animated.timing(updateIndicatorOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(updateIndicatorScale, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        })
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(updateIndicatorOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(updateIndicatorScale, {
+          toValue: 0.8,
+          duration: 300,
+          useNativeDriver: true,
+        })
+      ]).start();
+    }
+  }, [isUpdateInProgress]);
 
 
   const loadEnableDebugTabSetting = async () => {
@@ -95,11 +128,8 @@ export default function TabLayout() {
 
   const checkForUpdates = useCallback(async () => {
     try {
-      // This will check for updates, download them, and reload the app all in one call
       await updateAndReload();
-      
-      // No need for alerts since it happens in the background
-      // If there is an error or no update, it will be handled silently
+
     } catch (error) {
       console.error('Error in update process:', error);
     }
@@ -138,6 +168,13 @@ export default function TabLayout() {
     );
   };
 
+  const getUpdateStatusMessage = () => {
+    if (updateStatus.isChecking) return 'Checking for updates...';
+    if (updateStatus.isDownloading) return 'Downloading update...';
+    if (updateStatus.isReady) return 'Update ready!';
+    return '';
+  };
+
   if (isOnboardingCompleted === null) {
     return null;
   }
@@ -150,6 +187,23 @@ export default function TabLayout() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
+      {/* Update Indicator */}
+      <Animated.View 
+        style={[
+          styles.updateIndicatorContainer, 
+          { 
+            backgroundColor: colors.primary,
+            opacity: updateIndicatorOpacity,
+            transform: [{ scale: updateIndicatorScale }],
+            top: insets.top + 8
+          }
+        ]}
+        pointerEvents="none"
+      >
+        <Ionicons name="refresh" size={16} color="white" style={styles.updateIndicatorIcon} />
+        <Text style={styles.updateIndicatorText}>{getUpdateStatusMessage()}</Text>
+      </Animated.View>
+
       <Tabs
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
@@ -319,5 +373,30 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 10,
     fontWeight: '700',
-  }
+  },
+  updateIndicatorContainer: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+    zIndex: 1000,
+    alignSelf: 'center',
+    maxWidth: '80%',
+  },
+  updateIndicatorText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  updateIndicatorIcon: {
+    marginRight: 6,
+  },
 });
