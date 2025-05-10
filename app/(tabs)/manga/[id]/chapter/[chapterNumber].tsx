@@ -8,13 +8,13 @@ import {
   Platform,
   useColorScheme,
   Animated,
+  StatusBar,
 } from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { WebViewNavigation } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import BottomSheet from "@gorhom/bottom-sheet";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { getMangaData } from "@/services/bookmarkService";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -59,12 +59,13 @@ export default function ReadChapterScreen() {
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const controlsTimeout = useRef<NodeJS.Timeout>();
+  const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
     theme === "system" ? systemColorScheme : (theme as ColorScheme);
+  const colors = Colors[colorScheme];
   const styles = getStyles(colorScheme);
   const insets = useSafeAreaInsets();
 
@@ -80,6 +81,34 @@ export default function ReadChapterScreen() {
     currentChapterIndex !== undefined &&
     currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
     mangaDetails?.chapters?.[currentChapterIndex + 1];
+
+  // Status bar management
+  useFocusEffect(
+    useCallback(() => {
+      // Configure status bar when screen is focused
+      StatusBar.setBarStyle(colorScheme === "dark" ? "light-content" : "dark-content");
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor("transparent");
+
+      // Reset status bar when leaving this screen
+      return () => {
+        StatusBar.setHidden(false);
+        StatusBar.setBarStyle(colorScheme === "dark" ? "light-content" : "dark-content");
+        StatusBar.setTranslucent(true);
+        StatusBar.setBackgroundColor("transparent");
+      };
+    }, [colorScheme])
+  );
+
+  // Update status bar based on controls visibility
+  useEffect(() => {
+    if (showGuide && guideStep === 1) {
+      // Always show status bar during first step of guide
+      StatusBar.setHidden(false);
+    } else {
+      StatusBar.setHidden(!isControlsVisible);
+    }
+  }, [isControlsVisible, showGuide, guideStep]);
 
   // Check if the user has seen the guide before
   useEffect(() => {
@@ -120,7 +149,7 @@ export default function ReadChapterScreen() {
         duration: 200,
         useNativeDriver: true,
       }).start(() => setIsControlsVisible(false));
-    }, 3000);
+    }, 3000) as unknown as NodeJS.Timeout;
   }, [controlsOpacity, showGuide, guideStep]);
 
   const hideNavControls = useCallback(() => {
@@ -349,21 +378,11 @@ export default function ReadChapterScreen() {
     bottomSheetRef.current?.close();
   };
 
-  const statusBarBackgroundColor = isControlsVisible
-    ? "transparent"
-    : Colors[colorScheme].card;
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
 
   return (
     <View style={styles.container}>
-      <ExpoStatusBar
-        style={colorScheme === "dark" ? "light" : "dark"}
-        backgroundColor={statusBarBackgroundColor}
-        translucent={true}
-        hidden={!isControlsVisible && !showGuide}
-      />
-
       {isLoading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator

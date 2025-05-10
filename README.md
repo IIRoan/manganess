@@ -3,12 +3,12 @@
 MangaNess is a mobile application that allows users to read manga and manhwa. It provides a clean, ad-free reading experience with smooth scrolling, dark mode support, and responsive design for various device sizes. It also allows users to browse and search for manga titles, track read chapters, and save favorite manga for future reading.
 
 ## Screenshots
-<img src="https://github.com/user-attachments/assets/23d987e0-3d10-4547-b7dd-3e1096963372" alt="Image1" height="500">
-<img src="https://github.com/user-attachments/assets/c0ae03c0-7828-4cba-b610-4a0a772381b5" alt="Image2" height="500">
-<img src="https://github.com/user-attachments/assets/b5dda7f4-5c2b-4e5f-9a18-e2ccf9732f8a" alt="Image3" height="500">
-<img src="https://github.com/user-attachments/assets/51f11e45-9bd2-4c3c-9c72-f850ae675404" alt="Image4" height="500">
-<img src="https://github.com/user-attachments/assets/6273c09e-2172-4e2b-90fc-a9b9d5b67233" alt="Image5" height="500">
-<img src="https://github.com/user-attachments/assets/32004e23-18d9-47b4-b1c8-377ceb9587e0" alt="Image6" height="500">
+<img src="https://github.com/user-attachments/assets/b8626bed-3e80-4509-a8c5-ab6a5412bf17" alt="Image1" height="500">
+<img src="https://github.com/user-attachments/assets/e8cf415b-98a7-487b-9650-48a1d957f533" alt="Image2" height="500">
+<img src="https://github.com/user-attachments/assets/bd1b99b4-b93a-4325-8434-9d4e8d1d4570" alt="Image3" height="500">
+<img src="https://github.com/user-attachments/assets/16be9920-ae78-49eb-812c-4b6124f2682b" alt="Image4" height="500">
+<img src="https://github.com/user-attachments/assets/f072d3bf-b7f9-4fc3-964b-990c3c5f8b1a" alt="Image5" height="500">
+<img src="https://github.com/user-attachments/assets/239d924c-b3ed-43ee-ad69-e93097a1c01e" alt="Image6" height="500">
 
 ## Features
 

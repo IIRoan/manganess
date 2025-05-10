@@ -18,29 +18,23 @@ function RootLayoutNav() {
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
   const activeTheme = theme === 'system' ? colorScheme : theme;
-
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      StatusBar.setTranslucent(true);
-      StatusBar.setHidden(true);
-    }
-  }, []);
-
+  
   return (
     <>
-      <StatusBar hidden translucent />
+      <StatusBar translucent backgroundColor="transparent" />
+      
       <NavigationThemeProvider
         value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}
       >
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen 
-            name="cloudflare" 
-            options={{ 
+          <Stack.Screen
+            name="cloudflare"
+            options={{
               headerShown: true,
               title: 'Cloudflare Verification',
               presentation: 'modal'
-            }} 
+            }}
           />
         </Stack>
       </NavigationThemeProvider>
@@ -52,17 +46,17 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
-
+  
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
-
+  
   if (!loaded) {
     return null;
   }
-
+  
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
       <ThemeProvider>
