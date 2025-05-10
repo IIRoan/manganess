@@ -75,7 +75,6 @@ export default function TabLayout() {
   const refreshLastReadManga = async () => {
     try {
       const lastRead = await getLastReadManga();
-      console.log('Last read manga refreshed:', lastRead);
       setLastReadManga(lastRead);
       setLastReadUpdateCount(prev => prev + 1);
     } catch (error) {
