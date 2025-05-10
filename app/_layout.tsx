@@ -19,13 +19,6 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const activeTheme = theme === 'system' ? colorScheme : theme;
   
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      StatusBar.setTranslucent(true);
-
-    }
-  }, []);
-  
   return (
     <>
       <StatusBar translucent backgroundColor="transparent" />
