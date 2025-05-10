@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   useColorScheme,
   TouchableOpacity,
   Animated,
+  Alert,
 } from 'react-native';
 import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,9 +16,9 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Updates from 'expo-updates';
 import { imageCache } from '@/services/CacheImages';
 import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
+import { useAppUpdates } from '@/hooks/useAppUpdates';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -34,8 +35,6 @@ export default function TabLayout() {
   const TAB_BAR_WIDTH = width * 0.9;
   const TAB_WIDTH = TAB_BAR_WIDTH / 5;
 
-  const [updateMessage, setUpdateMessage] = useState<string>('');
-  const [showUpdateAlert, setShowUpdateAlert] = useState(false);
   const pathname = usePathname();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
@@ -43,6 +42,7 @@ export default function TabLayout() {
   const buttonScale = useRef(new Animated.Value(1)).current;
   
   const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
+  const { updateStatus, checkAndApplyUpdate } = useAppUpdates();
 
   useEffect(() => {
     loadEnableDebugTabSetting();
@@ -62,6 +62,16 @@ export default function TabLayout() {
       refreshLastReadManga();
     }
   }, [pathname]);
+
+  useEffect(() => {
+    if (updateStatus.countdown !== null) {
+      Alert.alert(
+        'Applying Update',
+        `The app will restart in ${updateStatus.countdown} seconds to apply the update.`,
+        [{ text: 'OK' }]
+      );
+    }
+  }, [updateStatus.countdown]);
 
   const loadEnableDebugTabSetting = async () => {
     try {
@@ -94,14 +104,19 @@ export default function TabLayout() {
 
   const checkForUpdates = async () => {
     try {
-      const update = await Updates.checkForUpdateAsync();
-      if (update.isAvailable) {
-        setUpdateMessage('The app will now restart to apply the update.');
-        await Updates.fetchUpdateAsync();
-        setShowUpdateAlert(true);
+      const result = await checkAndApplyUpdate(5);
+      
+      if (result.success && updateStatus.isUpdateAvailable) {
+        Alert.alert(
+          'Update Available',
+          'A new update is available. The app will restart in 5 seconds to apply the update.',
+          [{ text: 'OK' }]
+        );
+      } else if (!result.success && result.message !== 'App is up to date') {
+        console.log('Update check result:', result.message);
       }
     } catch (error) {
-      console.log('Error checking for updates:', error);
+      console.error('Error in update process:', error);
     }
   };
 
