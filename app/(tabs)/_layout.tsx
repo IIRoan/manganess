@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Animated,
   Alert,
+  AppState,
 } from 'react-native';
 import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +36,7 @@ export default function TabLayout() {
   const TAB_BAR_WIDTH = width * 0.9;
   const TAB_WIDTH = TAB_BAR_WIDTH / 5;
 
+  const appState = useRef(AppState.currentState);
   const pathname = usePathname();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
@@ -42,22 +44,40 @@ export default function TabLayout() {
   const buttonScale = useRef(new Animated.Value(1)).current;
   
   const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
-  const { updateStatus, updateAndReload, isUpdateInProgress } = useAppUpdates();
+  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } = useAppUpdates();
   
+  // Animation for the update indicator
   const updateIndicatorOpacity = useRef(new Animated.Value(0)).current;
   const updateIndicatorScale = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
-    checkForUpdates();
+    
+    performUpdateCheck();
+    
     imageCache.initializeCache();
     
-    const unsubscribe = navigation.addListener('focus', () => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (
+        appState.current.match(/inactive|background/) && 
+        nextAppState === 'active'
+      ) {
+        console.log('App has come to the foreground, checking for updates...');
+        performUpdateCheck();
+      }
+      
+      appState.current = nextAppState;
+    });
+    
+    const unsubscribeFocus = navigation.addListener('focus', () => {
       refreshLastReadManga();
     });
     
-    return unsubscribe;
+    return () => {
+      subscription.remove();
+      unsubscribeFocus();
+    };
   }, [navigation]);
   
   useEffect(() => {
@@ -126,14 +146,24 @@ export default function TabLayout() {
     }
   };
 
-  const checkForUpdates = useCallback(async () => {
+  const performUpdateCheck = useCallback(async () => {
+    console.log('Performing update check...');
     try {
-      await updateAndReload();
-
+      // First check if update is available
+      const checkResult = await checkForUpdate();
+      console.log('Update check result:', checkResult);
+      
+      if (checkResult.success) {
+        console.log('Update available, downloading and applying...');
+        // If an update is available, download and apply it
+        await updateAndReload();
+      } else {
+        console.log('No update available or unable to check:', checkResult.message);
+      }
     } catch (error) {
       console.error('Error in update process:', error);
     }
-  }, [updateAndReload]);
+  }, [checkForUpdate, updateAndReload]);
 
   const handleLastButtonPress = () => {
     Animated.sequence([
