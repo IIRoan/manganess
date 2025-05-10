@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getMangaData, setMangaData } from "./bookmarkService";
+import { MangaData } from "@/types";
 
 const LAST_READ_MANGA_KEY = "last_read_manga";
 
@@ -150,6 +151,41 @@ export const setLastReadManga = async (
     );
   } catch (error) {
     console.error("Error setting last read manga:", error);
+  }
+};
+
+export const getRecentlyReadManga = async (limit: number = 6): Promise<MangaData[]> => {
+  try {
+    // Get all AsyncStorage keys
+    const allKeys = await AsyncStorage.getAllKeys();
+    
+    // Filter for manga data keys (manga_*)
+    const mangaKeys = allKeys.filter(key => key.startsWith('manga_') && !key.includes('_read_chapters'));
+    
+    const mangaDataArray = await Promise.all(
+      mangaKeys.map(async (key) => {
+        const data = await AsyncStorage.getItem(key);
+        return data ? JSON.parse(data) as MangaData : null;
+      })
+    );
+    
+
+    const validManga = mangaDataArray.filter(
+      (manga): manga is MangaData => 
+        manga !== null && 
+        manga.readChapters && 
+        manga.readChapters.length > 0 &&
+        !!manga.bannerImage
+    );
+    
+    // Sort by lastUpdated timestamp (descending)
+    validManga.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+    
+    // Return the top {limit} items
+    return validManga.slice(0, limit);
+  } catch (error) {
+    console.error('Error fetching recently read manga:', error);
+    return [];
   }
 };
 
