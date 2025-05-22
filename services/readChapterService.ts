@@ -26,10 +26,16 @@ export const getLastReadChapter = async (
 ): Promise<string | null> => {
   try {
     const mangaData = await getMangaData(mangaId);
-    if (!mangaData?.lastReadChapter) {
+    if (!mangaData?.readChapters || mangaData.readChapters.length === 0) {
       return "Not started";
     }
-    return `Chapter ${mangaData.lastReadChapter}`;
+
+    // Calculate the highest chapter number from readChapters array
+    const highestChapter = Math.max(
+      ...mangaData.readChapters.map((ch) => parseFloat(ch))
+    ).toString();
+
+    return `Chapter ${highestChapter}`;
   } catch (error) {
     console.error("Error getting last read chapter:", error);
     return null;
@@ -154,37 +160,40 @@ export const setLastReadManga = async (
   }
 };
 
-export const getRecentlyReadManga = async (limit: number = 6): Promise<MangaData[]> => {
+export const getRecentlyReadManga = async (
+  limit: number = 6
+): Promise<MangaData[]> => {
   try {
     // Get all AsyncStorage keys
     const allKeys = await AsyncStorage.getAllKeys();
-    
+
     // Filter for manga data keys (manga_*)
-    const mangaKeys = allKeys.filter(key => key.startsWith('manga_') && !key.includes('_read_chapters'));
-    
+    const mangaKeys = allKeys.filter(
+      (key) => key.startsWith("manga_") && !key.includes("_read_chapters")
+    );
+
     const mangaDataArray = await Promise.all(
       mangaKeys.map(async (key) => {
         const data = await AsyncStorage.getItem(key);
-        return data ? JSON.parse(data) as MangaData : null;
+        return data ? (JSON.parse(data) as MangaData) : null;
       })
     );
-    
 
     const validManga = mangaDataArray.filter(
-      (manga): manga is MangaData => 
-        manga !== null && 
-        manga.readChapters && 
+      (manga): manga is MangaData =>
+        manga !== null &&
+        manga.readChapters &&
         manga.readChapters.length > 0 &&
         !!manga.bannerImage
     );
-    
+
     // Sort by lastUpdated timestamp (descending)
     validManga.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-    
+
     // Return the top {limit} items
     return validManga.slice(0, limit);
   } catch (error) {
-    console.error('Error fetching recently read manga:', error);
+    console.error("Error fetching recently read manga:", error);
     return [];
   }
 };
