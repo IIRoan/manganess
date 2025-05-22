@@ -8,7 +8,7 @@
     },
     "main": {
       "channel": "main",
-       "android": {
+      "android": {
         "buildType": "apk"
       }
     },

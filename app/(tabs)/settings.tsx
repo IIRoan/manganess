@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,10 @@ import {
   Alert,
   Switch,
   Platform,
-} from 'react-native';
-import { useTheme, Theme } from '@/constants/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, ColorScheme } from '@/constants/Colors';
+} from "react-native";
+import { useTheme, Theme } from "@/constants/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
+import { Colors, ColorScheme } from "@/constants/Colors";
 import {
   getDebugTabEnabled,
   setDebugTabEnabled,
@@ -21,17 +21,17 @@ import {
   importAppData,
   clearAppData,
   migrateToNewStorage,
-  refreshMangaImages
-} from '@/services/settingsService';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as AniListOAuth from '@/services/anilistOAuth';
-import { syncAllMangaWithAniList } from '@/services/anilistService';
-import { ActivityIndicator } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
-import * as FileSystem from 'expo-file-system';
-import * as DocumentPicker from 'expo-document-picker';
-import * as Sharing from 'expo-sharing';
-import CustomColorPicker from '@/components/CustomColorPicker';
+  refreshMangaImages,
+} from "@/services/settingsService";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as AniListOAuth from "@/services/anilistOAuth";
+import { syncAllMangaWithAniList } from "@/services/anilistService";
+import { ActivityIndicator } from "react-native";
+import Svg, { Path } from "react-native-svg";
+import * as FileSystem from "expo-file-system";
+import * as DocumentPicker from "expo-document-picker";
+import * as Sharing from "expo-sharing";
+import CustomColorPicker from "@/components/CustomColorPicker";
 
 /* Type Definitions */
 interface ThemeOption {
@@ -43,7 +43,8 @@ interface ThemeOption {
 export default function SettingsScreen() {
   const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
-  const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
+  const colorScheme =
+    theme === "system" ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
   const [user, setUser] = useState<any>(null);
@@ -53,12 +54,14 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
-  const [selectedColor, setSelectedColor] = useState<string>(accentColor || colors.primary);
+  const [selectedColor, setSelectedColor] = useState<string>(
+    accentColor || colors.primary,
+  );
 
   const themeOptions: ThemeOption[] = [
-    { label: 'Light', value: 'light', icon: 'sunny-outline' },
-    { label: 'Dark', value: 'dark', icon: 'moon-outline' },
-    { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
+    { label: "Light", value: "light", icon: "sunny-outline" },
+    { label: "Dark", value: "dark", icon: "moon-outline" },
+    { label: "System", value: "system", icon: "phone-portrait-outline" },
   ];
 
   useEffect(() => {
@@ -74,20 +77,20 @@ export default function SettingsScreen() {
   const loadEnableDebugTabSetting = async () => {
     try {
       const enabled = await getDebugTabEnabled();
-      console.log('Loaded enableDebugTab:', enabled);
+      console.log("Loaded enableDebugTab:", enabled);
       setEnableDebugTab(enabled);
     } catch (error) {
-      console.error('Error loading enable debug tab setting:', error);
+      console.error("Error loading enable debug tab setting:", error);
     }
   };
 
   const toggleEnableDebugTab = async (value: boolean) => {
     try {
       await setDebugTabEnabled(value);
-      console.log('Saved enableDebugTab:', value);
+      console.log("Saved enableDebugTab:", value);
       setEnableDebugTab(value);
     } catch (error) {
-      console.error('Error toggling enable debug tab setting:', error);
+      console.error("Error toggling enable debug tab setting:", error);
     }
   };
 
@@ -97,7 +100,7 @@ export default function SettingsScreen() {
 
       // Create JSON file
       const jsonString = JSON.stringify(exportedData, null, 2);
-      const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
+      const fileName = `manganess_${new Date().toISOString().split("T")[0]}.json`;
       const filePath = `${FileSystem.documentDirectory}${fileName}`;
 
       // Write file
@@ -106,66 +109,68 @@ export default function SettingsScreen() {
       // Share file
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(filePath, {
-          mimeType: 'application/json',
-          dialogTitle: 'Export App Data'
+          mimeType: "application/json",
+          dialogTitle: "Export App Data",
         });
       }
     } catch (error) {
-      console.error('Export error:', error);
-      Alert.alert('Error', 'Failed to export data');
+      console.error("Export error:", error);
+      Alert.alert("Error", "Failed to export data");
     }
   };
 
   const handleImportData = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json'
+        type: "application/json",
       });
 
       if (result.canceled) return;
 
-      const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const fileContent = await FileSystem.readAsStringAsync(
+        result.assets[0].uri,
+      );
       const importedData = JSON.parse(fileContent);
 
       Alert.alert(
-        'Import Data',
-        'This will replace all existing data. Continue?',
+        "Import Data",
+        "This will replace all existing data. Continue?",
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: "Cancel", style: "cancel" },
           {
-            text: 'Import',
+            text: "Import",
             onPress: async () => {
               await importAppData(importedData);
-              Alert.alert('Success', 'Data imported! Please restart the app');
+              Alert.alert("Success", "Data imported! Please restart the app");
             },
           },
-        ]
+        ],
       );
     } catch (error) {
-      console.error('Import error:', error);
-      Alert.alert('Error', 'Failed to import data');
+      console.error("Import error:", error);
+      Alert.alert("Error", "Failed to import data");
     }
   };
 
   const handleClearData = () => {
     Alert.alert(
-      'Clear App Data',
-      'Are you sure you want to clear all app data? This action cannot be undone.',
+      "Clear App Data",
+      "Are you sure you want to clear all app data? This action cannot be undone.",
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: "Cancel", style: "cancel" },
         {
-          text: 'OK',
+          text: "OK",
           onPress: async () => {
             try {
               await clearAppData();
-              Alert.alert('Success', 'All app data has been cleared.');
+              Alert.alert("Success", "All app data has been cleared.");
             } catch (error) {
-              console.error('Error clearing app data:', error);
-              Alert.alert('Error', 'Failed to clear app data.');
+              console.error("Error clearing app data:", error);
+              Alert.alert("Error", "Failed to clear app data.");
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -177,7 +182,7 @@ export default function SettingsScreen() {
         const userData = await AniListOAuth.getCurrentUser();
         setUser(userData.data.Viewer);
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        console.error("Error fetching user data:", error);
       }
     }
   };
@@ -191,12 +196,15 @@ export default function SettingsScreen() {
         Alert.alert("Success", "Successfully logged in to AniList!");
       }
     } catch (error: unknown) {
-      console.error('AniList login error:', error);
+      console.error("AniList login error:", error);
       if (error instanceof Error) {
-        if (error.message.includes('cancelled')) {
+        if (error.message.includes("cancelled")) {
           Alert.alert("Cancelled", "Login was cancelled by user");
         } else {
-          Alert.alert("Error", `Failed to login with AniList: ${error.message}`);
+          Alert.alert(
+            "Error",
+            `Failed to login with AniList: ${error.message}`,
+          );
         }
       }
     }
@@ -207,7 +215,7 @@ export default function SettingsScreen() {
       await AniListOAuth.logout();
       setUser(null);
     } catch (error: unknown) {
-      console.error('AniList logout error:', error);
+      console.error("AniList logout error:", error);
       Alert.alert("Error", "Failed to logout");
     }
   };
@@ -216,10 +224,13 @@ export default function SettingsScreen() {
     try {
       setIsSyncing(true);
       const results = await syncAllMangaWithAniList();
-      Alert.alert("Sync Results", results.join('\n'));
+      Alert.alert("Sync Results", results.join("\n"));
     } catch (error) {
-      console.error('Error syncing manga:', error);
-      Alert.alert("Error", `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error syncing manga:", error);
+      Alert.alert(
+        "Error",
+        `Failed to sync manga: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     } finally {
       setIsSyncing(false);
     }
@@ -253,7 +264,10 @@ export default function SettingsScreen() {
           {themeOptions.map((option) => (
             <TouchableOpacity
               key={option.value}
-              style={[styles.option, theme === option.value && styles.activeOption]}
+              style={[
+                styles.option,
+                theme === option.value && styles.activeOption,
+              ]}
               onPress={() => setTheme(option.value)}
             >
               <Ionicons
@@ -279,9 +293,15 @@ export default function SettingsScreen() {
             style={[styles.option, { borderBottomWidth: 0 }]}
             onPress={() => setColorPickerVisible(true)}
           >
-            <Ionicons name="color-palette-outline" size={24} color={colors.text} />
+            <Ionicons
+              name="color-palette-outline"
+              size={24}
+              color={colors.text}
+            />
             <Text style={styles.optionText}>Accent Color</Text>
-            <View style={[styles.colorPreview, { backgroundColor: selectedColor }]} />
+            <View
+              style={[styles.colorPreview, { backgroundColor: selectedColor }]}
+            />
           </TouchableOpacity>
 
           {/* Reset accent color button */}
@@ -301,11 +321,21 @@ export default function SettingsScreen() {
           {user ? (
             <>
               <View style={styles.userInfo}>
-                <Image source={{ uri: user.avatar.large }} style={styles.avatar} />
+                <Image
+                  source={{ uri: user.avatar.large }}
+                  style={styles.avatar}
+                />
                 <Text style={styles.username}>{user.name}</Text>
               </View>
-              <TouchableOpacity style={styles.option} onPress={handleAniListLogout}>
-                <Ionicons name="log-out-outline" size={24} color={colors.text} />
+              <TouchableOpacity
+                style={styles.option}
+                onPress={handleAniListLogout}
+              >
+                <Ionicons
+                  name="log-out-outline"
+                  size={24}
+                  color={colors.text}
+                />
                 <Text style={styles.optionText}>Logout from AniList</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -315,13 +345,24 @@ export default function SettingsScreen() {
               >
                 <View style={styles.buttonContent}>
                   <Ionicons name="sync-outline" size={24} color={colors.card} />
-                  <Text style={styles.syncButtonText}>Sync All Manga with AniList</Text>
-                  {isSyncing && <ActivityIndicator size="small" color={colors.card} style={styles.spinner} />}
+                  <Text style={styles.syncButtonText}>
+                    Sync All Manga with AniList
+                  </Text>
+                  {isSyncing && (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.card}
+                      style={styles.spinner}
+                    />
+                  )}
                 </View>
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity style={styles.loginButton} onPress={handleAniListLogin}>
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={handleAniListLogin}
+            >
               <View style={styles.buttonContent}>
                 <Svg width={24} height={24} viewBox="0 0 24 24">
                   <Path
@@ -349,7 +390,11 @@ export default function SettingsScreen() {
             <Text style={styles.optionText}>Import App Data</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.option} onPress={handleClearData}>
-            <Ionicons name="trash-outline" size={24} color={colors.notification} />
+            <Ionicons
+              name="trash-outline"
+              size={24}
+              color={colors.notification}
+            />
             <Text style={styles.optionText}>Clear App Data</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -360,11 +405,11 @@ export default function SettingsScreen() {
                 setIsRefreshing(true);
                 const result = await refreshMangaImages();
                 Alert.alert(
-                  result.success ? 'Success' : 'Error',
-                  result.message
+                  result.success ? "Success" : "Error",
+                  result.message,
                 );
               } catch (error) {
-                Alert.alert('Error', 'Failed to refresh manga images');
+                Alert.alert("Error", "Failed to refresh manga images");
               } finally {
                 setIsRefreshing(false);
               }
@@ -372,7 +417,13 @@ export default function SettingsScreen() {
           >
             <Ionicons name="refresh-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Refresh Manga Images</Text>
-            {isRefreshing && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
+            {isRefreshing && (
+              <ActivityIndicator
+                size="small"
+                color={colors.primary}
+                style={styles.spinner}
+              />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.option, { borderBottomWidth: 0 }]}
@@ -382,11 +433,11 @@ export default function SettingsScreen() {
                 setIsMigrating(true);
                 const result = await migrateToNewStorage();
                 Alert.alert(
-                  result.success ? 'Success' : 'Error',
-                  result.message
+                  result.success ? "Success" : "Error",
+                  result.message,
                 );
               } catch (error) {
-                Alert.alert('Error', 'Failed to migrate data');
+                Alert.alert("Error", "Failed to migrate data");
               } finally {
                 setIsMigrating(false);
               }
@@ -394,7 +445,13 @@ export default function SettingsScreen() {
           >
             <Ionicons name="sync-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Migrate to New Storage Format</Text>
-            {isMigrating && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
+            {isMigrating && (
+              <ActivityIndicator
+                size="small"
+                color={colors.primary}
+                style={styles.spinner}
+              />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -406,8 +463,15 @@ export default function SettingsScreen() {
             <Switch
               value={enableDebugTab}
               onValueChange={toggleEnableDebugTab}
-              trackColor={{ false: colors.border, true: accentColor || colors.primary }}
-              thumbColor={enableDebugTab && Platform.OS === 'android' ? '#FFFFFF' : undefined}
+              trackColor={{
+                false: colors.border,
+                true: accentColor || colors.primary,
+              }}
+              thumbColor={
+                enableDebugTab && Platform.OS === "android"
+                  ? "#FFFFFF"
+                  : undefined
+              }
             />
           </View>
           <Text style={styles.noteText}>
@@ -418,7 +482,7 @@ export default function SettingsScreen() {
         <View style={styles.bottomSpacing} />
       </ScrollView>
       <Image
-        source={require('@/assets/images/nessie.png')}
+        source={require("@/assets/images/nessie.png")}
         style={styles.nessieImage}
         resizeMode="contain"
       />
@@ -445,7 +509,7 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     title: {
       fontSize: 28,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       marginBottom: 20,
       color: colors.text,
     },
@@ -454,13 +518,13 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     sectionTitle: {
       fontSize: 20,
-      fontWeight: '600',
+      fontWeight: "600",
       marginBottom: 10,
       color: colors.text,
     },
     option: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       paddingVertical: 15,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
@@ -474,7 +538,7 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     activeOptionText: {
       color: colors.primary,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     noteText: {
       fontSize: 14,
@@ -488,17 +552,17 @@ const getStyles = (colors: typeof Colors.light) =>
       height: 80,
     },
     nessieImage: {
-      position: 'absolute',
+      position: "absolute",
       bottom: 90,
       left: 20,
       width: 80,
       height: 80,
       opacity: 0.8,
-      transform: [{ rotate: '-15deg' }],
+      transform: [{ rotate: "-15deg" }],
     },
     clearDataButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.card,
       padding: 15,
       borderRadius: 10,
@@ -508,11 +572,11 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 16,
       marginLeft: 15,
       color: colors.notification,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     userInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       marginBottom: 15,
       backgroundColor: colors.background,
       padding: 10,
@@ -526,7 +590,7 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     username: {
       fontSize: 16,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       color: colors.text,
     },
     loginButton: {
@@ -538,7 +602,7 @@ const getStyles = (colors: typeof Colors.light) =>
     loginButtonText: {
       color: colors.card,
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: "600",
       marginLeft: 10,
     },
     syncButton: {
@@ -550,13 +614,13 @@ const getStyles = (colors: typeof Colors.light) =>
     syncButtonText: {
       color: colors.card,
       fontSize: 16,
-      fontWeight: '600',
+      fontWeight: "600",
       marginLeft: 10,
     },
     buttonContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
     },
     disabledButton: {
       opacity: 0.7,
@@ -565,8 +629,8 @@ const getStyles = (colors: typeof Colors.light) =>
       marginLeft: 10,
     },
     dataButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       backgroundColor: colors.card,
       padding: 15,
       borderRadius: 10,
@@ -578,6 +642,6 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 16,
       marginLeft: 15,
       color: colors.text,
-      fontWeight: '600',
+      fontWeight: "600",
     },
   });

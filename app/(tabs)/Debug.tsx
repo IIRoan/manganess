@@ -388,7 +388,7 @@ export default function DebugScreen() {
 
             try {
               addLog(
-                "Starting Cloudflare trigger attempt using suspicious patterns"
+                "Starting Cloudflare trigger attempt using suspicious patterns",
               );
 
               const endpoints = [
@@ -480,7 +480,7 @@ export default function DebugScreen() {
               addLog(
                 `Unexpected error: ${
                   error instanceof Error ? error.message : String(error)
-                }`
+                }`,
               );
               setIsTriggering(false);
               showAlertWithConfig({
@@ -522,7 +522,7 @@ export default function DebugScreen() {
             // Simulate Cloudflare by passing HTML with the verification string
             checkForCloudflare(
               '<div class="cf-browser-verification">test</div>',
-              "/debug"
+              "/debug",
             );
             setShowAlert(false);
           },

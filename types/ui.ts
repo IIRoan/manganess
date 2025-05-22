@@ -1,12 +1,12 @@
 // Contains all UI component types
 
-import { ColorScheme } from '@/constants/Colors';
-import { ComponentProps } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { TextStyle, ViewStyle } from 'react-native';
-import { WebView } from 'react-native-webview';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { ThemeType } from './';
+import { ColorScheme } from "@/constants/Colors";
+import { ComponentProps } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { TextStyle, ViewStyle } from "react-native";
+import { WebView } from "react-native-webview";
+import Swipeable from "react-native-gesture-handler/Swipeable";
+import { ThemeType } from "./";
 
 // Define a comprehensive type for all icon names based on Ionicons
 export type IconName = keyof typeof Ionicons.glyphMap;
@@ -68,7 +68,8 @@ export interface GenreTagProps {
   genre: string;
 }
 
-export interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {
+export interface CustomWebViewProps
+  extends React.ComponentProps<typeof WebView> {
   allowedHosts?: string[];
   currentUrl?: string;
 }
@@ -94,7 +95,7 @@ export interface CustomAlertProps {
   visible: boolean;
   title: string;
   onClose: () => void;
-  type: 'bookmarks' | 'confirm';
+  type: "bookmarks" | "confirm";
   options?: Option[];
   message?: string;
 }

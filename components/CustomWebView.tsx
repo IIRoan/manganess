@@ -1,6 +1,10 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Platform } from 'react-native';
-import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
+import React, { useRef, useState, useEffect } from "react";
+import { Platform } from "react-native";
+import {
+  WebView,
+  WebViewNavigation,
+  WebViewMessageEvent,
+} from "react-native-webview";
 
 interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {
   allowedHosts?: string[];
@@ -8,7 +12,7 @@ interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {
 }
 
 const CustomWebView: React.FC<CustomWebViewProps> = ({
-  allowedHosts = ['mangafire.to'],
+  allowedHosts = ["mangafire.to"],
   currentUrl,
   ...props
 }) => {
@@ -17,11 +21,12 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
   const [lastLoadedUrl, setLastLoadedUrl] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const initialUrl =
-    currentUrl || (props.source && 'uri' in props.source ? props.source.uri : '');
+    currentUrl ||
+    (props.source && "uri" in props.source ? props.source.uri : "");
 
   useEffect(() => {
-    if (Platform.OS === 'ios') {
-      setTimeout(() => setWebViewKey(key => key + 1), 50);
+    if (Platform.OS === "ios") {
+      setTimeout(() => setWebViewKey((key) => key + 1), 50);
     }
   }, []);
 
@@ -81,7 +86,7 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
   `;
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
-    const isAllowedHost = allowedHosts.some(host =>
+    const isAllowedHost = allowedHosts.some((host) =>
       navState.url.toLowerCase().includes(host.toLowerCase()),
     );
 
@@ -100,7 +105,7 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
 
     // If it's not an allowed host, block it
     if (!isAllowedHost && webViewRef.current) {
-      console.log('Blocking navigation to:', navState.url);
+      console.log("Blocking navigation to:", navState.url);
       webViewRef.current.stopLoading();
       if (lastLoadedUrl) {
         webViewRef.current.injectJavaScript(`
@@ -119,10 +124,10 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      console.log('WebView message:', data);
+      console.log("WebView message:", data);
 
       switch (data.type) {
-        case 'PAGE_LOADED':
+        case "PAGE_LOADED":
           setLastLoadedUrl(data.url);
           break;
       }
@@ -143,12 +148,12 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
       injectedJavaScript={`
         ${preventHorizontalScrollJS}
         ${preventRedirectsJS}
-        ${props.injectedJavaScript || ''}
+        ${props.injectedJavaScript || ""}
         true;
       `}
       userAgent={Platform.select({
         android:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         ios: props.userAgent,
       })}
       sharedCookiesEnabled={false}

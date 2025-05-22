@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import * as FileSystem from 'expo-file-system';
+import { useEffect, useState } from "react";
+import * as FileSystem from "expo-file-system";
 
 const CACHE_FOLDER = `${FileSystem.cacheDirectory}image_cache/`;
 
@@ -22,16 +22,18 @@ class ImageCache {
     try {
       const cacheFolder = await FileSystem.getInfoAsync(CACHE_FOLDER);
       if (!cacheFolder.exists) {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
       }
       this.initialized = true;
     } catch (error) {
-      console.error('Failed to initialize cache:', error);
+      console.error("Failed to initialize cache:", error);
     }
   }
 
   private getCacheFilename(url: string): string {
-    return url.split('/').pop() || url;
+    return url.split("/").pop() || url;
   }
 
   async getCachedImagePath(url: string): Promise<string> {
@@ -39,15 +41,17 @@ class ImageCache {
       // First ensure cache directory exists
       const cacheFolder = await FileSystem.getInfoAsync(CACHE_FOLDER);
       if (!cacheFolder.exists) {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
         this.initialized = true;
       }
 
       const filename = this.getCacheFilename(url);
       const filePath = `${CACHE_FOLDER}${filename}`;
-      
+
       const fileInfo = await FileSystem.getInfoAsync(filePath);
-      
+
       if (fileInfo.exists) {
         return filePath;
       }
@@ -55,7 +59,9 @@ class ImageCache {
       // Double check directory exists before download
       const cacheFolderCheck = await FileSystem.getInfoAsync(CACHE_FOLDER);
       if (!cacheFolderCheck.exists) {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
       }
 
       const downloadResult = await FileSystem.downloadAsync(url, filePath);
@@ -65,7 +71,7 @@ class ImageCache {
 
       return filePath;
     } catch (error) {
-      console.error('Error caching image:', error);
+      console.error("Error caching image:", error);
       return url;
     }
   }
@@ -77,16 +83,20 @@ class ImageCache {
         await FileSystem.deleteAsync(CACHE_FOLDER);
       }
       // Always ensure the directory exists after clearing
-      await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+      await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+        intermediates: true,
+      });
       this.initialized = true;
     } catch (error) {
-      console.error('Error clearing cache:', error);
+      console.error("Error clearing cache:", error);
       // If there's an error, still try to ensure the directory exists
       try {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
         this.initialized = true;
       } catch (dirError) {
-        console.error('Failed to create cache directory:', dirError);
+        console.error("Failed to create cache directory:", dirError);
       }
     }
   }
@@ -110,10 +120,10 @@ class ImageCache {
 
       return {
         size: totalSize,
-        count: files.length
+        count: files.length,
       };
     } catch (error) {
-      console.error('Error getting cache size:', error);
+      console.error("Error getting cache size:", error);
       return { size: 0, count: 0 };
     }
   }
@@ -129,14 +139,14 @@ export function useImageCache(url: string): string {
 
     const cacheImage = async () => {
       if (!url) return;
-      
+
       try {
         const path = await imageCache.getCachedImagePath(url);
         if (isMounted) {
           setCachedPath(path);
         }
       } catch (error) {
-        console.error('Error in useImageCache:', error);
+        console.error("Error in useImageCache:", error);
         if (isMounted) {
           setCachedPath(url);
         }

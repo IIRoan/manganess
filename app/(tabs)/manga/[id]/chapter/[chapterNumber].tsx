@@ -71,7 +71,7 @@ export default function ReadChapterScreen() {
 
   const chapterUrl = getChapterUrl(id, chapterNumber);
   const currentChapterIndex = mangaDetails?.chapters?.findIndex(
-    (chapter) => chapter.number === chapterNumber
+    (chapter) => chapter.number === chapterNumber,
   );
   const hasNextChapter =
     currentChapterIndex !== undefined &&
@@ -86,18 +86,22 @@ export default function ReadChapterScreen() {
   useFocusEffect(
     useCallback(() => {
       // Configure status bar when screen is focused
-      StatusBar.setBarStyle(colorScheme === "dark" ? "light-content" : "dark-content");
+      StatusBar.setBarStyle(
+        colorScheme === "dark" ? "light-content" : "dark-content",
+      );
       StatusBar.setTranslucent(true);
       StatusBar.setBackgroundColor("transparent");
 
       // Reset status bar when leaving this screen
       return () => {
         StatusBar.setHidden(false);
-        StatusBar.setBarStyle(colorScheme === "dark" ? "light-content" : "dark-content");
+        StatusBar.setBarStyle(
+          colorScheme === "dark" ? "light-content" : "dark-content",
+        );
         StatusBar.setTranslucent(true);
         StatusBar.setBackgroundColor("transparent");
       };
-    }, [colorScheme])
+    }, [colorScheme]),
   );
 
   // Update status bar based on controls visibility
@@ -204,7 +208,7 @@ export default function ReadChapterScreen() {
       setIsBottomSheetOpen(index >= 0);
       index >= 0 ? hideControls() : showControls();
     },
-    [hideControls, showControls]
+    [hideControls, showControls],
   );
 
   const toggleControls = useCallback(() => {
@@ -263,10 +267,10 @@ export default function ReadChapterScreen() {
       };
       const backHandler = BackHandler.addEventListener(
         "hardwareBackPress",
-        onBackPress
+        onBackPress,
       );
       return () => backHandler.remove();
-    }, [id, router])
+    }, [id, router]),
   );
 
   const handleLoadEnd = () => setIsLoading(false);
@@ -289,7 +293,7 @@ export default function ReadChapterScreen() {
         }
       }
     },
-    [chapterUrl, id, mangaTitle, router]
+    [chapterUrl, id, mangaTitle, router],
   );
 
   const handleChapterPress = (chapterNum: string) => {

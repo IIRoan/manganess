@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       build-profile:
-        description: 'EAS Build Profile'
+        description: "EAS Build Profile"
         required: true
-        default: 'preview'
+        default: "preview"
         type: choice
         options:
-        - preview
-        - testing
-        - main
+          - preview
+          - testing
+          - main
 
 jobs:
   build:

@@ -1,15 +1,10 @@
-import React from 'react';
-import {
-  Animated,
-  StyleSheet,
-  Dimensions,
-  useColorScheme,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React from "react";
+import { Animated, StyleSheet, Dimensions, useColorScheme } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-import { Colors, ColorScheme } from '@/constants/Colors';
+import { Colors, ColorScheme } from "@/constants/Colors";
 
-const { height } = Dimensions.get('window');
+const { height } = Dimensions.get("window");
 
 interface SwipeBackIndicatorProps {
   swipeProgress: Animated.Value;
@@ -45,14 +40,14 @@ const SwipeBackIndicator: React.FC<SwipeBackIndicatorProps> = ({
 
 const indicatorStyles = StyleSheet.create({
   container: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     width: 50,
     height: height,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
   },
 });
 

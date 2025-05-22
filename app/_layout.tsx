@@ -1,30 +1,30 @@
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider as NavigationThemeProvider,
-} from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import { useColorScheme, Platform, StatusBar } from 'react-native';
-import { ThemeProvider, useTheme } from '../constants/ThemeContext';
-import React from 'react';
+} from "@react-navigation/native";
+import { useFonts } from "expo-font";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { useEffect } from "react";
+import { useColorScheme, Platform, StatusBar } from "react-native";
+import { ThemeProvider, useTheme } from "../constants/ThemeContext";
+import React from "react";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
-  const activeTheme = theme === 'system' ? colorScheme : theme;
-  
+  const activeTheme = theme === "system" ? colorScheme : theme;
+
   return (
     <>
       <StatusBar translucent backgroundColor="transparent" />
-      
+
       <NavigationThemeProvider
-        value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}
+        value={activeTheme === "dark" ? DarkTheme : DefaultTheme}
       >
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -32,8 +32,8 @@ function RootLayoutNav() {
             name="cloudflare"
             options={{
               headerShown: true,
-              title: 'Cloudflare Verification',
-              presentation: 'modal'
+              title: "Cloudflare Verification",
+              presentation: "modal",
             }}
           />
         </Stack>
@@ -44,21 +44,21 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
-  
+
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
-  
+
   if (!loaded) {
     return null;
   }
-  
+
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "transparent" }}>
       <ThemeProvider>
         <RootLayoutNav />
       </ThemeProvider>

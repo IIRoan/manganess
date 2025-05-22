@@ -166,7 +166,7 @@ export default function MangaDetailScreen() {
       fetchData();
 
       return () => {};
-    }, [id, fetchReadChapters, fetchLastReadChapter])
+    }, [id, fetchReadChapters, fetchLastReadChapter]),
   );
 
   const handleBookmark = () => {
@@ -175,7 +175,7 @@ export default function MangaDetailScreen() {
       bookmarkStatus,
       mangaDetails.title,
       handleSaveBookmark,
-      handleRemoveBookmark
+      handleRemoveBookmark,
     );
 
     setBookmarkPopupConfig(config as BookmarkPopupConfig);
@@ -190,7 +190,7 @@ export default function MangaDetailScreen() {
       mangaDetails,
       id as string,
       readChapters,
-      setReadChapters
+      setReadChapters,
     );
     if (config) {
       setAlertConfig(config);
@@ -204,7 +204,7 @@ export default function MangaDetailScreen() {
         const result = await markChapterAsUnread(
           id as string,
           chapterNumber,
-          readChapters
+          readChapters,
         );
 
         // Update the read chapters state
@@ -226,7 +226,7 @@ export default function MangaDetailScreen() {
         console.error("Error marking chapter as unread:", error);
       }
     },
-    [id, readChapters, currentlyOpenSwipeable]
+    [id, readChapters, currentlyOpenSwipeable],
   );
 
   const handleSaveBookmark = async (status: BookmarkStatus) => {
@@ -239,7 +239,7 @@ export default function MangaDetailScreen() {
         readChapters,
         setBookmarkStatus,
         setIsBookmarkPopupVisible,
-        setReadChapters
+        setReadChapters,
       );
     } catch (error) {
       console.error("Error saving bookmark:", error);
@@ -251,7 +251,7 @@ export default function MangaDetailScreen() {
       await removeBookmark(
         id as string,
         setBookmarkStatus,
-        setIsBookmarkPopupVisible
+        setIsBookmarkPopupVisible,
       );
     } catch (error) {
       console.error("Error removing bookmark:", error);
@@ -288,7 +288,7 @@ export default function MangaDetailScreen() {
       return 0;
     }
     return Math.round(
-      (readChapters.length / mangaDetails.chapters.length) * 100
+      (readChapters.length / mangaDetails.chapters.length) * 100,
     );
   };
 
@@ -323,7 +323,7 @@ export default function MangaDetailScreen() {
         setShowScrollToBottomButton(false);
       }
     },
-    [mangaDetails?.chapters?.length]
+    [mangaDetails?.chapters?.length],
   );
 
   // Use useEffect to animate the opacity of the scroll to top button

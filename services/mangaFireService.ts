@@ -43,7 +43,7 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
         headers: {
           "User-Agent": USER_AGENT,
         },
-      }
+      },
     );
 
     const html = response.data as string;
@@ -87,13 +87,13 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
 
 const parseMangaDetails = (html: string): MangaDetails => {
   const title = decode(
-    html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || "Unknown Title"
+    html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || "Unknown Title",
   );
   const alternativeTitle = decode(html.match(/<h6>(.*?)<\/h6>/)?.[1] || "");
   const status = html.match(/<p>(.*?)<\/p>/)?.[1] || "Unknown Status";
 
   const descriptionMatch = html.match(
-    /<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/
+    /<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/,
   );
   let description = descriptionMatch
     ? decode(descriptionMatch[1].trim()) || "No description available"
@@ -107,7 +107,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
     .trim();
 
   const authorMatch = html.match(
-    /<span>Author:<\/span>.*?<span>(.*?)<\/span>/s
+    /<span>Author:<\/span>.*?<span>(.*?)<\/span>/s,
   );
   const authors = authorMatch
     ? authorMatch[1]
@@ -120,7 +120,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
     "Unknown";
 
   const genresMatch = html.match(
-    /<span>Genres:<\/span>.*?<span>(.*?)<\/span>/s
+    /<span>Genres:<\/span>.*?<span>(.*?)<\/span>/s,
   );
   const genres = genresMatch
     ? genresMatch[1]
@@ -130,12 +130,12 @@ const parseMangaDetails = (html: string): MangaDetails => {
 
   const rating =
     html.match(
-      /<span class="live-score" itemprop="ratingValue">(.*?)<\/span>/
+      /<span class="live-score" itemprop="ratingValue">(.*?)<\/span>/,
     )?.[1] || "N/A";
   const reviewCount =
     html.match(/<span itemprop="reviewCount".*?>(.*?)<\/span>/)?.[1] || "0";
   const bannerImageMatch = html.match(
-    /<div class="poster">.*?<img src="(.*?)" itemprop="image"/s
+    /<div class="poster">.*?<img src="(.*?)" itemprop="image"/s,
   );
   const bannerImage = bannerImageMatch ? bannerImageMatch[1] : "";
 
@@ -173,7 +173,7 @@ export const getChapterUrl = (id: string, chapterNumber: string): string => {
 export const markChapterAsRead = async (
   id: string,
   chapterNumber: string,
-  mangaTitle: string
+  mangaTitle: string,
 ) => {
   if (!id || !chapterNumber || !mangaTitle) {
     console.error("Invalid parameters for markChapterAsRead:", {
@@ -195,10 +195,10 @@ export const markChapterAsRead = async (
     const mangaData = await getMangaData(id);
     if (mangaData) {
       const updatedReadChapters = Array.from(
-        new Set([...mangaData.readChapters, chapterNumber])
+        new Set([...mangaData.readChapters, chapterNumber]),
       );
       const highestChapter = Math.max(
-        ...updatedReadChapters.map((ch) => parseFloat(ch))
+        ...updatedReadChapters.map((ch) => parseFloat(ch)),
       ).toString();
       await setMangaData({
         ...mangaData,
@@ -208,7 +208,7 @@ export const markChapterAsRead = async (
       });
 
       console.log(
-        `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`
+        `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`,
       );
     } else {
       await setMangaData({
@@ -240,7 +240,7 @@ export const updateAniListProgress = async (
   id: string,
   mangaTitle: string,
   progress: number,
-  bookmarkStatus: string
+  bookmarkStatus: string,
 ) => {
   if (!mangaTitle) {
     console.error("Manga title is undefined for id:", id);
@@ -272,7 +272,7 @@ export const updateAniListProgress = async (
       }
       await updateMangaStatus(anilistManga.id, status, progress);
       console.log(
-        `Updated AniList progress for "${mangaTitle}" (${id}) to ${progress} chapters with status ${status}`
+        `Updated AniList progress for "${mangaTitle}" (${id}) to ${progress} chapters with status ${status}`,
       );
     } else {
       console.log(`Manga "${mangaTitle}" (${id}) not found on AniList`);

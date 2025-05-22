@@ -1,16 +1,20 @@
-import type React from "react"
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
+import type React from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 interface LastReadChapterBarProps {
-  lastReadChapter: string | null
-  onPress: () => void
-  colors: any
-  readChapters: string[]
+  lastReadChapter: string | null;
+  onPress: () => void;
+  colors: any;
+  readChapters: string[];
 }
 
-const LastReadChapterBar: React.FC<LastReadChapterBarProps> = ({ lastReadChapter, onPress, colors }) => {
-  const isStartReading = !lastReadChapter || lastReadChapter === "Not started"
+const LastReadChapterBar: React.FC<LastReadChapterBarProps> = ({
+  lastReadChapter,
+  onPress,
+  colors,
+}) => {
+  const isStartReading = !lastReadChapter || lastReadChapter === "Not started";
 
   return (
     <TouchableOpacity
@@ -36,15 +40,18 @@ const LastReadChapterBar: React.FC<LastReadChapterBarProps> = ({ lastReadChapter
             "Start reading"
           ) : (
             <>
-              Continue from <Text style={[styles.chapterText, { color: colors.primary }]}>{lastReadChapter}</Text>
+              Continue from{" "}
+              <Text style={[styles.chapterText, { color: colors.primary }]}>
+                {lastReadChapter}
+              </Text>
             </>
           )}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.text + "40"} />
     </TouchableOpacity>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -73,7 +80,6 @@ const styles = StyleSheet.create({
   chapterText: {
     fontWeight: "600",
   },
-})
+});
 
-export default LastReadChapterBar
-
+export default LastReadChapterBar;

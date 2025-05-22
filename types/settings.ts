@@ -7,4 +7,4 @@ export interface AppSettings {
   accentColor?: string;
 }
 
-export type ThemeType = 'light' | 'dark' | 'system';
+export type ThemeType = "light" | "dark" | "system";

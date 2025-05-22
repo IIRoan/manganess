@@ -1,20 +1,27 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
-import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
-import { useImageCache } from '@/services/CacheImages';
-import * as FileSystem from 'expo-file-system';
-import { MangaCardProps } from '@/types';
+import React from "react";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  ViewStyle,
+} from "react-native";
+import { Colors, ColorScheme } from "@/constants/Colors";
+import { useTheme } from "@/constants/ThemeContext";
+import { useImageCache } from "@/services/CacheImages";
+import * as FileSystem from "expo-file-system";
+import { MangaCardProps } from "@/types";
 
 const MangaCard: React.FC<MangaCardProps> = ({
   title,
   imageUrl,
   onPress,
   lastReadChapter,
-  style
+  style,
 }) => {
   const { theme, systemTheme } = useTheme();
-  const colorScheme = theme === 'system' ? systemTheme : theme as ColorScheme;
+  const colorScheme = theme === "system" ? systemTheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
 
@@ -23,16 +30,16 @@ const MangaCard: React.FC<MangaCardProps> = ({
   const getImageSource = () => {
     if (
       cachedImagePath &&
-      typeof cachedImagePath === 'string' &&
-      cachedImagePath.startsWith(FileSystem.cacheDirectory || '')
+      typeof cachedImagePath === "string" &&
+      cachedImagePath.startsWith(FileSystem.cacheDirectory || "")
     ) {
       return {
-        uri: `file://${cachedImagePath}`
+        uri: `file://${cachedImagePath}`,
       };
     }
 
     return {
-      uri: cachedImagePath || imageUrl
+      uri: cachedImagePath || imageUrl,
     };
   };
 
@@ -48,11 +55,7 @@ const MangaCard: React.FC<MangaCardProps> = ({
         accessibilityLabel="Manga Image"
       />
       <View style={styles.cardInfo}>
-        <Text
-          style={styles.cardTitle}
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >
+        <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">
           {title}
         </Text>
         {lastReadChapter && (
@@ -69,30 +72,31 @@ const MangaCard: React.FC<MangaCardProps> = ({
   );
 };
 
-const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
-  cardContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: colors.card,
-  },
-  cardImage: {
-    width: '100%',
-    aspectRatio: 3 / 4,
-    resizeMode: 'cover',
-  },
-  cardInfo: {
-    padding: 8,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  lastReadChapter: {
-    fontSize: 12,
-    color: colors.tabIconDefault,
-  },
-});
+const getStyles = (colors: typeof Colors.light) =>
+  StyleSheet.create({
+    cardContainer: {
+      borderRadius: 12,
+      overflow: "hidden",
+      backgroundColor: colors.card,
+    },
+    cardImage: {
+      width: "100%",
+      aspectRatio: 3 / 4,
+      resizeMode: "cover",
+    },
+    cardInfo: {
+      padding: 8,
+    },
+    cardTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.text,
+      marginBottom: 4,
+    },
+    lastReadChapter: {
+      fontSize: 12,
+      color: colors.tabIconDefault,
+    },
+  });
 
 export default MangaCard;

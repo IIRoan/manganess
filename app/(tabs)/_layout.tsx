@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,17 +9,21 @@ import {
   Animated,
   Alert,
   AppState,
-} from 'react-native';
-import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { getAppSettings, getDebugTabEnabled, isOnboardingCompleted as checkOnboarding } from '@/services/settingsService';
-import { useTheme } from '@/constants/ThemeContext';
-import { Colors, ColorScheme } from '@/constants/Colors';
-import OnboardingScreen from '../onboarding';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { imageCache } from '@/services/CacheImages';
-import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
-import { useAppUpdates } from '@/hooks/useAppUpdates';
+} from "react-native";
+import { Tabs, usePathname, useRouter, useNavigation } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  getAppSettings,
+  getDebugTabEnabled,
+  isOnboardingCompleted as checkOnboarding,
+} from "@/services/settingsService";
+import { useTheme } from "@/constants/ThemeContext";
+import { Colors, ColorScheme } from "@/constants/Colors";
+import OnboardingScreen from "../onboarding";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { imageCache } from "@/services/CacheImages";
+import { getLastReadManga, LastReadManga } from "@/services/readChapterService";
+import { useAppUpdates } from "@/hooks/useAppUpdates";
 
 export default function TabLayout() {
   const router = useRouter();
@@ -27,66 +31,71 @@ export default function TabLayout() {
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
+    theme === "system" ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
 
   const insets = useSafeAreaInsets();
 
-  const { width } = Dimensions.get('window');
+  const { width } = Dimensions.get("window");
   const TAB_BAR_WIDTH = width * 0.9;
   const TAB_WIDTH = TAB_BAR_WIDTH / 5;
 
   const appState = useRef(AppState.currentState);
   const pathname = usePathname();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
-  const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(null);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<
+    boolean | null
+  >(null);
+  const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
+    null,
+  );
   const buttonScale = useRef(new Animated.Value(1)).current;
-  
+
   const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
   // Get update status from the hook
-  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } = useAppUpdates();
-  
+  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } =
+    useAppUpdates();
+
   // Animation values
   const updateIndicatorOpacity = useRef(new Animated.Value(0)).current;
   const updateIndicatorRotation = useRef(new Animated.Value(0)).current;
   const updateProgressWidth = useRef(new Animated.Value(0)).current;
   // Track whether progress has started
   const [progressStarted, setProgressStarted] = useState(false);
-  
+
   // Animation ref
   const updateAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const progressAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  
+
   // Determine if we should actually show the indicator
   // Only show for downloading updates or when ready to apply, not for checks
-  const shouldShowUpdateIndicator = 
+  const shouldShowUpdateIndicator =
     isUpdateInProgress && (updateStatus.isDownloading || updateStatus.isReady);
 
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
-    
+
     performUpdateCheck();
-    
+
     imageCache.initializeCache();
-    
-    const subscription = AppState.addEventListener('change', nextAppState => {
+
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (
-        appState.current.match(/inactive|background/) && 
-        nextAppState === 'active'
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active"
       ) {
-        console.log('App has come to the foreground, checking for updates...');
+        console.log("App has come to the foreground, checking for updates...");
         performUpdateCheck();
       }
-      
+
       appState.current = nextAppState;
     });
-    
-    const unsubscribeFocus = navigation.addListener('focus', () => {
+
+    const unsubscribeFocus = navigation.addListener("focus", () => {
       refreshLastReadManga();
     });
-    
+
     return () => {
       subscription.remove();
       unsubscribeFocus();
@@ -98,9 +107,14 @@ export default function TabLayout() {
       }
     };
   }, [navigation]);
-  
+
   useEffect(() => {
-    if (pathname === '/' || pathname === '/bookmarks' || pathname === '/settings' || pathname === '/mangasearch') {
+    if (
+      pathname === "/" ||
+      pathname === "/bookmarks" ||
+      pathname === "/settings" ||
+      pathname === "/mangasearch"
+    ) {
       refreshLastReadManga();
     }
   }, [pathname]);
@@ -112,7 +126,7 @@ export default function TabLayout() {
       updateAnimationRef.current.stop();
       updateAnimationRef.current = null;
     }
-    
+
     if (progressAnimationRef.current) {
       progressAnimationRef.current.stop();
       progressAnimationRef.current = null;
@@ -125,23 +139,23 @@ export default function TabLayout() {
         duration: 300,
         useNativeDriver: true,
       }).start();
-      
+
       // Start a continuous rotation for the spinner
       const rotateAnimation = Animated.timing(updateIndicatorRotation, {
         toValue: 1,
         duration: 1500,
         useNativeDriver: true,
       });
-      
+
       // Create a looping rotation
       const loopingRotation = Animated.loop(rotateAnimation);
-      
+
       // Start the rotation animation
       loopingRotation.start();
-      
+
       // Keep track of the animation
       updateAnimationRef.current = loopingRotation;
-      
+
       // Create simulated progress for short updates
       // Progress moves quickly to 70% then slows down
       progressAnimationRef.current = Animated.sequence([
@@ -154,12 +168,11 @@ export default function TabLayout() {
           toValue: 0.9, // Then more slowly to 90%
           duration: 1200,
           useNativeDriver: false,
-        })
+        }),
       ]);
-      
+
       progressAnimationRef.current.start();
       setProgressStarted(true);
-      
     } else {
       // When update completes, instantly fill the progress bar to 100%
       // then fade out the entire indicator
@@ -177,7 +190,7 @@ export default function TabLayout() {
             toValue: 0,
             duration: 300,
             useNativeDriver: true,
-          })
+          }),
         ]).start(() => {
           // Reset the progress after the animation completes
           updateProgressWidth.setValue(0);
@@ -191,7 +204,7 @@ export default function TabLayout() {
           duration: 300,
           useNativeDriver: true,
         }).start();
-        
+
         // Reset animation values
         updateProgressWidth.setValue(0);
         updateIndicatorRotation.setValue(0);
@@ -216,17 +229,17 @@ export default function TabLayout() {
       const enabled = await getDebugTabEnabled();
       setEnableDebugTab(enabled);
     } catch (error) {
-      console.error('Error loading enable debug tab setting:', error);
+      console.error("Error loading enable debug tab setting:", error);
     }
   };
-  
+
   const refreshLastReadManga = async () => {
     try {
       const lastRead = await getLastReadManga();
       setLastReadManga(lastRead);
-      setLastReadUpdateCount(prev => prev + 1);
+      setLastReadUpdateCount((prev) => prev + 1);
     } catch (error) {
-      console.error('Error refreshing last read manga:', error);
+      console.error("Error refreshing last read manga:", error);
     }
   };
 
@@ -235,27 +248,30 @@ export default function TabLayout() {
       const completed = await checkOnboarding();
       setIsOnboardingCompleted(completed);
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
+      console.error("Error checking onboarding status:", error);
       setIsOnboardingCompleted(false);
     }
   };
 
   const performUpdateCheck = useCallback(async () => {
-    console.log('Performing update check...');
+    console.log("Performing update check...");
     try {
       // First check if update is available
       const checkResult = await checkForUpdate();
-      console.log('Update check result:', checkResult);
-      
+      console.log("Update check result:", checkResult);
+
       if (checkResult.success) {
-        console.log('Update available, downloading and applying...');
+        console.log("Update available, downloading and applying...");
         // If an update is available, download and apply it
         await updateAndReload();
       } else {
-        console.log('No update available or unable to check:', checkResult.message);
+        console.log(
+          "No update available or unable to check:",
+          checkResult.message,
+        );
       }
     } catch (error) {
-      console.error('Error in update process:', error);
+      console.error("Error in update process:", error);
     }
   }, [checkForUpdate, updateAndReload]);
 
@@ -272,20 +288,20 @@ export default function TabLayout() {
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     if (lastReadManga && lastReadManga.id) {
-      console.log('Navigating to manga:', lastReadManga);
+      console.log("Navigating to manga:", lastReadManga);
       router.push(`/manga/${lastReadManga.id}`);
     } else {
-      console.log('No last read manga found, navigating to search');
-      router.push('/mangasearch');
+      console.log("No last read manga found, navigating to search");
+      router.push("/mangasearch");
     }
   };
 
   const shouldShowTabBar = () => {
-    const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
+    const allowedPaths = ["/", "/mangasearch", "/settings", "/bookmarks"];
     if (enableDebugTab) {
-      allowedPaths.push('/Debug');
+      allowedPaths.push("/Debug");
     }
     return (
       allowedPaths.includes(pathname) || /^\/manga\/[^\/]+$/.test(pathname)
@@ -293,21 +309,21 @@ export default function TabLayout() {
   };
 
   const getUpdateStatusMessage = () => {
-    if (updateStatus.isDownloading) return 'Downloading update...';
-    if (updateStatus.isReady) return 'Update ready!';
-    return '';
+    if (updateStatus.isDownloading) return "Downloading update...";
+    if (updateStatus.isReady) return "Update ready!";
+    return "";
   };
 
   // Create interpolated rotation value for the spinner icon
   const spin = updateIndicatorRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
+    outputRange: ["0deg", "360deg"],
   });
 
   // Get the width for the progress bar
   const progressBarWidth = updateProgressWidth.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', '100%']
+    outputRange: ["0%", "100%"],
   });
 
   if (isOnboardingCompleted === null) {
@@ -323,47 +339,54 @@ export default function TabLayout() {
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
       {/* Update Indicator - Only shown during downloading or ready states */}
-      <Animated.View 
+      <Animated.View
         style={[
-          styles.updateIndicatorContainer, 
-          { 
-            backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#FFFFFF',
+          styles.updateIndicatorContainer,
+          {
+            backgroundColor: colorScheme === "dark" ? "#1E1E1E" : "#FFFFFF",
             opacity: updateIndicatorOpacity,
             top: insets.top + 8,
             borderColor: colors.primary,
-          }
+          },
         ]}
         pointerEvents="none"
       >
         <Animated.View style={{ transform: [{ rotate: spin }] }}>
-          <Ionicons 
-            name="sync" 
-            size={18} 
-            color={colors.primary} 
-            style={styles.updateIndicatorIcon} 
+          <Ionicons
+            name="sync"
+            size={18}
+            color={colors.primary}
+            style={styles.updateIndicatorIcon}
           />
         </Animated.View>
-        
+
         <View style={styles.updateContentContainer}>
-          <Text 
+          <Text
             style={[
-              styles.updateIndicatorText, 
-              { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' }
+              styles.updateIndicatorText,
+              { color: colorScheme === "dark" ? "#FFFFFF" : "#333333" },
             ]}
           >
             {getUpdateStatusMessage()}
           </Text>
-          
+
           {/* Progress bar */}
-          <View style={[styles.progressBarContainer, { backgroundColor: colorScheme === 'dark' ? '#333333' : '#EEEEEE' }]}>
-            <Animated.View 
+          <View
+            style={[
+              styles.progressBarContainer,
+              {
+                backgroundColor: colorScheme === "dark" ? "#333333" : "#EEEEEE",
+              },
+            ]}
+          >
+            <Animated.View
               style={[
-                styles.progressBar, 
-                { 
+                styles.progressBar,
+                {
                   backgroundColor: colors.primary,
-                  width: progressBarWidth
-                }
-              ]} 
+                  width: progressBarWidth,
+                },
+              ]}
             />
           </View>
         </View>
@@ -375,23 +398,23 @@ export default function TabLayout() {
             let iconName: keyof typeof Ionicons.glyphMap;
 
             switch (route.name) {
-              case 'index':
-                iconName = focused ? 'home' : 'home-outline';
+              case "index":
+                iconName = focused ? "home" : "home-outline";
                 break;
-              case 'mangasearch':
-                iconName = focused ? 'search' : 'search-outline';
+              case "mangasearch":
+                iconName = focused ? "search" : "search-outline";
                 break;
-              case 'bookmarks':
-                iconName = focused ? 'bookmark' : 'bookmark-outline';
+              case "bookmarks":
+                iconName = focused ? "bookmark" : "bookmark-outline";
                 break;
-              case 'settings':
-                iconName = focused ? 'settings' : 'settings-outline';
+              case "settings":
+                iconName = focused ? "settings" : "settings-outline";
                 break;
-              case 'Debug':
-                iconName = focused ? 'bug' : 'bug-outline';
+              case "Debug":
+                iconName = focused ? "bug" : "bug-outline";
                 break;
               default:
-                iconName = 'help-outline';
+                iconName = "help-outline";
             }
 
             return (
@@ -411,7 +434,7 @@ export default function TabLayout() {
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.tabIconDefault,
           tabBarStyle: {
-            position: 'absolute',
+            position: "absolute",
             bottom: tabBarBottomPosition,
             marginHorizontal: (width - TAB_BAR_WIDTH) / 2,
             backgroundColor: colors.card,
@@ -420,7 +443,7 @@ export default function TabLayout() {
             width: TAB_BAR_WIDTH,
             paddingBottom: 5,
             paddingTop: 5,
-            display: shouldShowTabBar() ? 'flex' : 'none',
+            display: shouldShowTabBar() ? "flex" : "none",
             elevation: 4,
           },
           tabBarItemStyle: {
@@ -428,7 +451,7 @@ export default function TabLayout() {
             width: TAB_WIDTH,
           },
           tabBarLabelStyle: {
-            fontWeight: '600',
+            fontWeight: "600",
             fontSize: 10,
             marginTop: 5,
           },
@@ -440,14 +463,14 @@ export default function TabLayout() {
         })}
         backBehavior="history"
       >
-        <Tabs.Screen name="index" options={{ title: 'Home' }} />
-        <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
-        <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
-        <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+        <Tabs.Screen name="index" options={{ title: "Home" }} />
+        <Tabs.Screen name="mangasearch" options={{ title: "Search" }} />
+        <Tabs.Screen name="bookmarks" options={{ title: "Saved" }} />
+        <Tabs.Screen name="settings" options={{ title: "Settings" }} />
         <Tabs.Screen
           name="Debug"
           options={{
-            title: 'Debug',
+            title: "Debug",
             href: enableDebugTab ? undefined : null,
           }}
         />
@@ -460,29 +483,26 @@ export default function TabLayout() {
           name="manga/[id]/chapter/[chapterNumber].styles"
           options={{ href: null }}
         />
-        <Tabs.Screen
-          name="manga/[id].styles"
-          options={{ href: null }}
-        />
+        <Tabs.Screen name="manga/[id].styles" options={{ href: null }} />
       </Tabs>
-      
+
       {shouldShowTabBar() && (
-        <Animated.View 
+        <Animated.View
           style={[
             styles.lastButtonContainer,
-            { 
+            {
               bottom: tabBarBottomPosition + 30,
-              transform: [{ scale: buttonScale }]
+              transform: [{ scale: buttonScale }],
             },
           ]}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.lastButton, 
-              { 
+              styles.lastButton,
+              {
                 backgroundColor: colors.primary,
                 borderColor: colors.card,
-              }
+              },
             ]}
             onPress={handleLastButtonPress}
             activeOpacity={0.8}
@@ -500,61 +520,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    height: '100%',
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    height: "100%",
   },
   activeIndicator: {
-    position: 'absolute',
+    position: "absolute",
     bottom: -5,
     width: 4,
     height: 4,
     borderRadius: 2,
   },
   lastButtonContainer: {
-    position: 'absolute', 
-    alignSelf: 'center',
-    alignItems: 'center',
+    position: "absolute",
+    alignSelf: "center",
+    alignItems: "center",
     zIndex: 100,
   },
   lastButton: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 4,
     elevation: 0,
   },
   lastButtonLabel: {
-    position: 'absolute',
+    position: "absolute",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
     top: 48,
   },
   lastButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   // Update indicator styles
   updateIndicatorContainer: {
-    position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
+    position: "absolute",
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
     zIndex: 1000,
-    alignSelf: 'center',
-    maxWidth: '90%',
+    alignSelf: "center",
+    maxWidth: "90%",
     borderWidth: 1,
   },
   updateContentContainer: {
@@ -563,7 +583,7 @@ const styles = StyleSheet.create({
   },
   updateIndicatorText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 6,
   },
   updateIndicatorIcon: {
@@ -572,11 +592,11 @@ const styles = StyleSheet.create({
   progressBarContainer: {
     height: 4,
     borderRadius: 2,
-    width: '100%',
-    overflow: 'hidden',
+    width: "100%",
+    overflow: "hidden",
   },
   progressBar: {
-    height: '100%',
+    height: "100%",
     borderRadius: 2,
   },
 });
