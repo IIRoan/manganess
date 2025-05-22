@@ -21,13 +21,14 @@ const parseHashParams = (hash: string) => {
 export async function loginWithAniList() {
   try {
     debug('Starting login process');
-    
-    const redirectUri = Constants.appOwnership === 'expo' 
-      ? 'https://auth.expo.io/@iroan/manganess'
-      : 'com.iroan.manganess://oauth';
-    
+
+    const redirectUri =
+      Constants.appOwnership === 'expo'
+        ? 'https://auth.expo.io/@iroan/manganess'
+        : 'com.iroan.manganess://oauth';
+
     const authUrl = `${ANILIST_AUTH_URL}?client_id=${ANILIST_CLIENT_ID}&response_type=token`;
-    
+
     debug('Auth URL:', authUrl);
     debug('Redirect URI:', redirectUri);
 
@@ -51,7 +52,11 @@ export async function loginWithAniList() {
 
       const authData = {
         accessToken: params.access_token,
-        expiresAt: Date.now() + (params.expires_in ? parseInt(params.expires_in) * 1000 : 365 * 24 * 60 * 60 * 1000)
+        expiresAt:
+          Date.now() +
+          (params.expires_in
+            ? parseInt(params.expires_in) * 1000
+            : 365 * 24 * 60 * 60 * 1000),
       };
 
       debug('Saving auth data');
@@ -80,9 +85,12 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function makeAniListRequest(query: string, variables: any = {}): Promise<any> {
+export async function makeAniListRequest(
+  query: string,
+  variables: any = {}
+): Promise<any> {
   debug('Making API request', { query, variables });
-  
+
   const authData = await getAuthData();
   if (!authData) {
     debug('No auth data found for request');
@@ -94,8 +102,8 @@ export async function makeAniListRequest(query: string, variables: any = {}): Pr
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Authorization': `Bearer ${authData.accessToken}`,
+      Accept: 'application/json',
+      Authorization: `Bearer ${authData.accessToken}`,
     },
     body: JSON.stringify({
       query,
@@ -108,7 +116,9 @@ export async function makeAniListRequest(query: string, variables: any = {}): Pr
 
   if (!response.ok) {
     debug('API request failed:', data.errors);
-    throw new Error(data.errors?.[0]?.message || 'Failed to make AniList API request');
+    throw new Error(
+      data.errors?.[0]?.message || 'Failed to make AniList API request'
+    );
   }
 
   return data;

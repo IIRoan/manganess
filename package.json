@@ -66,6 +66,8 @@
     "web": "expo start --web",
     "test": "jest --watchAll",
     "lint": "expo lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "build": "eas build -p android --profile preview"
   },
   "jest": {
@@ -112,6 +114,11 @@
     "@types/lodash": "^4.17.14",
     "@types/react": "~19.0.10",
     "@types/react-test-renderer": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.32.1",
+    "@typescript-eslint/parser": "^8.32.1",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-prettier": "^5.4.0",
+    "prettier": "^3.5.3",
     "react-test-renderer": "18.3.1",
     "typescript": "^5.3.3"
   },
