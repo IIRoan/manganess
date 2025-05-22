@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,10 @@ import {
   Alert,
   Switch,
   Platform,
-} from "react-native";
-import { useTheme, Theme } from "@/constants/ThemeContext";
-import { Ionicons } from "@expo/vector-icons";
-import { Colors, ColorScheme } from "@/constants/Colors";
+} from 'react-native';
+import { useTheme, Theme } from '@/constants/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors, ColorScheme } from '@/constants/Colors';
 import {
   getDebugTabEnabled,
   setDebugTabEnabled,
@@ -22,16 +22,16 @@ import {
   clearAppData,
   migrateToNewStorage,
   refreshMangaImages,
-} from "@/services/settingsService";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as AniListOAuth from "@/services/anilistOAuth";
-import { syncAllMangaWithAniList } from "@/services/anilistService";
-import { ActivityIndicator } from "react-native";
-import Svg, { Path } from "react-native-svg";
-import * as FileSystem from "expo-file-system";
-import * as DocumentPicker from "expo-document-picker";
-import * as Sharing from "expo-sharing";
-import CustomColorPicker from "@/components/CustomColorPicker";
+} from '@/services/settingsService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as AniListOAuth from '@/services/anilistOAuth';
+import { syncAllMangaWithAniList } from '@/services/anilistService';
+import { ActivityIndicator } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
+import CustomColorPicker from '@/components/CustomColorPicker';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -44,7 +44,7 @@ export default function SettingsScreen() {
   const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === "system" ? systemColorScheme : (theme as ColorScheme);
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
   const [user, setUser] = useState<any>(null);
@@ -55,13 +55,13 @@ export default function SettingsScreen() {
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState<string>(
-    accentColor || colors.primary,
+    accentColor || colors.primary
   );
 
   const themeOptions: ThemeOption[] = [
-    { label: "Light", value: "light", icon: "sunny-outline" },
-    { label: "Dark", value: "dark", icon: "moon-outline" },
-    { label: "System", value: "system", icon: "phone-portrait-outline" },
+    { label: 'Light', value: 'light', icon: 'sunny-outline' },
+    { label: 'Dark', value: 'dark', icon: 'moon-outline' },
+    { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
   ];
 
   useEffect(() => {
@@ -77,20 +77,20 @@ export default function SettingsScreen() {
   const loadEnableDebugTabSetting = async () => {
     try {
       const enabled = await getDebugTabEnabled();
-      console.log("Loaded enableDebugTab:", enabled);
+      console.log('Loaded enableDebugTab:', enabled);
       setEnableDebugTab(enabled);
     } catch (error) {
-      console.error("Error loading enable debug tab setting:", error);
+      console.error('Error loading enable debug tab setting:', error);
     }
   };
 
   const toggleEnableDebugTab = async (value: boolean) => {
     try {
       await setDebugTabEnabled(value);
-      console.log("Saved enableDebugTab:", value);
+      console.log('Saved enableDebugTab:', value);
       setEnableDebugTab(value);
     } catch (error) {
-      console.error("Error toggling enable debug tab setting:", error);
+      console.error('Error toggling enable debug tab setting:', error);
     }
   };
 
@@ -100,7 +100,7 @@ export default function SettingsScreen() {
 
       // Create JSON file
       const jsonString = JSON.stringify(exportedData, null, 2);
-      const fileName = `manganess_${new Date().toISOString().split("T")[0]}.json`;
+      const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
       const filePath = `${FileSystem.documentDirectory}${fileName}`;
 
       // Write file
@@ -109,68 +109,68 @@ export default function SettingsScreen() {
       // Share file
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(filePath, {
-          mimeType: "application/json",
-          dialogTitle: "Export App Data",
+          mimeType: 'application/json',
+          dialogTitle: 'Export App Data',
         });
       }
     } catch (error) {
-      console.error("Export error:", error);
-      Alert.alert("Error", "Failed to export data");
+      console.error('Export error:', error);
+      Alert.alert('Error', 'Failed to export data');
     }
   };
 
   const handleImportData = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "application/json",
+        type: 'application/json',
       });
 
       if (result.canceled) return;
 
       const fileContent = await FileSystem.readAsStringAsync(
-        result.assets[0].uri,
+        result.assets[0].uri
       );
       const importedData = JSON.parse(fileContent);
 
       Alert.alert(
-        "Import Data",
-        "This will replace all existing data. Continue?",
+        'Import Data',
+        'This will replace all existing data. Continue?',
         [
-          { text: "Cancel", style: "cancel" },
+          { text: 'Cancel', style: 'cancel' },
           {
-            text: "Import",
+            text: 'Import',
             onPress: async () => {
               await importAppData(importedData);
-              Alert.alert("Success", "Data imported! Please restart the app");
+              Alert.alert('Success', 'Data imported! Please restart the app');
             },
           },
-        ],
+        ]
       );
     } catch (error) {
-      console.error("Import error:", error);
-      Alert.alert("Error", "Failed to import data");
+      console.error('Import error:', error);
+      Alert.alert('Error', 'Failed to import data');
     }
   };
 
   const handleClearData = () => {
     Alert.alert(
-      "Clear App Data",
-      "Are you sure you want to clear all app data? This action cannot be undone.",
+      'Clear App Data',
+      'Are you sure you want to clear all app data? This action cannot be undone.',
       [
-        { text: "Cancel", style: "cancel" },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: "OK",
+          text: 'OK',
           onPress: async () => {
             try {
               await clearAppData();
-              Alert.alert("Success", "All app data has been cleared.");
+              Alert.alert('Success', 'All app data has been cleared.');
             } catch (error) {
-              console.error("Error clearing app data:", error);
-              Alert.alert("Error", "Failed to clear app data.");
+              console.error('Error clearing app data:', error);
+              Alert.alert('Error', 'Failed to clear app data.');
             }
           },
         },
-      ],
+      ]
     );
   };
 
@@ -182,7 +182,7 @@ export default function SettingsScreen() {
         const userData = await AniListOAuth.getCurrentUser();
         setUser(userData.data.Viewer);
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        console.error('Error fetching user data:', error);
       }
     }
   };
@@ -193,17 +193,17 @@ export default function SettingsScreen() {
       if (authData) {
         const userData = await AniListOAuth.getCurrentUser();
         setUser(userData.data.Viewer);
-        Alert.alert("Success", "Successfully logged in to AniList!");
+        Alert.alert('Success', 'Successfully logged in to AniList!');
       }
     } catch (error: unknown) {
-      console.error("AniList login error:", error);
+      console.error('AniList login error:', error);
       if (error instanceof Error) {
-        if (error.message.includes("cancelled")) {
-          Alert.alert("Cancelled", "Login was cancelled by user");
+        if (error.message.includes('cancelled')) {
+          Alert.alert('Cancelled', 'Login was cancelled by user');
         } else {
           Alert.alert(
-            "Error",
-            `Failed to login with AniList: ${error.message}`,
+            'Error',
+            `Failed to login with AniList: ${error.message}`
           );
         }
       }
@@ -215,8 +215,8 @@ export default function SettingsScreen() {
       await AniListOAuth.logout();
       setUser(null);
     } catch (error: unknown) {
-      console.error("AniList logout error:", error);
-      Alert.alert("Error", "Failed to logout");
+      console.error('AniList logout error:', error);
+      Alert.alert('Error', 'Failed to logout');
     }
   };
 
@@ -224,12 +224,12 @@ export default function SettingsScreen() {
     try {
       setIsSyncing(true);
       const results = await syncAllMangaWithAniList();
-      Alert.alert("Sync Results", results.join("\n"));
+      Alert.alert('Sync Results', results.join('\n'));
     } catch (error) {
-      console.error("Error syncing manga:", error);
+      console.error('Error syncing manga:', error);
       Alert.alert(
-        "Error",
-        `Failed to sync manga: ${error instanceof Error ? error.message : "Unknown error"}`,
+        'Error',
+        `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     } finally {
       setIsSyncing(false);
@@ -261,7 +261,7 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Theme</Text>
-          {themeOptions.map((option) => (
+          {themeOptions.map(option => (
             <TouchableOpacity
               key={option.value}
               style={[
@@ -405,11 +405,11 @@ export default function SettingsScreen() {
                 setIsRefreshing(true);
                 const result = await refreshMangaImages();
                 Alert.alert(
-                  result.success ? "Success" : "Error",
-                  result.message,
+                  result.success ? 'Success' : 'Error',
+                  result.message
                 );
               } catch (error) {
-                Alert.alert("Error", "Failed to refresh manga images");
+                Alert.alert('Error', 'Failed to refresh manga images');
               } finally {
                 setIsRefreshing(false);
               }
@@ -433,11 +433,11 @@ export default function SettingsScreen() {
                 setIsMigrating(true);
                 const result = await migrateToNewStorage();
                 Alert.alert(
-                  result.success ? "Success" : "Error",
-                  result.message,
+                  result.success ? 'Success' : 'Error',
+                  result.message
                 );
               } catch (error) {
-                Alert.alert("Error", "Failed to migrate data");
+                Alert.alert('Error', 'Failed to migrate data');
               } finally {
                 setIsMigrating(false);
               }
@@ -468,8 +468,8 @@ export default function SettingsScreen() {
                 true: accentColor || colors.primary,
               }}
               thumbColor={
-                enableDebugTab && Platform.OS === "android"
-                  ? "#FFFFFF"
+                enableDebugTab && Platform.OS === 'android'
+                  ? '#FFFFFF'
                   : undefined
               }
             />
@@ -482,7 +482,7 @@ export default function SettingsScreen() {
         <View style={styles.bottomSpacing} />
       </ScrollView>
       <Image
-        source={require("@/assets/images/nessie.png")}
+        source={require('@/assets/images/nessie.png')}
         style={styles.nessieImage}
         resizeMode="contain"
       />
@@ -509,7 +509,7 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     title: {
       fontSize: 28,
-      fontWeight: "bold",
+      fontWeight: 'bold',
       marginBottom: 20,
       color: colors.text,
     },
@@ -518,13 +518,13 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     sectionTitle: {
       fontSize: 20,
-      fontWeight: "600",
+      fontWeight: '600',
       marginBottom: 10,
       color: colors.text,
     },
     option: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingVertical: 15,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
@@ -538,7 +538,7 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     activeOptionText: {
       color: colors.primary,
-      fontWeight: "600",
+      fontWeight: '600',
     },
     noteText: {
       fontSize: 14,
@@ -552,17 +552,17 @@ const getStyles = (colors: typeof Colors.light) =>
       height: 80,
     },
     nessieImage: {
-      position: "absolute",
+      position: 'absolute',
       bottom: 90,
       left: 20,
       width: 80,
       height: 80,
       opacity: 0.8,
-      transform: [{ rotate: "-15deg" }],
+      transform: [{ rotate: '-15deg' }],
     },
     clearDataButton: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.card,
       padding: 15,
       borderRadius: 10,
@@ -572,11 +572,11 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 16,
       marginLeft: 15,
       color: colors.notification,
-      fontWeight: "600",
+      fontWeight: '600',
     },
     userInfo: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       marginBottom: 15,
       backgroundColor: colors.background,
       padding: 10,
@@ -590,7 +590,7 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     username: {
       fontSize: 16,
-      fontWeight: "bold",
+      fontWeight: 'bold',
       color: colors.text,
     },
     loginButton: {
@@ -602,7 +602,7 @@ const getStyles = (colors: typeof Colors.light) =>
     loginButtonText: {
       color: colors.card,
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: '600',
       marginLeft: 10,
     },
     syncButton: {
@@ -614,13 +614,13 @@ const getStyles = (colors: typeof Colors.light) =>
     syncButtonText: {
       color: colors.card,
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: '600',
       marginLeft: 10,
     },
     buttonContent: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     disabledButton: {
       opacity: 0.7,
@@ -629,8 +629,8 @@ const getStyles = (colors: typeof Colors.light) =>
       marginLeft: 10,
     },
     dataButton: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.card,
       padding: 15,
       borderRadius: 10,
@@ -642,6 +642,6 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 16,
       marginLeft: 15,
       color: colors.text,
-      fontWeight: "600",
+      fontWeight: '600',
     },
   });

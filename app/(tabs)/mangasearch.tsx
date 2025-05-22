@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   TextInput,
@@ -13,16 +13,16 @@ import {
   useWindowDimensions,
   Platform,
   Animated,
-} from "react-native";
-import { Stack, useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
-import MangaCard from "@/components/MangaCard";
-import { Colors, ColorScheme } from "@/constants/Colors";
-import { useTheme } from "@/constants/ThemeContext";
-import { searchManga, type MangaItem } from "@/services/mangaFireService";
-import { getLastReadChapter } from "@/services/readChapterService";
-import { useDebounce } from "@/hooks/useDebounce";
+} from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import MangaCard from '@/components/MangaCard';
+import { Colors, ColorScheme } from '@/constants/Colors';
+import { useTheme } from '@/constants/ThemeContext';
+import { searchManga, type MangaItem } from '@/services/mangaFireService';
+import { getLastReadChapter } from '@/services/readChapterService';
+import { useDebounce } from '@/hooks/useDebounce';
 
 /* Type Definitions */
 interface LastReadChapters {
@@ -42,22 +42,22 @@ export default function MangaSearchScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
 
   // State variables
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>(
-    {},
+    {}
   );
 
   // Focus input field on screen focus
   useFocusEffect(
     useCallback(() => {
-      if (searchQuery === "") {
+      if (searchQuery === '') {
         inputRef.current?.focus();
       }
-    }, [searchQuery]),
+    }, [searchQuery])
   );
 
   // Search function to handle input
@@ -71,7 +71,7 @@ export default function MangaSearchScreen() {
           const results = await searchManga(debouncedSearchQuery);
           setSearchResults(results);
         } catch (err) {
-          setError("Failed to fetch manga. Please try again.");
+          setError('Failed to fetch manga. Please try again.');
           console.error(err);
         } finally {
           setIsLoading(false);
@@ -86,7 +86,7 @@ export default function MangaSearchScreen() {
 
   // Clear search
   const clearSearch = useCallback(() => {
-    setSearchQuery("");
+    setSearchQuery('');
     setSearchResults([]);
     inputRef.current?.focus();
   }, []);
@@ -99,11 +99,11 @@ export default function MangaSearchScreen() {
   const handleMangaPress = useCallback(
     (item: MangaItem) => {
       router.navigate({
-        pathname: "/manga/[id]",
+        pathname: '/manga/[id]',
         params: { id: item.id, title: item.title, bannerImage: item.banner },
       });
     },
-    [router],
+    [router]
   );
 
   // Fetch last read chapters
@@ -140,7 +140,7 @@ export default function MangaSearchScreen() {
         </View>
       </View>
     ),
-    [handleMangaPress, lastReadChapters, styles],
+    [handleMangaPress, lastReadChapters, styles]
   );
 
   // Key extractor for FlatList
@@ -158,14 +158,14 @@ export default function MangaSearchScreen() {
         </Text>
       </View>
     ),
-    [styles, colors.primary],
+    [styles, colors.primary]
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen
         options={{
-          title: "Search",
+          title: 'Search',
           headerTintColor: colors.text,
           headerShown: false,
         }}
@@ -189,7 +189,7 @@ export default function MangaSearchScreen() {
               placeholder="Search manga or manhwa..."
               placeholderTextColor={colors.tabIconDefault}
               value={searchQuery}
-              onChangeText={(query) => setSearchQuery(query)}
+              onChangeText={query => setSearchQuery(query)}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity
@@ -222,7 +222,7 @@ export default function MangaSearchScreen() {
             columnWrapperStyle={styles.columnWrapper}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: true },
+              { useNativeDriver: true }
             )}
             ListEmptyComponent={EmptyState}
             keyboardShouldPersistTaps="handled"
@@ -238,7 +238,7 @@ export default function MangaSearchScreen() {
 const getStyles = (
   colors: typeof Colors.light,
   width: number,
-  height: number,
+  height: number
 ) => {
   const isLandscape = width > height;
   const cardWidth = isLandscape ? (width - 60) / 4 : (width - 48) / 2;
@@ -247,10 +247,10 @@ const getStyles = (
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+      paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     headerWrapper: {
-      position: "absolute",
+      position: 'absolute',
       top: 0,
       left: 0,
       right: 0,
@@ -262,8 +262,8 @@ const getStyles = (
       marginTop: 46,
     },
     searchContainer: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       padding: 16,
       gap: 12,
       backgroundColor: colors.card,
@@ -273,8 +273,8 @@ const getStyles = (
     },
     searchInputContainer: {
       flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.card,
       borderRadius: 12,
       paddingHorizontal: 16,
@@ -294,22 +294,22 @@ const getStyles = (
     },
     loadingContainer: {
       flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     gridContainer: {
       padding: 16,
       paddingBottom: 150,
     },
     columnWrapper: {
-      justifyContent: "space-between",
+      justifyContent: 'space-between',
     },
     cardWrapper: {
       width: cardWidth,
       marginBottom: 16,
     },
     card: {
-      width: "100%",
+      width: '100%',
       aspectRatio: 3 / 4,
     },
     titleContainer: {
@@ -318,13 +318,13 @@ const getStyles = (
     mangaTitle: {
       color: colors.text,
       fontSize: 14,
-      fontWeight: "bold",
-      textAlign: "center",
+      fontWeight: 'bold',
+      textAlign: 'center',
     },
     emptyStateContainer: {
       flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
       padding: 16,
       marginTop: height * 0.2,
     },
@@ -332,21 +332,21 @@ const getStyles = (
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: colors.primary + "20",
-      alignItems: "center",
-      justifyContent: "center",
+      backgroundColor: colors.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
       marginBottom: 16,
     },
     emptyStateTitle: {
       fontSize: 24,
-      fontWeight: "600",
+      fontWeight: '600',
       color: colors.text,
       marginBottom: 8,
     },
     emptyStateText: {
       fontSize: 16,
       color: colors.tabIconDefault,
-      textAlign: "center",
+      textAlign: 'center',
       maxWidth: 250,
     },
   });

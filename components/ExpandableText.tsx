@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Platform,
   TextInput,
   LayoutAnimation,
-} from "react-native";
+} from 'react-native';
 
 interface ExpandableTextProps {
   text: string;
@@ -32,12 +32,12 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
         setIsTruncated(true);
       }
     },
-    [initialLines],
+    [initialLines]
   );
 
   const toggleExpand = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsExpanded((prev) => !prev);
+    setIsExpanded(prev => !prev);
   }, []);
 
   const TextComponent = useMemo(() => {
@@ -82,7 +82,7 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    overflow: "hidden",
+    overflow: 'hidden',
   },
   text: {
     fontSize: 16,

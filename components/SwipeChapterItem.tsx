@@ -1,13 +1,13 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   TouchableOpacity,
   Animated,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import Swipeable from "react-native-gesture-handler/Swipeable";
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 
 interface SwipeableChapterItemProps {
   chapter: {
@@ -55,12 +55,12 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
 
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
-    dragX: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>
   ) => {
     const trans = dragX.interpolate({
       inputRange: [-BUTTON_WIDTH, 0],
       outputRange: [0, BUTTON_WIDTH],
-      extrapolate: "clamp",
+      extrapolate: 'clamp',
     });
 
     return (
@@ -167,7 +167,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
               name="checkmark-circle"
               size={24}
               color={
-                isCurrentlyLastRead ? colors.primary : colors.primary + "99"
+                isCurrentlyLastRead ? colors.primary : colors.primary + '99'
               }
             />
           </View>
@@ -179,32 +179,32 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    width: "100%",
-    backgroundColor: "transparent",
+    width: '100%',
+    backgroundColor: 'transparent',
   },
   content: {
-    backgroundColor: "transparent",
+    backgroundColor: 'transparent',
   },
   rightActionContainer: {
     width: BUTTON_WIDTH,
-    height: "100%",
+    height: '100%',
   },
   button: {
     width: BUTTON_WIDTH,
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
-    color: "white",
+    color: 'white',
     fontSize: 12,
     marginTop: 4,
   },
   lastReadChapterItem: {
-    backgroundColor: "rgba(0, 128, 0, 0.05)",
+    backgroundColor: 'rgba(0, 128, 0, 0.05)',
   },
   lastReadChapterText: {
-    fontWeight: "700",
+    fontWeight: '700',
   },
 });
 

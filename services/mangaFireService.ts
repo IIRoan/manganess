@@ -1,13 +1,13 @@
-import axios from "axios";
-import { decode } from "html-entities";
-import { MANGA_API_URL } from "@/constants/Config";
+import axios from 'axios';
+import { decode } from 'html-entities';
+import { MANGA_API_URL } from '@/constants/Config';
 import {
   searchAnilistMangaByName,
   updateMangaStatus,
   isLoggedInToAniList,
-} from "@/services/anilistService";
-import { getMangaData, setMangaData } from "@/services/bookmarkService";
-import { setLastReadManga } from "./readChapterService";
+} from '@/services/anilistService';
+import { getMangaData, setMangaData } from '@/services/bookmarkService';
+import { setLastReadManga } from './readChapterService';
 
 export interface MangaItem {
   id: string;
@@ -33,7 +33,7 @@ export interface MangaDetails {
 }
 
 const USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0";
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
 
 export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
   try {
@@ -41,9 +41,9 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword)}`,
       {
         headers: {
-          "User-Agent": USER_AGENT,
+          'User-Agent': USER_AGENT,
         },
-      },
+      }
     );
 
     const html = response.data as string;
@@ -51,9 +51,9 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
     const matches = [...html.matchAll(mangaRegex)];
 
-    return matches.map((match) => {
+    return matches.map(match => {
       const link = match[1];
-      const id = link.split("/").pop() || "";
+      const id = link.split('/').pop() || '';
       return {
         id,
         link: `${MANGA_API_URL}${link}`,
@@ -64,7 +64,7 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       };
     });
   } catch (error) {
-    console.error("Error searching manga:", error);
+    console.error('Error searching manga:', error);
     throw error;
   }
 };
@@ -73,71 +73,71 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
   try {
     const response = await axios.get(`${MANGA_API_URL}/manga/${id}`, {
       headers: {
-        "User-Agent": USER_AGENT,
+        'User-Agent': USER_AGENT,
       },
     });
 
     const html = response.data as string;
     return parseMangaDetails(html);
   } catch (error) {
-    console.error("Error fetching manga details:", error);
+    console.error('Error fetching manga details:', error);
     throw error;
   }
 };
 
 const parseMangaDetails = (html: string): MangaDetails => {
   const title = decode(
-    html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || "Unknown Title",
+    html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title'
   );
-  const alternativeTitle = decode(html.match(/<h6>(.*?)<\/h6>/)?.[1] || "");
-  const status = html.match(/<p>(.*?)<\/p>/)?.[1] || "Unknown Status";
+  const alternativeTitle = decode(html.match(/<h6>(.*?)<\/h6>/)?.[1] || '');
+  const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
 
   const descriptionMatch = html.match(
-    /<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/,
+    /<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/
   );
   let description = descriptionMatch
-    ? decode(descriptionMatch[1].trim()) || "No description available"
-    : "No description available";
+    ? decode(descriptionMatch[1].trim()) || 'No description available'
+    : 'No description available';
 
   description = description
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<p>/gi, "")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<(?:.|\n)*?>/gm, "")
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<p>/gi, '')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<(?:.|\n)*?>/gm, '')
     .trim();
 
   const authorMatch = html.match(
-    /<span>Author:<\/span>.*?<span>(.*?)<\/span>/s,
+    /<span>Author:<\/span>.*?<span>(.*?)<\/span>/s
   );
   const authors = authorMatch
     ? authorMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => a.replace(/<[^>]*>/g, "")) || []
+        ?.map(a => a.replace(/<[^>]*>/g, '')) || []
     : [];
 
   const published =
     html.match(/<span>Published:<\/span>.*?<span>(.*?)<\/span>/s)?.[1] ||
-    "Unknown";
+    'Unknown';
 
   const genresMatch = html.match(
-    /<span>Genres:<\/span>.*?<span>(.*?)<\/span>/s,
+    /<span>Genres:<\/span>.*?<span>(.*?)<\/span>/s
   );
   const genres = genresMatch
     ? genresMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => a.replace(/<[^>]*>/g, "")) || []
+        ?.map(a => a.replace(/<[^>]*>/g, '')) || []
     : [];
 
   const rating =
     html.match(
-      /<span class="live-score" itemprop="ratingValue">(.*?)<\/span>/,
-    )?.[1] || "N/A";
+      /<span class="live-score" itemprop="ratingValue">(.*?)<\/span>/
+    )?.[1] || 'N/A';
   const reviewCount =
-    html.match(/<span itemprop="reviewCount".*?>(.*?)<\/span>/)?.[1] || "0";
+    html.match(/<span itemprop="reviewCount".*?>(.*?)<\/span>/)?.[1] || '0';
   const bannerImageMatch = html.match(
-    /<div class="poster">.*?<img src="(.*?)" itemprop="image"/s,
+    /<div class="poster">.*?<img src="(.*?)" itemprop="image"/s
   );
-  const bannerImage = bannerImageMatch ? bannerImageMatch[1] : "";
+  const bannerImage = bannerImageMatch ? bannerImageMatch[1] : '';
 
   const chaptersRegex =
     /<li class="item".*?<a href="(.*?)".*?<span>Chapter (\d+):.*?<\/span>.*?<span>(.*?)<\/span>/g;
@@ -173,10 +173,10 @@ export const getChapterUrl = (id: string, chapterNumber: string): string => {
 export const markChapterAsRead = async (
   id: string,
   chapterNumber: string,
-  mangaTitle: string,
+  mangaTitle: string
 ) => {
   if (!id || !chapterNumber || !mangaTitle) {
-    console.error("Invalid parameters for markChapterAsRead:", {
+    console.error('Invalid parameters for markChapterAsRead:', {
       id,
       chapterNumber,
       mangaTitle,
@@ -185,7 +185,7 @@ export const markChapterAsRead = async (
   }
 
   try {
-    console.log("Updating last read manga in mangaFireService:", {
+    console.log('Updating last read manga in mangaFireService:', {
       id,
       mangaTitle,
       chapterNumber,
@@ -195,10 +195,10 @@ export const markChapterAsRead = async (
     const mangaData = await getMangaData(id);
     if (mangaData) {
       const updatedReadChapters = Array.from(
-        new Set([...mangaData.readChapters, chapterNumber]),
+        new Set([...mangaData.readChapters, chapterNumber])
       );
       const highestChapter = Math.max(
-        ...updatedReadChapters.map((ch) => parseFloat(ch)),
+        ...updatedReadChapters.map(ch => parseFloat(ch))
       ).toString();
       await setMangaData({
         ...mangaData,
@@ -208,13 +208,13 @@ export const markChapterAsRead = async (
       });
 
       console.log(
-        `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`,
+        `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`
       );
     } else {
       await setMangaData({
         id,
         title: mangaTitle,
-        bannerImage: "",
+        bannerImage: '',
         bookmarkStatus: null,
         readChapters: [chapterNumber],
         lastReadChapter: chapterNumber,
@@ -222,7 +222,7 @@ export const markChapterAsRead = async (
       });
     }
   } catch (error) {
-    console.error("Error marking chapter as read:", error);
+    console.error('Error marking chapter as read:', error);
   }
 };
 
@@ -231,7 +231,7 @@ export const getBookmarkStatus = async (id: string): Promise<string | null> => {
     const mangaData = await getMangaData(id);
     return mangaData?.bookmarkStatus || null;
   } catch (error) {
-    console.error("Error getting bookmark status:", error);
+    console.error('Error getting bookmark status:', error);
     return null;
   }
 };
@@ -240,17 +240,17 @@ export const updateAniListProgress = async (
   id: string,
   mangaTitle: string,
   progress: number,
-  bookmarkStatus: string,
+  bookmarkStatus: string
 ) => {
   if (!mangaTitle) {
-    console.error("Manga title is undefined for id:", id);
+    console.error('Manga title is undefined for id:', id);
     return;
   }
 
   try {
     const isLoggedIn = await isLoggedInToAniList();
     if (!isLoggedIn) {
-      console.log("User is not logged in to AniList. Skipping update.");
+      console.log('User is not logged in to AniList. Skipping update.');
       return;
     }
 
@@ -258,27 +258,27 @@ export const updateAniListProgress = async (
     if (anilistManga) {
       let status: string;
       switch (bookmarkStatus) {
-        case "To Read":
-          status = "PLANNING";
+        case 'To Read':
+          status = 'PLANNING';
           break;
-        case "Reading":
-          status = "CURRENT";
+        case 'Reading':
+          status = 'CURRENT';
           break;
-        case "Read":
-          status = "COMPLETED";
+        case 'Read':
+          status = 'COMPLETED';
           break;
         default:
-          status = "CURRENT";
+          status = 'CURRENT';
       }
       await updateMangaStatus(anilistManga.id, status, progress);
       console.log(
-        `Updated AniList progress for "${mangaTitle}" (${id}) to ${progress} chapters with status ${status}`,
+        `Updated AniList progress for "${mangaTitle}" (${id}) to ${progress} chapters with status ${status}`
       );
     } else {
       console.log(`Manga "${mangaTitle}" (${id}) not found on AniList`);
     }
   } catch (error) {
-    console.error("Error updating AniList progress:", error);
+    console.error('Error updating AniList progress:', error);
   }
 };
 
@@ -289,18 +289,18 @@ export const parseNewReleases = (html: string): MangaItem[] => {
   for (const match of homeSwiperMatches) {
     const swiperContent = match[1];
 
-    if (swiperContent.includes("<h2>New Release</h2>")) {
+    if (swiperContent.includes('<h2>New Release</h2>')) {
       const itemRegex =
         /<div class="swiper-slide unit[^"]*">\s*<a href="\/manga\/([^"]+)">\s*<div class="poster">\s*<div><img src="([^"]+)" alt="([^"]+)"><\/div>\s*<\/div>\s*<span>([^<]+)<\/span>\s*<\/a>\s*<\/div>/g;
       const matches = Array.from(swiperContent.matchAll(itemRegex));
 
-      return matches.map((match) => ({
+      return matches.map(match => ({
         id: match[1],
         imageUrl: match[2],
         title: decode(match[4].trim()),
-        banner: "",
+        banner: '',
         link: `/manga/${match[1]}`,
-        type: "manga",
+        type: 'manga',
       }));
     }
   }
@@ -313,14 +313,14 @@ export const parseMostViewedManga = (html: string): MangaItem[] => {
   const regex =
     /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
   const matches = [...html.matchAll(regex)];
-  return matches.slice(0, 10).map((match) => ({
+  return matches.slice(0, 10).map(match => ({
     id: match[1],
     rank: parseInt(match[2]),
     imageUrl: match[3],
     title: decode(match[4]),
-    banner: "",
+    banner: '',
     link: `/manga/${match[1]}`,
-    type: "manga",
+    type: 'manga',
   }));
 };
 

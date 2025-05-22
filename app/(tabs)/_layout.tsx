@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,21 +9,21 @@ import {
   Animated,
   Alert,
   AppState,
-} from "react-native";
-import { Tabs, usePathname, useRouter, useNavigation } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+} from 'react-native';
+import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import {
   getAppSettings,
   getDebugTabEnabled,
   isOnboardingCompleted as checkOnboarding,
-} from "@/services/settingsService";
-import { useTheme } from "@/constants/ThemeContext";
-import { Colors, ColorScheme } from "@/constants/Colors";
-import OnboardingScreen from "../onboarding";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { imageCache } from "@/services/CacheImages";
-import { getLastReadManga, LastReadManga } from "@/services/readChapterService";
-import { useAppUpdates } from "@/hooks/useAppUpdates";
+} from '@/services/settingsService';
+import { useTheme } from '@/constants/ThemeContext';
+import { Colors, ColorScheme } from '@/constants/Colors';
+import OnboardingScreen from '../onboarding';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { imageCache } from '@/services/CacheImages';
+import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
+import { useAppUpdates } from '@/hooks/useAppUpdates';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -31,12 +31,12 @@ export default function TabLayout() {
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === "system" ? systemColorScheme : (theme as ColorScheme);
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
 
   const insets = useSafeAreaInsets();
 
-  const { width } = Dimensions.get("window");
+  const { width } = Dimensions.get('window');
   const TAB_BAR_WIDTH = width * 0.9;
   const TAB_WIDTH = TAB_BAR_WIDTH / 5;
 
@@ -47,7 +47,7 @@ export default function TabLayout() {
     boolean | null
   >(null);
   const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
-    null,
+    null
   );
   const buttonScale = useRef(new Animated.Value(1)).current;
 
@@ -80,19 +80,19 @@ export default function TabLayout() {
 
     imageCache.initializeCache();
 
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
       if (
         appState.current.match(/inactive|background/) &&
-        nextAppState === "active"
+        nextAppState === 'active'
       ) {
-        console.log("App has come to the foreground, checking for updates...");
+        console.log('App has come to the foreground, checking for updates...');
         performUpdateCheck();
       }
 
       appState.current = nextAppState;
     });
 
-    const unsubscribeFocus = navigation.addListener("focus", () => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
       refreshLastReadManga();
     });
 
@@ -110,10 +110,10 @@ export default function TabLayout() {
 
   useEffect(() => {
     if (
-      pathname === "/" ||
-      pathname === "/bookmarks" ||
-      pathname === "/settings" ||
-      pathname === "/mangasearch"
+      pathname === '/' ||
+      pathname === '/bookmarks' ||
+      pathname === '/settings' ||
+      pathname === '/mangasearch'
     ) {
       refreshLastReadManga();
     }
@@ -229,7 +229,7 @@ export default function TabLayout() {
       const enabled = await getDebugTabEnabled();
       setEnableDebugTab(enabled);
     } catch (error) {
-      console.error("Error loading enable debug tab setting:", error);
+      console.error('Error loading enable debug tab setting:', error);
     }
   };
 
@@ -237,9 +237,9 @@ export default function TabLayout() {
     try {
       const lastRead = await getLastReadManga();
       setLastReadManga(lastRead);
-      setLastReadUpdateCount((prev) => prev + 1);
+      setLastReadUpdateCount(prev => prev + 1);
     } catch (error) {
-      console.error("Error refreshing last read manga:", error);
+      console.error('Error refreshing last read manga:', error);
     }
   };
 
@@ -248,30 +248,30 @@ export default function TabLayout() {
       const completed = await checkOnboarding();
       setIsOnboardingCompleted(completed);
     } catch (error) {
-      console.error("Error checking onboarding status:", error);
+      console.error('Error checking onboarding status:', error);
       setIsOnboardingCompleted(false);
     }
   };
 
   const performUpdateCheck = useCallback(async () => {
-    console.log("Performing update check...");
+    console.log('Performing update check...');
     try {
       // First check if update is available
       const checkResult = await checkForUpdate();
-      console.log("Update check result:", checkResult);
+      console.log('Update check result:', checkResult);
 
       if (checkResult.success) {
-        console.log("Update available, downloading and applying...");
+        console.log('Update available, downloading and applying...');
         // If an update is available, download and apply it
         await updateAndReload();
       } else {
         console.log(
-          "No update available or unable to check:",
-          checkResult.message,
+          'No update available or unable to check:',
+          checkResult.message
         );
       }
     } catch (error) {
-      console.error("Error in update process:", error);
+      console.error('Error in update process:', error);
     }
   }, [checkForUpdate, updateAndReload]);
 
@@ -290,18 +290,18 @@ export default function TabLayout() {
     ]).start();
 
     if (lastReadManga && lastReadManga.id) {
-      console.log("Navigating to manga:", lastReadManga);
+      console.log('Navigating to manga:', lastReadManga);
       router.push(`/manga/${lastReadManga.id}`);
     } else {
-      console.log("No last read manga found, navigating to search");
-      router.push("/mangasearch");
+      console.log('No last read manga found, navigating to search');
+      router.push('/mangasearch');
     }
   };
 
   const shouldShowTabBar = () => {
-    const allowedPaths = ["/", "/mangasearch", "/settings", "/bookmarks"];
+    const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
     if (enableDebugTab) {
-      allowedPaths.push("/Debug");
+      allowedPaths.push('/Debug');
     }
     return (
       allowedPaths.includes(pathname) || /^\/manga\/[^\/]+$/.test(pathname)
@@ -309,21 +309,21 @@ export default function TabLayout() {
   };
 
   const getUpdateStatusMessage = () => {
-    if (updateStatus.isDownloading) return "Downloading update...";
-    if (updateStatus.isReady) return "Update ready!";
-    return "";
+    if (updateStatus.isDownloading) return 'Downloading update...';
+    if (updateStatus.isReady) return 'Update ready!';
+    return '';
   };
 
   // Create interpolated rotation value for the spinner icon
   const spin = updateIndicatorRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
+    outputRange: ['0deg', '360deg'],
   });
 
   // Get the width for the progress bar
   const progressBarWidth = updateProgressWidth.interpolate({
     inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
+    outputRange: ['0%', '100%'],
   });
 
   if (isOnboardingCompleted === null) {
@@ -343,7 +343,7 @@ export default function TabLayout() {
         style={[
           styles.updateIndicatorContainer,
           {
-            backgroundColor: colorScheme === "dark" ? "#1E1E1E" : "#FFFFFF",
+            backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#FFFFFF',
             opacity: updateIndicatorOpacity,
             top: insets.top + 8,
             borderColor: colors.primary,
@@ -364,7 +364,7 @@ export default function TabLayout() {
           <Text
             style={[
               styles.updateIndicatorText,
-              { color: colorScheme === "dark" ? "#FFFFFF" : "#333333" },
+              { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' },
             ]}
           >
             {getUpdateStatusMessage()}
@@ -375,7 +375,7 @@ export default function TabLayout() {
             style={[
               styles.progressBarContainer,
               {
-                backgroundColor: colorScheme === "dark" ? "#333333" : "#EEEEEE",
+                backgroundColor: colorScheme === 'dark' ? '#333333' : '#EEEEEE',
               },
             ]}
           >
@@ -398,23 +398,23 @@ export default function TabLayout() {
             let iconName: keyof typeof Ionicons.glyphMap;
 
             switch (route.name) {
-              case "index":
-                iconName = focused ? "home" : "home-outline";
+              case 'index':
+                iconName = focused ? 'home' : 'home-outline';
                 break;
-              case "mangasearch":
-                iconName = focused ? "search" : "search-outline";
+              case 'mangasearch':
+                iconName = focused ? 'search' : 'search-outline';
                 break;
-              case "bookmarks":
-                iconName = focused ? "bookmark" : "bookmark-outline";
+              case 'bookmarks':
+                iconName = focused ? 'bookmark' : 'bookmark-outline';
                 break;
-              case "settings":
-                iconName = focused ? "settings" : "settings-outline";
+              case 'settings':
+                iconName = focused ? 'settings' : 'settings-outline';
                 break;
-              case "Debug":
-                iconName = focused ? "bug" : "bug-outline";
+              case 'Debug':
+                iconName = focused ? 'bug' : 'bug-outline';
                 break;
               default:
-                iconName = "help-outline";
+                iconName = 'help-outline';
             }
 
             return (
@@ -434,7 +434,7 @@ export default function TabLayout() {
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.tabIconDefault,
           tabBarStyle: {
-            position: "absolute",
+            position: 'absolute',
             bottom: tabBarBottomPosition,
             marginHorizontal: (width - TAB_BAR_WIDTH) / 2,
             backgroundColor: colors.card,
@@ -443,7 +443,7 @@ export default function TabLayout() {
             width: TAB_BAR_WIDTH,
             paddingBottom: 5,
             paddingTop: 5,
-            display: shouldShowTabBar() ? "flex" : "none",
+            display: shouldShowTabBar() ? 'flex' : 'none',
             elevation: 4,
           },
           tabBarItemStyle: {
@@ -451,7 +451,7 @@ export default function TabLayout() {
             width: TAB_WIDTH,
           },
           tabBarLabelStyle: {
-            fontWeight: "600",
+            fontWeight: '600',
             fontSize: 10,
             marginTop: 5,
           },
@@ -463,14 +463,14 @@ export default function TabLayout() {
         })}
         backBehavior="history"
       >
-        <Tabs.Screen name="index" options={{ title: "Home" }} />
-        <Tabs.Screen name="mangasearch" options={{ title: "Search" }} />
-        <Tabs.Screen name="bookmarks" options={{ title: "Saved" }} />
-        <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+        <Tabs.Screen name="index" options={{ title: 'Home' }} />
+        <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
+        <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
+        <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
         <Tabs.Screen
           name="Debug"
           options={{
-            title: "Debug",
+            title: 'Debug',
             href: enableDebugTab ? undefined : null,
           }}
         />
@@ -520,61 +520,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: "100%",
-    height: "100%",
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
   },
   activeIndicator: {
-    position: "absolute",
+    position: 'absolute',
     bottom: -5,
     width: 4,
     height: 4,
     borderRadius: 2,
   },
   lastButtonContainer: {
-    position: "absolute",
-    alignSelf: "center",
-    alignItems: "center",
+    position: 'absolute',
+    alignSelf: 'center',
+    alignItems: 'center',
     zIndex: 100,
   },
   lastButton: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 4,
     elevation: 0,
   },
   lastButtonLabel: {
-    position: "absolute",
+    position: 'absolute',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
     top: 48,
   },
   lastButtonText: {
-    color: "white",
+    color: 'white',
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: '700',
   },
   // Update indicator styles
   updateIndicatorContainer: {
-    position: "absolute",
-    flexDirection: "row",
-    alignItems: "center",
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
     zIndex: 1000,
-    alignSelf: "center",
-    maxWidth: "90%",
+    alignSelf: 'center',
+    maxWidth: '90%',
     borderWidth: 1,
   },
   updateContentContainer: {
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   },
   updateIndicatorText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: '600',
     marginBottom: 6,
   },
   updateIndicatorIcon: {
@@ -592,11 +592,11 @@ const styles = StyleSheet.create({
   progressBarContainer: {
     height: 4,
     borderRadius: 2,
-    width: "100%",
-    overflow: "hidden",
+    width: '100%',
+    overflow: 'hidden',
   },
   progressBar: {
-    height: "100%",
+    height: '100%',
     borderRadius: 2,
   },
 });

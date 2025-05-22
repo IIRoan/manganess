@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,29 +9,29 @@ import {
   useColorScheme,
   Animated,
   StatusBar,
-} from "react-native";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import { WebViewNavigation } from "react-native-webview";
-import { Ionicons } from "@expo/vector-icons";
-import BottomSheet from "@gorhom/bottom-sheet";
-import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { getMangaData } from "@/services/bookmarkService";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from 'react-native';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { WebViewNavigation } from 'react-native-webview';
+import { Ionicons } from '@expo/vector-icons';
+import BottomSheet from '@gorhom/bottom-sheet';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { getMangaData } from '@/services/bookmarkService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getChapterUrl,
   markChapterAsRead,
   getInjectedJavaScript,
   fetchMangaDetails,
   MangaDetails,
-} from "@/services/mangaFireService";
-import { useTheme } from "@/constants/ThemeContext";
-import { Colors, ColorScheme } from "@/constants/Colors";
-import CustomWebView from "@/components/CustomWebView";
+} from '@/services/mangaFireService';
+import { useTheme } from '@/constants/ThemeContext';
+import { Colors, ColorScheme } from '@/constants/Colors';
+import CustomWebView from '@/components/CustomWebView';
 import {
   ChapterGuideOverlay,
   hasSeenChapterGuide,
-} from "@/components/ChapterGuideOverlay";
-import getStyles from "./[chapterNumber].styles";
+} from '@/components/ChapterGuideOverlay';
+import getStyles from './[chapterNumber].styles';
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
@@ -64,14 +64,14 @@ export default function ReadChapterScreen() {
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === "system" ? systemColorScheme : (theme as ColorScheme);
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colorScheme);
   const insets = useSafeAreaInsets();
 
   const chapterUrl = getChapterUrl(id, chapterNumber);
   const currentChapterIndex = mangaDetails?.chapters?.findIndex(
-    (chapter) => chapter.number === chapterNumber,
+    chapter => chapter.number === chapterNumber
   );
   const hasNextChapter =
     currentChapterIndex !== undefined &&
@@ -87,21 +87,21 @@ export default function ReadChapterScreen() {
     useCallback(() => {
       // Configure status bar when screen is focused
       StatusBar.setBarStyle(
-        colorScheme === "dark" ? "light-content" : "dark-content",
+        colorScheme === 'dark' ? 'light-content' : 'dark-content'
       );
       StatusBar.setTranslucent(true);
-      StatusBar.setBackgroundColor("transparent");
+      StatusBar.setBackgroundColor('transparent');
 
       // Reset status bar when leaving this screen
       return () => {
         StatusBar.setHidden(false);
         StatusBar.setBarStyle(
-          colorScheme === "dark" ? "light-content" : "dark-content",
+          colorScheme === 'dark' ? 'light-content' : 'dark-content'
         );
         StatusBar.setTranslucent(true);
-        StatusBar.setBackgroundColor("transparent");
+        StatusBar.setBackgroundColor('transparent');
       };
-    }, [colorScheme]),
+    }, [colorScheme])
   );
 
   // Update status bar based on controls visibility
@@ -208,7 +208,7 @@ export default function ReadChapterScreen() {
       setIsBottomSheetOpen(index >= 0);
       index >= 0 ? hideControls() : showControls();
     },
-    [hideControls, showControls],
+    [hideControls, showControls]
   );
 
   const toggleControls = useCallback(() => {
@@ -238,7 +238,7 @@ export default function ReadChapterScreen() {
       await markChapterAsRead(id, chapterNumber, title);
       setMangaTitle(title);
     } catch (error) {
-      console.error("Error marking chapter as read:", error);
+      console.error('Error marking chapter as read:', error);
     }
   }, [id, chapterNumber]);
 
@@ -247,7 +247,7 @@ export default function ReadChapterScreen() {
       const details = await fetchMangaDetails(id);
       setMangaDetails(details);
     } catch (error) {
-      console.error("Error fetching manga details:", error);
+      console.error('Error fetching manga details:', error);
     }
   }, [id]);
 
@@ -266,17 +266,17 @@ export default function ReadChapterScreen() {
         return true;
       };
       const backHandler = BackHandler.addEventListener(
-        "hardwareBackPress",
-        onBackPress,
+        'hardwareBackPress',
+        onBackPress
       );
       return () => backHandler.remove();
-    }, [id, router]),
+    }, [id, router])
   );
 
   const handleLoadEnd = () => setIsLoading(false);
   const handleBackPress = () => router.navigate(`/manga/${id}`);
   const handleError = () => {
-    setError("Failed to load chapter. Please try again.");
+    setError('Failed to load chapter. Please try again.');
     setIsLoading(false);
   };
 
@@ -293,7 +293,7 @@ export default function ReadChapterScreen() {
         }
       }
     },
-    [chapterUrl, id, mangaTitle, router],
+    [chapterUrl, id, mangaTitle, router]
   );
 
   const handleChapterPress = (chapterNum: string) => {
@@ -303,7 +303,7 @@ export default function ReadChapterScreen() {
 
   const renderChapterList = () => {
     if (!mangaDetails?.chapters) return null;
-    return mangaDetails.chapters.map((chapter) => (
+    return mangaDetails.chapters.map(chapter => (
       <TouchableOpacity
         key={chapter.number}
         style={[
@@ -314,7 +314,7 @@ export default function ReadChapterScreen() {
       >
         <View style={styles.chapterItemLeft}>
           <Text style={styles.chapterNumber}>Chapter {chapter.number}</Text>
-          <Text style={styles.chapterDate}>{chapter.date || "No date"}</Text>
+          <Text style={styles.chapterDate}>{chapter.date || 'No date'}</Text>
         </View>
         {chapter.number === chapterNumber ? (
           <View style={styles.readIndicator} />
@@ -338,7 +338,7 @@ export default function ReadChapterScreen() {
   const handlePreviousChapter = () => navigateChapter(1);
 
   const handleWebViewMessage = (event: any) => {
-    if (event.nativeEvent.data === "toggleControls") {
+    if (event.nativeEvent.data === 'toggleControls') {
       toggleControls();
     }
   };
@@ -413,10 +413,10 @@ export default function ReadChapterScreen() {
               injectedJavaScript={injectedJS}
               onNavigationStateChange={handleNavigationStateChange}
               onMessage={handleWebViewMessage}
-              allowedHosts={["mangafire.to"]}
+              allowedHosts={['mangafire.to']}
               javaScriptEnabled={true}
               domStorageEnabled={true}
-              decelerationRate={Platform.OS === "ios" ? "normal" : 0.9}
+              decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.9}
               nestedScrollEnabled={true}
             />
           </View>
@@ -430,14 +430,14 @@ export default function ReadChapterScreen() {
                 zIndex: 150, // Higher z-index for controls
               },
             ]}
-            pointerEvents={isControlsVisible ? "auto" : "none"}
+            pointerEvents={isControlsVisible ? 'auto' : 'none'}
           >
             <View
               style={[
                 styles.controls,
                 {
                   paddingTop: insets.top,
-                  backgroundColor: Colors[colorScheme].card + "E6",
+                  backgroundColor: Colors[colorScheme].card + 'E6',
                 },
               ]}
             >
@@ -450,8 +450,8 @@ export default function ReadChapterScreen() {
                       {
                         width: enhancedBackButtonSize,
                         height: enhancedBackButtonSize,
-                        alignItems: "center",
-                        justifyContent: "center",
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       },
                     ]}
                     hitSlop={{
@@ -485,12 +485,12 @@ export default function ReadChapterScreen() {
                       <Ionicons
                         name="menu"
                         size={16}
-                        color={Colors[colorScheme].text + "66"}
+                        color={Colors[colorScheme].text + '66'}
                         style={styles.menuIcon}
                       />
                     </View>
                     <Text style={styles.titleText} numberOfLines={1}>
-                      {mangaTitle || "Loading..."}
+                      {mangaTitle || 'Loading...'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -509,8 +509,8 @@ export default function ReadChapterScreen() {
                       {
                         width: enhancedNavigationButtonSize,
                         height: enhancedNavigationButtonSize,
-                        alignItems: "center",
-                        justifyContent: "center",
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       },
                     ]}
                     hitSlop={{
@@ -538,8 +538,8 @@ export default function ReadChapterScreen() {
                       {
                         width: enhancedNavigationButtonSize,
                         height: enhancedNavigationButtonSize,
-                        alignItems: "center",
-                        justifyContent: "center",
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       },
                     ]}
                     hitSlop={{
@@ -572,7 +572,7 @@ export default function ReadChapterScreen() {
 
           <BottomSheet
             ref={bottomSheetRef}
-            snapPoints={["60%", "80%"]}
+            snapPoints={['60%', '80%']}
             index={-1}
             enablePanDownToClose
             onChange={handleBottomSheetChange}

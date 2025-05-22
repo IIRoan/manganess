@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,24 +6,24 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
-} from "react-native";
-import { useTheme } from "@/constants/ThemeContext";
-import { Colors, ColorScheme } from "@/constants/Colors";
-import { useRouter } from "expo-router";
-import { MANGA_API_URL } from "@/constants/Config";
-import CustomWebView from "@/components/CustomWebView";
-import { Ionicons } from "@expo/vector-icons";
-import { WebViewNavigation } from "react-native-webview";
-import { useColorScheme } from "react-native";
-import { useCloudflareDetection } from "@/hooks/useCloudflareDetection";
-import { ServiceResponse } from "@/types";
+} from 'react-native';
+import { useTheme } from '@/constants/ThemeContext';
+import { Colors, ColorScheme } from '@/constants/Colors';
+import { useRouter } from 'expo-router';
+import { MANGA_API_URL } from '@/constants/Config';
+import CustomWebView from '@/components/CustomWebView';
+import { Ionicons } from '@expo/vector-icons';
+import { WebViewNavigation } from 'react-native-webview';
+import { useColorScheme } from 'react-native';
+import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
+import { ServiceResponse } from '@/types';
 
 export default function CloudflarePage() {
   const router = useRouter();
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === "system" ? systemColorScheme : (theme as ColorScheme);
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
 
@@ -36,7 +36,7 @@ export default function CloudflarePage() {
   };
 
   const handleError = () => {
-    setError("Failed to load verification page. Please try again.");
+    setError('Failed to load verification page. Please try again.');
     setIsLoading(false);
   };
 
@@ -45,8 +45,8 @@ export default function CloudflarePage() {
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
     // Check if we're no longer on a Cloudflare page
     if (
-      !navState.url.includes("cf-browser-verification") &&
-      !navState.url.includes("cf_captcha_kind")
+      !navState.url.includes('cf-browser-verification') &&
+      !navState.url.includes('cf_captcha_kind')
     ) {
       setVerificationComplete(true);
       handleVerificationComplete(); // This will route back to the previous page
@@ -95,11 +95,11 @@ export default function CloudflarePage() {
             onLoadEnd={handleLoadEnd}
             onError={handleError}
             injectedJavaScript={injectedJavaScript}
-            allowedHosts={["mangafire.to"]}
+            allowedHosts={['mangafire.to']}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             onNavigationStateChange={handleNavigationStateChange}
-            decelerationRate={Platform.OS === "ios" ? "normal" : 0.98}
+            decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.98}
           />
 
           <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
@@ -133,24 +133,24 @@ const getStyles = (colors: typeof Colors.light) =>
       flex: 1,
     },
     loadingContainer: {
-      position: "absolute",
+      position: 'absolute',
       left: 0,
       right: 0,
       top: 0,
       bottom: 0,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: colors.background,
     },
     errorContainer: {
       flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
+      justifyContent: 'center',
+      alignItems: 'center',
       padding: 20,
     },
     errorText: {
       fontSize: 18,
-      textAlign: "center",
+      textAlign: 'center',
       color: colors.error,
       marginBottom: 20,
     },
@@ -163,28 +163,28 @@ const getStyles = (colors: typeof Colors.light) =>
     retryButtonText: {
       color: colors.card,
       fontSize: 16,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
     backButton: {
-      position: "absolute",
+      position: 'absolute',
       top: 50,
       left: 10,
       zIndex: 1000,
-      backgroundColor: "rgba(0, 0, 0, 0.3)",
+      backgroundColor: 'rgba(0, 0, 0, 0.3)',
       borderRadius: 20,
       padding: 8,
     },
     completeBanner: {
-      position: "absolute",
+      position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
       backgroundColor: colors.card,
       padding: 20,
-      alignItems: "center",
+      alignItems: 'center',
       borderTopLeftRadius: 15,
       borderTopRightRadius: 15,
-      shadowColor: "#000",
+      shadowColor: '#000',
       shadowOffset: {
         width: 0,
         height: -2,
@@ -196,7 +196,7 @@ const getStyles = (colors: typeof Colors.light) =>
     completeText: {
       color: colors.primary,
       fontSize: 18,
-      fontWeight: "bold",
+      fontWeight: 'bold',
       marginBottom: 10,
     },
     continueButton: {
@@ -209,7 +209,7 @@ const getStyles = (colors: typeof Colors.light) =>
     continueButtonText: {
       color: colors.card,
       fontSize: 16,
-      fontWeight: "bold",
-      textAlign: "center",
+      fontWeight: 'bold',
+      textAlign: 'center',
     },
   });

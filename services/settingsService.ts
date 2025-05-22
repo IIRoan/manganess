@@ -1,16 +1,16 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { setMangaData, getMangaData } from "./bookmarkService";
-import { fetchMangaDetails } from "./mangaFireService";
-import { imageCache } from "./CacheImages";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setMangaData, getMangaData } from './bookmarkService';
+import { fetchMangaDetails } from './mangaFireService';
+import { imageCache } from './CacheImages';
 
 interface AppSettings {
-  theme: "light" | "dark" | "system";
+  theme: 'light' | 'dark' | 'system';
   enableDebugTab: boolean;
   onboardingCompleted: boolean;
   accentColor?: string;
 }
 
-const SETTINGS_KEY = "app_settings";
+const SETTINGS_KEY = 'app_settings';
 
 export async function getAppSettings(): Promise<AppSettings> {
   try {
@@ -19,15 +19,15 @@ export async function getAppSettings(): Promise<AppSettings> {
       return JSON.parse(settingsStr);
     }
     return {
-      theme: "system",
+      theme: 'system',
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
     };
   } catch (error) {
-    console.error("Error getting app settings:", error);
+    console.error('Error getting app settings:', error);
     return {
-      theme: "system",
+      theme: 'system',
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
@@ -39,7 +39,7 @@ export async function setAppSettings(settings: AppSettings): Promise<void> {
   try {
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (error) {
-    console.error("Error saving app settings:", error);
+    console.error('Error saving app settings:', error);
   }
 }
 
@@ -60,7 +60,7 @@ export async function isOnboardingCompleted(): Promise<boolean> {
 }
 
 export async function setOnboardingCompleted(
-  completed: boolean,
+  completed: boolean
 ): Promise<void> {
   const settings = await getAppSettings();
   settings.onboardingCompleted = completed;
@@ -89,7 +89,7 @@ export async function importAppData(data: Record<string, any>) {
   await AsyncStorage.clear();
   const pairs: [string, string][] = Object.entries(data).map(([key, value]) => [
     key,
-    typeof value === "string" ? value : JSON.stringify(value),
+    typeof value === 'string' ? value : JSON.stringify(value),
   ]);
   await AsyncStorage.multiSet(pairs);
 }
@@ -104,14 +104,14 @@ export async function refreshMangaImages(): Promise<{
 }> {
   try {
     const allKeys = await AsyncStorage.getAllKeys();
-    const mangaKeys = allKeys.filter((key) => key.startsWith("manga_"));
+    const mangaKeys = allKeys.filter(key => key.startsWith('manga_'));
     let updatedCount = 0;
 
     // Clear the image cache before starting refresh
     await imageCache.clearCache();
 
     for (const key of mangaKeys) {
-      const mangaId = key.replace("manga_", "");
+      const mangaId = key.replace('manga_', '');
       const mangaData = await getMangaData(mangaId);
 
       if (mangaData) {
@@ -136,10 +136,10 @@ export async function refreshMangaImages(): Promise<{
       message: `Updated images for ${updatedCount} manga out of ${mangaKeys.length} total`,
     };
   } catch (error) {
-    console.error("Error refreshing manga images:", error);
+    console.error('Error refreshing manga images:', error);
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }
@@ -153,14 +153,14 @@ export async function migrateToNewStorage(): Promise<{
     const allKeys = await AsyncStorage.getAllKeys();
 
     // Get bookmark keys
-    const bookmarkKeys = allKeys.filter((key) => key.startsWith("bookmark_"));
+    const bookmarkKeys = allKeys.filter(key => key.startsWith('bookmark_'));
 
     // Clear image cache before migration
     await imageCache.clearCache();
 
     // Process each bookmark
     for (const bookmarkKey of bookmarkKeys) {
-      const id = bookmarkKey.replace("bookmark_", "");
+      const id = bookmarkKey.replace('bookmark_', '');
 
       // Get all related data
       const [bookmarkStatus, title, imageUrl, readChaptersStr] =
@@ -182,8 +182,8 @@ export async function migrateToNewStorage(): Promise<{
       // Create new manga data structure
       await setMangaData({
         id,
-        title: mangaDetails?.title || title[1] || "",
-        bannerImage: mangaDetails?.bannerImage || imageUrl[1] || "",
+        title: mangaDetails?.title || title[1] || '',
+        bannerImage: mangaDetails?.bannerImage || imageUrl[1] || '',
         bookmarkStatus: (bookmarkStatus[1] as any) || null,
         readChapters,
         lastReadChapter:
@@ -207,10 +207,10 @@ export async function migrateToNewStorage(): Promise<{
       message: `Successfully migrated ${bookmarkKeys.length} manga to new storage format`,
     };
   } catch (error) {
-    console.error("Error during migration:", error);
+    console.error('Error during migration:', error);
     return {
       success: false,
-      message: `Migration failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      message: `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 }

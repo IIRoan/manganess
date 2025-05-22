@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,11 @@ import {
   useColorScheme,
   TouchableWithoutFeedback,
   Animated,
-} from "react-native";
-import { Colors, ColorScheme } from "@/constants/Colors";
-import { useTheme } from "@/constants/ThemeContext";
-import { Ionicons } from "@expo/vector-icons";
-import { Option, CustomAlertProps } from "@/types";
+} from 'react-native';
+import { Colors, ColorScheme } from '@/constants/Colors';
+import { useTheme } from '@/constants/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { Option, CustomAlertProps } from '@/types';
 
 const Alert: React.FC<CustomAlertProps> = ({
   visible,
@@ -25,7 +25,7 @@ const Alert: React.FC<CustomAlertProps> = ({
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === "system" ? systemColorScheme : (theme as ColorScheme);
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
 
   const styles = getStyles(colors);
@@ -46,7 +46,7 @@ const Alert: React.FC<CustomAlertProps> = ({
   }, [visible]);
 
   const renderContent = () => {
-    if (type === "bookmarks") {
+    if (type === 'bookmarks') {
       return (
         <View testID="alert-options" style={styles.optionsContainer}>
           {options?.map((option, index) => (
@@ -72,7 +72,7 @@ const Alert: React.FC<CustomAlertProps> = ({
           ))}
         </View>
       );
-    } else if (type === "confirm") {
+    } else if (type === 'confirm') {
       return (
         <>
           <Text style={styles.message}>{message}</Text>
@@ -145,17 +145,17 @@ const getStyles = (colors: typeof Colors.light) =>
   StyleSheet.create({
     centeredView: {
       flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     modalView: {
       margin: 20,
       backgroundColor: colors.card,
       borderRadius: 24,
       padding: 24,
-      alignItems: "stretch",
-      shadowColor: "#000",
+      alignItems: 'stretch',
+      shadowColor: '#000',
       shadowOffset: {
         width: 0,
         height: 4,
@@ -164,14 +164,14 @@ const getStyles = (colors: typeof Colors.light) =>
       shadowRadius: 8,
       elevation: 5,
       minWidth: 300,
-      maxWidth: "85%",
+      maxWidth: '85%',
     },
     optionsContainer: {
       marginTop: 16,
     },
     button: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       borderRadius: 12,
       padding: 14,
       marginTop: 12,
@@ -184,25 +184,25 @@ const getStyles = (colors: typeof Colors.light) =>
       height: 40,
       borderRadius: 20,
       backgroundColor: `${colors.primary}15`,
-      justifyContent: "center",
-      alignItems: "center",
+      justifyContent: 'center',
+      alignItems: 'center',
       marginRight: 16,
     },
     textStyle: {
       color: colors.text,
-      fontWeight: "600",
+      fontWeight: '600',
       fontSize: 16,
       flex: 1,
     },
     modalText: {
       marginBottom: 16,
-      textAlign: "center",
-      fontWeight: "bold",
+      textAlign: 'center',
+      fontWeight: 'bold',
       fontSize: 24,
       color: colors.primary,
     },
     closeButton: {
-      position: "absolute",
+      position: 'absolute',
       right: 16,
       top: 16,
       zIndex: 1,
@@ -210,18 +210,18 @@ const getStyles = (colors: typeof Colors.light) =>
       height: 32,
       borderRadius: 16,
       backgroundColor: `${colors.text}10`,
-      justifyContent: "center",
-      alignItems: "center",
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     message: {
       fontSize: 16,
       color: colors.text,
-      textAlign: "center",
+      textAlign: 'center',
       marginBottom: 20,
     },
     confirmButtonsContainer: {
-      flexDirection: "row",
-      justifyContent: "space-around",
+      flexDirection: 'row',
+      justifyContent: 'space-around',
       gap: 12,
     },
     confirmButton: {
@@ -229,11 +229,11 @@ const getStyles = (colors: typeof Colors.light) =>
       paddingVertical: 12,
       paddingHorizontal: 20,
       borderRadius: 8,
-      alignItems: "center",
+      alignItems: 'center',
     },
     confirmButtonText: {
       fontSize: 16,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
     cancelButton: {
       backgroundColor: colors.primary,

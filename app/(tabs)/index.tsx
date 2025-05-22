@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,26 +10,26 @@ import {
   Image,
   RefreshControl,
   Dimensions,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
-import { useTheme } from "@/constants/ThemeContext";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Colors } from "@/constants/Colors";
-import { LinearGradient } from "expo-linear-gradient";
-import { MANGA_API_URL } from "@/constants/Config";
-import MangaCard from "@/components/MangaCard";
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { useTheme } from '@/constants/ThemeContext';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Colors } from '@/constants/Colors';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MANGA_API_URL } from '@/constants/Config';
+import MangaCard from '@/components/MangaCard';
 import {
   parseMostViewedManga,
   parseNewReleases,
-} from "@/services/mangaFireService";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCloudflareDetection } from "@/hooks/useCloudflareDetection";
-import axios from "axios";
-import { MangaItem } from "@/types";
-import { getRecentlyReadManga } from "@/services/readChapterService";
+} from '@/services/mangaFireService';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
+import axios from 'axios';
+import { MangaItem } from '@/types';
+import { getRecentlyReadManga } from '@/services/readChapterService';
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TRENDING_CARD_WIDTH = 200;
 const TRENDING_CARD_HEIGHT = 260;
@@ -37,7 +37,7 @@ const FEATURED_HEIGHT = 280;
 const RECENTLY_READ_CARD_WIDTH = Math.min(160, (SCREEN_WIDTH - 64) / 2);
 
 const DEFAULT_MANGA_COVER =
-  "https://static.mangafire.to/default/img/no-image.jpg";
+  'https://static.mangafire.to/default/img/no-image.jpg';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -68,8 +68,8 @@ export default function HomeScreen() {
 
       const response = await axios.get(`${MANGA_API_URL}/home`, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
+          'User-Agent':
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
         },
         timeout: 10000,
       });
@@ -90,9 +90,9 @@ export default function HomeScreen() {
         setFeaturedManga(parsedMostViewed[0]);
       }
     } catch (error) {
-      console.error("Error fetching manga data:", error);
+      console.error('Error fetching manga data:', error);
       setError(
-        "An error occurred while fetching manga data. Please try again.",
+        'An error occurred while fetching manga data. Please try again.'
       );
     } finally {
       setIsLoading(false);
@@ -105,14 +105,14 @@ export default function HomeScreen() {
       setIsRecentMangaLoading(true);
       const recentManga = await getRecentlyReadManga(6);
 
-      const processedManga = recentManga.map((manga) => ({
+      const processedManga = recentManga.map(manga => ({
         ...manga,
         bannerImage: manga.bannerImage || DEFAULT_MANGA_COVER,
       }));
 
       setRecentlyReadManga(processedManga);
     } catch (error) {
-      console.error("Error fetching recently read manga:", error);
+      console.error('Error fetching recently read manga:', error);
     } finally {
       setIsRecentMangaLoading(false);
     }
@@ -129,7 +129,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchRecentlyReadManga();
-    }, [fetchRecentlyReadManga]),
+    }, [fetchRecentlyReadManga])
   );
 
   const handleRefresh = useCallback(() => {
@@ -144,7 +144,7 @@ export default function HomeScreen() {
         <View
           style={[
             styles.iconBackground,
-            { backgroundColor: themeColors.primary + "20" },
+            { backgroundColor: themeColors.primary + '20' },
           ]}
         >
           <Ionicons name={iconName} size={20} color={themeColors.primary} />
@@ -154,7 +154,7 @@ export default function HomeScreen() {
         </Text>
       </View>
     ),
-    [themeColors],
+    [themeColors]
   );
 
   const renderTrendingItem = useCallback(
@@ -166,7 +166,7 @@ export default function HomeScreen() {
       >
         <Image source={{ uri: item.imageUrl }} style={styles.trendingImage} />
         <LinearGradient
-          colors={["transparent", "rgba(0,0,0,0.9)"]}
+          colors={['transparent', 'rgba(0,0,0,0.9)']}
           style={styles.trendingGradient}
         >
           <View style={styles.trendingContent}>
@@ -187,14 +187,14 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
     ),
-    [router, themeColors.primary],
+    [router, themeColors.primary]
   );
 
   const renderRecentlyReadItem = useCallback(
     ({ item, index }: { item: any; index: number }) => {
       const lastReadChapter = item.lastReadChapter
         ? `Chapter ${item.lastReadChapter}`
-        : "Not started";
+        : 'Not started';
 
       return (
         <View
@@ -219,7 +219,7 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [router, themeColors.text],
+    [router, themeColors.text]
   );
 
   const renderNewReleaseGrid = useCallback(() => {
@@ -260,7 +260,7 @@ export default function HomeScreen() {
         <View
           style={[
             styles.loadingContainer,
-            { height: 200, backgroundColor: "transparent" },
+            { height: 200, backgroundColor: 'transparent' },
           ]}
         >
           <ActivityIndicator size="small" color={themeColors.primary} />
@@ -273,25 +273,25 @@ export default function HomeScreen() {
         <View
           style={[
             styles.emptyStateContainer,
-            { backgroundColor: themeColors.card + "50" },
+            { backgroundColor: themeColors.card + '50' },
           ]}
         >
           <Ionicons
             name="book-outline"
             size={40}
-            color={themeColors.text + "70"}
+            color={themeColors.text + '70'}
           />
           <Text
-            style={[styles.emptyStateText, { color: themeColors.text + "90" }]}
+            style={[styles.emptyStateText, { color: themeColors.text + '90' }]}
           >
             Manga you're reading will appear here
           </Text>
           <TouchableOpacity
             style={[
               styles.browseButton,
-              { backgroundColor: themeColors.primary + "20" },
+              { backgroundColor: themeColors.primary + '20' },
             ]}
-            onPress={() => router.navigate("/mangasearch")}
+            onPress={() => router.navigate('/mangasearch')}
           >
             <Text
               style={[styles.browseButtonText, { color: themeColors.primary }]}
@@ -307,7 +307,7 @@ export default function HomeScreen() {
       <FlatList
         data={recentlyReadManga}
         renderItem={renderRecentlyReadItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.recentlyReadList}
@@ -336,7 +336,7 @@ export default function HomeScreen() {
           style={styles.featuredImage}
         />
         <LinearGradient
-          colors={["transparent", "rgba(0,0,0,0.8)"]}
+          colors={['transparent', 'rgba(0,0,0,0.8)']}
           style={styles.featuredGradient}
         >
           <View style={styles.featuredContent}>
@@ -426,16 +426,16 @@ export default function HomeScreen() {
             {renderFeaturedManga()}
 
             <View style={styles.section}>
-              {renderSectionTitle("Continue Reading", "book")}
+              {renderSectionTitle('Continue Reading', 'book')}
               {renderContinueReadingSection()}
             </View>
 
             <View style={styles.section}>
-              {renderSectionTitle("Trending Now", "trophy")}
+              {renderSectionTitle('Trending Now', 'trophy')}
               <FlatList
                 data={mostViewedManga.slice(1)}
                 renderItem={renderTrendingItem}
-                keyExtractor={(item) => item.id}
+                keyExtractor={item => item.id}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.trendingList}
@@ -446,7 +446,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.section}>
-              {renderSectionTitle("New Releases", "sparkles")}
+              {renderSectionTitle('New Releases', 'sparkles')}
               {renderNewReleaseGrid()}
             </View>
           </>
@@ -467,8 +467,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     marginBottom: 16,
   },
@@ -476,64 +476,64 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   featuredContainer: {
     height: FEATURED_HEIGHT,
     marginHorizontal: 16,
     marginBottom: 24,
     borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
+    overflow: 'hidden',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 8,
   },
   featuredImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   featuredGradient: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: "70%",
-    justifyContent: "flex-end",
+    height: '70%',
+    justifyContent: 'flex-end',
     padding: 16,
   },
   featuredContent: {
-    alignItems: "flex-start",
+    alignItems: 'flex-start',
   },
   featuredBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 59, 48, 0.8)",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 59, 48, 0.8)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
     marginBottom: 8,
   },
   featuredBadgeText: {
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginLeft: 4,
   },
   featuredTitle: {
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 22,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginBottom: 12,
-    textShadowColor: "rgba(0, 0, 0, 0.7)",
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
@@ -543,9 +543,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   readNowText: {
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   trendingList: {
     paddingRight: 16,
@@ -555,39 +555,39 @@ const styles = StyleSheet.create({
     width: TRENDING_CARD_WIDTH,
     height: TRENDING_CARD_HEIGHT,
     borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#000",
+    overflow: 'hidden',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
   },
   trendingImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   trendingGradient: {
-    position: "absolute",
+    position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: "50%",
-    justifyContent: "flex-end",
+    height: '50%',
+    justifyContent: 'flex-end',
     padding: 12,
   },
   trendingContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
   },
   trendingTitle: {
     flex: 1,
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginRight: 8,
-    textShadowColor: "rgba(0, 0, 0, 0.7)",
+    textShadowColor: 'rgba(0, 0, 0, 0.7)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
@@ -595,34 +595,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   rankText: {
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   newReleaseGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 16,
   },
   newReleaseWrapper: {
-    width: "50%",
+    width: '50%',
     padding: 8,
   },
   newReleaseCard: {
     borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
+    overflow: 'hidden',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   card: {
-    width: "100%",
+    width: '100%',
     aspectRatio: 3 / 4,
     borderRadius: 12,
   },
@@ -633,18 +633,18 @@ const styles = StyleSheet.create({
   },
   mangaTitle: {
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   emptyStateContainer: {
     marginHorizontal: 16,
     borderRadius: 16,
     padding: 24,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyStateText: {
     fontSize: 16,
-    textAlign: "center",
+    textAlign: 'center',
     marginTop: 12,
     marginBottom: 16,
   },
@@ -655,12 +655,12 @@ const styles = StyleSheet.create({
   },
   browseButtonText: {
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingIndicator: {
     marginTop: 20,
@@ -671,13 +671,13 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 20,
   },
   errorText: {
     fontSize: 16,
-    textAlign: "center",
+    textAlign: 'center',
     marginTop: 12,
     marginBottom: 20,
   },
@@ -688,9 +688,9 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   retryButtonText: {
-    color: "#FFFFFF",
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   recentlyReadList: {
     paddingRight: 16,
@@ -701,15 +701,15 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   recentlyReadCard: {
-    width: "100%",
+    width: '100%',
     aspectRatio: 3 / 4,
     borderRadius: 12,
-    overflow: "hidden",
+    overflow: 'hidden',
   },
   recentlyReadTitle: {
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginTop: 6,
-    textAlign: "center",
+    textAlign: 'center',
   },
 });

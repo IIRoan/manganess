@@ -1,15 +1,15 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
-import { useColorScheme } from "react-native";
-import { ColorScheme, Colors, updateAccentColor } from "@/constants/Colors";
-import { getAppSettings, setAppSettings } from "@/services/settingsService";
-import { ThemeType } from "@/types";
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { useColorScheme } from 'react-native';
+import { ColorScheme, Colors, updateAccentColor } from '@/constants/Colors';
+import { getAppSettings, setAppSettings } from '@/services/settingsService';
+import { ThemeType } from '@/types';
 
 interface ThemeContextType {
   theme: ThemeType;
   systemTheme: ColorScheme;
   setTheme: (theme: ThemeType | ((prevTheme: ThemeType) => ThemeType)) => void;
   toggleTheme: () => void;
-  actualTheme: "light" | "dark";
+  actualTheme: 'light' | 'dark';
   accentColor: string | undefined;
   setAccentColor: (color: string | undefined) => void;
 }
@@ -19,9 +19,9 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [theme, setThemeState] = useState<ThemeType>("system");
+  const [theme, setThemeState] = useState<ThemeType>('system');
   const [accentColor, setAccentColorState] = useState<string | undefined>(
-    undefined,
+    undefined
   );
   const systemColorScheme = useColorScheme() as ColorScheme;
 
@@ -39,19 +39,19 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         setAccentColorState(settings.accentColor);
       }
     } catch (error) {
-      console.error("Error loading saved settings:", error);
+      console.error('Error loading saved settings:', error);
     }
   };
 
   const setTheme = async (
-    newTheme: ThemeType | ((prevTheme: ThemeType) => ThemeType),
+    newTheme: ThemeType | ((prevTheme: ThemeType) => ThemeType)
   ) => {
     try {
       const currentSettings = await getAppSettings();
 
       // Handle both direct value and function that uses previous value
       const resolvedTheme =
-        typeof newTheme === "function" ? newTheme(theme) : newTheme;
+        typeof newTheme === 'function' ? newTheme(theme) : newTheme;
 
       await setAppSettings({
         ...currentSettings,
@@ -59,21 +59,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       setThemeState(resolvedTheme);
     } catch (error) {
-      console.error("Error saving theme:", error);
+      console.error('Error saving theme:', error);
     }
   };
 
   const toggleTheme = () => {
     setTheme((prevTheme: ThemeType): ThemeType => {
       switch (prevTheme) {
-        case "light":
-          return "dark";
-        case "dark":
-          return "system";
-        case "system":
-          return "light";
+        case 'light':
+          return 'dark';
+        case 'dark':
+          return 'system';
+        case 'system':
+          return 'light';
         default:
-          return "system";
+          return 'system';
       }
     });
   };
@@ -89,12 +89,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       // Update colors object directly
       updateAccentColor(
         color,
-        theme === "system" ? systemColorScheme : (theme as ColorScheme),
+        theme === 'system' ? systemColorScheme : (theme as ColorScheme)
       );
 
       setAccentColorState(color);
     } catch (error) {
-      console.error("Error saving accent color:", error);
+      console.error('Error saving accent color:', error);
     }
   };
 
@@ -106,7 +106,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
         setTheme,
         toggleTheme,
         actualTheme:
-          theme === "system" ? systemColorScheme : (theme as "light" | "dark"),
+          theme === 'system' ? systemColorScheme : (theme as 'light' | 'dark'),
         accentColor,
         setAccentColor,
       }}
@@ -119,7 +119,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider");
+    throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
 };

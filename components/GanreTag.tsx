@@ -1,7 +1,7 @@
-import React from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
-import { useTheme } from "@/constants/ThemeContext";
-import { Colors, ColorScheme } from "@/constants/Colors";
+import React from 'react';
+import { View, Text, StyleSheet, useColorScheme } from 'react-native';
+import { useTheme } from '@/constants/ThemeContext';
+import { Colors, ColorScheme } from '@/constants/Colors';
 
 interface GenreTagProps {
   genre: string;
@@ -10,7 +10,7 @@ interface GenreTagProps {
 export const GenreTag: React.FC<GenreTagProps> = ({ genre }) => {
   const { theme } = useTheme();
   const colorScheme =
-    theme === "system"
+    theme === 'system'
       ? (useColorScheme() as ColorScheme)
       : (theme as ColorScheme);
   const colors = Colors[colorScheme];
@@ -26,7 +26,7 @@ export const GenreTag: React.FC<GenreTagProps> = ({ genre }) => {
     genreText: {
       color: colors.card,
       fontSize: 12,
-      fontWeight: "600",
+      fontWeight: '600',
     },
   });
 

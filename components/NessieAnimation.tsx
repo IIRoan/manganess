@@ -1,7 +1,7 @@
 // was used in the index but isn't anymore, not used rn
 
-import React, { useRef, useEffect, useCallback } from "react";
-import { Animated, Easing, View, StyleSheet, ViewStyle } from "react-native";
+import React, { useRef, useEffect, useCallback } from 'react';
+import { Animated, Easing, View, StyleSheet, ViewStyle } from 'react-native';
 
 const CYCLE_DURATION = 8000; // 8 seconds for the full cycle
 const MAX_RIGHT_DISTANCE = 80; // Maximum 80px to the right from starting position
@@ -29,11 +29,11 @@ export const NessieAnimation: React.FC<NessieAnimationProps> = ({
   const generateNewWalkCycle = useCallback(() => {
     const newWalkDistance = Math.floor(
       Math.random() * (MAX_WALK_DISTANCE - MIN_WALK_DISTANCE + 1) +
-        MIN_WALK_DISTANCE,
+        MIN_WALK_DISTANCE
     );
     let newStartPosition = Math.max(
       0,
-      Math.min(startPosition.current, MAX_RIGHT_DISTANCE - newWalkDistance),
+      Math.min(startPosition.current, MAX_RIGHT_DISTANCE - newWalkDistance)
     );
 
     walkDistance.current = newWalkDistance;
@@ -114,18 +114,18 @@ export const NessieAnimation: React.FC<NessieAnimationProps> = ({
       1,
     ],
     outputRange: [0, -2, 0, -2, 0, 0, -2, 0, -2, 0],
-    extrapolate: "clamp",
+    extrapolate: 'clamp',
   });
 
   const rotateY = backflipRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
+    outputRange: ['0deg', '360deg'],
   });
 
   return (
     <View style={[styles.container, style]}>
       <Animated.Image
-        source={require("@/assets/images/nessie.png")}
+        source={require('@/assets/images/nessie.png')}
         style={[
           styles.image,
           {
@@ -146,10 +146,10 @@ export const NessieAnimation: React.FC<NessieAnimationProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   image: {
-    resizeMode: "contain",
+    resizeMode: 'contain',
   },
 });

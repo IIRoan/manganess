@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import * as FileSystem from "expo-file-system";
+import { useEffect, useState } from 'react';
+import * as FileSystem from 'expo-file-system';
 
 const CACHE_FOLDER = `${FileSystem.cacheDirectory}image_cache/`;
 
@@ -28,12 +28,12 @@ class ImageCache {
       }
       this.initialized = true;
     } catch (error) {
-      console.error("Failed to initialize cache:", error);
+      console.error('Failed to initialize cache:', error);
     }
   }
 
   private getCacheFilename(url: string): string {
-    return url.split("/").pop() || url;
+    return url.split('/').pop() || url;
   }
 
   async getCachedImagePath(url: string): Promise<string> {
@@ -71,7 +71,7 @@ class ImageCache {
 
       return filePath;
     } catch (error) {
-      console.error("Error caching image:", error);
+      console.error('Error caching image:', error);
       return url;
     }
   }
@@ -88,7 +88,7 @@ class ImageCache {
       });
       this.initialized = true;
     } catch (error) {
-      console.error("Error clearing cache:", error);
+      console.error('Error clearing cache:', error);
       // If there's an error, still try to ensure the directory exists
       try {
         await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
@@ -96,7 +96,7 @@ class ImageCache {
         });
         this.initialized = true;
       } catch (dirError) {
-        console.error("Failed to create cache directory:", dirError);
+        console.error('Failed to create cache directory:', dirError);
       }
     }
   }
@@ -123,7 +123,7 @@ class ImageCache {
         count: files.length,
       };
     } catch (error) {
-      console.error("Error getting cache size:", error);
+      console.error('Error getting cache size:', error);
       return { size: 0, count: 0 };
     }
   }
@@ -146,7 +146,7 @@ export function useImageCache(url: string): string {
           setCachedPath(path);
         }
       } catch (error) {
-        console.error("Error in useImageCache:", error);
+        console.error('Error in useImageCache:', error);
         if (isMounted) {
           setCachedPath(url);
         }

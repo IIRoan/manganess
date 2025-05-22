@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,19 +10,19 @@ import {
   useColorScheme,
   StatusBar,
   Platform,
-} from "react-native";
-import { Colors, ColorScheme } from "@/constants/Colors";
-import { useTheme } from "@/constants/ThemeContext";
-import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+} from 'react-native';
+import { Colors, ColorScheme } from '@/constants/Colors';
+import { useTheme } from '@/constants/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
   Easing,
-} from "react-native-reanimated";
-import { Option, BottomPopupProps } from "@/types";
+} from 'react-native-reanimated';
+import { Option, BottomPopupProps } from '@/types';
 
 const BottomPopup: React.FC<BottomPopupProps> = ({
   visible,
@@ -33,12 +33,12 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === "system" ? systemColorScheme : (theme as ColorScheme);
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const insets = useSafeAreaInsets();
 
   const styles = getStyles(colors, insets);
-  const screenHeight = Dimensions.get("window").height;
+  const screenHeight = Dimensions.get('window').height;
 
   const translateY = useSharedValue(screenHeight);
   const overlayOpacity = useSharedValue(0);
@@ -46,9 +46,9 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
   useEffect(() => {
     if (visible) {
       // Show the modal
-      StatusBar.setBarStyle("light-content");
-      if (Platform.OS === "android") {
-        StatusBar.setBackgroundColor("rgba(0,0,0,0.05)");
+      StatusBar.setBarStyle('light-content');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor('rgba(0,0,0,0.05)');
       }
       translateY.value = withSpring(0, {
         damping: 25,
@@ -64,9 +64,9 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
       });
     } else {
       // Hide the modal
-      StatusBar.setBarStyle("default");
-      if (Platform.OS === "android") {
-        StatusBar.setBackgroundColor("transparent");
+      StatusBar.setBarStyle('default');
+      if (Platform.OS === 'android') {
+        StatusBar.setBackgroundColor('transparent');
       }
       translateY.value = withTiming(screenHeight, {
         duration: 100,
@@ -150,11 +150,11 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
   StyleSheet.create({
     modalContainer: {
       flex: 1,
-      justifyContent: "flex-end",
+      justifyContent: 'flex-end',
     },
     modalOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: "rgba(0,0,0,0.5)",
+      backgroundColor: 'rgba(0,0,0,0.5)',
     },
     container: {
       backgroundColor: colors.card,
@@ -163,8 +163,8 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       paddingTop: 12,
       paddingHorizontal: 24,
       paddingBottom: insets.bottom + 24,
-      maxHeight: "80%",
-      shadowColor: "#000",
+      maxHeight: '80%',
+      shadowColor: '#000',
       shadowOffset: { width: 0, height: -3 },
       shadowOpacity: 0.1,
       shadowRadius: 5,
@@ -175,19 +175,19 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       height: 4,
       backgroundColor: colors.border,
       borderRadius: 2,
-      alignSelf: "center",
+      alignSelf: 'center',
       marginBottom: 16,
     },
     header: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
       marginBottom: 24,
     },
     title: {
       fontSize: 22,
       color: colors.text,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
     closeButton: {
       padding: 8,
@@ -198,8 +198,8 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       marginTop: 8,
     },
     optionButton: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingVertical: 16,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
@@ -209,8 +209,8 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       height: 40,
       borderRadius: 20,
       backgroundColor: colors.background,
-      justifyContent: "center",
-      alignItems: "center",
+      justifyContent: 'center',
+      alignItems: 'center',
       marginRight: 16,
     },
     optionText: {

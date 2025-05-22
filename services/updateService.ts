@@ -1,5 +1,5 @@
-import * as Updates from "expo-updates";
-import { Platform } from "react-native";
+import * as Updates from 'expo-updates';
+import { Platform } from 'react-native';
 
 export interface UpdateStatus {
   isChecking: boolean;
@@ -27,29 +27,29 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
     if (__DEV__) {
       return {
         success: false,
-        message: "Updates are not available in development mode",
+        message: 'Updates are not available in development mode',
       };
     }
 
-    console.log("Checking for updates...");
+    console.log('Checking for updates...');
     const update = await Updates.checkForUpdateAsync();
 
     if (update.isAvailable) {
       return {
         success: true,
-        message: "Update available",
+        message: 'Update available',
       };
     } else {
       return {
         success: false,
-        message: "App is up to date",
+        message: 'App is up to date',
       };
     }
   } catch (error) {
-    console.error("Error checking for update:", error);
+    console.error('Error checking for update:', error);
     return {
       success: false,
-      message: `Error checking for updates: ${error instanceof Error ? error.message : "Unknown error"}`,
+      message: `Error checking for updates: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 };
@@ -62,21 +62,21 @@ export const downloadUpdate = async (): Promise<UpdateResult> => {
     if (__DEV__) {
       return {
         success: false,
-        message: "Cannot download updates in development mode",
+        message: 'Cannot download updates in development mode',
       };
     }
 
-    console.log("Downloading update...");
+    console.log('Downloading update...');
     await Updates.fetchUpdateAsync();
     return {
       success: true,
-      message: "Update downloaded successfully",
+      message: 'Update downloaded successfully',
     };
   } catch (error) {
-    console.error("Error downloading update:", error);
+    console.error('Error downloading update:', error);
     return {
       success: false,
-      message: `Error downloading update: ${error instanceof Error ? error.message : "Unknown error"}`,
+      message: `Error downloading update: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 };
@@ -86,25 +86,25 @@ export const downloadUpdate = async (): Promise<UpdateResult> => {
  */
 export const applyUpdate = async (): Promise<UpdateResult> => {
   try {
-    if (__DEV__ || Platform.OS === "web") {
+    if (__DEV__ || Platform.OS === 'web') {
       return {
         success: false,
-        message: "Cannot apply updates in development or web mode",
+        message: 'Cannot apply updates in development or web mode',
       };
     }
 
-    console.log("Reloading app with update...");
+    console.log('Reloading app with update...');
     await Updates.reloadAsync();
 
     return {
       success: true,
-      message: "Update applied successfully",
+      message: 'Update applied successfully',
     };
   } catch (error) {
-    console.error("Error applying update:", error);
+    console.error('Error applying update:', error);
     return {
       success: false,
-      message: `Error applying update: ${error instanceof Error ? error.message : "Unknown error"}`,
+      message: `Error applying update: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
   }
 };
@@ -115,7 +115,7 @@ export const applyUpdate = async (): Promise<UpdateResult> => {
  */
 export const performFullUpdateFlow = async (
   options: UpdateOptions = {},
-  onStatusChange?: (status: UpdateStatus) => void,
+  onStatusChange?: (status: UpdateStatus) => void
 ): Promise<UpdateResult> => {
   const { silent = false, forceReload = false } = options;
 
@@ -177,11 +177,11 @@ export const performFullUpdateFlow = async (
 
     return {
       success: true,
-      message: "Update is ready to be applied",
+      message: 'Update is ready to be applied',
     };
   } catch (error) {
     const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
+      error instanceof Error ? error.message : 'Unknown error';
     updateState({
       isChecking: false,
       isDownloading: false,

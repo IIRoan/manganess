@@ -1,27 +1,27 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface NavigationHistory {
   paths: string[];
   lastUpdated: number;
 }
 
-const HISTORY_KEY = "navigation_history";
+const HISTORY_KEY = 'navigation_history';
 const MAX_HISTORY_LENGTH = 10;
 
 // Function to determine if a path should be excluded from history
 const shouldExcludeFromHistory = (path: string): boolean => {
   // Exclude chapter pages from history
-  return path.includes("/chapter/");
+  return path.includes('/chapter/');
 };
 
 // Extract manga detail path from a chapter path
 const getMangaDetailPathFromChapter = (chapterPath: string): string => {
-  const parts = chapterPath.split("/");
+  const parts = chapterPath.split('/');
   // Return "/manga/[id]" from "/manga/[id]/chapter/[num]"
-  if (parts.length >= 3 && parts[1] === "manga") {
+  if (parts.length >= 3 && parts[1] === 'manga') {
     return `/${parts[1]}/${parts[2]}`;
   }
-  return "";
+  return '';
 };
 
 export const getNavigationHistory = async (): Promise<string[]> => {
@@ -33,13 +33,13 @@ export const getNavigationHistory = async (): Promise<string[]> => {
     }
     return [];
   } catch (error) {
-    console.error("Error getting navigation history:", error);
+    console.error('Error getting navigation history:', error);
     return [];
   }
 };
 
 export const updateNavigationHistory = async (
-  newPath: string,
+  newPath: string
 ): Promise<void> => {
   try {
     // Skip excluded routes
@@ -71,16 +71,16 @@ export const updateNavigationHistory = async (
     history.lastUpdated = Date.now();
     await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   } catch (error) {
-    console.error("Error updating navigation history:", error);
+    console.error('Error updating navigation history:', error);
   }
 };
 
 export const getPreviousRoute = async (
-  currentPath: string,
+  currentPath: string
 ): Promise<string> => {
   try {
     // Default fallback route
-    const DEFAULT_ROUTE = "/mangasearch";
+    const DEFAULT_ROUTE = '/mangasearch';
 
     const historyData = await AsyncStorage.getItem(HISTORY_KEY);
     if (!historyData) {
@@ -131,7 +131,7 @@ export const getPreviousRoute = async (
       }
     }
   } catch (error) {
-    console.error("Error getting previous route:", error);
-    return "/mangasearch";
+    console.error('Error getting previous route:', error);
+    return '/mangasearch';
   }
 };

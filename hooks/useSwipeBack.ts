@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { PanResponder, Animated, Dimensions } from "react-native";
+import { useState, useRef, useCallback } from 'react';
+import { PanResponder, Animated, Dimensions } from 'react-native';
 
 interface UseSwipeBackProps {
   onSwipeBack: () => void;
@@ -17,11 +17,11 @@ export const useSwipeBack = ({
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: (evt) => {
+      onStartShouldSetPanResponder: evt => {
         const { locationX } = evt.nativeEvent;
         return locationX <= edgeWidth;
       },
-      onMoveShouldSetPanResponder: (evt) => {
+      onMoveShouldSetPanResponder: evt => {
         const { locationX } = evt.nativeEvent;
         return locationX <= edgeWidth;
       },
@@ -59,7 +59,7 @@ export const useSwipeBack = ({
           useNativeDriver: false,
         }).start();
       },
-    }),
+    })
   ).current;
 
   return {

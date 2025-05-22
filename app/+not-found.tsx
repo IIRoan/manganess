@@ -1,9 +1,9 @@
-import React from "react";
-import { Link, Stack } from "expo-router";
-import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
-import { useTheme } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
-import { Theme } from "@react-navigation/native";
+import React from 'react';
+import { Link, Stack } from 'expo-router';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { useTheme } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { Theme } from '@react-navigation/native';
 
 export default function NotFoundScreen() {
   const { colors } = useTheme();
@@ -11,7 +11,7 @@ export default function NotFoundScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: "Oops!", headerShown: false }} />
+      <Stack.Screen options={{ title: 'Oops!', headerShown: false }} />
       <View style={styles.container}>
         <View style={styles.content}>
           <Ionicons
@@ -34,22 +34,22 @@ export default function NotFoundScreen() {
   );
 }
 
-const getStyles = (colors: Theme["colors"]) =>
+const getStyles = (colors: Theme['colors']) =>
   StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.card,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
       padding: 20,
     },
     content: {
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     title: {
       fontSize: 24,
-      fontWeight: "bold",
+      fontWeight: 'bold',
       color: colors.text,
       marginTop: 20,
       marginBottom: 10,
@@ -57,7 +57,7 @@ const getStyles = (colors: Theme["colors"]) =>
     message: {
       fontSize: 16,
       color: colors.text,
-      textAlign: "center",
+      textAlign: 'center',
       marginBottom: 30,
     },
     button: {
@@ -69,6 +69,6 @@ const getStyles = (colors: Theme["colors"]) =>
     buttonText: {
       color: colors.card,
       fontSize: 16,
-      fontWeight: "bold",
+      fontWeight: 'bold',
     },
   });
