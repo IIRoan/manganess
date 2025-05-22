@@ -44,8 +44,6 @@ import type {
   MangaDetails,
   BookmarkStatus,
 } from "@/types";
-import { useSwipeBack } from "@/hooks/useSwipeBack";
-import SwipeBackIndicator from "@/components/SwipeBackIndicator";
 
 /* Type Definitions */
 type BookmarkPopupConfig = {
@@ -102,11 +100,6 @@ export default function MangaDetailScreen() {
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
-
-  //For the swipe back animation
-  const { panResponder, isSwipingBack, swipeProgress } = useSwipeBack({
-    onSwipeBack: handleBackPress,
-  });
 
   const fetchMangaDetailsData = async () => {
     try {
@@ -205,36 +198,36 @@ export default function MangaDetailScreen() {
     }
   };
 
-const handleMarkAsUnread = useCallback(
-  async (chapterNumber: string) => {
-    try {
-      const result = await markChapterAsUnread(
-        id as string,
-        chapterNumber,
-        readChapters
-      );
-      
-      // Update the read chapters state
-      setReadChapters(result.updatedChapters);
-      
-      // Update the last read chapter display immediately
-      if (result.newLastReadChapter) {
-        setLastReadChapter(`Chapter ${result.newLastReadChapter}`);
-      } else {
-        setLastReadChapter('Not started');
+  const handleMarkAsUnread = useCallback(
+    async (chapterNumber: string) => {
+      try {
+        const result = await markChapterAsUnread(
+          id as string,
+          chapterNumber,
+          readChapters
+        );
+
+        // Update the read chapters state
+        setReadChapters(result.updatedChapters);
+
+        // Update the last read chapter display immediately
+        if (result.newLastReadChapter) {
+          setLastReadChapter(`Chapter ${result.newLastReadChapter}`);
+        } else {
+          setLastReadChapter("Not started");
+        }
+
+        // Close any open swipeables
+        if (currentlyOpenSwipeable) {
+          currentlyOpenSwipeable.close();
+          setCurrentlyOpenSwipeable(null);
+        }
+      } catch (error) {
+        console.error("Error marking chapter as unread:", error);
       }
-      
-      // Close any open swipeables
-      if (currentlyOpenSwipeable) {
-        currentlyOpenSwipeable.close();
-        setCurrentlyOpenSwipeable(null);
-      }
-    } catch (error) {
-      console.error("Error marking chapter as unread:", error);
-    }
-  },
-  [id, readChapters, currentlyOpenSwipeable]
-);
+    },
+    [id, readChapters, currentlyOpenSwipeable]
+  );
 
   const handleSaveBookmark = async (status: BookmarkStatus) => {
     if (!mangaDetails) return;
@@ -383,7 +376,7 @@ const handleMarkAsUnread = useCallback(
   const remainingReadingTime = estimateRemainingReadingTime();
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View style={styles.container}>
       {/* Alert component is used to display alerts */}
       {alertConfig && (
         <AlertComponent
@@ -560,7 +553,8 @@ const handleMarkAsUnread = useCallback(
           renderItem={({ item: chapter, index }) => {
             const isRead = readChapters.includes(chapter.number);
             const isLastItem = index === mangaDetails.chapters.length - 1;
-            const isCurrentlyLastRead = lastReadChapter === `Chapter ${chapter.number}`;
+            const isCurrentlyLastRead =
+              lastReadChapter === `Chapter ${chapter.number}`;
 
             return (
               <SwipeableChapterItem
@@ -582,7 +576,6 @@ const handleMarkAsUnread = useCallback(
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
         />
-        {isSwipingBack && <SwipeBackIndicator swipeProgress={swipeProgress} />}
 
         {/* Scroll to Bottom Button */}
         <Animated.View
