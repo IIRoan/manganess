@@ -1,5 +1,14 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextStyle, Platform, TextInput, LayoutAnimation } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  TextStyle,
+  Platform,
+  TextInput,
+  LayoutAnimation,
+} from 'react-native';
 
 interface ExpandableTextProps {
   text: string;
@@ -8,24 +17,27 @@ interface ExpandableTextProps {
   expandedStyle?: TextStyle;
 }
 
-const ExpandableText: React.FC<ExpandableTextProps> = ({ 
-  text, 
-  initialLines = 3, 
+const ExpandableText: React.FC<ExpandableTextProps> = ({
+  text,
+  initialLines = 3,
   style,
   expandedStyle,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
 
-  const onTextLayout = useCallback((e: any) => {
-    if (e.nativeEvent.lines.length > initialLines) {
-      setIsTruncated(true);
-    }
-  }, [initialLines]);
+  const onTextLayout = useCallback(
+    (e: any) => {
+      if (e.nativeEvent.lines.length > initialLines) {
+        setIsTruncated(true);
+      }
+    },
+    [initialLines]
+  );
 
   const toggleExpand = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsExpanded((prev) => !prev);
+    setIsExpanded(prev => !prev);
   }, []);
 
   const TextComponent = useMemo(() => {
@@ -47,7 +59,7 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
   }, [TextComponent, isExpanded, initialLines, onTextLayout]);
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       onPress={toggleExpand}
       testID="expandable-text"
       activeOpacity={0.7}
@@ -56,10 +68,10 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
       <TextComponent
         {...textProps}
         style={[
-          styles.text, 
+          styles.text,
           style,
           isExpanded && expandedStyle,
-          isTruncated && !isExpanded && styles.truncatedText
+          isTruncated && !isExpanded && styles.truncatedText,
         ]}
       >
         {text}

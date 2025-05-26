@@ -1,10 +1,5 @@
 import React from 'react';
-import {
-  Animated,
-  StyleSheet,
-  Dimensions,
-  useColorScheme,
-} from 'react-native';
+import { Animated, StyleSheet, Dimensions, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, ColorScheme } from '@/constants/Colors';

@@ -1,0 +1,22 @@
+# Global owner for the entire repository
+* @IIRoan
+
+# Core application files
+/app/ @IIRoan
+/components/ @IIRoan
+/services/ @IIRoan
+/types/ @IIRoan
+
+# Configuration and build files
+package.json @IIRoan
+tsconfig.json @IIRoan
+eas.json @IIRoan
+app.json @IIRoan
+
+# GitHub workflows and templates
+/.github/ @IIRoan
+
+# Documentation
+README.md @IIRoan
+CONTRIBUTING.md @IIRoan
+CHANGELOG.md @IIRoan

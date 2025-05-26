@@ -12,7 +12,11 @@ import {
 } from 'react-native';
 import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getAppSettings, getDebugTabEnabled, isOnboardingCompleted as checkOnboarding } from '@/services/settingsService';
+import {
+  getAppSettings,
+  getDebugTabEnabled,
+  isOnboardingCompleted as checkOnboarding,
+} from '@/services/settingsService';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
@@ -39,54 +43,59 @@ export default function TabLayout() {
   const appState = useRef(AppState.currentState);
   const pathname = usePathname();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
-  const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(null);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<
+    boolean | null
+  >(null);
+  const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
+    null
+  );
   const buttonScale = useRef(new Animated.Value(1)).current;
-  
+
   const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
   // Get update status from the hook
-  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } = useAppUpdates();
-  
+  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } =
+    useAppUpdates();
+
   // Animation values
   const updateIndicatorOpacity = useRef(new Animated.Value(0)).current;
   const updateIndicatorRotation = useRef(new Animated.Value(0)).current;
   const updateProgressWidth = useRef(new Animated.Value(0)).current;
   // Track whether progress has started
   const [progressStarted, setProgressStarted] = useState(false);
-  
+
   // Animation ref
   const updateAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const progressAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  
+
   // Determine if we should actually show the indicator
   // Only show for downloading updates or when ready to apply, not for checks
-  const shouldShowUpdateIndicator = 
+  const shouldShowUpdateIndicator =
     isUpdateInProgress && (updateStatus.isDownloading || updateStatus.isReady);
 
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
-    
+
     performUpdateCheck();
-    
+
     imageCache.initializeCache();
-    
+
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (
-        appState.current.match(/inactive|background/) && 
+        appState.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
         console.log('App has come to the foreground, checking for updates...');
         performUpdateCheck();
       }
-      
+
       appState.current = nextAppState;
     });
-    
+
     const unsubscribeFocus = navigation.addListener('focus', () => {
       refreshLastReadManga();
     });
-    
+
     return () => {
       subscription.remove();
       unsubscribeFocus();
@@ -98,9 +107,14 @@ export default function TabLayout() {
       }
     };
   }, [navigation]);
-  
+
   useEffect(() => {
-    if (pathname === '/' || pathname === '/bookmarks' || pathname === '/settings' || pathname === '/mangasearch') {
+    if (
+      pathname === '/' ||
+      pathname === '/bookmarks' ||
+      pathname === '/settings' ||
+      pathname === '/mangasearch'
+    ) {
       refreshLastReadManga();
     }
   }, [pathname]);
@@ -112,7 +126,7 @@ export default function TabLayout() {
       updateAnimationRef.current.stop();
       updateAnimationRef.current = null;
     }
-    
+
     if (progressAnimationRef.current) {
       progressAnimationRef.current.stop();
       progressAnimationRef.current = null;
@@ -125,23 +139,23 @@ export default function TabLayout() {
         duration: 300,
         useNativeDriver: true,
       }).start();
-      
+
       // Start a continuous rotation for the spinner
       const rotateAnimation = Animated.timing(updateIndicatorRotation, {
         toValue: 1,
         duration: 1500,
         useNativeDriver: true,
       });
-      
+
       // Create a looping rotation
       const loopingRotation = Animated.loop(rotateAnimation);
-      
+
       // Start the rotation animation
       loopingRotation.start();
-      
+
       // Keep track of the animation
       updateAnimationRef.current = loopingRotation;
-      
+
       // Create simulated progress for short updates
       // Progress moves quickly to 70% then slows down
       progressAnimationRef.current = Animated.sequence([
@@ -154,12 +168,11 @@ export default function TabLayout() {
           toValue: 0.9, // Then more slowly to 90%
           duration: 1200,
           useNativeDriver: false,
-        })
+        }),
       ]);
-      
+
       progressAnimationRef.current.start();
       setProgressStarted(true);
-      
     } else {
       // When update completes, instantly fill the progress bar to 100%
       // then fade out the entire indicator
@@ -177,7 +190,7 @@ export default function TabLayout() {
             toValue: 0,
             duration: 300,
             useNativeDriver: true,
-          })
+          }),
         ]).start(() => {
           // Reset the progress after the animation completes
           updateProgressWidth.setValue(0);
@@ -191,7 +204,7 @@ export default function TabLayout() {
           duration: 300,
           useNativeDriver: true,
         }).start();
-        
+
         // Reset animation values
         updateProgressWidth.setValue(0);
         updateIndicatorRotation.setValue(0);
@@ -219,7 +232,7 @@ export default function TabLayout() {
       console.error('Error loading enable debug tab setting:', error);
     }
   };
-  
+
   const refreshLastReadManga = async () => {
     try {
       const lastRead = await getLastReadManga();
@@ -246,13 +259,16 @@ export default function TabLayout() {
       // First check if update is available
       const checkResult = await checkForUpdate();
       console.log('Update check result:', checkResult);
-      
+
       if (checkResult.success) {
         console.log('Update available, downloading and applying...');
         // If an update is available, download and apply it
         await updateAndReload();
       } else {
-        console.log('No update available or unable to check:', checkResult.message);
+        console.log(
+          'No update available or unable to check:',
+          checkResult.message
+        );
       }
     } catch (error) {
       console.error('Error in update process:', error);
@@ -272,7 +288,7 @@ export default function TabLayout() {
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     if (lastReadManga && lastReadManga.id) {
       console.log('Navigating to manga:', lastReadManga);
       router.push(`/manga/${lastReadManga.id}`);
@@ -301,13 +317,13 @@ export default function TabLayout() {
   // Create interpolated rotation value for the spinner icon
   const spin = updateIndicatorRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
+    outputRange: ['0deg', '360deg'],
   });
 
   // Get the width for the progress bar
   const progressBarWidth = updateProgressWidth.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', '100%']
+    outputRange: ['0%', '100%'],
   });
 
   if (isOnboardingCompleted === null) {
@@ -323,47 +339,54 @@ export default function TabLayout() {
   return (
     <View style={[styles.container, { backgroundColor: colors.card }]}>
       {/* Update Indicator - Only shown during downloading or ready states */}
-      <Animated.View 
+      <Animated.View
         style={[
-          styles.updateIndicatorContainer, 
-          { 
+          styles.updateIndicatorContainer,
+          {
             backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#FFFFFF',
             opacity: updateIndicatorOpacity,
             top: insets.top + 8,
             borderColor: colors.primary,
-          }
+          },
         ]}
         pointerEvents="none"
       >
         <Animated.View style={{ transform: [{ rotate: spin }] }}>
-          <Ionicons 
-            name="sync" 
-            size={18} 
-            color={colors.primary} 
-            style={styles.updateIndicatorIcon} 
+          <Ionicons
+            name="sync"
+            size={18}
+            color={colors.primary}
+            style={styles.updateIndicatorIcon}
           />
         </Animated.View>
-        
+
         <View style={styles.updateContentContainer}>
-          <Text 
+          <Text
             style={[
-              styles.updateIndicatorText, 
-              { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' }
+              styles.updateIndicatorText,
+              { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' },
             ]}
           >
             {getUpdateStatusMessage()}
           </Text>
-          
+
           {/* Progress bar */}
-          <View style={[styles.progressBarContainer, { backgroundColor: colorScheme === 'dark' ? '#333333' : '#EEEEEE' }]}>
-            <Animated.View 
+          <View
+            style={[
+              styles.progressBarContainer,
+              {
+                backgroundColor: colorScheme === 'dark' ? '#333333' : '#EEEEEE',
+              },
+            ]}
+          >
+            <Animated.View
               style={[
-                styles.progressBar, 
-                { 
+                styles.progressBar,
+                {
                   backgroundColor: colors.primary,
-                  width: progressBarWidth
-                }
-              ]} 
+                  width: progressBarWidth,
+                },
+              ]}
             />
           </View>
         </View>
@@ -460,29 +483,26 @@ export default function TabLayout() {
           name="manga/[id]/chapter/[chapterNumber].styles"
           options={{ href: null }}
         />
-        <Tabs.Screen
-          name="manga/[id].styles"
-          options={{ href: null }}
-        />
+        <Tabs.Screen name="manga/[id].styles" options={{ href: null }} />
       </Tabs>
-      
+
       {shouldShowTabBar() && (
-        <Animated.View 
+        <Animated.View
           style={[
             styles.lastButtonContainer,
-            { 
+            {
               bottom: tabBarBottomPosition + 30,
-              transform: [{ scale: buttonScale }]
+              transform: [{ scale: buttonScale }],
             },
           ]}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.lastButton, 
-              { 
+              styles.lastButton,
+              {
                 backgroundColor: colors.primary,
                 borderColor: colors.card,
-              }
+              },
             ]}
             onPress={handleLastButtonPress}
             activeOpacity={0.8}
@@ -513,7 +533,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   lastButtonContainer: {
-    position: 'absolute', 
+    position: 'absolute',
     alignSelf: 'center',
     alignItems: 'center',
     zIndex: 100,

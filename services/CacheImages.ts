@@ -22,7 +22,9 @@ class ImageCache {
     try {
       const cacheFolder = await FileSystem.getInfoAsync(CACHE_FOLDER);
       if (!cacheFolder.exists) {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
       }
       this.initialized = true;
     } catch (error) {
@@ -39,15 +41,17 @@ class ImageCache {
       // First ensure cache directory exists
       const cacheFolder = await FileSystem.getInfoAsync(CACHE_FOLDER);
       if (!cacheFolder.exists) {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
         this.initialized = true;
       }
 
       const filename = this.getCacheFilename(url);
       const filePath = `${CACHE_FOLDER}${filename}`;
-      
+
       const fileInfo = await FileSystem.getInfoAsync(filePath);
-      
+
       if (fileInfo.exists) {
         return filePath;
       }
@@ -55,7 +59,9 @@ class ImageCache {
       // Double check directory exists before download
       const cacheFolderCheck = await FileSystem.getInfoAsync(CACHE_FOLDER);
       if (!cacheFolderCheck.exists) {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
       }
 
       const downloadResult = await FileSystem.downloadAsync(url, filePath);
@@ -77,13 +83,17 @@ class ImageCache {
         await FileSystem.deleteAsync(CACHE_FOLDER);
       }
       // Always ensure the directory exists after clearing
-      await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+      await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+        intermediates: true,
+      });
       this.initialized = true;
     } catch (error) {
       console.error('Error clearing cache:', error);
       // If there's an error, still try to ensure the directory exists
       try {
-        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, { intermediates: true });
+        await FileSystem.makeDirectoryAsync(CACHE_FOLDER, {
+          intermediates: true,
+        });
         this.initialized = true;
       } catch (dirError) {
         console.error('Failed to create cache directory:', dirError);
@@ -110,7 +120,7 @@ class ImageCache {
 
       return {
         size: totalSize,
-        count: files.length
+        count: files.length,
       };
     } catch (error) {
       console.error('Error getting cache size:', error);
@@ -129,7 +139,7 @@ export function useImageCache(url: string): string {
 
     const cacheImage = async () => {
       if (!url) return;
-      
+
       try {
         const path = await imageCache.getCachedImagePath(url);
         if (isMounted) {
