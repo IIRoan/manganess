@@ -32,6 +32,7 @@ import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import CustomColorPicker from '@/components/CustomColorPicker';
+import NavigationSettingsPanel from '@/components/NavigationSettingsPanel';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -54,6 +55,7 @@ export default function SettingsScreen() {
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState<string>(accentColor || colors.primary);
+  const [showNavigationSettings, setShowNavigationSettings] = useState(false);
 
   const themeOptions: ThemeOption[] = [
     { label: 'Light', value: 'light', icon: 'sunny-outline' },
@@ -339,6 +341,25 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Navigation</Text>
+          <TouchableOpacity 
+            style={styles.option} 
+            onPress={() => setShowNavigationSettings(!showNavigationSettings)}
+          >
+            <Ionicons name="navigate-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Navigation Settings</Text>
+            <Ionicons 
+              name={showNavigationSettings ? "chevron-up" : "chevron-down"} 
+              size={24} 
+              color={colors.text} 
+            />
+          </TouchableOpacity>
+          {showNavigationSettings && (
+            <NavigationSettingsPanel style={styles.navigationPanel} />
+          )}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Data Management</Text>
           <TouchableOpacity style={styles.option} onPress={handleExportData}>
             <Ionicons name="download-outline" size={24} color={colors.text} />
@@ -579,5 +600,11 @@ const getStyles = (colors: typeof Colors.light) =>
       marginLeft: 15,
       color: colors.text,
       fontWeight: '600',
+    },
+    navigationPanel: {
+      marginTop: 10,
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      padding: 0,
     },
   });
