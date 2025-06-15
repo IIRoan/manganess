@@ -28,6 +28,7 @@ import {
   getChapterLongPressAlertConfig,
 } from "@/services/bookmarkService";
 import { useNavigationHistory } from "@/hooks/useNavigationHistory";
+import EnhancedBackButton from "@/components/EnhancedBackButton";
 import { GenreTag } from "@/components/GanreTag";
 import {
   getLastReadChapter,
@@ -414,13 +415,12 @@ export default function MangaDetailScreen() {
                 <View style={styles.overlay} />
                 <View style={styles.headerContent}>
                   <View style={styles.headerButtons}>
-                    <TouchableOpacity
-                      testID="back-button"
-                      onPress={handleBackPress}
+                    <EnhancedBackButton
+                      size={30}
+                      color="#FFFFFF"
                       style={styles.headerButton}
-                    >
-                      <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
-                    </TouchableOpacity>
+                      showHistoryOnLongPress={true}
+                    />
                     <TouchableOpacity
                       testID="bookmark-button"
                       onPress={handleBookmark}
