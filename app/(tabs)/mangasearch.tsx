@@ -130,6 +130,7 @@ export default function MangaSearchScreen() {
           onPress={() => handleMangaPress(item)}
           lastReadChapter={lastReadChapters[item.id]}
           style={styles.card}
+          context="search"
         />
         <View style={styles.titleContainer}>
           <Text style={styles.mangaTitle} numberOfLines={2}>

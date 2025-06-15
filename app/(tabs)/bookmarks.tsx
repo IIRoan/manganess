@@ -47,7 +47,7 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 const ImagePreloader = ({ urls }: { urls: string[] }) => {
   useEffect(() => {
     urls.forEach((url) => {
-      if (url) imageCache.getCachedImagePath(url);
+      if (url) imageCache.getCachedImagePath(url, 'bookmark');
     });
   }, [urls]);
   return null;
@@ -361,6 +361,8 @@ export default function BookmarksScreen() {
             imageUrl={item.imageUrl}
             onPress={() => handleBookmarkPress(item.id)}
             lastReadChapter={item.lastReadChapter}
+            context="bookmark"
+            mangaId={item.id}
           />
         </View>
       );
@@ -379,6 +381,8 @@ export default function BookmarksScreen() {
             onPress={() => {}}
             lastReadChapter={null}
             style={styles.listItemImage}
+            context="bookmark"
+            mangaId={item.id}
           />
         </View>
         <View style={styles.listItemContent}>

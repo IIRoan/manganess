@@ -32,7 +32,7 @@ import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import CustomColorPicker from '@/components/CustomColorPicker';
-import NavigationSettingsPanel from '@/components/NavigationSettingsPanel';
+import { imageCache } from '@/services/CacheImages';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -55,7 +55,8 @@ export default function SettingsScreen() {
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState<string>(accentColor || colors.primary);
-  const [showNavigationSettings, setShowNavigationSettings] = useState(false);
+  const [cacheStats, setCacheStats] = useState<any>(null);
+  const [isCacheLoading, setIsCacheLoading] = useState(false);
 
   const themeOptions: ThemeOption[] = [
     { label: 'Light', value: 'light', icon: 'sunny-outline' },
@@ -66,12 +67,64 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkLoginStatus();
+    loadCacheStats();
 
     // Update selected color when accentColor changes
     if (accentColor) {
       setSelectedColor(accentColor);
     }
   }, [accentColor]);
+
+  const loadCacheStats = async () => {
+    try {
+      const stats = await imageCache.getCacheStats();
+      setCacheStats(stats);
+    } catch (error) {
+      console.error('Error loading cache stats:', error);
+    }
+  };
+
+  const handleClearImageCache = (context?: 'search' | 'manga') => {
+    const contextName = context === 'search' ? 'search cache' : context === 'manga' ? 'manga cache' : 'all image cache';
+    
+    Alert.alert(
+      'Clear Image Cache',
+      `Are you sure you want to clear the ${contextName}? This will free up storage space but images will need to be downloaded again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsCacheLoading(true);
+              await imageCache.clearCache(context);
+              await loadCacheStats();
+              Alert.alert('Success', `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully.`);
+            } catch (error) {
+              console.error('Error clearing cache:', error);
+              Alert.alert('Error', `Failed to clear ${contextName}.`);
+            } finally {
+              setIsCacheLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (timestamp: number): string => {
+    if (!timestamp) return 'Never';
+    return new Date(timestamp).toLocaleDateString();
+  };
 
   const loadEnableDebugTabSetting = async () => {
     try {
@@ -340,23 +393,72 @@ export default function SettingsScreen() {
           </Text>
         </View>
 
+
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Navigation</Text>
+          <Text style={styles.sectionTitle}>Image Cache Management</Text>
+          {cacheStats && (
+            <View style={styles.cacheStatsContainer}>
+              <Text style={styles.cacheStatsTitle}>Cache Statistics</Text>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Total Size:</Text>
+                <Text style={styles.cacheStatsValue}>{formatFileSize(cacheStats.totalSize)}</Text>
+              </View>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Total Files:</Text>
+                <Text style={styles.cacheStatsValue}>{cacheStats.totalFiles}</Text>
+              </View>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Manga Images:</Text>
+                <Text style={styles.cacheStatsValue}>{cacheStats.mangaCount}</Text>
+              </View>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Search Cache:</Text>
+                <Text style={styles.cacheStatsValue}>{cacheStats.searchCount}</Text>
+              </View>
+              {cacheStats.oldestEntry > 0 && (
+                <View style={styles.cacheStatsRow}>
+                  <Text style={styles.cacheStatsLabel}>Oldest Entry:</Text>
+                  <Text style={styles.cacheStatsValue}>{formatDate(cacheStats.oldestEntry)}</Text>
+                </View>
+              )}
+            </View>
+          )}
           <TouchableOpacity 
             style={styles.option} 
-            onPress={() => setShowNavigationSettings(!showNavigationSettings)}
+            onPress={() => handleClearImageCache('search')}
+            disabled={isCacheLoading}
           >
-            <Ionicons name="navigate-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Navigation Settings</Text>
-            <Ionicons 
-              name={showNavigationSettings ? "chevron-up" : "chevron-down"} 
-              size={24} 
-              color={colors.text} 
-            />
+            <Ionicons name="images-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Clear Search Cache</Text>
+            {isCacheLoading && <ActivityIndicator size="small" color={colors.primary} />}
           </TouchableOpacity>
-          {showNavigationSettings && (
-            <NavigationSettingsPanel style={styles.navigationPanel} />
-          )}
+          <TouchableOpacity 
+            style={styles.option} 
+            onPress={() => handleClearImageCache('manga')}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="library-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Clear Manga Cache</Text>
+            {isCacheLoading && <ActivityIndicator size="small" color={colors.primary} />}
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.option} 
+            onPress={() => handleClearImageCache()}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="trash-outline" size={24} color={colors.notification} />
+            <Text style={styles.optionText}>Clear All Image Cache</Text>
+            {isCacheLoading && <ActivityIndicator size="small" color={colors.primary} />}
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.option} 
+            onPress={loadCacheStats}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="refresh-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Refresh Cache Stats</Text>
+            {isCacheLoading && <ActivityIndicator size="small" color={colors.primary} />}
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -601,10 +703,30 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.text,
       fontWeight: '600',
     },
-    navigationPanel: {
-      marginTop: 10,
+    cacheStatsContainer: {
       backgroundColor: colors.background,
       borderRadius: 10,
-      padding: 0,
+      padding: 15,
+      marginBottom: 15,
+    },
+    cacheStatsTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 10,
+    },
+    cacheStatsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 5,
+    },
+    cacheStatsLabel: {
+      fontSize: 14,
+      color: colors.text,
+    },
+    cacheStatsValue: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.primary,
     },
   });
