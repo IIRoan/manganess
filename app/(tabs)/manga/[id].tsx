@@ -28,6 +28,7 @@ import {
   getChapterLongPressAlertConfig,
 } from "@/services/bookmarkService";
 import { useNavigationHistory } from "@/hooks/useNavigationHistory";
+import EnhancedBackButton from "@/components/EnhancedBackButton";
 import { GenreTag } from "@/components/GanreTag";
 import {
   getLastReadChapter,
@@ -38,19 +39,37 @@ import { useFocusEffect } from "@react-navigation/native";
 import LastReadChapterBar from "@/components/LastReadChapterBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import getStyles from "./[id].styles";
+import { useMangaImageCache } from "@/services/CacheImages";
 import type {
   AlertConfig,
   Option,
   MangaDetails,
   BookmarkStatus,
 } from "@/types";
-import { useSwipeBack } from "@/hooks/useSwipeBack";
-import SwipeBackIndicator from "@/components/SwipeBackIndicator";
 
 /* Type Definitions */
 type BookmarkPopupConfig = {
   title: string;
   options: Option[];
+};
+
+// Component for manga banner image with caching validation
+const MangaBannerImage: React.FC<{
+  mangaId: string;
+  bannerUrl: string;
+  style: any;
+}> = ({ mangaId, bannerUrl, style }) => {
+  const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl);
+  
+  return (
+    <Image
+      source={{ uri: cachedBannerPath }}
+      style={style}
+      onError={(error) =>
+        console.error("Error loading banner image:", error)
+      }
+    />
+  );
 };
 
 export default function MangaDetailScreen() {
@@ -102,11 +121,6 @@ export default function MangaDetailScreen() {
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
-
-  //For the swipe back animation
-  const { panResponder, isSwipingBack, swipeProgress } = useSwipeBack({
-    onSwipeBack: handleBackPress,
-  });
 
   const fetchMangaDetailsData = async () => {
     try {
@@ -205,36 +219,36 @@ export default function MangaDetailScreen() {
     }
   };
 
-const handleMarkAsUnread = useCallback(
-  async (chapterNumber: string) => {
-    try {
-      const result = await markChapterAsUnread(
-        id as string,
-        chapterNumber,
-        readChapters
-      );
-      
-      // Update the read chapters state
-      setReadChapters(result.updatedChapters);
-      
-      // Update the last read chapter display immediately
-      if (result.newLastReadChapter) {
-        setLastReadChapter(`Chapter ${result.newLastReadChapter}`);
-      } else {
-        setLastReadChapter('Not started');
+  const handleMarkAsUnread = useCallback(
+    async (chapterNumber: string) => {
+      try {
+        const result = await markChapterAsUnread(
+          id as string,
+          chapterNumber,
+          readChapters
+        );
+
+        // Update the read chapters state
+        setReadChapters(result.updatedChapters);
+
+        // Update the last read chapter display immediately
+        if (result.newLastReadChapter) {
+          setLastReadChapter(`Chapter ${result.newLastReadChapter}`);
+        } else {
+          setLastReadChapter("Not started");
+        }
+
+        // Close any open swipeables
+        if (currentlyOpenSwipeable) {
+          currentlyOpenSwipeable.close();
+          setCurrentlyOpenSwipeable(null);
+        }
+      } catch (error) {
+        console.error("Error marking chapter as unread:", error);
       }
-      
-      // Close any open swipeables
-      if (currentlyOpenSwipeable) {
-        currentlyOpenSwipeable.close();
-        setCurrentlyOpenSwipeable(null);
-      }
-    } catch (error) {
-      console.error("Error marking chapter as unread:", error);
-    }
-  },
-  [id, readChapters, currentlyOpenSwipeable]
-);
+    },
+    [id, readChapters, currentlyOpenSwipeable]
+  );
 
   const handleSaveBookmark = async (status: BookmarkStatus) => {
     if (!mangaDetails) return;
@@ -383,7 +397,7 @@ const handleMarkAsUnread = useCallback(
   const remainingReadingTime = estimateRemainingReadingTime();
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View style={styles.container}>
       {/* Alert component is used to display alerts */}
       {alertConfig && (
         <AlertComponent
@@ -411,23 +425,20 @@ const handleMarkAsUnread = useCallback(
           ListHeaderComponent={() => (
             <>
               <View style={styles.headerContainer}>
-                <Image
-                  source={{ uri: mangaDetails.bannerImage }}
+                <MangaBannerImage 
+                  mangaId={id as string}
+                  bannerUrl={mangaDetails.bannerImage}
                   style={styles.bannerImage}
-                  onError={(error) =>
-                    console.error("Error loading banner image:", error)
-                  }
                 />
                 <View style={styles.overlay} />
                 <View style={styles.headerContent}>
                   <View style={styles.headerButtons}>
-                    <TouchableOpacity
-                      testID="back-button"
-                      onPress={handleBackPress}
+                    <EnhancedBackButton
+                      size={30}
+                      color="#FFFFFF"
                       style={styles.headerButton}
-                    >
-                      <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
-                    </TouchableOpacity>
+                      showHistoryOnLongPress={true}
+                    />
                     <TouchableOpacity
                       testID="bookmark-button"
                       onPress={handleBookmark}
@@ -452,6 +463,7 @@ const handleMarkAsUnread = useCallback(
                       text={mangaDetails.alternativeTitle}
                       initialLines={1}
                       style={styles.alternativeTitle}
+                      stateKey={`alt-title-${id}`}
                     />
                   )}
                   <View style={styles.statusContainer}>
@@ -507,6 +519,7 @@ const handleMarkAsUnread = useCallback(
                       text={mangaDetails.description}
                       initialLines={3}
                       style={styles.description}
+                      stateKey={`description-${id}`}
                     />
                     <LastReadChapterBar
                       lastReadChapter={lastReadChapter}
@@ -560,7 +573,8 @@ const handleMarkAsUnread = useCallback(
           renderItem={({ item: chapter, index }) => {
             const isRead = readChapters.includes(chapter.number);
             const isLastItem = index === mangaDetails.chapters.length - 1;
-            const isCurrentlyLastRead = lastReadChapter === `Chapter ${chapter.number}`;
+            const isCurrentlyLastRead =
+              lastReadChapter === `Chapter ${chapter.number}`;
 
             return (
               <SwipeableChapterItem
@@ -582,7 +596,6 @@ const handleMarkAsUnread = useCallback(
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
         />
-        {isSwipingBack && <SwipeBackIndicator swipeProgress={swipeProgress} />}
 
         {/* Scroll to Bottom Button */}
         <Animated.View

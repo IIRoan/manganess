@@ -20,6 +20,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { imageCache } from '@/services/CacheImages';
 import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
+import { SwipeGestureOverlay } from '@/components/SwipeBackIndicator';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -46,6 +48,15 @@ export default function TabLayout() {
   const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
   // Get update status from the hook
   const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } = useAppUpdates();
+  
+  // Swipe gesture integration
+  const { 
+    panResponder, 
+    isSwipingBack, 
+    swipeProgress, 
+    swipeOpacity, 
+    canSwipeBack 
+  } = useSwipeBack();
   
   // Animation values
   const updateIndicatorOpacity = useRef(new Animated.Value(0)).current;
@@ -292,6 +303,7 @@ export default function TabLayout() {
     );
   };
 
+
   const getUpdateStatusMessage = () => {
     if (updateStatus.isDownloading) return 'Downloading update...';
     if (updateStatus.isReady) return 'Update ready!';
@@ -321,53 +333,60 @@ export default function TabLayout() {
   const tabBarBottomPosition = insets.bottom + 15;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card }]}>
-      {/* Update Indicator - Only shown during downloading or ready states */}
-      <Animated.View 
-        style={[
-          styles.updateIndicatorContainer, 
-          { 
-            backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#FFFFFF',
-            opacity: updateIndicatorOpacity,
-            top: insets.top + 8,
-            borderColor: colors.primary,
-          }
-        ]}
-        pointerEvents="none"
-      >
-        <Animated.View style={{ transform: [{ rotate: spin }] }}>
-          <Ionicons 
-            name="sync" 
-            size={18} 
-            color={colors.primary} 
-            style={styles.updateIndicatorIcon} 
-          />
-        </Animated.View>
-        
-        <View style={styles.updateContentContainer}>
-          <Text 
-            style={[
-              styles.updateIndicatorText, 
-              { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' }
-            ]}
-          >
-            {getUpdateStatusMessage()}
-          </Text>
-          
-          {/* Progress bar */}
-          <View style={[styles.progressBarContainer, { backgroundColor: colorScheme === 'dark' ? '#333333' : '#EEEEEE' }]}>
-            <Animated.View 
-              style={[
-                styles.progressBar, 
-                { 
-                  backgroundColor: colors.primary,
-                  width: progressBarWidth
-                }
-              ]} 
+    <SwipeGestureOverlay
+      enabled={canSwipeBack}
+      panResponder={panResponder}
+      swipeProgress={swipeProgress}
+      swipeOpacity={swipeOpacity}
+      isSwipingBack={isSwipingBack}
+    >
+      <View style={[styles.container, { backgroundColor: colors.card }]}>
+        {/* Update Indicator - Only shown during downloading or ready states */}
+        <Animated.View 
+          style={[
+            styles.updateIndicatorContainer, 
+            { 
+              backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#FFFFFF',
+              opacity: updateIndicatorOpacity,
+              top: insets.top + 8,
+              borderColor: colors.primary,
+            }
+          ]}
+          pointerEvents="none"
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons 
+              name="sync" 
+              size={18} 
+              color={colors.primary} 
+              style={styles.updateIndicatorIcon} 
             />
+          </Animated.View>
+          
+          <View style={styles.updateContentContainer}>
+            <Text 
+              style={[
+                styles.updateIndicatorText, 
+                { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' }
+              ]}
+            >
+              {getUpdateStatusMessage()}
+            </Text>
+            
+            {/* Progress bar */}
+            <View style={[styles.progressBarContainer, { backgroundColor: colorScheme === 'dark' ? '#333333' : '#EEEEEE' }]}>
+              <Animated.View 
+                style={[
+                  styles.progressBar, 
+                  { 
+                    backgroundColor: colors.primary,
+                    width: progressBarWidth
+                  }
+                ]} 
+              />
+            </View>
           </View>
-        </View>
-      </Animated.View>
+        </Animated.View>
 
       <Tabs
         screenOptions={({ route }) => ({
@@ -491,7 +510,8 @@ export default function TabLayout() {
           </TouchableOpacity>
         </Animated.View>
       )}
-    </View>
+      </View>
+    </SwipeGestureOverlay>
   );
 }
 
