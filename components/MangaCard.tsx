@@ -2,23 +2,35 @@ import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-import { useImageCache } from '@/services/CacheImages';
+import { useImageCache, useMangaImageCache, type CacheContext } from '@/services/CacheImages';
 import * as FileSystem from 'expo-file-system';
 import { MangaCardProps } from '@/types';
 
-const MangaCard: React.FC<MangaCardProps> = ({
+interface EnhancedMangaCardProps extends MangaCardProps {
+  context?: CacheContext;
+  mangaId?: string;
+}
+
+const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   title,
   imageUrl,
   onPress,
   lastReadChapter,
-  style
+  style,
+  context = 'search',
+  mangaId
 }) => {
   const { theme, systemTheme } = useTheme();
   const colorScheme = theme === 'system' ? systemTheme : theme as ColorScheme;
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
 
-  const cachedImagePath = useImageCache(imageUrl);
+  // Use appropriate caching strategy based on context
+  const searchCachedPath = useImageCache(imageUrl, context, mangaId);
+  const mangaCachedPath = useMangaImageCache(mangaId || '', imageUrl);
+  
+  // Choose the right cached path based on context
+  const cachedImagePath = context === 'manga' && mangaId ? mangaCachedPath : searchCachedPath;
 
   const getImageSource = () => {
     if (

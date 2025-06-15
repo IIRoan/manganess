@@ -178,6 +178,8 @@ export default function HomeScreen() {
           onPress={() => router.navigate(`/manga/${item.id}`)}
           lastReadChapter={lastReadChapter}
           style={styles.recentlyReadCard}
+          context="manga"
+          mangaId={item.id}
         />
         <Text style={[styles.recentlyReadTitle, { color: themeColors.text }]} numberOfLines={2}>
           {item.title}
@@ -202,6 +204,8 @@ export default function HomeScreen() {
                 onPress={() => router.navigate(`/manga/${item.id}`)}
                 lastReadChapter={null}
                 style={styles.card}
+                context="manga"
+                mangaId={item.id}
               />
               <View style={styles.titleContainer}>
                 <Text style={[styles.mangaTitle, { color: themeColors.text }]} numberOfLines={2}>

@@ -39,6 +39,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import LastReadChapterBar from "@/components/LastReadChapterBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import getStyles from "./[id].styles";
+import { useMangaImageCache } from "@/services/CacheImages";
 import type {
   AlertConfig,
   Option,
@@ -50,6 +51,25 @@ import type {
 type BookmarkPopupConfig = {
   title: string;
   options: Option[];
+};
+
+// Component for manga banner image with caching validation
+const MangaBannerImage: React.FC<{
+  mangaId: string;
+  bannerUrl: string;
+  style: any;
+}> = ({ mangaId, bannerUrl, style }) => {
+  const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl);
+  
+  return (
+    <Image
+      source={{ uri: cachedBannerPath }}
+      style={style}
+      onError={(error) =>
+        console.error("Error loading banner image:", error)
+      }
+    />
+  );
 };
 
 export default function MangaDetailScreen() {
@@ -405,12 +425,10 @@ export default function MangaDetailScreen() {
           ListHeaderComponent={() => (
             <>
               <View style={styles.headerContainer}>
-                <Image
-                  source={{ uri: mangaDetails.bannerImage }}
+                <MangaBannerImage 
+                  mangaId={id as string}
+                  bannerUrl={mangaDetails.bannerImage}
                   style={styles.bannerImage}
-                  onError={(error) =>
-                    console.error("Error loading banner image:", error)
-                  }
                 />
                 <View style={styles.overlay} />
                 <View style={styles.headerContent}>
@@ -445,6 +463,7 @@ export default function MangaDetailScreen() {
                       text={mangaDetails.alternativeTitle}
                       initialLines={1}
                       style={styles.alternativeTitle}
+                      stateKey={`alt-title-${id}`}
                     />
                   )}
                   <View style={styles.statusContainer}>
@@ -500,6 +519,7 @@ export default function MangaDetailScreen() {
                       text={mangaDetails.description}
                       initialLines={3}
                       style={styles.description}
+                      stateKey={`description-${id}`}
                     />
                     <LastReadChapterBar
                       lastReadChapter={lastReadChapter}
