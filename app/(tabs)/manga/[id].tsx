@@ -38,6 +38,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import LastReadChapterBar from "@/components/LastReadChapterBar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHapticFeedback } from "@/utils/haptics";
 import getStyles from "./[id].styles";
 import { useMangaImageCache } from "@/services/CacheImages";
 import type {
@@ -119,6 +120,9 @@ export default function MangaDetailScreen() {
   // Back button
   const { handleBackPress } = useNavigationHistory();
 
+  // Haptic feedback
+  const haptics = useHapticFeedback();
+
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
 
@@ -192,6 +196,9 @@ export default function MangaDetailScreen() {
 
   const handleBookmark = () => {
     if (!mangaDetails) return;
+    
+    haptics.onBookmark();
+    
     const config = getBookmarkPopupConfig(
       bookmarkStatus,
       mangaDetails.title,
@@ -204,6 +211,8 @@ export default function MangaDetailScreen() {
   };
 
   const handleChapterLongPress = (chapterNumber: string) => {
+    haptics.onLongPress();
+    
     const isRead = readChapters.includes(chapterNumber);
     const config = getChapterLongPressAlertConfig(
       isRead,
@@ -280,6 +289,7 @@ export default function MangaDetailScreen() {
   };
 
   const handleChapterPress = (chapterNumber: string | number) => {
+    haptics.onSelection();
     router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
   };
 
@@ -422,6 +432,10 @@ export default function MangaDetailScreen() {
         <FlashList
           ref={flashListRef}
           estimatedItemSize={70}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={15}
+          updateCellsBatchingPeriod={50}
+          drawDistance={100}
           ListHeaderComponent={() => (
             <>
               <View style={styles.headerContainer}>
@@ -437,17 +451,20 @@ export default function MangaDetailScreen() {
                       size={30}
                       color="#FFFFFF"
                       style={styles.headerButton}
-                      showHistoryOnLongPress={true}
                     />
                     <TouchableOpacity
                       testID="bookmark-button"
                       onPress={handleBookmark}
                       style={styles.headerButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={bookmarkStatus ? "Remove bookmark" : "Add bookmark"}
+                      accessibilityHint={`Currently ${bookmarkStatus || "not bookmarked"}. Tap to ${bookmarkStatus ? "remove" : "add"} bookmark.`}
                     >
                       <Ionicons
                         name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
                         size={30}
                         color={colors.primary}
+                        accessibilityElementsHidden={true}
                       />
                     </TouchableOpacity>
                   </View>
@@ -455,6 +472,8 @@ export default function MangaDetailScreen() {
                     style={styles.title}
                     numberOfLines={2}
                     ellipsizeMode="tail"
+                    accessibilityRole="header"
+                    accessibilityLevel={1}
                   >
                     {mangaDetails.title}
                   </Text>
@@ -467,7 +486,12 @@ export default function MangaDetailScreen() {
                     />
                   )}
                   <View style={styles.statusContainer}>
-                    <Text style={styles.statusText}>{mangaDetails.status}</Text>
+                    <Text 
+                      style={styles.statusText}
+                      accessibilityLabel={`Publication status: ${mangaDetails.status}`}
+                    >
+                      {mangaDetails.status}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -613,8 +637,16 @@ export default function MangaDetailScreen() {
               flashListRef.current?.scrollToEnd({ animated: true });
             }}
             style={styles.scrollToBottomButtonTouchable}
+            accessibilityRole="button"
+            accessibilityLabel="Scroll to bottom"
+            accessibilityHint="Scroll to the last chapter"
           >
-            <Ionicons name="arrow-down" size={20} color="white" />
+            <Ionicons 
+              name="arrow-down" 
+              size={20} 
+              color="white"
+              accessibilityElementsHidden={true}
+            />
           </TouchableOpacity>
         </Animated.View>
 
@@ -637,8 +669,16 @@ export default function MangaDetailScreen() {
               });
             }}
             style={styles.scrollToTopButtonTouchable}
+            accessibilityRole="button"
+            accessibilityLabel="Scroll to top"
+            accessibilityHint="Scroll to the manga details"
           >
-            <Ionicons name="arrow-up" size={20} color="white" />
+            <Ionicons 
+              name="arrow-up" 
+              size={20} 
+              color="white"
+              accessibilityElementsHidden={true}
+            />
           </TouchableOpacity>
         </Animated.View>
       </View>

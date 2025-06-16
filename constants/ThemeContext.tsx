@@ -48,11 +48,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ? newTheme(theme)
         : newTheme;
 
-      await setAppSettings({
+      // Batch the state and settings update
+      setThemeState(resolvedTheme);
+      
+      // Update settings in background
+      setAppSettings({
         ...currentSettings,
         theme: resolvedTheme
+      }).catch(error => {
+        console.error('Error saving theme to storage:', error);
+        // Revert state if storage fails
+        setThemeState(theme);
       });
-      setThemeState(resolvedTheme);
     } catch (error) {
       console.error('Error saving theme:', error);
     }
@@ -72,15 +79,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const setAccentColor = async (color: string | undefined) => {
     try {
       const currentSettings = await getAppSettings();
-      await setAppSettings({
-        ...currentSettings,
-        accentColor: color
-      });
-
+      
+      // Update state immediately for better UX
+      setAccentColorState(color);
+      
       // Update colors object directly
       updateAccentColor(color, theme === 'system' ? systemColorScheme : theme as ColorScheme);
 
-      setAccentColorState(color);
+      // Save to storage in background
+      setAppSettings({
+        ...currentSettings,
+        accentColor: color
+      }).catch(error => {
+        console.error('Error saving accent color to storage:', error);
+        // Could revert accent color state here if needed
+      });
     } catch (error) {
       console.error('Error saving accent color:', error);
     }

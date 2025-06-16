@@ -19,11 +19,14 @@ import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MANGA_API_URL } from '@/constants/Config';
 import MangaCard from '@/components/MangaCard';
+import { RecentlyReadSkeleton, TrendingSkeleton, NewReleasesSkeleton, FeaturedMangaSkeleton } from '@/components/SkeletonLoading';
+import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
+import { PageTransition } from '@/components/PageTransition';
 import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
-import { MangaItem } from '@/types';
+import { MangaItem, RecentMangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -50,7 +53,7 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
   
-  const [recentlyReadManga, setRecentlyReadManga] = useState<any[]>([]);
+  const [recentlyReadManga, setRecentlyReadManga] = useState<RecentMangaItem[]>([]);
   const [isRecentMangaLoading, setIsRecentMangaLoading] = useState<boolean>(true);
 
   const fetchMangaData = useCallback(async () => {
@@ -133,9 +136,20 @@ export default function HomeScreen() {
   const renderSectionTitle = useCallback((title: string, iconName: keyof typeof Ionicons.glyphMap) => (
     <View style={styles.sectionTitleContainer}>
       <View style={[styles.iconBackground, { backgroundColor: themeColors.primary + '20' }]}>
-        <Ionicons name={iconName} size={20} color={themeColors.primary} />
+        <Ionicons 
+          name={iconName} 
+          size={20} 
+          color={themeColors.primary}
+          accessibilityElementsHidden={true}
+        />
       </View>
-      <Text style={[styles.sectionTitle, { color: themeColors.text }]}>{title}</Text>
+      <Text 
+        style={[styles.sectionTitle, { color: themeColors.text }]}
+        accessibilityRole="header"
+        accessibilityLevel={2}
+      >
+        {title}
+      </Text>
     </View>
   ), [themeColors]);
 
@@ -147,8 +161,15 @@ export default function HomeScreen() {
       ]}
       onPress={() => router.navigate(`/manga/${item.id}`)}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`View ${item.title}`}
+      accessibilityHint={item.rank ? `Ranked #${item.rank} in trending` : "Currently trending manga"}
     >
-      <Image source={{ uri: item.imageUrl }} style={styles.trendingImage} />
+      <Image 
+        source={{ uri: item.imageUrl }} 
+        style={styles.trendingImage}
+        accessibilityLabel={`Cover image for ${item.title}`}
+      />
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.9)']}
         style={styles.trendingGradient}
@@ -167,7 +188,7 @@ export default function HomeScreen() {
     </TouchableOpacity>
   ), [router, themeColors.primary]);
   
-  const renderRecentlyReadItem = useCallback(({ item, index }: { item: any; index: number }) => {
+  const renderRecentlyReadItem = useCallback(({ item, index }: { item: RecentMangaItem; index: number }) => {
     const lastReadChapter = item.lastReadChapter ? `Chapter ${item.lastReadChapter}` : 'Not started';
     
     return (
@@ -221,11 +242,7 @@ export default function HomeScreen() {
 
   const renderContinueReadingSection = useCallback(() => {
     if (isRecentMangaLoading) {
-      return (
-        <View style={[styles.loadingContainer, { height: 200, backgroundColor: 'transparent' }]}>
-          <ActivityIndicator size="small" color={themeColors.primary} />
-        </View>
-      );
+      return <RecentlyReadSkeleton />;
     }
 
     if (recentlyReadManga.length === 0) {
@@ -256,6 +273,15 @@ export default function HomeScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.recentlyReadList}
         decelerationRate="fast"
+        getItemLayout={(data, index) => ({
+          length: RECENTLY_READ_CARD_WIDTH + 12,
+          offset: (RECENTLY_READ_CARD_WIDTH + 12) * index,
+          index,
+        })}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={100}
+        windowSize={8}
       />
     );
   }, [isRecentMangaLoading, recentlyReadManga, themeColors, router, renderRecentlyReadItem]);
@@ -297,12 +323,27 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color={themeColors.primary} style={styles.loadingIndicator} />
-          <Text style={[styles.loadingText, { color: themeColors.text }]}>
-            Loading your manga...
-          </Text>
-        </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.content]}
+        >
+          <FeaturedMangaSkeleton />
+          
+          <View style={styles.section}>
+            {renderSectionTitle('Continue Reading', 'book')}
+            <RecentlyReadSkeleton />
+          </View>
+
+          <View style={styles.section}>
+            {renderSectionTitle('Trending Now', 'trophy')}
+            <TrendingSkeleton />
+          </View>
+
+          <View style={styles.section}>
+            {renderSectionTitle('New Releases', 'sparkles')}
+            <NewReleasesSkeleton />
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -314,11 +355,9 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content]}
         refreshControl={
-          <RefreshControl
+          <SmoothRefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            colors={[themeColors.primary]}
-            tintColor={themeColors.primary}
           />
         }
       >
@@ -335,32 +374,49 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
-            {renderFeaturedManga()}
+            <PageTransition transitionType="fade" duration={400}>
+              {renderFeaturedManga()}
+            </PageTransition>
 
-            <View style={styles.section}>
-              {renderSectionTitle('Continue Reading', 'book')}
-              {renderContinueReadingSection()}
-            </View>
+            <PageTransition transitionType="slide" duration={400} delay={100}>
+              <View style={styles.section}>
+                {renderSectionTitle('Continue Reading', 'book')}
+                {renderContinueReadingSection()}
+              </View>
+            </PageTransition>
 
-            <View style={styles.section}>
-              {renderSectionTitle('Trending Now', 'trophy')}
-              <FlatList
-                data={mostViewedManga.slice(1)}
-                renderItem={renderTrendingItem}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.trendingList}
-                decelerationRate="fast"
-                snapToInterval={TRENDING_CARD_WIDTH + 12}
-                snapToAlignment="start"
-              />
-            </View>
+            <PageTransition transitionType="slide" duration={400} delay={200}>
+              <View style={styles.section}>
+                {renderSectionTitle('Trending Now', 'trophy')}
+                <FlatList
+                  data={mostViewedManga.slice(1)}
+                  renderItem={renderTrendingItem}
+                  keyExtractor={(item) => item.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingList}
+                  decelerationRate="fast"
+                  snapToInterval={TRENDING_CARD_WIDTH + 12}
+                  snapToAlignment="start"
+                  getItemLayout={(data, index) => ({
+                    length: TRENDING_CARD_WIDTH + 12,
+                    offset: (TRENDING_CARD_WIDTH + 12) * index,
+                    index,
+                  })}
+                  removeClippedSubviews={true}
+                  maxToRenderPerBatch={5}
+                  updateCellsBatchingPeriod={100}
+                  windowSize={10}
+                />
+              </View>
+            </PageTransition>
 
-            <View style={styles.section}>
-              {renderSectionTitle('New Releases', 'sparkles')}
-              {renderNewReleaseGrid()}
-            </View>
+            <PageTransition transitionType="slide" duration={400} delay={300}>
+              <View style={styles.section}>
+                {renderSectionTitle('New Releases', 'sparkles')}
+                {renderNewReleaseGrid()}
+              </View>
+            </PageTransition>
           </>
         )}
       </ScrollView>
