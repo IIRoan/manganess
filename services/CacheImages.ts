@@ -19,6 +19,8 @@ const CACHE_METADATA_KEY = 'image_cache_metadata';
 const MAX_CACHE_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_CACHE_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 const SEARCH_CACHE_AGE = 60 * 60 * 1000; // 1 hour for search temp cache
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_DELAY_BASE = 1000; // 1 second base delay
 
 export type CacheContext = 'manga' | 'search' | 'bookmark';
 
@@ -47,6 +49,7 @@ class ImageCache {
   private initialized: boolean = false;
   private metadata: Map<string, CacheMetadata> = new Map();
   private metadataLoaded: boolean = false;
+  private downloadQueue: Map<string, Promise<string>> = new Map();
 
   private constructor() {}
 
@@ -123,6 +126,43 @@ class ImageCache {
     return `${folder}${filename}.jpg`;
   }
 
+  private async retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    maxAttempts: number = MAX_RETRY_ATTEMPTS
+  ): Promise<T> {
+    let lastError: Error;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
+        
+        if (attempt === maxAttempts) {
+          throw lastError;
+        }
+        
+        // Exponential backoff with jitter
+        const delay = RETRY_DELAY_BASE * Math.pow(2, attempt - 1) + Math.random() * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        console.log(`Retry attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`);
+      }
+    }
+    
+    throw lastError!;
+  }
+
+  private async downloadImageWithRetry(url: string, filePath: string): Promise<boolean> {
+    return this.retryWithBackoff(async () => {
+      const downloadResult = await FileSystem.downloadAsync(url, filePath);
+      if (downloadResult.status !== 200) {
+        throw new Error(`Download failed with status: ${downloadResult.status}`);
+      }
+      return true;
+    });
+  }
+
   async getCachedImagePath(
     url: string, 
     context: CacheContext = 'search', 
@@ -151,6 +191,12 @@ class ImageCache {
     const filename = `search_${urlHash.substring(0, 16)}`;
     const filePath = this.getCachePath('search', filename);
     
+    // Check if we're already downloading this image
+    const existingDownload = this.downloadQueue.get(url);
+    if (existingDownload) {
+      return existingDownload;
+    }
+    
     const fileInfo = await FileSystem.getInfoAsync(filePath);
     
     // Check if file exists and is not too old
@@ -164,29 +210,39 @@ class ImageCache {
       }
     }
     
-    // Download new image
-    try {
-      const downloadResult = await FileSystem.downloadAsync(url, filePath);
-      if (downloadResult.status === 200) {
-        // Store metadata for cleanup
-        const fileInfo = await FileSystem.getInfoAsync(filePath);
-        this.metadata.set(filename, {
-          originalUrl: url,
-          cachedPath: filePath,
-          lastAccessed: Date.now(),
-          lastUpdated: Date.now(),
-          context: 'search',
-          fileSize: fileInfo.size || 0,
-          urlHash: simpleHash(url)
-        });
-        await this.saveMetadata();
-        return filePath;
-      }
-    } catch (error) {
-      console.error('Failed to download search image:', error);
-    }
+    // Start download and add to queue
+    const downloadPromise = this.downloadSearchImage(url, filePath, filename);
+    this.downloadQueue.set(url, downloadPromise);
     
-    return url;
+    try {
+      const result = await downloadPromise;
+      return result;
+    } finally {
+      this.downloadQueue.delete(url);
+    }
+  }
+
+  private async downloadSearchImage(url: string, filePath: string, filename: string): Promise<string> {
+    try {
+      await this.downloadImageWithRetry(url, filePath);
+      
+      // Store metadata for cleanup
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      this.metadata.set(filename, {
+        originalUrl: url,
+        cachedPath: filePath,
+        lastAccessed: Date.now(),
+        lastUpdated: Date.now(),
+        context: 'search',
+        fileSize: fileInfo.size || 0,
+        urlHash: simpleHash(url)
+      });
+      await this.saveMetadata();
+      return filePath;
+    } catch (error) {
+      console.error('Failed to download search image after retries:', error);
+      return url; // Return original URL as fallback
+    }
   }
 
   private async getMangaImagePath(url: string, mangaId: string): Promise<string> {
@@ -218,28 +274,27 @@ class ImageCache {
     
     // Download new image
     try {
-      const downloadResult = await FileSystem.downloadAsync(url, filePath);
-      if (downloadResult.status === 200) {
-        const fileInfo = await FileSystem.getInfoAsync(filePath);
-        this.metadata.set(cacheKey, {
-          mangaId,
-          originalUrl: url,
-          cachedPath: filePath,
-          lastAccessed: Date.now(),
-          lastUpdated: Date.now(),
-          context: 'manga',
-          fileSize: fileInfo.size || 0,
-          urlHash: simpleHash(url)
-        });
-        await this.saveMetadata();
-        
-        // Clean up if cache is getting too large
-        await this.manageCacheSize();
-        
-        return filePath;
-      }
+      await this.downloadImageWithRetry(url, filePath);
+      
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      this.metadata.set(cacheKey, {
+        mangaId,
+        originalUrl: url,
+        cachedPath: filePath,
+        lastAccessed: Date.now(),
+        lastUpdated: Date.now(),
+        context: 'manga',
+        fileSize: fileInfo.size || 0,
+        urlHash: simpleHash(url)
+      });
+      await this.saveMetadata();
+      
+      // Clean up if cache is getting too large
+      await this.manageCacheSize();
+      
+      return filePath;
     } catch (error) {
-      console.error('Failed to download manga image:', error);
+      console.error('Failed to download manga image after retries:', error);
     }
     
     return url;
