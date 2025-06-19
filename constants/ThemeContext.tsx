@@ -16,9 +16,13 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [theme, setThemeState] = useState<ThemeType>('system');
-  const [accentColor, setAccentColorState] = useState<string | undefined>(undefined);
+  const [accentColor, setAccentColorState] = useState<string | undefined>(
+    undefined
+  );
   const systemColorScheme = useColorScheme() as ColorScheme;
 
   useEffect(() => {
@@ -39,23 +43,24 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  const setTheme = async (newTheme: ThemeType | ((prevTheme: ThemeType) => ThemeType)) => {
+  const setTheme = async (
+    newTheme: ThemeType | ((prevTheme: ThemeType) => ThemeType)
+  ) => {
     try {
       const currentSettings = await getAppSettings();
 
       // Handle both direct value and function that uses previous value
-      const resolvedTheme = typeof newTheme === 'function'
-        ? newTheme(theme)
-        : newTheme;
+      const resolvedTheme =
+        typeof newTheme === 'function' ? newTheme(theme) : newTheme;
 
       // Batch the state and settings update
       setThemeState(resolvedTheme);
-      
+
       // Update settings in background
       setAppSettings({
         ...currentSettings,
-        theme: resolvedTheme
-      }).catch(error => {
+        theme: resolvedTheme,
+      }).catch((error) => {
         console.error('Error saving theme to storage:', error);
         // Revert state if storage fails
         setThemeState(theme);
@@ -68,10 +73,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toggleTheme = () => {
     setTheme((prevTheme: ThemeType): ThemeType => {
       switch (prevTheme) {
-        case 'light': return 'dark';
-        case 'dark': return 'system';
-        case 'system': return 'light';
-        default: return 'system';
+        case 'light':
+          return 'dark';
+        case 'dark':
+          return 'system';
+        case 'system':
+          return 'light';
+        default:
+          return 'system';
       }
     });
   };
@@ -79,18 +88,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const setAccentColor = async (color: string | undefined) => {
     try {
       const currentSettings = await getAppSettings();
-      
+
       // Update state immediately for better UX
       setAccentColorState(color);
-      
+
       // Update colors object directly
-      updateAccentColor(color, theme === 'system' ? systemColorScheme : theme as ColorScheme);
+      updateAccentColor(
+        color,
+        theme === 'system' ? systemColorScheme : (theme as ColorScheme)
+      );
 
       // Save to storage in background
       setAppSettings({
         ...currentSettings,
-        accentColor: color
-      }).catch(error => {
+        accentColor: color,
+      }).catch((error) => {
         console.error('Error saving accent color to storage:', error);
         // Could revert accent color state here if needed
       });
@@ -100,15 +112,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   return (
-    <ThemeContext.Provider value={{
-      theme,
-      systemTheme: systemColorScheme,
-      setTheme,
-      toggleTheme,
-      actualTheme: theme === 'system' ? systemColorScheme : theme as 'light' | 'dark',
-      accentColor,
-      setAccentColor
-    }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        systemTheme: systemColorScheme,
+        setTheme,
+        toggleTheme,
+        actualTheme:
+          theme === 'system' ? systemColorScheme : (theme as 'light' | 'dark'),
+        accentColor,
+        setAccentColor,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

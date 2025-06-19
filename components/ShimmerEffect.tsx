@@ -18,7 +18,6 @@ export const ShimmerEffect: React.FC<ShimmerEffectProps> = ({
   style,
 }) => {
   const { actualTheme } = useTheme();
-  const colors = Colors[actualTheme];
   const shimmerAnimation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -87,15 +86,11 @@ export const ShimmerCard: React.FC<{ style?: ViewStyle }> = ({ style }) => (
   </View>
 );
 
-export const ShimmerText: React.FC<{ 
-  lines?: number; 
+export const ShimmerText: React.FC<{
+  lines?: number;
   width?: string;
   style?: ViewStyle;
-}> = ({ 
-  lines = 3, 
-  width = '100%',
-  style 
-}) => (
+}> = ({ lines = 3, width = '100%', style }) => (
   <View style={style}>
     {Array.from({ length: lines }).map((_, index) => (
       <ShimmerEffect

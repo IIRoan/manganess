@@ -23,7 +23,7 @@ class PerformanceMonitor {
 
   startMeasure(name: string): void {
     if (!this.isEnabled) return;
-    
+
     this.metrics.set(name, {
       name,
       startTime: performance.now(),
@@ -32,7 +32,7 @@ class PerformanceMonitor {
 
   endMeasure(name: string): number | null {
     if (!this.isEnabled) return null;
-    
+
     const metric = this.metrics.get(name);
     if (!metric) {
       console.warn(`Performance metric "${name}" was not started`);
@@ -41,11 +41,12 @@ class PerformanceMonitor {
 
     const endTime = performance.now();
     const duration = endTime - metric.startTime;
-    
+
     metric.endTime = endTime;
     metric.duration = duration;
 
-    if (duration > 100) { // Log slow operations (>100ms)
+    if (duration > 100) {
+      // Log slow operations (>100ms)
       console.log(`[Performance] ${name}: ${duration.toFixed(2)}ms`);
     }
 
@@ -54,7 +55,7 @@ class PerformanceMonitor {
 
   measureAsync<T>(name: string, operation: () => Promise<T>): Promise<T> {
     if (!this.isEnabled) return operation();
-    
+
     this.startMeasure(name);
     return operation().finally(() => {
       this.endMeasure(name);
@@ -63,7 +64,7 @@ class PerformanceMonitor {
 
   measureSync<T>(name: string, operation: () => T): T {
     if (!this.isEnabled) return operation();
-    
+
     this.startMeasure(name);
     try {
       return operation();
@@ -95,43 +96,49 @@ export const performanceMonitor = PerformanceMonitor.getInstance();
 export function useRenderTime(componentName: string) {
   if (__DEV__) {
     performanceMonitor.startMeasure(`render:${componentName}`);
-    
+
     return () => {
       performanceMonitor.endMeasure(`render:${componentName}`);
     };
   }
-  
+
   return () => {}; // No-op in production
 }
 
 // Decorator for measuring function execution time
-export function measureExecutionTime(target: any, propertyName: string, descriptor: PropertyDescriptor) {
+export function measureExecutionTime(
+  target: any,
+  propertyName: string,
+  descriptor: PropertyDescriptor
+) {
   if (!__DEV__) return descriptor;
-  
+
   const method = descriptor.value;
-  
-  descriptor.value = function(...args: any[]) {
+
+  descriptor.value = function (...args: any[]) {
     const functionName = `${target.constructor.name}.${propertyName}`;
-    return performanceMonitor.measureSync(functionName, () => method.apply(this, args));
+    return performanceMonitor.measureSync(functionName, () =>
+      method.apply(this, args)
+    );
   };
-  
+
   return descriptor;
 }
 
 // Utility for measuring component lifecycle
 export function measureComponentLifecycle(ComponentClass: any) {
   if (!__DEV__) return ComponentClass;
-  
+
   const originalRender = ComponentClass.prototype.render;
   const componentName = ComponentClass.name;
-  
-  ComponentClass.prototype.render = function() {
+
+  ComponentClass.prototype.render = function () {
     const endMeasure = useRenderTime(componentName);
     const result = originalRender.call(this);
     endMeasure();
     return result;
   };
-  
+
   return ComponentClass;
 }
 

@@ -24,7 +24,7 @@ export const SwipeableMangaCard: React.FC<SwipeableMangaCardProps> = ({
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const haptics = useHapticFeedback();
-  
+
   const translateX = useRef(new Animated.Value(0)).current;
   const actionOpacity = useRef(new Animated.Value(0)).current;
 

@@ -1,14 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  NavigationHistory, 
-  NavigationContext, 
-  NavigationEntry, 
+import {
+  NavigationHistory,
+  NavigationContext,
+  NavigationEntry,
   NavigationContextType,
   NavigationSettings,
   NavigationState,
   BreadcrumbItem,
   NavigationAnalytics,
-  LegacyNavigationHistory
+  LegacyNavigationHistory,
 } from '../types/navigation';
 
 const HISTORY_KEY = 'navigation_history_v2';
@@ -33,7 +33,7 @@ class NavigationHistoryService {
   private analytics: NavigationAnalytics | null = null;
   private settings: NavigationSettings = DEFAULT_SETTINGS;
   private sessionId: string = '';
-  private saveQueue: Array<() => Promise<void>> = [];
+  private saveQueue: (() => Promise<void>)[] = [];
   private isProcessingSaveQueue = false;
   private performanceMetrics = {
     addToHistoryTime: 0,
@@ -60,7 +60,7 @@ class NavigationHistoryService {
   private async initializeHistory(): Promise<NavigationHistory> {
     try {
       const historyData = await AsyncStorage.getItem(HISTORY_KEY);
-      
+
       if (historyData) {
         const parsed: NavigationHistory = JSON.parse(historyData);
         // Validate version and migrate if needed
@@ -69,13 +69,13 @@ class NavigationHistoryService {
         }
         return parsed;
       }
-      
+
       // Check for legacy history to migrate
       const legacyData = await AsyncStorage.getItem(LEGACY_HISTORY_KEY);
       if (legacyData) {
         return await this.migrateFromLegacy();
       }
-      
+
       // Create new history
       return this.createNewHistory();
     } catch (error) {
@@ -88,28 +88,29 @@ class NavigationHistoryService {
     try {
       const legacyData = await AsyncStorage.getItem(LEGACY_HISTORY_KEY);
       const newHistory = this.createNewHistory();
-      
+
       if (legacyData) {
         const legacy: LegacyNavigationHistory = JSON.parse(legacyData);
         const browseContext = this.createContext('browse');
-        
+
         // Migrate legacy paths to new structure
         legacy.paths.forEach((path, index) => {
           const entry: NavigationEntry = {
             path,
             title: this.getPageTitle(path),
-            timestamp: legacy.lastUpdated - (legacy.paths.length - index) * 1000,
+            timestamp:
+              legacy.lastUpdated - (legacy.paths.length - index) * 1000,
             context: this.determineContext(path),
             metadata: this.extractMetadata(path),
           };
           browseContext.stack.push(entry);
           newHistory.globalStack.push(entry);
         });
-        
+
         newHistory.contexts.browse = browseContext;
         newHistory.currentContext = 'browse';
       }
-      
+
       await this.saveHistory(newHistory);
       return newHistory;
     } catch (error) {
@@ -158,25 +159,25 @@ class NavigationHistoryService {
 
   private extractMetadata(path: string): NavigationEntry['metadata'] {
     const metadata: NavigationEntry['metadata'] = {};
-    
+
     // Extract manga ID from path
     const mangaMatch = path.match(/\/manga\/([^\/]+)/);
     if (mangaMatch) {
       metadata.mangaId = mangaMatch[1];
     }
-    
+
     // Extract chapter number
     const chapterMatch = path.match(/\/chapter\/([^\/]+)/);
     if (chapterMatch) {
       metadata.chapterNumber = parseInt(chapterMatch[1], 10);
     }
-    
+
     // Extract search query (if present in path)
     const searchMatch = path.match(/[?&]q=([^&]+)/);
     if (searchMatch) {
       metadata.searchQuery = decodeURIComponent(searchMatch[1]);
     }
-    
+
     return metadata;
   }
 
@@ -187,20 +188,20 @@ class NavigationHistoryService {
       '/bookmarks': 'Bookmarks',
       '/settings': 'Settings',
     };
-    
+
     if (titleMap[path]) {
       return titleMap[path];
     }
-    
+
     if (path.includes('/manga/') && path.includes('/chapter/')) {
       const chapterMatch = path.match(/\/chapter\/([^\/]+)/);
       return chapterMatch ? `Chapter ${chapterMatch[1]}` : 'Chapter';
     }
-    
+
     if (path.includes('/manga/')) {
       return 'Manga Details';
     }
-    
+
     return 'Page';
   }
 
@@ -245,10 +246,10 @@ class NavigationHistoryService {
     metricKey: keyof typeof this.performanceMetrics
   ): Promise<T> | T {
     const start = Date.now();
-    
+
     try {
       const result = operation();
-      
+
       if (result instanceof Promise) {
         return result.finally(() => {
           const duration = Date.now() - start;
@@ -266,14 +267,18 @@ class NavigationHistoryService {
     }
   }
 
-  private updatePerformanceMetric(key: keyof typeof this.performanceMetrics, duration: number): void {
+  private updatePerformanceMetric(
+    key: keyof typeof this.performanceMetrics,
+    duration: number
+  ): void {
     if (key === 'totalOperations') {
       this.performanceMetrics[key]++;
     } else {
       // Calculate running average
       const currentCount = this.performanceMetrics.totalOperations;
-      const currentAvg = this.performanceMetrics[key as keyof typeof this.performanceMetrics];
-      this.performanceMetrics[key as keyof typeof this.performanceMetrics] = 
+      const currentAvg =
+        this.performanceMetrics[key as keyof typeof this.performanceMetrics];
+      this.performanceMetrics[key as keyof typeof this.performanceMetrics] =
         (currentAvg * currentCount + duration) / (currentCount + 1);
     }
   }
@@ -300,57 +305,72 @@ class NavigationHistoryService {
   private async updateAnalyticsAsync(entry: NavigationEntry): Promise<void> {
     try {
       let analytics = this.analytics;
-      
+
       if (!analytics) {
         const analyticsData = await AsyncStorage.getItem(ANALYTICS_KEY);
-        analytics = analyticsData ? JSON.parse(analyticsData) : {
-          totalNavigations: 0,
-          averageSessionLength: 0,
-          mostVisitedPaths: {},
-          navigationPatterns: [],
-          gestureUsageStats: {
-            swipeBack: 0,
-            tapBack: 0,
-            breadcrumbUsage: 0,
-          },
-        };
+        analytics = analyticsData
+          ? JSON.parse(analyticsData)
+          : {
+              totalNavigations: 0,
+              averageSessionLength: 0,
+              mostVisitedPaths: {},
+              navigationPatterns: [],
+              gestureUsageStats: {
+                swipeBack: 0,
+                tapBack: 0,
+                breadcrumbUsage: 0,
+              },
+            };
         this.analytics = analytics;
       }
-      
+
       analytics.totalNavigations++;
-      analytics.mostVisitedPaths[entry.path] = (analytics.mostVisitedPaths[entry.path] || 0) + 1;
-      
+      analytics.mostVisitedPaths[entry.path] =
+        (analytics.mostVisitedPaths[entry.path] || 0) + 1;
+
       // Update patterns (last 10 paths)
       analytics.navigationPatterns.push(entry.path);
       if (analytics.navigationPatterns.length > 10) {
         analytics.navigationPatterns.shift();
       }
-      
+
       await AsyncStorage.setItem(ANALYTICS_KEY, JSON.stringify(analytics));
     } catch (error) {
       console.error('Error updating analytics:', error);
     }
   }
 
-  async addToHistory(path: string, options: {
-    title?: string;
-    context?: NavigationContextType;
-    metadata?: Partial<NavigationEntry['metadata']>;
-  } = {}): Promise<void> {
+  async addToHistory(
+    path: string,
+    options: {
+      title?: string;
+      context?: NavigationContextType;
+      metadata?: Partial<NavigationEntry['metadata']>;
+    } = {}
+  ): Promise<void> {
     return this.measurePerformance(async () => {
       try {
         const history = await this.getHistory();
         const contextType = options.context || this.determineContext(path);
-        
+
         // Don't add if it's the same as the last entry in global stack
         const lastEntry = history.globalStack[history.globalStack.length - 1];
         if (lastEntry && lastEntry.path === path) {
           console.log('🔍 Navigation Debug - Skipping duplicate path:', path);
           return;
         }
-        
+
+        // NEVER store chapter routes in history - they should only be accessible via SwipeChapterItem
+        if (path.includes('/manga/') && path.includes('/chapter/')) {
+          console.log(
+            '🚫 Navigation Debug - Skipping chapter route from history:',
+            path
+          );
+          return;
+        }
+
         console.log('🔍 Navigation Debug - Adding to history:', path);
-        
+
         // Create navigation entry
         const entry: NavigationEntry = {
           path,
@@ -362,10 +382,10 @@ class NavigationHistoryService {
             ...options.metadata,
           },
         };
-        
+
         // Add to global stack (primary navigation tracking)
         history.globalStack.push(entry);
-        
+
         // Also maintain context stack for analytics
         let context = history.contexts[contextType];
         if (!context) {
@@ -376,15 +396,18 @@ class NavigationHistoryService {
         context.metadata.lastAccessed = Date.now();
         context.metadata.totalVisits++;
         history.currentContext = contextType;
-        
+
         // Keep global stack manageable - this is the key for accurate navigation
         if (history.globalStack.length > history.settings.maxHistorySize) {
-          history.globalStack.splice(0, history.globalStack.length - history.settings.maxHistorySize);
+          history.globalStack.splice(
+            0,
+            history.globalStack.length - history.settings.maxHistorySize
+          );
         }
-        
+
         // Also prune context stacks
         this.pruneHistory(context, history.settings.maxHistorySize);
-        
+
         await this.saveHistory(history);
         this.updateAnalytics(entry);
         this.updatePerformanceMetric('totalOperations', 0);
@@ -398,27 +421,38 @@ class NavigationHistoryService {
     return this.measurePerformance(async () => {
       try {
         const history = await this.getHistory();
-        
+
         console.log('🔍 Navigation Debug - Current Path:', currentPath);
-        console.log('🔍 Navigation Debug - Global Stack:', history.globalStack.map(entry => entry.path));
-        
+        console.log(
+          '🔍 Navigation Debug - Global Stack:',
+          history.globalStack.map((entry) => entry.path)
+        );
+
         // Special handling for chapter pages - go back to manga detail
-        if (currentPath.includes('/manga/') && currentPath.includes('/chapter/')) {
+        if (
+          currentPath.includes('/manga/') &&
+          currentPath.includes('/chapter/')
+        ) {
           const mangaMatch = currentPath.match(/\/manga\/([^\/]+)/);
           if (mangaMatch) {
             const previousRoute = `/manga/${mangaMatch[1]}`;
-            console.log('🔍 Navigation Debug - Chapter -> Manga:', previousRoute);
+            console.log(
+              '🔍 Navigation Debug - Chapter -> Manga:',
+              previousRoute
+            );
             return previousRoute;
           }
           return DEFAULT_ROUTE;
         }
-        
+
         // Use global stack for simple, accurate navigation
         if (history.globalStack.length < 2) {
-          console.log('🔍 Navigation Debug - Insufficient history, using default');
+          console.log(
+            '🔍 Navigation Debug - Insufficient history, using default'
+          );
           return DEFAULT_ROUTE;
         }
-        
+
         // Find the current path in the global stack (search from end)
         let currentIndex = -1;
         for (let i = history.globalStack.length - 1; i >= 0; i--) {
@@ -427,25 +461,28 @@ class NavigationHistoryService {
             break;
           }
         }
-        
+
         console.log('🔍 Navigation Debug - Current Index:', currentIndex);
-        
+
         // If current path found and there's a previous entry
         if (currentIndex > 0) {
           const previousRoute = history.globalStack[currentIndex - 1].path;
           console.log('🔍 Navigation Debug - Found previous:', previousRoute);
           return previousRoute;
         }
-        
+
         // If current path not found or is first, return the last entry that's not current
         for (let i = history.globalStack.length - 1; i >= 0; i--) {
           if (history.globalStack[i].path !== currentPath) {
             const previousRoute = history.globalStack[i].path;
-            console.log('🔍 Navigation Debug - Using last different path:', previousRoute);
+            console.log(
+              '🔍 Navigation Debug - Using last different path:',
+              previousRoute
+            );
             return previousRoute;
           }
         }
-        
+
         console.log('🔍 Navigation Debug - Fallback to default');
         return DEFAULT_ROUTE;
       } catch (error) {
@@ -455,35 +492,43 @@ class NavigationHistoryService {
     }, 'getPreviousRouteTime');
   }
 
-  private async getPreviousFromReading(chapterPath: string, history: NavigationHistory): Promise<string> {
+  private async getPreviousFromReading(
+    chapterPath: string,
+    history: NavigationHistory
+  ): Promise<string> {
     // Extract manga ID from chapter path
     const mangaMatch = chapterPath.match(/\/manga\/([^\/]+)/);
     if (!mangaMatch) {
       return DEFAULT_ROUTE;
     }
-    
+
     const mangaId = mangaMatch[1];
     const mangaPath = `/manga/${mangaId}`;
-    
+
     // Look for the manga detail page in browse context
     const browseContext = history.contexts.browse;
     if (browseContext) {
-      const mangaDetailIndex = browseContext.stack.findLastIndex(entry => entry.path === mangaPath);
+      const mangaDetailIndex = browseContext.stack.findLastIndex(
+        (entry) => entry.path === mangaPath
+      );
       if (mangaDetailIndex > 0) {
         return browseContext.stack[mangaDetailIndex - 1].path;
       }
     }
-    
+
     // Fallback to manga detail page
     return mangaPath;
   }
 
-  private findPreviousContext(history: NavigationHistory, currentContextType: NavigationContextType): NavigationContext | null {
+  private findPreviousContext(
+    history: NavigationHistory,
+    currentContextType: NavigationContextType
+  ): NavigationContext | null {
     const contexts = Object.values(history.contexts);
     const sortedContexts = contexts
-      .filter(ctx => ctx.type !== currentContextType)
+      .filter((ctx) => ctx.type !== currentContextType)
       .sort((a, b) => b.metadata.lastAccessed - a.metadata.lastAccessed);
-    
+
     return sortedContexts[0] || null;
   }
 
@@ -492,7 +537,7 @@ class NavigationHistoryService {
       const history = await this.getHistory();
       const contextType = this.determineContext(currentPath);
       const context = history.contexts[contextType];
-      
+
       const state: NavigationState = {
         canGoBack: false,
         canGoForward: false,
@@ -501,22 +546,29 @@ class NavigationHistoryService {
         breadcrumbs: [],
         suggestions: [],
       };
-      
+
       if (context) {
-        const currentIndex = context.stack.findLastIndex(entry => entry.path === currentPath);
-        state.canGoBack = currentIndex > 0 || this.findPreviousContext(history, contextType) !== null;
+        const currentIndex = context.stack.findLastIndex(
+          (entry) => entry.path === currentPath
+        );
+        state.canGoBack =
+          currentIndex > 0 ||
+          this.findPreviousContext(history, contextType) !== null;
         state.currentDepth = context.stack.length;
         state.contextHistory = context.stack.slice(-10); // Last 10 entries
-        
+
         if (history.settings.showBreadcrumbs) {
           state.breadcrumbs = this.generateBreadcrumbs(currentPath, context);
         }
-        
+
         if (history.settings.enableSmartSuggestions) {
-          state.suggestions = await this.generateSuggestions(currentPath, history);
+          state.suggestions = await this.generateSuggestions(
+            currentPath,
+            history
+          );
         }
       }
-      
+
       return state;
     } catch (error) {
       console.error('Error getting navigation state:', error);
@@ -531,9 +583,12 @@ class NavigationHistoryService {
     }
   }
 
-  private generateBreadcrumbs(currentPath: string, context: NavigationContext): BreadcrumbItem[] {
+  private generateBreadcrumbs(
+    currentPath: string,
+    context: NavigationContext
+  ): BreadcrumbItem[] {
     const breadcrumbs: BreadcrumbItem[] = [];
-    
+
     // Add home breadcrumb
     breadcrumbs.push({
       path: '/',
@@ -541,7 +596,7 @@ class NavigationHistoryService {
       icon: 'home',
       isClickable: true,
     });
-    
+
     // Add context-specific breadcrumbs
     if (currentPath.includes('/manga/')) {
       breadcrumbs.push({
@@ -550,7 +605,7 @@ class NavigationHistoryService {
         icon: 'search',
         isClickable: true,
       });
-      
+
       if (currentPath.includes('/chapter/')) {
         const mangaMatch = currentPath.match(/\/manga\/([^\/]+)/);
         if (mangaMatch) {
@@ -561,7 +616,7 @@ class NavigationHistoryService {
             isClickable: true,
           });
         }
-        
+
         const chapterMatch = currentPath.match(/\/chapter\/([^\/]+)/);
         if (chapterMatch) {
           breadcrumbs.push({
@@ -573,30 +628,33 @@ class NavigationHistoryService {
         }
       }
     }
-    
+
     return breadcrumbs;
   }
 
-  private async generateSuggestions(currentPath: string, history: NavigationHistory): Promise<string[]> {
+  private async generateSuggestions(
+    currentPath: string,
+    history: NavigationHistory
+  ): Promise<string[]> {
     const suggestions: string[] = [];
-    
+
     // Add frequently visited pages
     if (this.analytics) {
       const sorted = Object.entries(this.analytics.mostVisitedPaths)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
         .map(([path]) => path)
-        .filter(path => path !== currentPath);
-      
+        .filter((path) => path !== currentPath);
+
       suggestions.push(...sorted);
     }
-    
+
     // Add context-specific suggestions
     const contextType = this.determineContext(currentPath);
     if (contextType === 'reading' && currentPath.includes('/manga/')) {
       suggestions.push('/bookmarks');
     }
-    
+
     return suggestions.slice(0, 3);
   }
 
@@ -628,7 +686,7 @@ class NavigationHistoryService {
       const newSettings = { ...currentSettings, ...settings };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
       this.settings = newSettings;
-      
+
       // Update history settings
       const history = await this.getHistory();
       history.settings = newSettings;
@@ -671,7 +729,9 @@ class NavigationHistoryService {
     }
   }
 
-  async recordGestureUsage(gestureType: 'swipeBack' | 'tapBack' | 'breadcrumbUsage'): Promise<void> {
+  async recordGestureUsage(
+    gestureType: 'swipeBack' | 'tapBack' | 'breadcrumbUsage'
+  ): Promise<void> {
     try {
       const analytics = await this.getAnalytics();
       analytics.gestureUsageStats[gestureType]++;
@@ -689,22 +749,28 @@ class NavigationHistoryService {
   async optimizePerformance(): Promise<void> {
     try {
       const history = await this.getHistory();
-      
+
       // Clean up old entries beyond reasonable limits
       const maxGlobalSize = history.settings.maxHistorySize * 3;
       if (history.globalStack.length > maxGlobalSize) {
-        history.globalStack.splice(0, history.globalStack.length - maxGlobalSize);
+        history.globalStack.splice(
+          0,
+          history.globalStack.length - maxGlobalSize
+        );
       }
-      
+
       // Clean up contexts with no recent activity
-      const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-      Object.keys(history.contexts).forEach(contextType => {
+      const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      Object.keys(history.contexts).forEach((contextType) => {
         const context = history.contexts[contextType];
-        if (context.metadata.lastAccessed < oneWeekAgo && context.stack.length === 0) {
+        if (
+          context.metadata.lastAccessed < oneWeekAgo &&
+          context.stack.length === 0
+        ) {
           delete history.contexts[contextType];
         }
       });
-      
+
       await this.saveHistory(history);
     } catch (error) {
       console.error('Error optimizing performance:', error);
@@ -720,13 +786,17 @@ export default navigationService;
 // Legacy-compatible exports
 export const getNavigationHistory = async (): Promise<string[]> => {
   const history = await navigationService.getNavigationState('/');
-  return history.contextHistory.map(entry => entry.path);
+  return history.contextHistory.map((entry) => entry.path);
 };
 
-export const updateNavigationHistory = async (newPath: string): Promise<void> => {
+export const updateNavigationHistory = async (
+  newPath: string
+): Promise<void> => {
   await navigationService.addToHistory(newPath);
 };
 
-export const getPreviousRoute = async (currentPath: string): Promise<string> => {
+export const getPreviousRoute = async (
+  currentPath: string
+): Promise<string> => {
   return await navigationService.getPreviousRoute(currentPath);
 };

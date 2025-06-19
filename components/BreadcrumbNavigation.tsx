@@ -123,7 +123,7 @@ const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
 
   const handleBreadcrumbPress = (item: BreadcrumbItem) => {
     if (!item.isClickable) return;
-    
+
     haptics.onSelection();
     router.navigate(item.path as any);
   };
@@ -147,7 +147,7 @@ const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
                 style={styles.separator}
               />
             )}
-            
+
             <TouchableOpacity
               onPress={() => handleBreadcrumbPress(item)}
               disabled={!item.isClickable}
@@ -157,7 +157,9 @@ const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
               ]}
               accessibilityRole="button"
               accessibilityLabel={`Navigate to ${item.title}`}
-              accessibilityHint={item.isClickable ? `Go to ${item.title} page` : 'Current page'}
+              accessibilityHint={
+                item.isClickable ? `Go to ${item.title} page` : 'Current page'
+              }
             >
               <View style={styles.breadcrumbContent}>
                 {showIcons && item.icon && (
@@ -165,21 +167,17 @@ const BreadcrumbNavigation: React.FC<BreadcrumbNavigationProps> = ({
                     name={item.icon}
                     size={14}
                     color={
-                      item.isClickable
-                        ? colors.primary
-                        : colors.tabIconDefault
+                      item.isClickable ? colors.primary : colors.tabIconDefault
                     }
                     style={styles.icon}
                   />
                 )}
-                
+
                 <Text
                   style={[
                     styles.breadcrumbText,
                     {
-                      color: item.isClickable
-                        ? colors.primary
-                        : colors.text,
+                      color: item.isClickable ? colors.primary : colors.text,
                     },
                     !item.isClickable && styles.currentText,
                   ]}

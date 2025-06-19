@@ -31,15 +31,16 @@ const SmartBackButton: React.FC<SmartBackButtonProps> = ({
   disabled = false,
 }) => {
   const colorScheme = useColorScheme() as ColorScheme;
-  const { handleBackPress, canGoBack, navigationState } = useNavigationHistory();
+  const { handleBackPress, canGoBack, navigationState } =
+    useNavigationHistory();
   const router = useRouter();
   const pathname = usePathname();
   const haptics = useHapticFeedback();
-  
+
   const [isPressed, setIsPressed] = useState(false);
   const [backLabel, setBackLabel] = useState('Back');
   const scaleAnim = new Animated.Value(1);
-  
+
   const colors = Colors[colorScheme];
   const buttonColor = color || colors.text;
   const isDisabled = disabled || !canGoBack;
@@ -54,11 +55,13 @@ const SmartBackButton: React.FC<SmartBackButtonProps> = ({
         const lastNonMangaRoute = navigationState.contextHistory
           .slice()
           .reverse()
-          .find(entry => 
-            !entry.path.includes('/manga/') || 
-            (entry.path.includes('/manga/') && entry.path.includes('/chapter/'))
+          .find(
+            (entry) =>
+              !entry.path.includes('/manga/') ||
+              (entry.path.includes('/manga/') &&
+                entry.path.includes('/chapter/'))
           );
-        
+
         if (lastNonMangaRoute) {
           if (lastNonMangaRoute.path === '/mangasearch') return 'Search';
           if (lastNonMangaRoute.path === '/') return 'Home';
@@ -81,9 +84,9 @@ const SmartBackButton: React.FC<SmartBackButtonProps> = ({
 
   const handlePress = async () => {
     if (isDisabled) return;
-    
+
     haptics.onPress();
-    
+
     // Animate button press
     Animated.sequence([
       Animated.timing(scaleAnim, {
@@ -97,7 +100,7 @@ const SmartBackButton: React.FC<SmartBackButtonProps> = ({
         useNativeDriver: true,
       }),
     ]).start();
-    
+
     if (customOnPress) {
       customOnPress();
     } else {
@@ -135,27 +138,25 @@ const SmartBackButton: React.FC<SmartBackButtonProps> = ({
       accessibilityLabel={`Go back to ${backLabel}`}
       accessibilityHint={`Navigate back to the previous ${backLabel.toLowerCase()} page`}
     >
-      <Animated.View 
-        style={[
-          styles.content,
-          { transform: [{ scale: scaleAnim }] }
-        ]}
+      <Animated.View
+        style={[styles.content, { transform: [{ scale: scaleAnim }] }]}
       >
         <View style={styles.iconContainer}>
-          <Ionicons
-            name="arrow-back"
-            size={size}
-            color={buttonColor}
-          />
+          <Ionicons name="arrow-back" size={size} color={buttonColor} />
           {navigationState.currentDepth > 1 && (
-            <View style={[styles.depthIndicator, { backgroundColor: colors.primary }]}>
+            <View
+              style={[
+                styles.depthIndicator,
+                { backgroundColor: colors.primary },
+              ]}
+            >
               <Text style={[styles.depthText, { color: colors.background }]}>
                 {Math.min(navigationState.currentDepth - 1, 9)}
               </Text>
             </View>
           )}
         </View>
-        
+
         {showLabel && (
           <Text style={[styles.label, { color: buttonColor }]}>
             {backLabel}

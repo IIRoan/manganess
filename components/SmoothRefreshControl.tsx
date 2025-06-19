@@ -23,7 +23,7 @@ export const SmoothRefreshControl: React.FC<SmoothRefreshControlProps> = ({
     if (refreshing) {
       // Trigger haptic feedback when refresh starts
       haptics.onSelection();
-      
+
       // Start rotation animation
       Animated.loop(
         Animated.timing(rotationAnim, {

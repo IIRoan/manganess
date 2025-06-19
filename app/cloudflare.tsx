@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+  useColorScheme,
+} from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useRouter } from 'expo-router';
@@ -7,15 +15,15 @@ import { MANGA_API_URL } from '@/constants/Config';
 import CustomWebView from '@/components/CustomWebView';
 import { Ionicons } from '@expo/vector-icons';
 import { WebViewNavigation } from 'react-native-webview';
-import { useColorScheme } from 'react-native';
+
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
-import { ServiceResponse } from '@/types';
 
 export default function CloudflarePage() {
   const router = useRouter();
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
-  const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
+  const colorScheme =
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
 
@@ -36,8 +44,10 @@ export default function CloudflarePage() {
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
     // Check if we're no longer on a Cloudflare page
-    if (!navState.url.includes('cf-browser-verification') &&
-      !navState.url.includes('cf_captcha_kind')) {
+    if (
+      !navState.url.includes('cf-browser-verification') &&
+      !navState.url.includes('cf_captcha_kind')
+    ) {
       setVerificationComplete(true);
       handleVerificationComplete(); // This will route back to the previous page
     }

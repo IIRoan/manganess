@@ -23,7 +23,11 @@ export const PageTransition: React.FC<PageTransitionProps> = ({
   useEffect(() => {
     const animations: Animated.CompositeAnimation[] = [];
 
-    if (transitionType === 'fade' || transitionType === 'slide' || transitionType === 'scale') {
+    if (
+      transitionType === 'fade' ||
+      transitionType === 'slide' ||
+      transitionType === 'scale'
+    ) {
       animations.push(
         Animated.timing(opacity, {
           toValue: 1,

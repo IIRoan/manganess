@@ -32,7 +32,7 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
   const haptics = useHapticFeedback();
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(false);
-  
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const actionScale1 = useRef(new Animated.Value(0)).current;

@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
   ScrollView,
   Image,
-  RefreshControl,
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -19,10 +17,18 @@ import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MANGA_API_URL } from '@/constants/Config';
 import MangaCard from '@/components/MangaCard';
-import { RecentlyReadSkeleton, TrendingSkeleton, NewReleasesSkeleton, FeaturedMangaSkeleton } from '@/components/SkeletonLoading';
+import {
+  RecentlyReadSkeleton,
+  TrendingSkeleton,
+  NewReleasesSkeleton,
+  FeaturedMangaSkeleton,
+} from '@/components/SkeletonLoading';
 import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
 import { PageTransition } from '@/components/PageTransition';
-import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireService';
+import {
+  parseMostViewedManga,
+  parseNewReleases,
+} from '@/services/mangaFireService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
@@ -36,14 +42,16 @@ const TRENDING_CARD_HEIGHT = 260;
 const FEATURED_HEIGHT = 280;
 const RECENTLY_READ_CARD_WIDTH = Math.min(160, (SCREEN_WIDTH - 64) / 2);
 
-const DEFAULT_MANGA_COVER = 'https://static.mangafire.to/default/img/no-image.jpg';
+const DEFAULT_MANGA_COVER =
+  'https://static.mangafire.to/default/img/no-image.jpg';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { actualTheme, accentColor } = useTheme();
   const colors = Colors[actualTheme];
   const themeColors = { ...colors, primary: accentColor || colors.primary };
-  const { checkForCloudflare, resetCloudflareDetection } = useCloudflareDetection();
+  const { checkForCloudflare, resetCloudflareDetection } =
+    useCloudflareDetection();
   const insets = useSafeAreaInsets();
 
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
@@ -52,9 +60,12 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
-  
-  const [recentlyReadManga, setRecentlyReadManga] = useState<RecentMangaItem[]>([]);
-  const [isRecentMangaLoading, setIsRecentMangaLoading] = useState<boolean>(true);
+
+  const [recentlyReadManga, setRecentlyReadManga] = useState<RecentMangaItem[]>(
+    []
+  );
+  const [isRecentMangaLoading, setIsRecentMangaLoading] =
+    useState<boolean>(true);
 
   const fetchMangaData = useCallback(async () => {
     try {
@@ -88,7 +99,9 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('Error fetching manga data:', error);
-      setError('An error occurred while fetching manga data. Please try again.');
+      setError(
+        'An error occurred while fetching manga data. Please try again.'
+      );
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -99,12 +112,12 @@ export default function HomeScreen() {
     try {
       setIsRecentMangaLoading(true);
       const recentManga = await getRecentlyReadManga(6);
-      
-      const processedManga = recentManga.map(manga => ({
+
+      const processedManga = recentManga.map((manga) => ({
         ...manga,
-        bannerImage: manga.bannerImage || DEFAULT_MANGA_COVER
+        bannerImage: manga.bannerImage || DEFAULT_MANGA_COVER,
       }));
-      
+
       setRecentlyReadManga(processedManga);
     } catch (error) {
       console.error('Error fetching recently read manga:', error);
@@ -133,81 +146,111 @@ export default function HomeScreen() {
     fetchRecentlyReadManga();
   }, [fetchMangaData, fetchRecentlyReadManga]);
 
-  const renderSectionTitle = useCallback((title: string, iconName: keyof typeof Ionicons.glyphMap) => (
-    <View style={styles.sectionTitleContainer}>
-      <View style={[styles.iconBackground, { backgroundColor: themeColors.primary + '20' }]}>
-        <Ionicons 
-          name={iconName} 
-          size={20} 
-          color={themeColors.primary}
-          accessibilityElementsHidden={true}
-        />
-      </View>
-      <Text 
-        style={[styles.sectionTitle, { color: themeColors.text }]}
-        accessibilityRole="header"
-        accessibilityLevel={2}
-      >
-        {title}
-      </Text>
-    </View>
-  ), [themeColors]);
-
-  const renderTrendingItem = useCallback(({ item, index }: { item: MangaItem; index: number }) => (
-    <TouchableOpacity
-      style={[
-        styles.trendingItem,
-        { marginLeft: index === 0 ? 16 : 12 }
-      ]}
-      onPress={() => router.navigate(`/manga/${item.id}`)}
-      activeOpacity={0.7}
-      accessibilityRole="button"
-      accessibilityLabel={`View ${item.title}`}
-      accessibilityHint={item.rank ? `Ranked #${item.rank} in trending` : "Currently trending manga"}
-    >
-      <Image 
-        source={{ uri: item.imageUrl }} 
-        style={styles.trendingImage}
-        accessibilityLabel={`Cover image for ${item.title}`}
-      />
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.9)']}
-        style={styles.trendingGradient}
-      >
-        <View style={styles.trendingContent}>
-          <Text style={styles.trendingTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
-          {item.rank && (
-            <View style={[styles.rankBadge, { backgroundColor: themeColors.primary }]}>
-              <Text style={styles.rankText}>#{item.rank}</Text>
-            </View>
-          )}
+  const renderSectionTitle = useCallback(
+    (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
+      <View style={styles.sectionTitleContainer}>
+        <View
+          style={[
+            styles.iconBackground,
+            { backgroundColor: themeColors.primary + '20' },
+          ]}
+        >
+          <Ionicons
+            name={iconName}
+            size={20}
+            color={themeColors.primary}
+            accessibilityElementsHidden={true}
+          />
         </View>
-      </LinearGradient>
-    </TouchableOpacity>
-  ), [router, themeColors.primary]);
-  
-  const renderRecentlyReadItem = useCallback(({ item, index }: { item: RecentMangaItem; index: number }) => {
-    const lastReadChapter = item.lastReadChapter ? `Chapter ${item.lastReadChapter}` : 'Not started';
-    
-    return (
-      <View style={[styles.recentlyReadItem, { marginLeft: index === 0 ? 16 : 12 }]}>
-        <MangaCard
-          title={item.title}
-          imageUrl={item.bannerImage}
-          onPress={() => router.navigate(`/manga/${item.id}`)}
-          lastReadChapter={lastReadChapter}
-          style={styles.recentlyReadCard}
-          context="manga"
-          mangaId={item.id}
-        />
-        <Text style={[styles.recentlyReadTitle, { color: themeColors.text }]} numberOfLines={2}>
-          {item.title}
+        <Text
+          style={[styles.sectionTitle, { color: themeColors.text }]}
+          accessibilityRole="header"
+          accessibilityLevel={2}
+        >
+          {title}
         </Text>
       </View>
-    );
-  }, [router, themeColors.text]);
+    ),
+    [themeColors]
+  );
+
+  const renderTrendingItem = useCallback(
+    ({ item, index }: { item: MangaItem; index: number }) => (
+      <TouchableOpacity
+        style={[styles.trendingItem, { marginLeft: index === 0 ? 16 : 12 }]}
+        onPress={() => router.navigate(`/manga/${item.id}`)}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${item.title}`}
+        accessibilityHint={
+          item.rank
+            ? `Ranked #${item.rank} in trending`
+            : 'Currently trending manga'
+        }
+      >
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={styles.trendingImage}
+          accessibilityLabel={`Cover image for ${item.title}`}
+        />
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.9)']}
+          style={styles.trendingGradient}
+        >
+          <View style={styles.trendingContent}>
+            <Text style={styles.trendingTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            {item.rank && (
+              <View
+                style={[
+                  styles.rankBadge,
+                  { backgroundColor: themeColors.primary },
+                ]}
+              >
+                <Text style={styles.rankText}>#{item.rank}</Text>
+              </View>
+            )}
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    ),
+    [router, themeColors.primary]
+  );
+
+  const renderRecentlyReadItem = useCallback(
+    ({ item, index }: { item: RecentMangaItem; index: number }) => {
+      const lastReadChapter = item.lastReadChapter
+        ? `Chapter ${item.lastReadChapter}`
+        : 'Not started';
+
+      return (
+        <View
+          style={[
+            styles.recentlyReadItem,
+            { marginLeft: index === 0 ? 16 : 12 },
+          ]}
+        >
+          <MangaCard
+            title={item.title}
+            imageUrl={item.bannerImage}
+            onPress={() => router.navigate(`/manga/${item.id}`)}
+            lastReadChapter={lastReadChapter}
+            style={styles.recentlyReadCard}
+            context="manga"
+            mangaId={item.id}
+          />
+          <Text
+            style={[styles.recentlyReadTitle, { color: themeColors.text }]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
+        </View>
+      );
+    },
+    [router, themeColors.text]
+  );
 
   const renderNewReleaseGrid = useCallback(() => {
     return (
@@ -229,7 +272,10 @@ export default function HomeScreen() {
                 mangaId={item.id}
               />
               <View style={styles.titleContainer}>
-                <Text style={[styles.mangaTitle, { color: themeColors.text }]} numberOfLines={2}>
+                <Text
+                  style={[styles.mangaTitle, { color: themeColors.text }]}
+                  numberOfLines={2}
+                >
                   {item.title}
                 </Text>
               </View>
@@ -247,16 +293,32 @@ export default function HomeScreen() {
 
     if (recentlyReadManga.length === 0) {
       return (
-        <View style={[styles.emptyStateContainer, { backgroundColor: themeColors.card + '50' }]}>
-          <Ionicons name="book-outline" size={40} color={themeColors.text + '70'} />
-          <Text style={[styles.emptyStateText, { color: themeColors.text + '90' }]}>
-            Manga you're reading will appear here
+        <View
+          style={[
+            styles.emptyStateContainer,
+            { backgroundColor: themeColors.card + '50' },
+          ]}
+        >
+          <Ionicons
+            name="book-outline"
+            size={40}
+            color={themeColors.text + '70'}
+          />
+          <Text
+            style={[styles.emptyStateText, { color: themeColors.text + '90' }]}
+          >
+            Manga you&apos;re reading will appear here
           </Text>
           <TouchableOpacity
-            style={[styles.browseButton, { backgroundColor: themeColors.primary + '20' }]}
+            style={[
+              styles.browseButton,
+              { backgroundColor: themeColors.primary + '20' },
+            ]}
             onPress={() => router.navigate('/mangasearch')}
           >
-            <Text style={[styles.browseButtonText, { color: themeColors.primary }]}>
+            <Text
+              style={[styles.browseButtonText, { color: themeColors.primary }]}
+            >
               Browse Manga
             </Text>
           </TouchableOpacity>
@@ -284,18 +346,27 @@ export default function HomeScreen() {
         windowSize={8}
       />
     );
-  }, [isRecentMangaLoading, recentlyReadManga, themeColors, router, renderRecentlyReadItem]);
+  }, [
+    isRecentMangaLoading,
+    recentlyReadManga,
+    themeColors,
+    router,
+    renderRecentlyReadItem,
+  ]);
 
   const renderFeaturedManga = useCallback(() => {
     if (!featuredManga) return null;
 
     return (
       <TouchableOpacity
-        style={[styles.featuredContainer, { marginTop: insets.top + 16 }]} 
+        style={[styles.featuredContainer, { marginTop: insets.top + 16 }]}
         onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
         activeOpacity={0.8}
       >
-        <Image source={{ uri: featuredManga.imageUrl }} style={styles.featuredImage} />
+        <Image
+          source={{ uri: featuredManga.imageUrl }}
+          style={styles.featuredImage}
+        />
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.8)']}
           style={styles.featuredGradient}
@@ -309,7 +380,10 @@ export default function HomeScreen() {
               {featuredManga.title}
             </Text>
             <TouchableOpacity
-              style={[styles.readNowButton, { backgroundColor: themeColors.primary }]}
+              style={[
+                styles.readNowButton,
+                { backgroundColor: themeColors.primary },
+              ]}
               onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
             >
               <Text style={styles.readNowText}>Read Now</Text>
@@ -322,13 +396,15 @@ export default function HomeScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <View
+        style={[styles.container, { backgroundColor: themeColors.background }]}
+      >
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.content]}
         >
           <FeaturedMangaSkeleton />
-          
+
           <View style={styles.section}>
             {renderSectionTitle('Continue Reading', 'book')}
             <RecentlyReadSkeleton />
@@ -349,8 +425,9 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-
+    <View
+      style={[styles.container, { backgroundColor: themeColors.background }]}
+    >
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content]}
@@ -362,11 +439,24 @@ export default function HomeScreen() {
         }
       >
         {error ? (
-          <View style={[styles.errorContainer, { paddingTop: insets.top + 20 }]}>
-            <Ionicons name="alert-circle-outline" size={48} color={themeColors.notification} />
-            <Text style={[styles.errorText, { color: themeColors.notification }]}>{error}</Text>
+          <View
+            style={[styles.errorContainer, { paddingTop: insets.top + 20 }]}
+          >
+            <Ionicons
+              name="alert-circle-outline"
+              size={48}
+              color={themeColors.notification}
+            />
+            <Text
+              style={[styles.errorText, { color: themeColors.notification }]}
+            >
+              {error}
+            </Text>
             <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: themeColors.primary }]}
+              style={[
+                styles.retryButton,
+                { backgroundColor: themeColors.primary },
+              ]}
               onPress={fetchMangaData}
             >
               <Text style={styles.retryButtonText}>Retry</Text>

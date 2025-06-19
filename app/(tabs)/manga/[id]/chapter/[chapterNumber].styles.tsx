@@ -1,16 +1,18 @@
 import { StyleSheet } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
 
-const HEADER_HEIGHT = 56;
 const CHAPTER_ITEM_HEIGHT = 70;
 
 export default function getStyles(colorScheme: ColorScheme) {
   const colors = Colors[colorScheme];
-  
+
   const bottomSheetBg = colorScheme === 'dark' ? '#1A1A1A' : '#FFFFFF';
   const chapterItemBg = colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5';
-  const controlsBg = colorScheme === 'dark' ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.85)';
-  
+  const controlsBg =
+    colorScheme === 'dark'
+      ? 'rgba(0, 0, 0, 0.85)'
+      : 'rgba(255, 255, 255, 0.85)';
+
   return StyleSheet.create({
     container: {
       flex: 1,
@@ -132,7 +134,7 @@ export default function getStyles(colorScheme: ColorScheme) {
     },
     bottomSheetContent: {
       padding: 24,
-      paddingBottom: 120, 
+      paddingBottom: 120,
     },
     bottomSheetTitle: {
       fontSize: 24,

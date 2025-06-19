@@ -42,7 +42,7 @@ export interface BookmarkItem {
   lastUpdated?: number;
 }
 
-export type BookmarkStatus = "To Read" | "Reading" | "Read" | "On Hold";
+export type BookmarkStatus = 'To Read' | 'Reading' | 'Read' | 'On Hold';
 
 export interface RecentMangaItem {
   id: string;
