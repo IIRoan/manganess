@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View,
-  TouchableOpacity,
-  StyleSheet,
-  useColorScheme,
-  Pressable,
-} from 'react-native';
+import { View, StyleSheet, useColorScheme, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
@@ -32,14 +26,14 @@ const EnhancedBackButton: React.FC<EnhancedBackButtonProps> = ({
   const { handleBackPress, canGoBack, currentDepth } = useNavigationHistory();
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
-  
+
   const colors = Colors[colorScheme];
   const buttonColor = color || colors.text;
   const isDisabled = disabled || !canGoBack;
 
   const handlePress = async () => {
     if (isDisabled) return;
-    
+
     if (customOnPress) {
       customOnPress();
     } else {
@@ -77,13 +71,14 @@ const EnhancedBackButton: React.FC<EnhancedBackButtonProps> = ({
         delayLongPress={500}
       >
         <View style={styles.iconContainer}>
-          <Ionicons
-            name="arrow-back"
-            size={size}
-            color={buttonColor}
-          />
+          <Ionicons name="arrow-back" size={size} color={buttonColor} />
           {currentDepth > 1 && (
-            <View style={[styles.depthIndicator, { backgroundColor: colors.primary }]}>
+            <View
+              style={[
+                styles.depthIndicator,
+                { backgroundColor: colors.primary },
+              ]}
+            >
               <Ionicons
                 name="ellipsis-horizontal"
                 size={size * 0.5}
@@ -147,11 +142,7 @@ export const FloatingBackButton: React.FC<FloatingBackButtonProps> = ({
   };
 
   return (
-    <EnhancedBackButton
-      {...props}
-      size={size}
-      style={getPositionStyle()}
-    />
+    <EnhancedBackButton {...props} size={size} style={getPositionStyle()} />
   );
 };
 

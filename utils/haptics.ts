@@ -45,13 +45,19 @@ class HapticFeedbackService {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           break;
         case HapticType.Success:
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          await Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success
+          );
           break;
         case HapticType.Warning:
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          await Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Warning
+          );
           break;
         case HapticType.Error:
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          await Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Error
+          );
           break;
         case HapticType.Selection:
           await Haptics.selectionAsync();

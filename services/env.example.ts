@@ -1,1 +1,1 @@
-export const ANILIST_CLIENT_SECRET = ' '
+export const ANILIST_CLIENT_SECRET = ' ';

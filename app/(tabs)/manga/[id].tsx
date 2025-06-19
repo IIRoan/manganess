@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,45 +8,44 @@ import {
   useColorScheme,
   Animated,
   type ViewToken,
-} from "react-native";
-import type Swipeable from "react-native-gesture-handler/Swipeable";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@/constants/ThemeContext";
-import { Colors, type ColorScheme } from "@/constants/Colors";
-import ExpandableText from "@/components/ExpandableText";
-import AlertComponent from "@/components/Alert";
-import SwipeableChapterItem from "@/components/SwipeChapterItem";
-import BottomPopup from "@/components/BottomPopup";
-import { FlashList } from "@shopify/flash-list";
-import { fetchMangaDetails } from "@/services/mangaFireService";
+} from 'react-native';
+import type Swipeable from 'react-native-gesture-handler/Swipeable';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/constants/ThemeContext';
+import { Colors, type ColorScheme } from '@/constants/Colors';
+import ExpandableText from '@/components/ExpandableText';
+import AlertComponent from '@/components/Alert';
+import SwipeableChapterItem from '@/components/SwipeChapterItem';
+import BottomPopup from '@/components/BottomPopup';
+import { FlashList } from '@shopify/flash-list';
+import { fetchMangaDetails } from '@/services/mangaFireService';
 import {
   fetchBookmarkStatus,
   saveBookmark,
   removeBookmark,
   getBookmarkPopupConfig,
   getChapterLongPressAlertConfig,
-} from "@/services/bookmarkService";
-import { useNavigationHistory } from "@/hooks/useNavigationHistory";
-import EnhancedBackButton from "@/components/EnhancedBackButton";
-import { GenreTag } from "@/components/GanreTag";
+} from '@/services/bookmarkService';
+import EnhancedBackButton from '@/components/EnhancedBackButton';
+import { GenreTag } from '@/components/GanreTag';
 import {
   getLastReadChapter,
   getReadChapters,
   markChapterAsUnread,
-} from "@/services/readChapterService";
-import { useFocusEffect } from "@react-navigation/native";
-import LastReadChapterBar from "@/components/LastReadChapterBar";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHapticFeedback } from "@/utils/haptics";
-import getStyles from "./[id].styles";
-import { useMangaImageCache } from "@/services/CacheImages";
+} from '@/services/readChapterService';
+import { useFocusEffect } from '@react-navigation/native';
+import LastReadChapterBar from '@/components/LastReadChapterBar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHapticFeedback } from '@/utils/haptics';
+import getStyles from './[id].styles';
+import { useMangaImageCache } from '@/services/CacheImages';
 import type {
   AlertConfig,
   Option,
   MangaDetails,
   BookmarkStatus,
-} from "@/types";
+} from '@/types';
 
 /* Type Definitions */
 type BookmarkPopupConfig = {
@@ -61,14 +60,12 @@ const MangaBannerImage: React.FC<{
   style: any;
 }> = ({ mangaId, bannerUrl, style }) => {
   const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl);
-  
+
   return (
     <Image
       source={{ uri: cachedBannerPath }}
       style={style}
-      onError={(error) =>
-        console.error("Error loading banner image:", error)
-      }
+      onError={(error) => console.error('Error loading banner image:', error)}
     />
   );
 };
@@ -95,7 +92,7 @@ export default function MangaDetailScreen() {
   const [isBookmarkPopupVisible, setIsBookmarkPopupVisible] = useState(false);
   const [bookmarkPopupConfig, setBookmarkPopupConfig] =
     useState<BookmarkPopupConfig>({
-      title: "",
+      title: '',
       options: [],
     });
 
@@ -113,12 +110,11 @@ export default function MangaDetailScreen() {
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
   const colorScheme =
-    theme === "system" ? systemColorScheme : (theme as ColorScheme);
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
 
   // Back button
-  const { handleBackPress } = useNavigationHistory();
 
   // Haptic feedback
   const haptics = useHapticFeedback();
@@ -129,10 +125,10 @@ export default function MangaDetailScreen() {
   const fetchMangaDetailsData = async () => {
     try {
       const details = await fetchMangaDetails(id as string);
-      setMangaDetails(details);
+      setMangaDetails({ ...details, id: id as string });
     } catch (err) {
       console.error(err);
-      throw new Error("Failed to load manga details");
+      throw new Error('Failed to load manga details');
     }
   };
 
@@ -142,7 +138,7 @@ export default function MangaDetailScreen() {
       setBookmarkStatus(status);
     } catch (err) {
       console.error(err);
-      throw new Error("Failed to load bookmark status");
+      throw new Error('Failed to load bookmark status');
     }
   };
 
@@ -151,8 +147,8 @@ export default function MangaDetailScreen() {
       const chapters = await getReadChapters(id as string);
       setReadChapters(chapters);
     } catch (error) {
-      console.error("Error fetching read chapters:", error);
-      throw new Error("Failed to load read chapters");
+      console.error('Error fetching read chapters:', error);
+      throw new Error('Failed to load read chapters');
     }
   }, [id]);
 
@@ -161,15 +157,15 @@ export default function MangaDetailScreen() {
       const lastChapter = await getLastReadChapter(id as string);
       setLastReadChapter(lastChapter);
     } catch (err) {
-      console.error("Error fetching last read chapter:", err);
-      throw new Error("Failed to load last read chapter");
+      console.error('Error fetching last read chapter:', err);
+      throw new Error('Failed to load last read chapter');
     }
   }, [id]);
 
   useFocusEffect(
     useCallback(() => {
       const fetchData = async () => {
-        if (typeof id === "string") {
+        if (typeof id === 'string') {
           setIsLoading(true);
           setError(null);
           try {
@@ -180,8 +176,8 @@ export default function MangaDetailScreen() {
               fetchLastReadChapter(),
             ]);
           } catch (error) {
-            console.error("Error fetching data:", error);
-            setError("Failed to load manga details. Please try again.");
+            console.error('Error fetching data:', error);
+            setError('Failed to load manga details. Please try again.');
           } finally {
             setIsLoading(false);
           }
@@ -196,9 +192,9 @@ export default function MangaDetailScreen() {
 
   const handleBookmark = () => {
     if (!mangaDetails) return;
-    
+
     haptics.onBookmark();
-    
+
     const config = getBookmarkPopupConfig(
       bookmarkStatus,
       mangaDetails.title,
@@ -212,7 +208,7 @@ export default function MangaDetailScreen() {
 
   const handleChapterLongPress = (chapterNumber: string) => {
     haptics.onLongPress();
-    
+
     const isRead = readChapters.includes(chapterNumber);
     const config = getChapterLongPressAlertConfig(
       isRead,
@@ -244,7 +240,7 @@ export default function MangaDetailScreen() {
         if (result.newLastReadChapter) {
           setLastReadChapter(`Chapter ${result.newLastReadChapter}`);
         } else {
-          setLastReadChapter("Not started");
+          setLastReadChapter('Not started');
         }
 
         // Close any open swipeables
@@ -253,7 +249,7 @@ export default function MangaDetailScreen() {
           setCurrentlyOpenSwipeable(null);
         }
       } catch (error) {
-        console.error("Error marking chapter as unread:", error);
+        console.error('Error marking chapter as unread:', error);
       }
     },
     [id, readChapters, currentlyOpenSwipeable]
@@ -272,7 +268,7 @@ export default function MangaDetailScreen() {
         setReadChapters
       );
     } catch (error) {
-      console.error("Error saving bookmark:", error);
+      console.error('Error saving bookmark:', error);
     }
   };
 
@@ -284,7 +280,7 @@ export default function MangaDetailScreen() {
         setIsBookmarkPopupVisible
       );
     } catch (error) {
-      console.error("Error removing bookmark:", error);
+      console.error('Error removing bookmark:', error);
     }
   };
 
@@ -294,7 +290,7 @@ export default function MangaDetailScreen() {
   };
 
   const handleLastReadChapterPress = () => {
-    if (!lastReadChapter || lastReadChapter === "Not started") {
+    if (!lastReadChapter || lastReadChapter === 'Not started') {
       if (
         mangaDetails &&
         mangaDetails.chapters &&
@@ -302,10 +298,12 @@ export default function MangaDetailScreen() {
       ) {
         const firstChapter =
           mangaDetails.chapters[mangaDetails.chapters.length - 1];
-        handleChapterPress(firstChapter.number);
+        if (firstChapter) {
+          handleChapterPress(firstChapter.number);
+        }
       }
     } else {
-      const chapterNumber = lastReadChapter.replace("Chapter ", "");
+      const chapterNumber = lastReadChapter.replace('Chapter ', '');
       handleChapterPress(chapterNumber);
     }
   };
@@ -341,8 +339,8 @@ export default function MangaDetailScreen() {
       if (viewableItems && viewableItems.length > 0 && totalChapters > 0) {
         const firstVisibleItem = viewableItems[0];
         const lastVisibleItem = viewableItems[viewableItems.length - 1];
-        const firstVisibleIndex = firstVisibleItem.index ?? 0;
-        const lastVisibleIndex = lastVisibleItem.index ?? totalChapters - 1;
+        const firstVisibleIndex = firstVisibleItem?.index ?? 0;
+        const lastVisibleIndex = lastVisibleItem?.index ?? totalChapters - 1;
 
         setShowScrollToTopButton(firstVisibleIndex >= 10);
 
@@ -413,7 +411,7 @@ export default function MangaDetailScreen() {
         <AlertComponent
           visible={isAlertVisible}
           onClose={() => setIsAlertVisible(false)}
-          type={alertConfig.type as "bookmarks" | "confirm"}
+          type={alertConfig.type as 'bookmarks' | 'confirm'}
           title={alertConfig.title}
           message={alertConfig.message}
           options={alertConfig.options}
@@ -433,13 +431,11 @@ export default function MangaDetailScreen() {
           ref={flashListRef}
           estimatedItemSize={70}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={15}
-          updateCellsBatchingPeriod={50}
           drawDistance={100}
           ListHeaderComponent={() => (
             <>
               <View style={styles.headerContainer}>
-                <MangaBannerImage 
+                <MangaBannerImage
                   mangaId={id as string}
                   bannerUrl={mangaDetails.bannerImage}
                   style={styles.bannerImage}
@@ -457,11 +453,13 @@ export default function MangaDetailScreen() {
                       onPress={handleBookmark}
                       style={styles.headerButton}
                       accessibilityRole="button"
-                      accessibilityLabel={bookmarkStatus ? "Remove bookmark" : "Add bookmark"}
-                      accessibilityHint={`Currently ${bookmarkStatus || "not bookmarked"}. Tap to ${bookmarkStatus ? "remove" : "add"} bookmark.`}
+                      accessibilityLabel={
+                        bookmarkStatus ? 'Remove bookmark' : 'Add bookmark'
+                      }
+                      accessibilityHint={`Currently ${bookmarkStatus || 'not bookmarked'}. Tap to ${bookmarkStatus ? 'remove' : 'add'} bookmark.`}
                     >
                       <Ionicons
-                        name={bookmarkStatus ? "bookmark" : "bookmark-outline"}
+                        name={bookmarkStatus ? 'bookmark' : 'bookmark-outline'}
                         size={30}
                         color={colors.primary}
                         accessibilityElementsHidden={true}
@@ -473,7 +471,6 @@ export default function MangaDetailScreen() {
                     numberOfLines={2}
                     ellipsizeMode="tail"
                     accessibilityRole="header"
-                    accessibilityLevel={1}
                   >
                     {mangaDetails.title}
                   </Text>
@@ -486,7 +483,7 @@ export default function MangaDetailScreen() {
                     />
                   )}
                   <View style={styles.statusContainer}>
-                    <Text 
+                    <Text
                       style={styles.statusText}
                       accessibilityLabel={`Publication status: ${mangaDetails.status}`}
                     >
@@ -502,7 +499,7 @@ export default function MangaDetailScreen() {
                   <View style={styles.progressContainer}>
                     <View style={styles.progressHeader}>
                       <Text style={styles.progressTitle}>
-                        Reading Progress{" "}
+                        Reading Progress{' '}
                       </Text>
                       <Text style={styles.progressPercentage}>
                         {readingProgress}%
@@ -522,8 +519,8 @@ export default function MangaDetailScreen() {
                           name="book-outline"
                           size={14}
                           color={colors.text}
-                        />{" "}
-                        {readChapters.length}/{mangaDetails.chapters.length}{" "}
+                        />{' '}
+                        {readChapters.length}/{mangaDetails.chapters.length}{' '}
                         chapters read
                       </Text>
                       <Text style={styles.progressStat}>
@@ -531,7 +528,7 @@ export default function MangaDetailScreen() {
                           name="time-outline"
                           size={14}
                           color={colors.text}
-                        />{" "}
+                        />{' '}
                         ~{remainingReadingTime} min remaining
                       </Text>
                     </View>
@@ -557,7 +554,7 @@ export default function MangaDetailScreen() {
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Author</Text>
                       <Text style={styles.detailValue}>
-                        {(mangaDetails.author || []).join(", ")}
+                        {(mangaDetails.author || []).join(', ')}
                       </Text>
                     </View>
                     <View style={styles.detailRow}>
@@ -630,7 +627,7 @@ export default function MangaDetailScreen() {
               bottom: insets.bottom + 100 + 60,
             },
           ]}
-          pointerEvents={showScrollToBottomButton ? "auto" : "none"}
+          pointerEvents={showScrollToBottomButton ? 'auto' : 'none'}
         >
           <TouchableOpacity
             onPress={() => {
@@ -641,9 +638,9 @@ export default function MangaDetailScreen() {
             accessibilityLabel="Scroll to bottom"
             accessibilityHint="Scroll to the last chapter"
           >
-            <Ionicons 
-              name="arrow-down" 
-              size={20} 
+            <Ionicons
+              name="arrow-down"
+              size={20}
               color="white"
               accessibilityElementsHidden={true}
             />
@@ -659,7 +656,7 @@ export default function MangaDetailScreen() {
               bottom: insets.bottom + 100,
             },
           ]}
-          pointerEvents={showScrollToTopButton ? "auto" : "none"}
+          pointerEvents={showScrollToTopButton ? 'auto' : 'none'}
         >
           <TouchableOpacity
             onPress={() => {
@@ -673,9 +670,9 @@ export default function MangaDetailScreen() {
             accessibilityLabel="Scroll to top"
             accessibilityHint="Scroll to the manga details"
           >
-            <Ionicons 
-              name="arrow-up" 
-              size={20} 
+            <Ionicons
+              name="arrow-up"
+              size={20}
               color="white"
               accessibilityElementsHidden={true}
             />

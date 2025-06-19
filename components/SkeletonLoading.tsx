@@ -1,5 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Dimensions, ViewStyle } from 'react-native';
+import {
+  View,
+  Animated,
+  StyleSheet,
+  Dimensions,
+  ViewStyle,
+} from 'react-native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import { ShimmerEffect, ShimmerCard } from './ShimmerEffect';
@@ -69,14 +75,12 @@ export const MangaCardSkeleton: React.FC = () => {
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
 
-  return (
-    <ShimmerCard style={styles.cardContainer} />
-  );
+  return <ShimmerCard style={styles.cardContainer} />;
 };
 
 export const RecentlyReadSkeleton: React.FC = () => {
   const cardWidth = Math.min(160, (SCREEN_WIDTH - 64) / 2);
-  
+
   return (
     <View style={{ flexDirection: 'row', paddingHorizontal: 16 }}>
       {Array.from({ length: 3 }).map((_, index) => (
@@ -124,24 +128,25 @@ export const FeaturedMangaSkeleton: React.FC = () => {
   );
 };
 
-const getStyles = (colors: typeof Colors.light) => StyleSheet.create({
-  cardContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: colors.card,
-  },
-  cardInfo: {
-    padding: 8,
-  },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-  },
-  gridItem: {
-    width: '50%',
-    padding: 8,
-  },
-});
+const getStyles = (colors: typeof Colors.light) =>
+  StyleSheet.create({
+    cardContainer: {
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: colors.card,
+    },
+    cardInfo: {
+      padding: 8,
+    },
+    gridContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: 16,
+    },
+    gridItem: {
+      width: '50%',
+      padding: 8,
+    },
+  });
 
 export default SkeletonItem;

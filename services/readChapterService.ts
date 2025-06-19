@@ -1,8 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getMangaData, setMangaData } from "./bookmarkService";
-import { MangaData } from "@/types";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMangaData, setMangaData } from './bookmarkService';
+import { MangaData } from '@/types';
 
-const LAST_READ_MANGA_KEY = "last_read_manga";
+const LAST_READ_MANGA_KEY = 'last_read_manga';
 
 export interface LastReadManga {
   id: string;
@@ -16,7 +16,7 @@ export const getReadChapters = async (mangaId: string): Promise<string[]> => {
     const mangaData = await getMangaData(mangaId);
     return mangaData?.readChapters || [];
   } catch (error) {
-    console.error("Error getting read chapters:", error);
+    console.error('Error getting read chapters:', error);
     return [];
   }
 };
@@ -27,7 +27,7 @@ export const getLastReadChapter = async (
   try {
     const mangaData = await getMangaData(mangaId);
     if (!mangaData?.readChapters || mangaData.readChapters.length === 0) {
-      return "Not started";
+      return 'Not started';
     }
 
     // Calculate the highest chapter number from readChapters array
@@ -37,7 +37,7 @@ export const getLastReadChapter = async (
 
     return `Chapter ${highestChapter}`;
   } catch (error) {
-    console.error("Error getting last read chapter:", error);
+    console.error('Error getting last read chapter:', error);
     return null;
   }
 };
@@ -70,7 +70,7 @@ export const markChapterAsRead = async (
     }
     return currentReadChapters;
   } catch (error) {
-    console.error("Error marking chapter as read:", error);
+    console.error('Error marking chapter as read:', error);
     return currentReadChapters;
   }
 };
@@ -115,7 +115,7 @@ export const markChapterAsUnread = async (
         if (newLastReadChapter) {
           await setLastReadManga(mangaId, mangaData.title, newLastReadChapter);
         } else if (updatedReadChapters.length === 0) {
-          await setLastReadManga(mangaId, mangaData.title, "not_started");
+          await setLastReadManga(mangaId, mangaData.title, 'not_started');
         }
       }
 
@@ -129,7 +129,7 @@ export const markChapterAsUnread = async (
       newLastReadChapter: null,
     };
   } catch (error) {
-    console.error("Error marking chapter as unread:", error);
+    console.error('Error marking chapter as unread:', error);
     return {
       updatedChapters: currentReadChapters,
       newLastReadChapter: null,
@@ -150,13 +150,13 @@ export const setLastReadManga = async (
       timestamp: Date.now(),
     };
 
-    console.log("Setting last read manga:", lastReadManga);
+    console.log('Setting last read manga:', lastReadManga);
     await AsyncStorage.setItem(
       LAST_READ_MANGA_KEY,
       JSON.stringify(lastReadManga)
     );
   } catch (error) {
-    console.error("Error setting last read manga:", error);
+    console.error('Error setting last read manga:', error);
   }
 };
 
@@ -169,7 +169,7 @@ export const getRecentlyReadManga = async (
 
     // Filter for manga data keys (manga_*)
     const mangaKeys = allKeys.filter(
-      (key) => key.startsWith("manga_") && !key.includes("_read_chapters")
+      (key) => key.startsWith('manga_') && !key.includes('_read_chapters')
     );
 
     const mangaDataArray = await Promise.all(
@@ -193,7 +193,7 @@ export const getRecentlyReadManga = async (
     // Return the top {limit} items
     return validManga.slice(0, limit);
   } catch (error) {
-    console.error("Error fetching recently read manga:", error);
+    console.error('Error fetching recently read manga:', error);
     return [];
   }
 };
@@ -206,7 +206,7 @@ export const getLastReadManga = async (): Promise<LastReadManga | null> => {
     const parsedData = JSON.parse(data) as LastReadManga;
     return parsedData;
   } catch (error) {
-    console.error("Error getting last read manga:", error);
+    console.error('Error getting last read manga:', error);
     return null;
   }
 };

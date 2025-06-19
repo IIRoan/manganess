@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   StyleSheet,
   Dimensions,
   Animated,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ChapterGuideOverlayProps {
   visible: boolean;
@@ -20,8 +20,7 @@ interface ChapterGuideOverlayProps {
   showControls?: () => void;
 }
 
-const GUIDE_STORAGE_KEY = "chapter_guide_seen";
-const { width, height } = Dimensions.get("window");
+const GUIDE_STORAGE_KEY = 'chapter_guide_seen';
 
 export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
   visible,
@@ -82,9 +81,9 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
 
   const handleDismiss = async () => {
     try {
-      await AsyncStorage.setItem(GUIDE_STORAGE_KEY, "true");
+      await AsyncStorage.setItem(GUIDE_STORAGE_KEY, 'true');
     } catch (error) {
-      console.error("Error saving guide state:", error);
+      console.error('Error saving guide state:', error);
     }
     onDismiss();
   };
@@ -110,7 +109,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                 <View
                   style={[
                     styles.iconBubble,
-                    { backgroundColor: colors.primary + "20" },
+                    { backgroundColor: colors.primary + '20' },
                   ]}
                 >
                   <Ionicons
@@ -127,7 +126,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                 <View
                   style={[
                     styles.iconBubble,
-                    { backgroundColor: colors.primary + "20" },
+                    { backgroundColor: colors.primary + '20' },
                   ]}
                 >
                   <Ionicons name="menu" size={24} color={colors.primary} />
@@ -140,7 +139,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                 <View
                   style={[
                     styles.iconBubble,
-                    { backgroundColor: colors.primary + "20" },
+                    { backgroundColor: colors.primary + '20' },
                   ]}
                 >
                   <Ionicons
@@ -153,7 +152,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                   Navigate between chapters
                 </Text>
               </View>
-              <Text style={[styles.guideNote, { color: colors.text + "80" }]}>
+              <Text style={[styles.guideNote, { color: colors.text + '80' }]}>
                 Works for both manga and manhwa
               </Text>
             </View>
@@ -173,7 +172,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                   <View
                     style={[
                       styles.iconBubble,
-                      { backgroundColor: colors.primary + "20" },
+                      { backgroundColor: colors.primary + '20' },
                     ]}
                   >
                     <Ionicons
@@ -187,7 +186,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                     controls
                   </Text>
                 </View>
-                <Text style={[styles.guideNote, { color: colors.text + "80" }]}>
+                <Text style={[styles.guideNote, { color: colors.text + '80' }]}>
                   Great for manga and manhwa reading - tap to toggle controls
                   when needed
                 </Text>
@@ -212,7 +211,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                   <View
                     style={[
                       styles.iconBubble,
-                      { backgroundColor: colors.primary + "20" },
+                      { backgroundColor: colors.primary + '20' },
                     ]}
                   >
                     <Ionicons
@@ -226,7 +225,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                     controls
                   </Text>
                 </View>
-                <Text style={[styles.guideNote, { color: colors.text + "80" }]}>
+                <Text style={[styles.guideNote, { color: colors.text + '80' }]}>
                   Perfect for long manga and manhwa chapters
                 </Text>
               </View>
@@ -253,7 +252,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                       styles.guideText,
                       {
                         color: colors.text,
-                        textAlign: "center",
+                        textAlign: 'center',
                         marginTop: 16,
                       },
                     ]}
@@ -265,14 +264,14 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                     style={[
                       styles.guideNote,
                       {
-                        color: colors.text + "80",
-                        textAlign: "center",
+                        color: colors.text + '80',
+                        textAlign: 'center',
                         marginTop: 8,
                       },
                     ]}
                   >
-                    This guide won't appear again, but you can reset it in the
-                    Debug menu
+                    This guide won&apos;t appear again, but you can reset it in
+                    the Debug menu
                   </Text>
                 </View>
               </View>
@@ -292,7 +291,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
         styles.overlay,
         { opacity, paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
-      pointerEvents={currentStep === 1 ? "box-none" : "auto"}
+      pointerEvents={currentStep === 1 ? 'box-none' : 'auto'}
     >
       {renderStep()}
 
@@ -328,7 +327,7 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
           testID="guide-next-button"
         >
           <Text style={styles.nextButtonText}>
-            {currentStep < totalSteps ? "Next" : "Finish"}
+            {currentStep < totalSteps ? 'Next' : 'Finish'}
           </Text>
           <Ionicons
             name="arrow-forward"
@@ -346,9 +345,9 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
 export const hasSeenChapterGuide = async (): Promise<boolean> => {
   try {
     const value = await AsyncStorage.getItem(GUIDE_STORAGE_KEY);
-    return value === "true";
+    return value === 'true';
   } catch (error) {
-    console.error("Error checking guide state:", error);
+    console.error('Error checking guide state:', error);
     return false;
   }
 };
@@ -356,13 +355,13 @@ export const hasSeenChapterGuide = async (): Promise<boolean> => {
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
-    justifyContent: "space-between",
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'space-between',
     zIndex: 100,
   },
   fullOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "transparent",
+    backgroundColor: 'transparent',
   },
   guideOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -370,79 +369,79 @@ const styles = StyleSheet.create({
   },
   navHighlight: {
     height: 56,
-    width: "100%",
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    position: "absolute",
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    position: 'absolute',
   },
   centerContentWrapper: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   mainTapArea: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     left: 60, // 60px from left
     right: 60, // 60px from right
     bottom: 0,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.3)",
-    borderStyle: "dashed",
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderStyle: 'dashed',
   },
   edgeTapAreas: {
     ...StyleSheet.absoluteFillObject,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   leftEdge: {
     width: 60, // 60px exactly
-    height: "100%",
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderRightWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.5)",
-    borderStyle: "dashed",
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderStyle: 'dashed',
   },
   rightEdge: {
     width: 60, // 60px exactly
-    height: "100%",
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     borderLeftWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.5)",
-    borderStyle: "dashed",
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderStyle: 'dashed',
   },
   guideContent: {
     padding: 24,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     borderRadius: 16,
     margin: 16,
-    alignSelf: "center",
+    alignSelf: 'center',
     maxWidth: 400,
-    width: "90%",
+    width: '90%',
     zIndex: 5,
   },
   guideTitle: {
     fontSize: 22,
-    fontWeight: "bold",
+    fontWeight: 'bold',
     marginBottom: 16,
-    textAlign: "center",
+    textAlign: 'center',
   },
   guideExplanation: {
     fontSize: 16,
     marginBottom: 16,
-    textAlign: "center",
+    textAlign: 'center',
   },
   guideRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
   },
   iconBubble: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   guideText: {
@@ -452,31 +451,31 @@ const styles = StyleSheet.create({
   guideNote: {
     fontSize: 14,
     marginTop: 8,
-    fontStyle: "italic",
+    fontStyle: 'italic',
   },
   finalStep: {
-    alignItems: "center",
+    alignItems: 'center',
     paddingVertical: 20,
   },
   controlRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
     paddingBottom: 32,
     zIndex: 2,
   },
   navButtons: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   stepIndicator: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   backButton: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginRight: 16,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -485,7 +484,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   backIcon: {
     marginRight: 6,
@@ -494,15 +493,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     minWidth: 120,
   },
   nextButtonText: {
-    color: "white",
+    color: 'white',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   nextIcon: {
     marginLeft: 8,

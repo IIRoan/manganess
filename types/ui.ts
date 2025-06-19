@@ -68,7 +68,8 @@ export interface GenreTagProps {
   genre: string;
 }
 
-export interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {
+export interface CustomWebViewProps
+  extends React.ComponentProps<typeof WebView> {
   allowedHosts?: string[];
   currentUrl?: string;
 }
