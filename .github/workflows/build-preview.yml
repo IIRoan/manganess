@@ -9,9 +9,9 @@ on:
         default: 'preview'
         type: choice
         options:
-        - preview
-        - testing
-        - main
+          - preview
+          - testing
+          - main
 
 jobs:
   build:

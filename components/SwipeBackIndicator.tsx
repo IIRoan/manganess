@@ -11,7 +11,7 @@ import { BlurView } from 'expo-blur';
 
 import { Colors, ColorScheme } from '@/constants/Colors';
 
-const { height, width } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 interface SwipeBackIndicatorProps {
   swipeProgress?: Animated.Value;
@@ -42,68 +42,77 @@ const SwipeBackIndicator: React.FC<SwipeBackIndicatorProps> = ({
 
   const config = sizeConfig[size];
 
-  const animatedStyle = swipeProgress && swipeOpacity ? {
-    transform: [
-      {
-        translateX: swipeProgress.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-config.containerSize, 20],
-        }),
-      },
-      {
-        scale: swipeProgress.interpolate({
-          inputRange: [0, 0.5, 1],
-          outputRange: [0.8, 1.1, 1],
-        }),
-      },
-    ],
-    opacity: swipeOpacity,
-  } : {};
+  const animatedStyle =
+    swipeProgress && swipeOpacity
+      ? {
+          transform: [
+            {
+              translateX: swipeProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-config.containerSize, 20],
+              }),
+            },
+            {
+              scale: swipeProgress.interpolate({
+                inputRange: [0, 0.5, 1],
+                outputRange: [0.8, 1.1, 1],
+              }),
+            },
+          ],
+          opacity: swipeOpacity,
+        }
+      : {};
 
-  const staticStyle = isVisible ? {
-    opacity: 1,
-    transform: [{ translateX: 0 }],
-  } : {
-    opacity: 0,
-    transform: [{ translateX: -config.containerSize }],
-  };
+  const staticStyle = isVisible
+    ? {
+        opacity: 1,
+        transform: [{ translateX: 0 }],
+      }
+    : {
+        opacity: 0,
+        transform: [{ translateX: -config.containerSize }],
+      };
 
   const finalStyle = swipeProgress ? animatedStyle : staticStyle;
 
   return (
-    <Animated.View style={[
-      indicatorStyles.container,
-      {
-        width: config.containerSize,
-        height: config.containerSize,
-        borderRadius: config.containerSize / 2,
-      },
-      finalStyle,
-      customStyles,
-    ]}>
+    <Animated.View
+      style={[
+        indicatorStyles.container,
+        {
+          width: config.containerSize,
+          height: config.containerSize,
+          borderRadius: config.containerSize / 2,
+        },
+        finalStyle,
+        customStyles,
+      ]}
+    >
       <BlurView
         intensity={80}
         tint={colorScheme === 'dark' ? 'dark' : 'light'}
         style={indicatorStyles.blurContainer}
       >
         <View style={indicatorStyles.iconContainer}>
-          <Ionicons 
-            name="arrow-back" 
-            size={config.iconSize} 
-            color={arrowColor} 
+          <Ionicons
+            name="arrow-back"
+            size={config.iconSize}
+            color={arrowColor}
           />
         </View>
         {showText && (
-          <Animated.Text 
+          <Animated.Text
             style={[
               indicatorStyles.text,
               { color: textColor },
-              swipeProgress ? {
-                opacity: swipeProgress.interpolate({
-                  inputRange: [0, 0.5, 1],
-                  outputRange: [0, 1, 0],
-                }),
-              } : {}
+              swipeProgress
+                ? {
+                    opacity: swipeProgress.interpolate({
+                      inputRange: [0, 0.5, 1],
+                      outputRange: [0, 1, 0],
+                    }),
+                  }
+                : {},
             ]}
           >
             Go Back

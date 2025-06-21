@@ -2,13 +2,11 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   TextInput,
-  FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  Keyboard,
   ActivityIndicator,
   useWindowDimensions,
   Platform,
@@ -18,7 +16,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
-import { Colors, ColorScheme } from '@/constants/Colors';
+import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { searchManga, type MangaItem } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
@@ -35,7 +33,7 @@ export default function MangaSearchScreen() {
   const colors = Colors[actualTheme];
   const { width, height } = useWindowDimensions();
   const styles = getStyles(colors, width, height);
-  
+
   // Router and Input Ref
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
@@ -47,7 +45,9 @@ export default function MangaSearchScreen() {
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>({});
+  const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>(
+    {}
+  );
 
   // Focus input field on screen focus
   useFocusEffect(
@@ -191,7 +191,10 @@ export default function MangaSearchScreen() {
               onChangeText={(query) => setSearchQuery(query)}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+              <TouchableOpacity
+                onPress={clearSearch}
+                style={styles.clearButton}
+              >
                 <Ionicons
                   name="close-circle-outline"
                   size={20}
@@ -202,7 +205,7 @@ export default function MangaSearchScreen() {
           </View>
         </View>
       </View>
-      
+
       <View style={styles.contentContainer}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -231,7 +234,11 @@ export default function MangaSearchScreen() {
 }
 
 // Styles with responsiveness adjustments
-const getStyles = (colors: typeof Colors.light, width: number, height: number) => {
+const getStyles = (
+  colors: typeof Colors.light,
+  width: number,
+  height: number
+) => {
   const isLandscape = width > height;
   const cardWidth = isLandscape ? (width - 60) / 4 : (width - 48) / 2;
 
@@ -242,7 +249,7 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     headerWrapper: {
-      position: "absolute",
+      position: 'absolute',
       top: 0,
       left: 0,
       right: 0,
@@ -254,8 +261,8 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       marginTop: 46,
     },
     searchContainer: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       padding: 16,
       gap: 12,
       backgroundColor: colors.card,
@@ -265,8 +272,8 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
     },
     searchInputContainer: {
       flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.card,
       borderRadius: 12,
       paddingHorizontal: 16,
@@ -286,22 +293,22 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
     },
     loadingContainer: {
       flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     gridContainer: {
       padding: 16,
       paddingBottom: 150,
     },
     columnWrapper: {
-      justifyContent: "space-between",
+      justifyContent: 'space-between',
     },
     cardWrapper: {
       width: cardWidth,
       marginBottom: 16,
     },
     card: {
-      width: "100%",
+      width: '100%',
       aspectRatio: 3 / 4,
     },
     titleContainer: {
@@ -310,13 +317,13 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
     mangaTitle: {
       color: colors.text,
       fontSize: 14,
-      fontWeight: "bold",
-      textAlign: "center",
+      fontWeight: 'bold',
+      textAlign: 'center',
     },
     emptyStateContainer: {
       flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
+      alignItems: 'center',
+      justifyContent: 'center',
       padding: 16,
       marginTop: height * 0.2,
     },
@@ -324,21 +331,21 @@ const getStyles = (colors: typeof Colors.light, width: number, height: number) =
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: colors.primary + "20",
-      alignItems: "center",
-      justifyContent: "center",
+      backgroundColor: colors.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
       marginBottom: 16,
     },
     emptyStateTitle: {
       fontSize: 24,
-      fontWeight: "600",
+      fontWeight: '600',
       color: colors.text,
       marginBottom: 8,
     },
     emptyStateText: {
       fontSize: 16,
       color: colors.tabIconDefault,
-      textAlign: "center",
+      textAlign: 'center',
       maxWidth: 250,
     },
   });

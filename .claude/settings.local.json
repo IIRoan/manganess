@@ -3,7 +3,9 @@
     "allow": [
       "Bash(grep:*)",
       "Bash(npm run lint)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(rg:*)",
+      "Bash(bun run lint:*)"
     ]
   },
   "enableAllProjectMcpServers": false
