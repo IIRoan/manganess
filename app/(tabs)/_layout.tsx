@@ -38,7 +38,8 @@ export default function TabLayout() {
 
   const { width } = Dimensions.get('window');
   const TAB_BAR_WIDTH = width * 0.9;
-  const TAB_WIDTH = TAB_BAR_WIDTH / 5;
+  const visibleTabCount = enableDebugTab ? 6 : 5;
+  const TAB_WIDTH = TAB_BAR_WIDTH / visibleTabCount;
 
   const appState = useRef(AppState.currentState);
   const pathname = usePathname();
@@ -306,7 +307,13 @@ export default function TabLayout() {
   };
 
   const shouldShowTabBar = () => {
-    const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
+    const allowedPaths = [
+      '/',
+      '/mangasearch',
+      '/settings',
+      '/bookmarks',
+      '/genres',
+    ];
     if (enableDebugTab) {
       allowedPaths.push('/Debug');
     }
@@ -419,6 +426,9 @@ export default function TabLayout() {
                 case 'mangasearch':
                   iconName = focused ? 'search' : 'search-outline';
                   break;
+                case 'genres':
+                  iconName = focused ? 'albums' : 'albums-outline';
+                  break;
                 case 'bookmarks':
                   iconName = focused ? 'bookmark' : 'bookmark-outline';
                   break;
@@ -480,6 +490,7 @@ export default function TabLayout() {
         >
           <Tabs.Screen name="index" options={{ title: 'Home' }} />
           <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
+          <Tabs.Screen name="genres" options={{ title: 'Genres' }} />
           <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
           <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
           <Tabs.Screen
@@ -501,17 +512,18 @@ export default function TabLayout() {
           <Tabs.Screen name="manga/[id].styles" options={{ href: null }} />
         </Tabs>
 
-        {shouldShowTabBar() && (
+        {false && shouldShowTabBar() && (
           <Animated.View
             style={[
               styles.lastButtonContainer,
               {
                 bottom: tabBarBottomPosition + 30,
+                right: (width - TAB_BAR_WIDTH) / 2 - 10,
                 transform: [{ scale: buttonScale }],
               },
             ]}
           >
-            <TouchableOpacity
+            {/*             <TouchableOpacity
               style={[
                 styles.lastButton,
                 {
@@ -523,7 +535,7 @@ export default function TabLayout() {
               activeOpacity={0.8}
             >
               <Ionicons name="book" size={24} color="white" />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </Animated.View>
         )}
       </View>
@@ -550,7 +562,6 @@ const styles = StyleSheet.create({
   },
   lastButtonContainer: {
     position: 'absolute',
-    alignSelf: 'center',
     alignItems: 'center',
     zIndex: 100,
   },

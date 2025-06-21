@@ -108,7 +108,9 @@ export default function SettingsScreen() {
             try {
               setIsCacheLoading(true);
               await imageCache.clearCache(context);
-              await loadCacheStats();
+              // Force reload cache stats immediately
+              const newStats = await imageCache.getCacheStats();
+              setCacheStats(newStats);
               Alert.alert(
                 'Success',
                 `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully.`
@@ -521,7 +523,17 @@ export default function SettingsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.option}
-            onPress={loadCacheStats}
+            onPress={async () => {
+              try {
+                setIsCacheLoading(true);
+                const newStats = await imageCache.getCacheStats();
+                setCacheStats(newStats);
+              } catch (error) {
+                console.error('Error refreshing cache stats:', error);
+              } finally {
+                setIsCacheLoading(false);
+              }
+            }}
             disabled={isCacheLoading}
           >
             <Ionicons name="refresh-outline" size={24} color={colors.text} />
