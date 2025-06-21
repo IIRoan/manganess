@@ -5,7 +5,8 @@
       "Bash(npm run lint)",
       "Bash(npx tsc:*)",
       "Bash(rg:*)",
-      "Bash(bun run lint:*)"
+      "Bash(bun run lint:*)",
+      "Bash(bun run format:write:*)"
     ]
   },
   "enableAllProjectMcpServers": false
