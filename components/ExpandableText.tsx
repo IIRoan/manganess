@@ -1,5 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { Text, TouchableOpacity, StyleSheet, TextStyle, LayoutAnimation, View } from 'react-native';
+import {
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  TextStyle,
+  LayoutAnimation,
+} from 'react-native';
 
 interface ExpandableTextProps {
   text: string;
@@ -9,25 +15,26 @@ interface ExpandableTextProps {
   stateKey?: string;
 }
 
-const ExpandableText: React.FC<ExpandableTextProps> = ({ 
-  text, 
-  initialLines = 3, 
+const ExpandableText: React.FC<ExpandableTextProps> = ({
+  text,
+  initialLines = 3,
   style,
   expandedStyle,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
-  const [fullHeight, setFullHeight] = useState(0);
-  const [truncatedHeight, setTruncatedHeight] = useState(0);
 
-  const onFullTextLayout = useCallback((e: any) => {
-    const lineCount = e.nativeEvent.lines.length;
-    console.log(`Full text layout: ${lineCount} lines`);
-    if (lineCount > initialLines) {
-      setIsTruncated(true);
-      console.log('Text needs truncation');
-    }
-  }, [initialLines]);
+  const onFullTextLayout = useCallback(
+    (e: any) => {
+      const lineCount = e.nativeEvent.lines.length;
+      console.log(`Full text layout: ${lineCount} lines`);
+      if (lineCount > initialLines) {
+        setIsTruncated(true);
+        console.log('Text needs truncation');
+      }
+    },
+    [initialLines]
+  );
 
   const onTruncatedTextLayout = useCallback((e: any) => {
     const lineCount = e.nativeEvent.lines.length;
@@ -37,7 +44,7 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
   const toggleExpand = useCallback(() => {
     console.log('Toggle expand pressed, isTruncated:', isTruncated);
     if (!isTruncated) return;
-    
+
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsExpanded((prev) => {
       console.log('Toggling from', prev, 'to', !prev);
@@ -45,10 +52,15 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
     });
   }, [isTruncated]);
 
-  console.log('Rendering with isExpanded:', isExpanded, 'isTruncated:', isTruncated);
+  console.log(
+    'Rendering with isExpanded:',
+    isExpanded,
+    'isTruncated:',
+    isTruncated
+  );
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       onPress={toggleExpand}
       testID="expandable-text"
       activeOpacity={0.7}
@@ -56,30 +68,24 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
     >
       {/* Hidden text to measure full height */}
       <Text
-        style={[
-          styles.text,
-          style,
-          styles.hiddenText
-        ]}
+        style={[styles.text, style, styles.hiddenText]}
         onTextLayout={onFullTextLayout}
       >
         {text}
       </Text>
-      
+
       {/* Visible text */}
       <Text
         numberOfLines={isExpanded ? undefined : initialLines}
         onTextLayout={onTruncatedTextLayout}
-        style={[
-          styles.text, 
-          style,
-          isExpanded && expandedStyle,
-        ]}
+        style={[styles.text, style, isExpanded && expandedStyle]}
       >
         {text}
       </Text>
       {isTruncated && (
-        <Text style={[styles.expandIndicator, { color: style?.color || '#666' }]}>
+        <Text
+          style={[styles.expandIndicator, { color: style?.color || '#666' }]}
+        >
           {isExpanded ? '  ▲ Tap to collapse' : '  ▼ Tap to expand'}
         </Text>
       )}

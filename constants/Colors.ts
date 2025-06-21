@@ -37,7 +37,10 @@ export type ColorScheme = keyof typeof Colors;
 export type ThemeColors = typeof Colors.light & typeof Colors.dark;
 
 // Function to update accent color at runtime
-export function updateAccentColor(accentColor: string | undefined, colorScheme: ColorScheme = 'light'): void {
+export function updateAccentColor(
+  accentColor: string | undefined,
+  colorScheme: ColorScheme = 'light'
+): void {
   if (accentColor) {
     // Update light theme
     dynamicColors.light.primary = accentColor;
@@ -76,4 +79,6 @@ export async function initializeAccentColor(): Promise<void> {
 }
 
 // Initialize colors when this module is imported
-initializeAccentColor().catch(err => console.error('Failed to initialize accent color:', err));
+initializeAccentColor().catch((err) =>
+  console.error('Failed to initialize accent color:', err)
+);

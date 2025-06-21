@@ -17,7 +17,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { NavigationEntry } from '@/types/navigation';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 
-const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
+const { height: screenHeight } = Dimensions.get('window');
 
 interface NavigationHistoryPanelProps {
   visible: boolean;
@@ -32,8 +32,10 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
 }) => {
   const colorScheme = useColorScheme() as ColorScheme;
   const { navigationState, navigateTo, clearHistory } = useNavigationHistory();
-  const [selectedEntry, setSelectedEntry] = useState<NavigationEntry | null>(null);
-  
+  const [selectedEntry, setSelectedEntry] = useState<NavigationEntry | null>(
+    null
+  );
+
   const colors = Colors[colorScheme];
   const slideAnim = useRef(new Animated.Value(screenHeight)).current;
 
@@ -90,7 +92,7 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
   const formatTimestamp = (timestamp: number) => {
     const now = Date.now();
     const diff = now - timestamp;
-    
+
     if (diff < 60000) return 'Just now';
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
     if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
@@ -99,10 +101,10 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
 
   const getContextIcon = (context: string): keyof typeof Ionicons.glyphMap => {
     const contextIcons: Record<string, keyof typeof Ionicons.glyphMap> = {
-      'browse': 'compass',
-      'reading': 'book',
-      'search': 'search',
-      'settings': 'settings',
+      browse: 'compass',
+      reading: 'book',
+      search: 'search',
+      settings: 'settings',
     };
     return contextIcons[context] || 'document';
   };
@@ -110,14 +112,17 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
   const groupedHistory = navigationState.contextHistory
     .slice(-maxItems)
     .reverse()
-    .reduce((groups, entry) => {
-      const date = new Date(entry.timestamp).toDateString();
-      if (!groups[date]) {
-        groups[date] = [];
-      }
-      groups[date].push(entry);
-      return groups;
-    }, {} as Record<string, NavigationEntry[]>);
+    .reduce(
+      (groups, entry) => {
+        const date = new Date(entry.timestamp).toDateString();
+        if (!groups[date]) {
+          groups[date] = [];
+        }
+        groups[date].push(entry);
+        return groups;
+      },
+      {} as Record<string, NavigationEntry[]>
+    );
 
   return (
     <Modal
@@ -127,12 +132,12 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <TouchableOpacity 
-          style={styles.backdrop} 
-          activeOpacity={1} 
-          onPress={onClose} 
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={onClose}
         />
-        
+
         <Animated.View
           style={[
             styles.panel,
@@ -148,7 +153,7 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
             style={styles.blurContainer}
           >
             <View style={styles.handle} />
-            
+
             <View style={styles.header}>
               <Text style={[styles.title, { color: colors.text }]}>
                 Navigation History
@@ -158,8 +163,17 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                   style={[styles.clearButton, { borderColor: colors.border }]}
                   onPress={handleClearHistory}
                 >
-                  <Ionicons name="trash" size={16} color={colors.textSecondary} />
-                  <Text style={[styles.clearButtonText, { color: colors.textSecondary }]}>
+                  <Ionicons
+                    name="trash"
+                    size={16}
+                    color={colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.clearButtonText,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
                     Clear
                   </Text>
                 </TouchableOpacity>
@@ -169,23 +183,27 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
               </View>
             </View>
 
-            <ScrollView 
+            <ScrollView
               style={styles.content}
               showsVerticalScrollIndicator={false}
             >
               {Object.entries(groupedHistory).map(([date, entries]) => (
                 <View key={date} style={styles.dateGroup}>
-                  <Text style={[styles.dateHeader, { color: colors.textSecondary }]}>
+                  <Text
+                    style={[styles.dateHeader, { color: colors.textSecondary }]}
+                  >
                     {date === new Date().toDateString() ? 'Today' : date}
                   </Text>
-                  
+
                   {entries.map((entry, index) => (
                     <TouchableOpacity
                       key={`${entry.path}-${entry.timestamp}-${index}`}
                       style={[
                         styles.historyItem,
                         { backgroundColor: colors.card },
-                        selectedEntry === entry && { backgroundColor: colors.primary + '20' }
+                        selectedEntry === entry && {
+                          backgroundColor: colors.primary + '20',
+                        },
                       ]}
                       onPress={() => handleEntryPress(entry)}
                       onLongPress={() => setSelectedEntry(entry)}
@@ -200,32 +218,53 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                               color={colors.primary}
                               style={styles.contextIcon}
                             />
-                            <Text 
-                              style={[styles.historyItemTitle, { color: colors.text }]}
+                            <Text
+                              style={[
+                                styles.historyItemTitle,
+                                { color: colors.text },
+                              ]}
                               numberOfLines={1}
                             >
                               {entry.title}
                             </Text>
                           </View>
-                          <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
+                          <Text
+                            style={[
+                              styles.timestamp,
+                              { color: colors.textSecondary },
+                            ]}
+                          >
                             {formatTimestamp(entry.timestamp)}
                           </Text>
                         </View>
-                        
-                        <Text 
-                          style={[styles.historyItemPath, { color: colors.textSecondary }]}
+
+                        <Text
+                          style={[
+                            styles.historyItemPath,
+                            { color: colors.textSecondary },
+                          ]}
                           numberOfLines={1}
                         >
                           {entry.path}
                         </Text>
-                        
+
                         {entry.metadata?.mangaId && (
                           <View style={styles.metadata}>
-                            <Text style={[styles.metadataText, { color: colors.textSecondary }]}>
+                            <Text
+                              style={[
+                                styles.metadataText,
+                                { color: colors.textSecondary },
+                              ]}
+                            >
                               Manga ID: {entry.metadata.mangaId}
                             </Text>
                             {entry.metadata.chapterNumber && (
-                              <Text style={[styles.metadataText, { color: colors.textSecondary }]}>
+                              <Text
+                                style={[
+                                  styles.metadataText,
+                                  { color: colors.textSecondary },
+                                ]}
+                              >
                                 • Chapter {entry.metadata.chapterNumber}
                               </Text>
                             )}
@@ -236,11 +275,17 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                   ))}
                 </View>
               ))}
-              
+
               {Object.keys(groupedHistory).length === 0 && (
                 <View style={styles.emptyState}>
-                  <Ionicons name="time" size={48} color={colors.textSecondary} />
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  <Ionicons
+                    name="time"
+                    size={48}
+                    color={colors.textSecondary}
+                  />
+                  <Text
+                    style={[styles.emptyText, { color: colors.textSecondary }]}
+                  >
                     No navigation history yet
                   </Text>
                 </View>

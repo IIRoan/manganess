@@ -1,6 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Platform } from 'react-native';
-import { WebView, WebViewNavigation, WebViewMessageEvent } from 'react-native-webview';
+import {
+  WebView,
+  WebViewNavigation,
+  WebViewMessageEvent,
+} from 'react-native-webview';
 
 interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {
   allowedHosts?: string[];
@@ -16,12 +20,10 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
   const [webViewKey, setWebViewKey] = useState(1);
   const [lastLoadedUrl, setLastLoadedUrl] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const initialUrl =
-    currentUrl || (props.source && 'uri' in props.source ? props.source.uri : '');
 
   useEffect(() => {
     if (Platform.OS === 'ios') {
-      setTimeout(() => setWebViewKey(key => key + 1), 50);
+      setTimeout(() => setWebViewKey((key) => key + 1), 50);
     }
   }, []);
 
@@ -81,8 +83,8 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
   `;
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
-    const isAllowedHost = allowedHosts.some(host =>
-      navState.url.toLowerCase().includes(host.toLowerCase()),
+    const isAllowedHost = allowedHosts.some((host) =>
+      navState.url.toLowerCase().includes(host.toLowerCase())
     );
 
     // If this is the initial load or it's an allowed navigation from the app, allow it
@@ -128,7 +130,7 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
       }
 
       props.onMessage?.(event);
-    } catch (e) {
+    } catch {
       props.onMessage?.(event);
     }
   };

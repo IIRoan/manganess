@@ -11,7 +11,7 @@ export interface MangaItem {
 }
 
 export interface MangaDetails {
-  id?: string;
+  id: string;
   title: string;
   alternativeTitle: string;
   status: string;
@@ -42,7 +42,14 @@ export interface BookmarkItem {
   lastUpdated?: number;
 }
 
-export type BookmarkStatus = "To Read" | "Reading" | "Read" | "On Hold";
+export type BookmarkStatus = 'To Read' | 'Reading' | 'Read' | 'On Hold';
+
+export interface RecentMangaItem {
+  id: string;
+  title: string;
+  bannerImage: string;
+  lastReadChapter?: string;
+}
 
 export interface MangaData {
   id: string;

@@ -17,15 +17,24 @@ interface NessieAnimationProps {
   imageSize?: number;
 }
 
-export const NessieAnimation: React.FC<NessieAnimationProps> = ({ style, imageSize = 30 }) => {
+export const NessieAnimation: React.FC<NessieAnimationProps> = ({
+  style,
+  imageSize = 30,
+}) => {
   const progress = useRef(new Animated.Value(0)).current;
   const backflipRotation = useRef(new Animated.Value(0)).current;
   const walkDistance = useRef(0);
   const startPosition = useRef(0);
 
   const generateNewWalkCycle = useCallback(() => {
-    const newWalkDistance = Math.floor(Math.random() * (MAX_WALK_DISTANCE - MIN_WALK_DISTANCE + 1) + MIN_WALK_DISTANCE);
-    let newStartPosition = Math.max(0, Math.min(startPosition.current, MAX_RIGHT_DISTANCE - newWalkDistance));
+    const newWalkDistance = Math.floor(
+      Math.random() * (MAX_WALK_DISTANCE - MIN_WALK_DISTANCE + 1) +
+        MIN_WALK_DISTANCE
+    );
+    let newStartPosition = Math.max(
+      0,
+      Math.min(startPosition.current, MAX_RIGHT_DISTANCE - newWalkDistance)
+    );
 
     walkDistance.current = newWalkDistance;
     startPosition.current = newStartPosition;
@@ -44,7 +53,7 @@ export const NessieAnimation: React.FC<NessieAnimationProps> = ({ style, imageSi
 
   const animateWithDelay = useCallback(() => {
     const delay = Math.random() * (MAX_DELAY - MIN_DELAY) + MIN_DELAY;
-    
+
     Animated.sequence([
       Animated.delay(delay),
       Animated.timing(progress, {
@@ -52,7 +61,7 @@ export const NessieAnimation: React.FC<NessieAnimationProps> = ({ style, imageSi
         duration: CYCLE_DURATION,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
+      }),
     ]).start(({ finished }) => {
       if (finished) {
         progress.setValue(0);
@@ -76,23 +85,34 @@ export const NessieAnimation: React.FC<NessieAnimationProps> = ({ style, imageSi
   }, [generateNewWalkCycle, animateWithDelay]);
 
   const translateX = progress.interpolate({
-    inputRange: [0, 5/12, 1/2, 11/12, 1],
+    inputRange: [0, 5 / 12, 1 / 2, 11 / 12, 1],
     outputRange: [
       startPosition.current,
       startPosition.current + walkDistance.current,
       startPosition.current + walkDistance.current,
       startPosition.current,
-      startPosition.current
+      startPosition.current,
     ],
   });
 
   const scaleX = progress.interpolate({
-    inputRange: [0, 5/12, 5/12 + 0.001, 11/12, 11/12 + 0.001, 1],
+    inputRange: [0, 5 / 12, 5 / 12 + 0.001, 11 / 12, 11 / 12 + 0.001, 1],
     outputRange: [1, 1, -1, -1, 1, 1],
   });
 
   const translateY = progress.interpolate({
-    inputRange: [0, 1/24, 1/12, 1/4, 5/12, 1/2, 17/24, 3/4, 11/12, 1],
+    inputRange: [
+      0,
+      1 / 24,
+      1 / 12,
+      1 / 4,
+      5 / 12,
+      1 / 2,
+      17 / 24,
+      3 / 4,
+      11 / 12,
+      1,
+    ],
     outputRange: [0, -2, 0, -2, 0, 0, -2, 0, -2, 0],
     extrapolate: 'clamp',
   });

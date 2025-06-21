@@ -27,9 +27,7 @@ const SmartNavigationShortcuts: React.FC<SmartNavigationShortcutsProps> = ({
   onNavigate,
 }) => {
   const colorScheme = useColorScheme() as ColorScheme;
-  const { suggestions, navigateTo, getAnalytics } = useNavigationHistory();
-  const [smartSuggestions, setSmartSuggestions] = useState<string[]>([]);
-  const [recentPaths, setRecentPaths] = useState<NavigationEntry[]>([]);
+  const { navigateTo, getAnalytics } = useNavigationHistory();
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   const colors = Colors[colorScheme];
@@ -57,10 +55,10 @@ const SmartNavigationShortcuts: React.FC<SmartNavigationShortcutsProps> = ({
       if (analytics) {
         // Get most visited paths as suggestions
         const topPaths = Object.entries(analytics.mostVisitedPaths)
-          .sort(([,a], [,b]) => b - a)
+          .sort(([, a], [, b]) => b - a)
           .slice(0, maxShortcuts)
           .map(([path]) => path);
-        
+
         setSmartSuggestions(topPaths);
       }
     } catch (error) {
@@ -69,13 +67,13 @@ const SmartNavigationShortcuts: React.FC<SmartNavigationShortcutsProps> = ({
   };
 
   const getShortcutData = () => {
-    const shortcuts: Array<{
+    const shortcuts: {
       path: string;
       title: string;
       icon: keyof typeof Ionicons.glyphMap;
       color: string;
       description: string;
-    }> = [];
+    }[] = [];
 
     // Add predefined quick shortcuts
     const quickShortcuts = [
@@ -113,8 +111,8 @@ const SmartNavigationShortcuts: React.FC<SmartNavigationShortcutsProps> = ({
 
     // Add smart suggestions from analytics
     smartSuggestions.forEach((path) => {
-      if (shortcuts.find(s => s.path === path)) return; // Skip duplicates
-      
+      if (shortcuts.find((s) => s.path === path)) return; // Skip duplicates
+
       let title = 'Page';
       let icon: keyof typeof Ionicons.glyphMap = 'document';
       let color = colors.textSecondary;
@@ -162,11 +160,13 @@ const SmartNavigationShortcuts: React.FC<SmartNavigationShortcutsProps> = ({
     <Animated.View style={[styles.container, { opacity: fadeAnim }, style]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Ionicons name="flash" size={20} color={colors.primary} />
-        <Text style={[styles.title, { color: colors.text }]}>Quick Navigation</Text>
+        <Text style={[styles.title, { color: colors.text }]}>
+          Quick Navigation
+        </Text>
       </View>
 
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         style={styles.scrollView}
@@ -176,29 +176,33 @@ const SmartNavigationShortcuts: React.FC<SmartNavigationShortcutsProps> = ({
             key={`${shortcut.path}-${index}`}
             style={[
               styles.shortcut,
-              { 
+              {
                 backgroundColor: colors.card,
                 borderColor: colors.border,
-              }
+              },
             ]}
             onPress={() => handleShortcutPress(shortcut.path)}
             activeOpacity={0.7}
           >
-            <View style={[styles.iconContainer, { backgroundColor: shortcut.color + '20' }]}>
-              <Ionicons 
-                name={shortcut.icon} 
-                size={24} 
-                color={shortcut.color} 
-              />
+            <View
+              style={[
+                styles.iconContainer,
+                { backgroundColor: shortcut.color + '20' },
+              ]}
+            >
+              <Ionicons name={shortcut.icon} size={24} color={shortcut.color} />
             </View>
-            <Text 
+            <Text
               style={[styles.shortcutTitle, { color: colors.text }]}
               numberOfLines={1}
             >
               {shortcut.title}
             </Text>
-            <Text 
-              style={[styles.shortcutDescription, { color: colors.textSecondary }]}
+            <Text
+              style={[
+                styles.shortcutDescription,
+                { color: colors.textSecondary },
+              ]}
               numberOfLines={1}
             >
               {shortcut.description}
@@ -208,7 +212,11 @@ const SmartNavigationShortcuts: React.FC<SmartNavigationShortcutsProps> = ({
 
         {shortcuts.length === 0 && (
           <View style={styles.emptyState}>
-            <Ionicons name="rocket-outline" size={32} color={colors.textSecondary} />
+            <Ionicons
+              name="rocket-outline"
+              size={32}
+              color={colors.textSecondary}
+            />
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               Start navigating to see smart shortcuts
             </Text>
@@ -229,9 +237,8 @@ export const FloatingSmartShortcuts: React.FC<FloatingShortcutsProps> = ({
   offset = 120,
   ...props
 }) => {
-  const positionStyle = position === 'top' 
-    ? { top: offset } 
-    : { bottom: offset };
+  const positionStyle =
+    position === 'top' ? { top: offset } : { bottom: offset };
 
   return (
     <SmartNavigationShortcuts

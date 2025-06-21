@@ -1,6 +1,10 @@
 // Contains all navigation-related types
 
-export type NavigationContextType = 'browse' | 'reading' | 'settings' | 'search';
+export type NavigationContextType =
+  | 'browse'
+  | 'reading'
+  | 'settings'
+  | 'search';
 
 export interface NavigationEntry {
   path: string;
