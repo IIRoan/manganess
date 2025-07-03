@@ -6,7 +6,8 @@
       "Bash(npx tsc:*)",
       "Bash(rg:*)",
       "Bash(bun run lint:*)",
-      "Bash(bun run format:write:*)"
+      "Bash(bun run format:write:*)",
+      "Bash(bun run:*)"
     ]
   },
   "enableAllProjectMcpServers": false

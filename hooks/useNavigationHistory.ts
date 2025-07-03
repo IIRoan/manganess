@@ -48,7 +48,7 @@ export const useNavigationHistory = () => {
       try {
         // Add to history with optional metadata
         await navigationService.addToHistory(path, {
-          title: options?.title,
+          ...(options?.title && { title: options.title }),
           metadata: options?.metadata,
         });
 

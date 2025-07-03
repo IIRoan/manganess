@@ -247,7 +247,7 @@ class ImageCache {
         lastAccessed: Date.now(),
         lastUpdated: Date.now(),
         context: 'search',
-        fileSize: fileInfo.size || 0,
+        fileSize: fileInfo.exists ? fileInfo.size : 0,
         urlHash: simpleHash(url),
       });
       await this.saveMetadata();
@@ -303,7 +303,7 @@ class ImageCache {
         lastAccessed: Date.now(),
         lastUpdated: Date.now(),
         context: 'manga',
-        fileSize: fileInfo.size || 0,
+        fileSize: fileInfo.exists ? fileInfo.size : 0,
         urlHash: simpleHash(url),
       });
       await this.saveMetadata();

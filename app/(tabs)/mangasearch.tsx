@@ -44,7 +44,7 @@ export default function MangaSearchScreen() {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [/* error */, setError] = useState<string | null>(null);
   const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>(
     {}
   );
@@ -128,7 +128,7 @@ export default function MangaSearchScreen() {
           title={item.title}
           imageUrl={item.banner}
           onPress={() => handleMangaPress(item)}
-          lastReadChapter={lastReadChapters[item.id]}
+          lastReadChapter={lastReadChapters[item.id] || null}
           style={styles.card}
           context="search"
         />

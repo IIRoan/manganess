@@ -93,7 +93,7 @@ export default function BookmarksScreen() {
   const [isViewModeLoading, setIsViewModeLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<BookmarkStatus>('Reading');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState(SORT_OPTIONS[0].id);
+  const [sortOption, setSortOption] = useState(SORT_OPTIONS[0]?.id || 'title-asc');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showSortOptions, setShowSortOptions] = useState(false);
   const [allImageUrls, setAllImageUrls] = useState<string[]>([]);
@@ -172,8 +172,9 @@ export default function BookmarksScreen() {
 
       // Group by section
       filtered.forEach((it) => {
-        if (it.status && sections[it.status as BookmarkStatus]) {
-          sections[it.status as BookmarkStatus].push(it);
+        const status = it.status as BookmarkStatus;
+        if (status && sections[status]) {
+          sections[status].push(it);
         }
       });
 
@@ -197,16 +198,17 @@ export default function BookmarksScreen() {
       const arr = await Promise.all(
         keys.map(async (key: string) => {
           const id = key.split('_')[1];
+          if (!id) return null;
           const d = await getMangaData(id);
           if (!d) return null;
           return {
             id: d.id,
             title: d.title,
-            status: d.bookmarkStatus || '',
+            status: (d.bookmarkStatus as BookmarkStatus) || 'Reading',
             lastReadChapter: d.lastReadChapter
               ? `Chapter ${d.lastReadChapter}`
               : 'Not started',
-            imageUrl: d.bannerImage,
+            imageUrl: d.bannerImage || '',
             lastUpdated: d.lastUpdated ?? 0,
           } as BookmarkItem;
         })
@@ -389,7 +391,10 @@ export default function BookmarksScreen() {
             );
 
             if (currentIndex !== nextIndex) {
-              runOnJS(changeSection)(SECTIONS[nextIndex]);
+              const section = SECTIONS[nextIndex];
+              if (section) {
+                runOnJS(changeSection)(section);
+              }
             } else {
               translateX.value = withTiming(0, {
                 duration: 200,

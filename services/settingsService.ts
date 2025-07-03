@@ -7,7 +7,7 @@ interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   enableDebugTab: boolean;
   onboardingCompleted: boolean;
-  accentColor?: string;
+  accentColor?: string | undefined;
 }
 
 const SETTINGS_KEY = 'app_settings';
@@ -172,7 +172,7 @@ export async function migrateToNewStorage(): Promise<{
         ]);
 
       // Parse read chapters
-      const readChapters = readChaptersStr[1]
+      const readChapters = readChaptersStr?.[1]
         ? JSON.parse(readChaptersStr[1])
         : [];
 
@@ -182,9 +182,9 @@ export async function migrateToNewStorage(): Promise<{
       // Create new manga data structure
       await setMangaData({
         id,
-        title: mangaDetails?.title || title[1] || '',
-        bannerImage: mangaDetails?.bannerImage || imageUrl[1] || '',
-        bookmarkStatus: (bookmarkStatus[1] as any) || null,
+        title: mangaDetails?.title || title?.[1] || '',
+        bannerImage: mangaDetails?.bannerImage || imageUrl?.[1] || '',
+        bookmarkStatus: (bookmarkStatus?.[1] as any) || null,
         readChapters,
         lastReadChapter:
           readChapters.length > 0

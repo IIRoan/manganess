@@ -20,7 +20,7 @@ export function useAppUpdates() {
   const [lastResult, setLastResult] = useState<UpdateResult | null>(null);
 
   // Check if an update is available without downloading
-  const checkForUpdate = useCallback(async (options: UpdateOptions = {}) => {
+  const checkForUpdate = useCallback(async (_options: UpdateOptions = {}) => {
     setUpdateStatus((prev) => ({ ...prev, isChecking: true }));
     try {
       console.log('Checking for available updates...');

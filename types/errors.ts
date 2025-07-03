@@ -16,7 +16,7 @@ export enum ErrorType {
 export interface AppError {
   type: ErrorType;
   message: string;
-  code?: string;
+  code?: string | undefined;
   details?: any;
   timestamp: number;
   retryable: boolean;

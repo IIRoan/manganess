@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { updateAniListStatus } from './anilistService';
-import { BookmarkStatus, MangaData, AlertConfig } from '@/types';
+import { BookmarkStatus, MangaData } from '@/types';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
 

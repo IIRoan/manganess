@@ -101,7 +101,7 @@ export const markChapterAsUnread = async (
       await setMangaData({
         ...mangaData,
         readChapters: updatedReadChapters,
-        lastReadChapter: newLastReadChapter || undefined,
+        lastReadChapter: newLastReadChapter || '',
         lastUpdated: Date.now(),
       });
 

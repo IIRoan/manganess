@@ -39,7 +39,7 @@ export type ThemeColors = typeof Colors.light & typeof Colors.dark;
 // Function to update accent color at runtime
 export function updateAccentColor(
   accentColor: string | undefined,
-  colorScheme: ColorScheme = 'light'
+  _colorScheme: ColorScheme = 'light'
 ): void {
   if (accentColor) {
     // Update light theme

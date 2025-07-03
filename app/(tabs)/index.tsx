@@ -95,7 +95,7 @@ export default function HomeScreen() {
       setNewReleases(parsedNewReleases);
 
       if (parsedMostViewed.length > 0) {
-        setFeaturedManga(parsedMostViewed[0]);
+        setFeaturedManga(parsedMostViewed[0] || null);
       }
     } catch (error) {
       console.error('Error fetching manga data:', error);
@@ -165,7 +165,6 @@ export default function HomeScreen() {
         <Text
           style={[styles.sectionTitle, { color: themeColors.text }]}
           accessibilityRole="header"
-          accessibilityLevel={2}
         >
           {title}
         </Text>
@@ -255,7 +254,7 @@ export default function HomeScreen() {
   const renderNewReleaseGrid = useCallback(() => {
     return (
       <View style={styles.newReleaseGrid}>
-        {newReleases.map((item, index) => (
+        {newReleases.map((item) => (
           <View key={item.id} style={styles.newReleaseWrapper}>
             <TouchableOpacity
               onPress={() => router.navigate(`/manga/${item.id}`)}
@@ -335,7 +334,7 @@ export default function HomeScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.recentlyReadList}
         decelerationRate="fast"
-        getItemLayout={(data, index) => ({
+        getItemLayout={(_data, index) => ({
           length: RECENTLY_READ_CARD_WIDTH + 12,
           offset: (RECENTLY_READ_CARD_WIDTH + 12) * index,
           index,
@@ -488,7 +487,7 @@ export default function HomeScreen() {
                   decelerationRate="fast"
                   snapToInterval={TRENDING_CARD_WIDTH + 12}
                   snapToAlignment="start"
-                  getItemLayout={(data, index) => ({
+                  getItemLayout={(_data, index) => ({
                     length: TRENDING_CARD_WIDTH + 12,
                     offset: (TRENDING_CARD_WIDTH + 12) * index,
                     index,

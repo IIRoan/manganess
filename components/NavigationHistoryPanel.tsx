@@ -166,12 +166,12 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                   <Ionicons
                     name="trash"
                     size={16}
-                    color={colors.textSecondary}
+                    color={colors.tabIconDefault}
                   />
                   <Text
                     style={[
                       styles.clearButtonText,
-                      { color: colors.textSecondary },
+                      { color: colors.tabIconDefault },
                     ]}
                   >
                     Clear
@@ -190,7 +190,7 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
               {Object.entries(groupedHistory).map(([date, entries]) => (
                 <View key={date} style={styles.dateGroup}>
                   <Text
-                    style={[styles.dateHeader, { color: colors.textSecondary }]}
+                    style={[styles.dateHeader, { color: colors.tabIconDefault }]}
                   >
                     {date === new Date().toDateString() ? 'Today' : date}
                   </Text>
@@ -231,7 +231,7 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                           <Text
                             style={[
                               styles.timestamp,
-                              { color: colors.textSecondary },
+                              { color: colors.tabIconDefault },
                             ]}
                           >
                             {formatTimestamp(entry.timestamp)}
@@ -241,7 +241,7 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                         <Text
                           style={[
                             styles.historyItemPath,
-                            { color: colors.textSecondary },
+                            { color: colors.tabIconDefault },
                           ]}
                           numberOfLines={1}
                         >
@@ -253,7 +253,7 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                             <Text
                               style={[
                                 styles.metadataText,
-                                { color: colors.textSecondary },
+                                { color: colors.tabIconDefault },
                               ]}
                             >
                               Manga ID: {entry.metadata.mangaId}
@@ -262,7 +262,7 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                               <Text
                                 style={[
                                   styles.metadataText,
-                                  { color: colors.textSecondary },
+                                  { color: colors.tabIconDefault },
                                 ]}
                               >
                                 • Chapter {entry.metadata.chapterNumber}
@@ -281,10 +281,10 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
                   <Ionicons
                     name="time"
                     size={48}
-                    color={colors.textSecondary}
+                    color={colors.tabIconDefault}
                   />
                   <Text
-                    style={[styles.emptyText, { color: colors.textSecondary }]}
+                    style={[styles.emptyText, { color: colors.tabIconDefault }]}
                   >
                     No navigation history yet
                   </Text>

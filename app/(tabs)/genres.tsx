@@ -116,16 +116,16 @@ export default function GenresScreen() {
     return matches
       .map((match) => {
         const link = match[1];
-        const id = link.split('/').pop() || '';
+        const id = link?.split('/').pop() || '';
         const imageUrl = match[2];
 
         return {
           id,
           link: `${MANGA_API_URL}${link}`,
-          title: match[4].trim(),
-          banner: imageUrl,
-          imageUrl: imageUrl,
-          type: match[3].trim(),
+          title: match[4]?.trim() || '',
+          banner: imageUrl || '',
+          imageUrl: imageUrl || '',
+          type: match[3]?.trim() || '',
         };
       })
       .filter((item) => item.id && item.title)
@@ -175,6 +175,7 @@ export default function GenresScreen() {
       onPress={() => handleMangaPress(item)}
       style={styles.mangaCard}
       context="search"
+      lastReadChapter={null}
     />
   );
 

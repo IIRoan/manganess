@@ -13,7 +13,9 @@ const ANILIST_API_URL = 'https://graphql.anilist.co';
 const parseHashParams = (hash: string) => {
   return hash.split('&').reduce((params: any, param) => {
     const [key, value] = param.split('=');
-    params[key] = value;
+    if (key) {
+      params[key] = value;
+    }
     return params;
   }, {});
 };

@@ -148,11 +148,9 @@ const CustomWebView: React.FC<CustomWebViewProps> = ({
         ${props.injectedJavaScript || ''}
         true;
       `}
-      userAgent={Platform.select({
-        android:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        ios: props.userAgent,
-      })}
+      {...(Platform.OS === 'android' ? { 
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
+      } : props.userAgent ? { userAgent: props.userAgent } : {})}
       sharedCookiesEnabled={false}
       thirdPartyCookiesEnabled={false}
       javaScriptCanOpenWindowsAutomatically={false}

@@ -2,17 +2,19 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, View, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/constants/ThemeContext';
-import { Colors } from '@/constants/Colors';
+// import { Colors } from '@/constants/Colors';
+
+import { DimensionValue } from 'react-native';
 
 interface ShimmerEffectProps {
-  width?: number | string;
+  width?: DimensionValue;
   height?: number;
   borderRadius?: number;
   style?: ViewStyle;
 }
 
 export const ShimmerEffect: React.FC<ShimmerEffectProps> = ({
-  width = '100%',
+  width = 100,
   height = 20,
   borderRadius = 4,
   style,
@@ -88,14 +90,14 @@ export const ShimmerCard: React.FC<{ style?: ViewStyle }> = ({ style }) => (
 
 export const ShimmerText: React.FC<{
   lines?: number;
-  width?: string;
+  width?: DimensionValue;
   style?: ViewStyle;
-}> = ({ lines = 3, width = '100%', style }) => (
+}> = ({ lines = 3, width = '100%' as DimensionValue, style }) => (
   <View style={style}>
     {Array.from({ length: lines }).map((_, index) => (
       <ShimmerEffect
         key={index}
-        width={index === lines - 1 ? '70%' : width}
+        width={index === lines - 1 ? ('70%' as DimensionValue) : width}
         height={16}
         style={{ marginBottom: index < lines - 1 ? 8 : 0 }}
       />

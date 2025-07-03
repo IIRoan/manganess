@@ -277,6 +277,7 @@ export async function syncAllMangaWithAniList(): Promise<string[]> {
             'To Read': 'PLANNING',
             Reading: 'CURRENT',
             Read: 'COMPLETED',
+            'On Hold': 'PAUSED',
           }[mangaData.bookmarkStatus] || 'PLANNING';
 
         const progress = mangaData.readChapters.length;

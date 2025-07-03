@@ -22,7 +22,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { Option, BottomPopupProps } from '@/types';
+import { BottomPopupProps } from '@/types';
 
 const BottomPopup: React.FC<BottomPopupProps> = ({
   visible,

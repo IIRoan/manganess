@@ -31,7 +31,7 @@ class NavigationHistoryService {
   private static instance: NavigationHistoryService;
   private history: NavigationHistory | null = null;
   private analytics: NavigationAnalytics | null = null;
-  private settings: NavigationSettings = DEFAULT_SETTINGS;
+  private _settings: NavigationSettings = DEFAULT_SETTINGS;
   private sessionId: string = '';
   private saveQueue: (() => Promise<void>)[] = [];
   private isProcessingSaveQueue = false;
@@ -162,20 +162,20 @@ class NavigationHistoryService {
 
     // Extract manga ID from path
     const mangaMatch = path.match(/\/manga\/([^\/]+)/);
-    if (mangaMatch) {
+    if (mangaMatch?.[1]) {
       metadata.mangaId = mangaMatch[1];
     }
 
     // Extract chapter number
     const chapterMatch = path.match(/\/chapter\/([^\/]+)/);
     if (chapterMatch) {
-      metadata.chapterNumber = parseInt(chapterMatch[1], 10);
+      metadata.chapterNumber = parseInt(chapterMatch?.[1] || '0', 10);
     }
 
     // Extract search query (if present in path)
     const searchMatch = path.match(/[?&]q=([^&]+)/);
     if (searchMatch) {
-      metadata.searchQuery = decodeURIComponent(searchMatch[1]);
+      metadata.searchQuery = decodeURIComponent(searchMatch?.[1] || '');
     }
 
     return metadata;
@@ -324,14 +324,16 @@ class NavigationHistoryService {
         this.analytics = analytics;
       }
 
-      analytics.totalNavigations++;
-      analytics.mostVisitedPaths[entry.path] =
-        (analytics.mostVisitedPaths[entry.path] || 0) + 1;
+      if (analytics) {
+        analytics.totalNavigations++;
+        analytics.mostVisitedPaths[entry.path] =
+          (analytics.mostVisitedPaths[entry.path] || 0) + 1;
 
-      // Update patterns (last 10 paths)
-      analytics.navigationPatterns.push(entry.path);
-      if (analytics.navigationPatterns.length > 10) {
-        analytics.navigationPatterns.shift();
+        // Update patterns (last 10 paths)
+        analytics.navigationPatterns.push(entry.path);
+        if (analytics.navigationPatterns.length > 10) {
+          analytics.navigationPatterns.shift();
+        }
       }
 
       await AsyncStorage.setItem(ANALYTICS_KEY, JSON.stringify(analytics));
@@ -456,7 +458,7 @@ class NavigationHistoryService {
         // Find the current path in the global stack (search from end)
         let currentIndex = -1;
         for (let i = history.globalStack.length - 1; i >= 0; i--) {
-          if (history.globalStack[i].path === currentPath) {
+          if (history.globalStack[i]?.path === currentPath) {
             currentIndex = i;
             break;
           }
@@ -466,20 +468,20 @@ class NavigationHistoryService {
 
         // If current path found and there's a previous entry
         if (currentIndex > 0) {
-          const previousRoute = history.globalStack[currentIndex - 1].path;
+          const previousRoute = history.globalStack[currentIndex - 1]?.path;
           console.log('🔍 Navigation Debug - Found previous:', previousRoute);
-          return previousRoute;
+          return previousRoute || DEFAULT_ROUTE;
         }
 
         // If current path not found or is first, return the last entry that's not current
         for (let i = history.globalStack.length - 1; i >= 0; i--) {
-          if (history.globalStack[i].path !== currentPath) {
-            const previousRoute = history.globalStack[i].path;
+          if (history.globalStack[i]?.path !== currentPath) {
+            const previousRoute = history.globalStack[i]?.path;
             console.log(
               '🔍 Navigation Debug - Using last different path:',
               previousRoute
             );
-            return previousRoute;
+            return previousRoute || DEFAULT_ROUTE;
           }
         }
 
@@ -492,33 +494,6 @@ class NavigationHistoryService {
     }, 'getPreviousRouteTime');
   }
 
-  private async getPreviousFromReading(
-    chapterPath: string,
-    history: NavigationHistory
-  ): Promise<string> {
-    // Extract manga ID from chapter path
-    const mangaMatch = chapterPath.match(/\/manga\/([^\/]+)/);
-    if (!mangaMatch) {
-      return DEFAULT_ROUTE;
-    }
-
-    const mangaId = mangaMatch[1];
-    const mangaPath = `/manga/${mangaId}`;
-
-    // Look for the manga detail page in browse context
-    const browseContext = history.contexts.browse;
-    if (browseContext) {
-      const mangaDetailIndex = browseContext.stack.findLastIndex(
-        (entry) => entry.path === mangaPath
-      );
-      if (mangaDetailIndex > 0) {
-        return browseContext.stack[mangaDetailIndex - 1].path;
-      }
-    }
-
-    // Fallback to manga detail page
-    return mangaPath;
-  }
 
   private findPreviousContext(
     history: NavigationHistory,
@@ -585,7 +560,7 @@ class NavigationHistoryService {
 
   private generateBreadcrumbs(
     currentPath: string,
-    context: NavigationContext
+    _context: NavigationContext
   ): BreadcrumbItem[] {
     const breadcrumbs: BreadcrumbItem[] = [];
 
@@ -634,7 +609,7 @@ class NavigationHistoryService {
 
   private async generateSuggestions(
     currentPath: string,
-    history: NavigationHistory
+    _history: NavigationHistory
   ): Promise<string[]> {
     const suggestions: string[] = [];
 
@@ -685,7 +660,7 @@ class NavigationHistoryService {
       const currentSettings = await this.getSettings();
       const newSettings = { ...currentSettings, ...settings };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
-      this.settings = newSettings;
+      this._settings = newSettings;
 
       // Update history settings
       const history = await this.getHistory();
@@ -764,8 +739,8 @@ class NavigationHistoryService {
       Object.keys(history.contexts).forEach((contextType) => {
         const context = history.contexts[contextType];
         if (
-          context.metadata.lastAccessed < oneWeekAgo &&
-          context.stack.length === 0
+          (context?.metadata.lastAccessed || 0) < oneWeekAgo &&
+          context?.stack.length === 0
         ) {
           delete history.contexts[contextType];
         }

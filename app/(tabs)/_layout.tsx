@@ -5,11 +5,10 @@ import {
   StyleSheet,
   Dimensions,
   useColorScheme,
-  TouchableOpacity,
   Animated,
   AppState,
 } from 'react-native';
-import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
+import { Tabs, usePathname, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getDebugTabEnabled,
@@ -26,7 +25,6 @@ import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { SwipeGestureOverlay } from '@/components/SwipeBackIndicator';
 
 export default function TabLayout() {
-  const router = useRouter();
   const navigation = useNavigation();
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -37,17 +35,17 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
   const { width } = Dimensions.get('window');
+  const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const TAB_BAR_WIDTH = width * 0.9;
   const visibleTabCount = enableDebugTab ? 6 : 5;
   const TAB_WIDTH = TAB_BAR_WIDTH / visibleTabCount;
 
   const appState = useRef(AppState.currentState);
   const pathname = usePathname();
-  const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<
     boolean | null
   >(null);
-  const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
+  const [_lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
     null
   );
   const buttonScale = useRef(new Animated.Value(1)).current;
@@ -283,28 +281,28 @@ export default function TabLayout() {
     }
   }, [checkForUpdate, updateAndReload]);
 
-  const handleLastButtonPress = () => {
-    Animated.sequence([
-      Animated.timing(buttonScale, {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
+  // const handleLastButtonPress = () => {
+  //   Animated.sequence([
+  //     Animated.timing(buttonScale, {
+  //       toValue: 0.9,
+  //       duration: 100,
+  //       useNativeDriver: true,
+  //     }),
+  //     Animated.timing(buttonScale, {
+  //       toValue: 1,
+  //       duration: 100,
+  //       useNativeDriver: true,
+  //     }),
+  //   ]).start();
 
-    if (lastReadManga && lastReadManga.id) {
-      console.log('Navigating to manga:', lastReadManga);
-      router.push(`/manga/${lastReadManga.id}`);
-    } else {
-      console.log('No last read manga found, navigating to search');
-      router.push('/mangasearch');
-    }
-  };
+  //   if (lastReadManga && lastReadManga.id) {
+  //     console.log('Navigating to manga:', lastReadManga);
+  //     router.push(`/manga/${lastReadManga.id}`);
+  //   } else {
+  //     console.log('No last read manga found, navigating to search');
+  //     router.push('/mangasearch');
+  //   }
+  // };
 
   const shouldShowTabBar = () => {
     const allowedPaths = [
@@ -498,7 +496,7 @@ export default function TabLayout() {
             options={{
               title: 'Debug',
               href: enableDebugTab ? undefined : null,
-            }}
+            } as any}
           />
           <Tabs.Screen name="manga/[id]" options={{ href: null }} />
           <Tabs.Screen
