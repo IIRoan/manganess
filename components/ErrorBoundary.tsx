@@ -6,13 +6,13 @@ import { useTheme } from '@/constants/ThemeContext';
 
 interface ErrorBoundaryState {
   hasError: boolean;
-  error?: Error;
-  errorInfo?: React.ErrorInfo;
+  error?: Error | undefined;
+  errorInfo?: React.ErrorInfo | undefined;
 }
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
-  fallback?: React.ComponentType<{ error?: Error; resetError: () => void }>;
+  fallback?: React.ComponentType<{ error?: Error | undefined; resetError: () => void }>;
 }
 
 class ErrorBoundary extends React.Component<
@@ -28,22 +28,22 @@ class ErrorBoundary extends React.Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({ error, errorInfo });
   }
 
   resetError = () => {
-    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+    this.setState({ hasError: false, error: undefined as Error | undefined, errorInfo: undefined as React.ErrorInfo | undefined });
   };
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
         const FallbackComponent = this.props.fallback;
         return (
           <FallbackComponent
-            error={this.state.error}
+            error={this.state.error as Error | undefined}
             resetError={this.resetError}
           />
         );
@@ -51,7 +51,7 @@ class ErrorBoundary extends React.Component<
 
       return (
         <DefaultErrorFallback
-          error={this.state.error}
+          error={this.state.error as Error | undefined}
           resetError={this.resetError}
         />
       );
@@ -62,7 +62,7 @@ class ErrorBoundary extends React.Component<
 }
 
 const DefaultErrorFallback: React.FC<{
-  error?: Error;
+  error?: Error | undefined;
   resetError: () => void;
 }> = ({ error, resetError }) => {
   const { actualTheme } = useTheme();

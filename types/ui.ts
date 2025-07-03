@@ -1,7 +1,7 @@
 // Contains all UI component types
 
-import { ColorScheme } from '@/constants/Colors';
-import { ComponentProps } from 'react';
+/* import { ColorScheme } from '@/constants/Colors'; */
+/* import { ComponentProps } from 'react'; */
 import { Ionicons } from '@expo/vector-icons';
 import { TextStyle, ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';

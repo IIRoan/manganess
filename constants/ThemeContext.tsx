@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useColorScheme } from 'react-native';
-import { ColorScheme, Colors, updateAccentColor } from '@/constants/Colors';
+import { ColorScheme, updateAccentColor } from '@/constants/Colors';
 import { getAppSettings, setAppSettings } from '@/services/settingsService';
 import { ThemeType } from '@/types';
 

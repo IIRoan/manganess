@@ -54,7 +54,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   }, [currentlyOpenSwipeable]);
 
   const renderRightActions = (
-    progress: Animated.AnimatedInterpolation<number>,
+    _progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>
   ) => {
     const trans = dragX.interpolate({

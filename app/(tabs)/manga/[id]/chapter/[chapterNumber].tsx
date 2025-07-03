@@ -287,7 +287,7 @@ export default function ReadChapterScreen() {
         const newChapterMatch = navState.url.match(/\/chapter-(\d+)/);
         if (newChapterMatch) {
           const newChapterNumber = newChapterMatch[1];
-          if (mangaTitle) {
+          if (mangaTitle && id && newChapterNumber) {
             await markChapterAsRead(id, newChapterNumber, mangaTitle);
           }
           router.replace(`/manga/${id}/chapter/${newChapterNumber}`);

@@ -116,19 +116,19 @@ function parseSearchResults(html: string): MangaItem[] {
   return matches
     .map((match) => {
       const link = match[1];
-      const id = link.split('/').pop() || '';
+      const id = link ? link.split('/').pop() || '' : '';
       const imageUrl = match[2];
 
       // Validate image URL
-      const validImageUrl = validateUrl(imageUrl) ? imageUrl : '';
+      const validImageUrl = validateUrl(imageUrl || '') ? imageUrl : '';
 
       return {
         id,
-        link: `${MANGA_API_URL}${link}`,
-        title: decode(match[4].trim()),
-        banner: validImageUrl,
-        imageUrl: validImageUrl,
-        type: decode(match[3].trim()),
+        link: `${MANGA_API_URL}${link || ''}`,
+        title: decode(match[4]?.trim() || ''),
+        banner: validImageUrl || '',
+        imageUrl: validImageUrl || '',
+        type: decode(match[3]?.trim() || ''),
       };
     })
     .filter((item) => item.id && item.title); // Filter out incomplete results
@@ -175,7 +175,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const descriptionMatch = html.match(
     /<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/
   );
-  let description = descriptionMatch
+  let description = descriptionMatch?.[1]
     ? decode(descriptionMatch[1].trim()) || 'No description available'
     : 'No description available';
 
@@ -189,7 +189,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const authorMatch = html.match(
     /<span>Author:<\/span>.*?<span>(.*?)<\/span>/s
   );
-  const authors = authorMatch
+  const authors = authorMatch?.[1]
     ? authorMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
         ?.map((a) => a.replace(/<[^>]*>/g, '')) || []
@@ -202,7 +202,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const genresMatch = html.match(
     /<span>Genres:<\/span>.*?<span>(.*?)<\/span>/s
   );
-  const genres = genresMatch
+  const genres = genresMatch?.[1]
     ? genresMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
         ?.map((a) => a.replace(/<[^>]*>/g, '')) || []
@@ -225,10 +225,10 @@ const parseMangaDetails = (html: string): MangaDetails => {
   let match;
   while ((match = chaptersRegex.exec(html)) !== null) {
     chapters.push({
-      url: match[1],
-      number: match[2],
-      title: `Chapter ${match[2]}`,
-      date: match[3],
+      url: match[1] || '',
+      number: match[2] || '',
+      title: `Chapter ${match[2] || ''}`,
+      date: match[3] || '',
     });
   }
 
@@ -242,8 +242,8 @@ const parseMangaDetails = (html: string): MangaDetails => {
     genres,
     rating,
     reviewCount,
-    bannerImage,
-    chapters,
+    bannerImage: bannerImage || '',
+    chapters: chapters.filter(ch => ch.number && ch.url && ch.date),
   };
 };
 
@@ -369,17 +369,17 @@ export const parseNewReleases = (html: string): MangaItem[] => {
   for (const match of homeSwiperMatches) {
     const swiperContent = match[1];
 
-    if (swiperContent.includes('<h2>New Release</h2>')) {
+    if (swiperContent && swiperContent.includes('<h2>New Release</h2>')) {
       const itemRegex =
         /<div class="swiper-slide unit[^"]*">\s*<a href="\/manga\/([^"]+)">\s*<div class="poster">\s*<div><img src="([^"]+)" alt="([^"]+)"><\/div>\s*<\/div>\s*<span>([^<]+)<\/span>\s*<\/a>\s*<\/div>/g;
-      const matches = Array.from(swiperContent.matchAll(itemRegex));
+      const matches = Array.from(swiperContent?.matchAll(itemRegex) || []);
 
       return matches.map((match) => ({
-        id: match[1],
-        imageUrl: match[2],
-        title: decode(match[4].trim()),
+        id: match[1] || '',
+        imageUrl: match[2] || '',
+        title: decode(match[4]?.trim() || ''),
         banner: '',
-        link: `/manga/${match[1]}`,
+        link: `/manga/${match[1] || ''}`,
         type: 'manga',
       }));
     }
@@ -394,12 +394,12 @@ export const parseMostViewedManga = (html: string): MangaItem[] => {
     /<div class="swiper-slide unit[^>]*>.*?<a href="\/manga\/([^"]+)".*?<b>(\d+)<\/b>.*?<img src="([^"]+)".*?alt="([^"]+)".*?<\/a>/gs;
   const matches = [...html.matchAll(regex)];
   return matches.slice(0, 10).map((match) => ({
-    id: match[1],
-    rank: parseInt(match[2]),
-    imageUrl: match[3],
-    title: decode(match[4]),
+    id: match[1] || '',
+    rank: parseInt(match[2] || '0'),
+    imageUrl: match[3] || '',
+    title: decode(match[4] || ''),
     banner: '',
-    link: `/manga/${match[1]}`,
+    link: `/manga/${match[1] || ''}`,
     type: 'manga',
   }));
 };

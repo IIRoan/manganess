@@ -194,7 +194,7 @@ export default function SettingsScreen() {
       if (result.canceled) return;
 
       const fileContent = await FileSystem.readAsStringAsync(
-        result.assets[0].uri
+        result.assets?.[0]?.uri || ''
       );
       const importedData = JSON.parse(fileContent);
 

@@ -1,11 +1,13 @@
 import React, { useRef } from 'react';
-import { View, Text, Animated, PanGestureHandler, State } from 'react-native';
+import { View, Text, Animated } from 'react-native';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from './MangaCard';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import { useHapticFeedback } from '@/utils/haptics';
-import { MangaCardProps, CacheContext } from '@/types';
+import { MangaCardProps } from '@/types';
+import { CacheContext } from '@/services/CacheImages';
 
 interface SwipeableMangaCardProps extends MangaCardProps {
   context?: CacheContext;

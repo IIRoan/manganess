@@ -59,7 +59,7 @@ export const SkeletonItem: React.FC<SkeletonLoadingProps> = ({
     <Animated.View
       style={[
         {
-          width,
+          width: Number(width) || 100,
           height,
           borderRadius,
           backgroundColor,
@@ -97,7 +97,7 @@ export const TrendingSkeleton: React.FC = () => {
     <View style={{ flexDirection: 'row', paddingHorizontal: 16 }}>
       {Array.from({ length: 4 }).map((_, index) => (
         <View key={index} style={{ width: 200, height: 260, marginRight: 12 }}>
-          <ShimmerEffect width="100%" height="100%" borderRadius={16} />
+          <ShimmerEffect width={200} height={260} borderRadius={16} />
         </View>
       ))}
     </View>
@@ -123,7 +123,7 @@ export const NewReleasesSkeleton: React.FC = () => {
 export const FeaturedMangaSkeleton: React.FC = () => {
   return (
     <View style={{ height: 280, marginHorizontal: 16, marginBottom: 24 }}>
-      <ShimmerEffect width="100%" height="100%" borderRadius={16} />
+      <ShimmerEffect width={300} height={280} borderRadius={16} />
     </View>
   );
 };

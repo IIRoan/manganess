@@ -12,7 +12,7 @@ import {
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import { Option, CustomAlertProps } from '@/types';
+import { CustomAlertProps } from '@/types';
 
 const Alert: React.FC<CustomAlertProps> = ({
   visible,
@@ -107,6 +107,7 @@ const Alert: React.FC<CustomAlertProps> = ({
         </>
       );
     }
+    return null;
   };
 
   return (
