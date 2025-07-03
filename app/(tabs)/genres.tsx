@@ -176,6 +176,7 @@ export default function GenresScreen() {
       style={styles.mangaCard}
       context="search"
       lastReadChapter={null}
+      mangaId={item.id}
     />
   );
 

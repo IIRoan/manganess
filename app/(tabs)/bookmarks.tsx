@@ -426,6 +426,15 @@ export default function BookmarksScreen() {
               lastReadChapter={item.lastReadChapter}
               context="bookmark"
               mangaId={item.id}
+              onBookmarkChange={(_mangaId, newStatus) => {
+                // If unbookmarked (newStatus is null), refresh immediately
+                if (newStatus === null) {
+                  fetchBookmarks();
+                } else {
+                  // For status changes, just refresh to update the display
+                  fetchBookmarks();
+                }
+              }}
             />
           </View>
         );
@@ -446,6 +455,15 @@ export default function BookmarksScreen() {
               style={styles.listItemImage}
               context="bookmark"
               mangaId={item.id}
+              onBookmarkChange={(_mangaId, newStatus) => {
+                // If unbookmarked (newStatus is null), refresh immediately
+                if (newStatus === null) {
+                  fetchBookmarks();
+                } else {
+                  // For status changes, just refresh to update the display
+                  fetchBookmarks();
+                }
+              }}
             />
           </View>
           <View style={styles.listItemContent}>
