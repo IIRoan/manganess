@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { updateAniListStatus } from './anilistService';
-import { BookmarkStatus, MangaData } from '@/types';
+import { BookmarkStatus, MangaData, IconName } from '@/types';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
 
@@ -206,49 +206,49 @@ export const getBookmarkPopupConfig = (
           {
             text: 'To Read',
             onPress: () => handleSaveBookmark('To Read'),
-            icon: 'book-outline',
+            icon: 'book-outline' as IconName,
           },
           {
             text: 'Reading',
             onPress: () => handleSaveBookmark('Reading'),
-            icon: 'book',
+            icon: 'book' as IconName,
           },
           {
             text: 'On Hold',
             onPress: () => handleSaveBookmark('On Hold'),
-            icon: 'pause-circle-outline',
+            icon: 'pause-circle-outline' as IconName,
           },
           {
             text: 'Read',
             onPress: () => handleSaveBookmark('Read'),
-            icon: 'checkmark-circle-outline',
+            icon: 'checkmark-circle-outline' as IconName,
           },
           {
             text: 'Unbookmark',
             onPress: handleRemoveBookmark,
-            icon: 'close-circle-outline',
+            icon: 'close-circle-outline' as IconName,
           },
         ]
       : [
           {
             text: 'To Read',
             onPress: () => handleSaveBookmark('To Read'),
-            icon: 'book-outline',
+            icon: 'book-outline' as IconName,
           },
           {
             text: 'Reading',
             onPress: () => handleSaveBookmark('Reading'),
-            icon: 'book',
+            icon: 'book' as IconName,
           },
           {
             text: 'On Hold',
             onPress: () => handleSaveBookmark('On Hold'),
-            icon: 'pause-circle-outline',
+            icon: 'pause-circle-outline' as IconName,
           },
           {
             text: 'Read',
             onPress: () => handleSaveBookmark('Read'),
-            icon: 'checkmark-circle-outline',
+            icon: 'checkmark-circle-outline' as IconName,
           },
         ],
   };

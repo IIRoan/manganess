@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,15 @@ import {
   type CacheContext,
 } from '@/services/CacheImages';
 import * as FileSystem from 'expo-file-system';
-import { MangaCardProps } from '@/types';
+import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
+import BottomPopup from './BottomPopup';
+import { getBookmarkPopupConfig, getMangaData, saveBookmark, removeBookmark } from '@/services/bookmarkService';
+import { Ionicons } from '@expo/vector-icons';
 
 interface EnhancedMangaCardProps extends MangaCardProps {
   context?: CacheContext;
-  mangaId?: string;
+  onLongPress?: () => void;
 }
 
 const MangaCard: React.FC<EnhancedMangaCardProps> = ({
@@ -32,6 +35,8 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   style,
   context = 'search',
   mangaId,
+  onLongPress,
+  onBookmarkChange,
 }) => {
   const { theme, systemTheme } = useTheme();
   const colorScheme = theme === 'system' ? systemTheme : (theme as ColorScheme);
@@ -40,8 +45,26 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [showBookmarkPopup, setShowBookmarkPopup] = useState(false);
+  const [bookmarkStatus, setBookmarkStatus] = useState<BookmarkStatus | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const haptics = useHapticFeedback();
+
+  // Load bookmark status when component mounts or mangaId changes
+  useEffect(() => {
+    const loadBookmarkStatus = async () => {
+      if (mangaId) {
+        try {
+          const mangaData = await getMangaData(mangaId);
+          setBookmarkStatus(mangaData?.bookmarkStatus || null);
+        } catch (error) {
+          console.error('Error loading bookmark status:', error);
+        }
+      }
+    };
+
+    loadBookmarkStatus();
+  }, [mangaId]);
 
   // Use appropriate caching strategy based on context
   const searchCachedPath = useImageCache(imageUrl, context, mangaId);
@@ -96,21 +119,112 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
     }).start();
   };
 
-  return (
-    <Pressable
-      testID="manga-card"
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      style={[styles.cardContainer, style]}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${title} manga details`}
-      accessibilityHint={
-        lastReadChapter
-          ? `Last read: ${lastReadChapter}`
-          : 'Tap to view manga details'
+  const handleLongPress = async () => {
+    if (onLongPress) {
+      onLongPress();
+      return;
+    }
+    
+    if (!mangaId) return;
+    
+    haptics.onLongPress();
+    
+    try {
+      const mangaData = await getMangaData(mangaId);
+      setBookmarkStatus(mangaData?.bookmarkStatus || null);
+      setShowBookmarkPopup(true);
+    } catch (error) {
+      console.error('Error fetching manga data for long press:', error);
+    }
+  };
+
+  const handleSaveBookmark = async (status: BookmarkStatus) => {
+    if (!mangaId) return;
+    
+    try {
+      // Update local state immediately for instant feedback
+      setBookmarkStatus(status);
+      setShowBookmarkPopup(false);
+      
+      const mangaData = await getMangaData(mangaId);
+      const mockMangaDetails = {
+        title: title,
+        bannerImage: imageUrl,
+        chapters: [],
+      };
+      
+      await saveBookmark(
+        mangaId,
+        status,
+        mockMangaDetails,
+        mangaData?.readChapters || [],
+        (newStatus) => setBookmarkStatus(newStatus as BookmarkStatus | null),
+        () => {},
+        () => {}
+      );
+      
+      // Notify parent component about bookmark change
+      if (onBookmarkChange) {
+        onBookmarkChange(mangaId, status);
       }
-    >
+    } catch (error) {
+      console.error('Error saving bookmark:', error);
+      // Revert local state if there was an error
+      const mangaData = await getMangaData(mangaId);
+      setBookmarkStatus(mangaData?.bookmarkStatus || null);
+    }
+  };
+
+  const handleRemoveBookmark = async () => {
+    if (!mangaId) return;
+    
+    try {
+      // Update local state immediately for instant feedback
+      setBookmarkStatus(null);
+      setShowBookmarkPopup(false);
+      
+      await removeBookmark(
+        mangaId,
+        (newStatus) => setBookmarkStatus(newStatus as BookmarkStatus | null),
+        () => {}
+      );
+      
+      // Notify parent component about bookmark change
+      if (onBookmarkChange) {
+        onBookmarkChange(mangaId, null);
+      }
+    } catch (error) {
+      console.error('Error removing bookmark:', error);
+      // Revert local state if there was an error
+      const mangaData = await getMangaData(mangaId);
+      setBookmarkStatus(mangaData?.bookmarkStatus || null);
+    }
+  };
+
+  const bookmarkPopupConfig = getBookmarkPopupConfig(
+    bookmarkStatus,
+    title,
+    handleSaveBookmark,
+    handleRemoveBookmark
+  );
+
+  return (
+    <>
+      <Pressable
+        testID="manga-card"
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onLongPress={handleLongPress}
+        style={[styles.cardContainer, style]}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${title} manga details`}
+        accessibilityHint={
+          lastReadChapter
+            ? `Last read: ${lastReadChapter}`
+            : 'Tap to view manga details'
+        }
+      >
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <View style={styles.imageContainer}>
           <Image
@@ -128,6 +242,11 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
           {hasError && (
             <View style={styles.errorOverlay}>
               <Text style={styles.errorText}>Failed to load image</Text>
+            </View>
+          )}
+          {bookmarkStatus && context !== 'bookmark' && (
+            <View style={styles.bookmarkIndicator}>
+              <Ionicons name="bookmark" size={16} color={colors.primary} />
             </View>
           )}
         </View>
@@ -153,6 +272,14 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
         </View>
       </Animated.View>
     </Pressable>
+    
+    <BottomPopup
+      visible={showBookmarkPopup}
+      title={bookmarkPopupConfig.title}
+      onClose={() => setShowBookmarkPopup(false)}
+      options={bookmarkPopupConfig.options}
+    />
+  </>
   );
 };
 
@@ -209,6 +336,22 @@ const getStyles = (colors: typeof Colors.light) =>
     lastReadChapter: {
       fontSize: 12,
       color: colors.tabIconDefault,
+    },
+    bookmarkIndicator: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      width: 24,
+      height: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+      elevation: 2,
     },
   });
 

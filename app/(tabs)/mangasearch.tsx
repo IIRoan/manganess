@@ -131,6 +131,7 @@ export default function MangaSearchScreen() {
           lastReadChapter={lastReadChapters[item.id] || null}
           style={styles.card}
           context="search"
+          mangaId={item.id}
         />
         <View style={styles.titleContainer}>
           <Text style={styles.mangaTitle} numberOfLines={2}>

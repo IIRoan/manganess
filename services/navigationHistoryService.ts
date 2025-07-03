@@ -31,7 +31,6 @@ class NavigationHistoryService {
   private static instance: NavigationHistoryService;
   private history: NavigationHistory | null = null;
   private analytics: NavigationAnalytics | null = null;
-  private _settings: NavigationSettings = DEFAULT_SETTINGS;
   private sessionId: string = '';
   private saveQueue: (() => Promise<void>)[] = [];
   private isProcessingSaveQueue = false;
@@ -660,7 +659,6 @@ class NavigationHistoryService {
       const currentSettings = await this.getSettings();
       const newSettings = { ...currentSettings, ...settings };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
-      this._settings = newSettings;
 
       // Update history settings
       const history = await this.getHistory();
