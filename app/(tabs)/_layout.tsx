@@ -5,14 +5,15 @@ import {
   StyleSheet,
   Dimensions,
   useColorScheme,
-  TouchableOpacity,
   Animated,
-  Alert,
   AppState,
 } from 'react-native';
-import { Tabs, usePathname, useRouter, useNavigation } from 'expo-router';
+import { Tabs, usePathname, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getAppSettings, getDebugTabEnabled, isOnboardingCompleted as checkOnboarding } from '@/services/settingsService';
+import {
+  getDebugTabEnabled,
+  isOnboardingCompleted as checkOnboarding,
+} from '@/services/settingsService';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
@@ -20,9 +21,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { imageCache } from '@/services/CacheImages';
 import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
+import { useSwipeBack } from '@/hooks/useSwipeBack';
+import { SwipeGestureOverlay } from '@/components/SwipeBackIndicator';
 
 export default function TabLayout() {
-  const router = useRouter();
   const navigation = useNavigation();
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -33,60 +35,74 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
   const { width } = Dimensions.get('window');
+  const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const TAB_BAR_WIDTH = width * 0.9;
-  const TAB_WIDTH = TAB_BAR_WIDTH / 5;
+  const visibleTabCount = enableDebugTab ? 6 : 5;
+  const TAB_WIDTH = TAB_BAR_WIDTH / visibleTabCount;
 
   const appState = useRef(AppState.currentState);
   const pathname = usePathname();
-  const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
-  const [lastReadManga, setLastReadManga] = useState<LastReadManga | null>(null);
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<
+    boolean | null
+  >(null);
+  const [_lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
+    null
+  );
   const buttonScale = useRef(new Animated.Value(1)).current;
-  
-  const [lastReadUpdateCount, setLastReadUpdateCount] = useState(0);
+
   // Get update status from the hook
-  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } = useAppUpdates();
-  
+  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } =
+    useAppUpdates();
+
+  // Swipe gesture integration
+  const {
+    panResponder,
+    isSwipingBack,
+    swipeProgress,
+    swipeOpacity,
+    canSwipeBack,
+  } = useSwipeBack();
+
   // Animation values
   const updateIndicatorOpacity = useRef(new Animated.Value(0)).current;
   const updateIndicatorRotation = useRef(new Animated.Value(0)).current;
   const updateProgressWidth = useRef(new Animated.Value(0)).current;
   // Track whether progress has started
   const [progressStarted, setProgressStarted] = useState(false);
-  
+
   // Animation ref
   const updateAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const progressAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  
+
   // Determine if we should actually show the indicator
   // Only show for downloading updates or when ready to apply, not for checks
-  const shouldShowUpdateIndicator = 
+  const shouldShowUpdateIndicator =
     isUpdateInProgress && (updateStatus.isDownloading || updateStatus.isReady);
 
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
-    
+
     performUpdateCheck();
-    
+
     imageCache.initializeCache();
-    
-    const subscription = AppState.addEventListener('change', nextAppState => {
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (
-        appState.current.match(/inactive|background/) && 
+        appState.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
         console.log('App has come to the foreground, checking for updates...');
         performUpdateCheck();
       }
-      
+
       appState.current = nextAppState;
     });
-    
+
     const unsubscribeFocus = navigation.addListener('focus', () => {
       refreshLastReadManga();
     });
-    
+
     return () => {
       subscription.remove();
       unsubscribeFocus();
@@ -98,9 +114,14 @@ export default function TabLayout() {
       }
     };
   }, [navigation]);
-  
+
   useEffect(() => {
-    if (pathname === '/' || pathname === '/bookmarks' || pathname === '/settings' || pathname === '/mangasearch') {
+    if (
+      pathname === '/' ||
+      pathname === '/bookmarks' ||
+      pathname === '/settings' ||
+      pathname === '/mangasearch'
+    ) {
       refreshLastReadManga();
     }
   }, [pathname]);
@@ -112,7 +133,7 @@ export default function TabLayout() {
       updateAnimationRef.current.stop();
       updateAnimationRef.current = null;
     }
-    
+
     if (progressAnimationRef.current) {
       progressAnimationRef.current.stop();
       progressAnimationRef.current = null;
@@ -125,23 +146,23 @@ export default function TabLayout() {
         duration: 300,
         useNativeDriver: true,
       }).start();
-      
+
       // Start a continuous rotation for the spinner
       const rotateAnimation = Animated.timing(updateIndicatorRotation, {
         toValue: 1,
         duration: 1500,
         useNativeDriver: true,
       });
-      
+
       // Create a looping rotation
       const loopingRotation = Animated.loop(rotateAnimation);
-      
+
       // Start the rotation animation
       loopingRotation.start();
-      
+
       // Keep track of the animation
       updateAnimationRef.current = loopingRotation;
-      
+
       // Create simulated progress for short updates
       // Progress moves quickly to 70% then slows down
       progressAnimationRef.current = Animated.sequence([
@@ -154,12 +175,11 @@ export default function TabLayout() {
           toValue: 0.9, // Then more slowly to 90%
           duration: 1200,
           useNativeDriver: false,
-        })
+        }),
       ]);
-      
+
       progressAnimationRef.current.start();
       setProgressStarted(true);
-      
     } else {
       // When update completes, instantly fill the progress bar to 100%
       // then fade out the entire indicator
@@ -177,7 +197,7 @@ export default function TabLayout() {
             toValue: 0,
             duration: 300,
             useNativeDriver: true,
-          })
+          }),
         ]).start(() => {
           // Reset the progress after the animation completes
           updateProgressWidth.setValue(0);
@@ -191,7 +211,7 @@ export default function TabLayout() {
           duration: 300,
           useNativeDriver: true,
         }).start();
-        
+
         // Reset animation values
         updateProgressWidth.setValue(0);
         updateIndicatorRotation.setValue(0);
@@ -219,12 +239,11 @@ export default function TabLayout() {
       console.error('Error loading enable debug tab setting:', error);
     }
   };
-  
+
   const refreshLastReadManga = async () => {
     try {
       const lastRead = await getLastReadManga();
       setLastReadManga(lastRead);
-      setLastReadUpdateCount(prev => prev + 1);
     } catch (error) {
       console.error('Error refreshing last read manga:', error);
     }
@@ -246,44 +265,53 @@ export default function TabLayout() {
       // First check if update is available
       const checkResult = await checkForUpdate();
       console.log('Update check result:', checkResult);
-      
+
       if (checkResult.success) {
         console.log('Update available, downloading and applying...');
         // If an update is available, download and apply it
         await updateAndReload();
       } else {
-        console.log('No update available or unable to check:', checkResult.message);
+        console.log(
+          'No update available or unable to check:',
+          checkResult.message
+        );
       }
     } catch (error) {
       console.error('Error in update process:', error);
     }
   }, [checkForUpdate, updateAndReload]);
 
-  const handleLastButtonPress = () => {
-    Animated.sequence([
-      Animated.timing(buttonScale, {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    
-    if (lastReadManga && lastReadManga.id) {
-      console.log('Navigating to manga:', lastReadManga);
-      router.push(`/manga/${lastReadManga.id}`);
-    } else {
-      console.log('No last read manga found, navigating to search');
-      router.push('/mangasearch');
-    }
-  };
+  // const handleLastButtonPress = () => {
+  //   Animated.sequence([
+  //     Animated.timing(buttonScale, {
+  //       toValue: 0.9,
+  //       duration: 100,
+  //       useNativeDriver: true,
+  //     }),
+  //     Animated.timing(buttonScale, {
+  //       toValue: 1,
+  //       duration: 100,
+  //       useNativeDriver: true,
+  //     }),
+  //   ]).start();
+
+  //   if (lastReadManga && lastReadManga.id) {
+  //     console.log('Navigating to manga:', lastReadManga);
+  //     router.push(`/manga/${lastReadManga.id}`);
+  //   } else {
+  //     console.log('No last read manga found, navigating to search');
+  //     router.push('/mangasearch');
+  //   }
+  // };
 
   const shouldShowTabBar = () => {
-    const allowedPaths = ['/', '/mangasearch', '/settings', '/bookmarks'];
+    const allowedPaths = [
+      '/',
+      '/mangasearch',
+      '/settings',
+      '/bookmarks',
+      '/genres',
+    ];
     if (enableDebugTab) {
       allowedPaths.push('/Debug');
     }
@@ -301,13 +329,13 @@ export default function TabLayout() {
   // Create interpolated rotation value for the spinner icon
   const spin = updateIndicatorRotation.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
+    outputRange: ['0deg', '360deg'],
   });
 
   // Get the width for the progress bar
   const progressBarWidth = updateProgressWidth.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0%', '100%']
+    outputRange: ['0%', '100%'],
   });
 
   if (isOnboardingCompleted === null) {
@@ -321,177 +349,195 @@ export default function TabLayout() {
   const tabBarBottomPosition = insets.bottom + 15;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.card }]}>
-      {/* Update Indicator - Only shown during downloading or ready states */}
-      <Animated.View 
-        style={[
-          styles.updateIndicatorContainer, 
-          { 
-            backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#FFFFFF',
-            opacity: updateIndicatorOpacity,
-            top: insets.top + 8,
-            borderColor: colors.primary,
-          }
-        ]}
-        pointerEvents="none"
-      >
-        <Animated.View style={{ transform: [{ rotate: spin }] }}>
-          <Ionicons 
-            name="sync" 
-            size={18} 
-            color={colors.primary} 
-            style={styles.updateIndicatorIcon} 
-          />
-        </Animated.View>
-        
-        <View style={styles.updateContentContainer}>
-          <Text 
-            style={[
-              styles.updateIndicatorText, 
-              { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' }
-            ]}
-          >
-            {getUpdateStatusMessage()}
-          </Text>
-          
-          {/* Progress bar */}
-          <View style={[styles.progressBarContainer, { backgroundColor: colorScheme === 'dark' ? '#333333' : '#EEEEEE' }]}>
-            <Animated.View 
-              style={[
-                styles.progressBar, 
-                { 
-                  backgroundColor: colors.primary,
-                  width: progressBarWidth
-                }
-              ]} 
-            />
-          </View>
-        </View>
-      </Animated.View>
-
-      <Tabs
-        screenOptions={({ route }) => ({
-          tabBarIcon: ({ focused, color, size }) => {
-            let iconName: keyof typeof Ionicons.glyphMap;
-
-            switch (route.name) {
-              case 'index':
-                iconName = focused ? 'home' : 'home-outline';
-                break;
-              case 'mangasearch':
-                iconName = focused ? 'search' : 'search-outline';
-                break;
-              case 'bookmarks':
-                iconName = focused ? 'bookmark' : 'bookmark-outline';
-                break;
-              case 'settings':
-                iconName = focused ? 'settings' : 'settings-outline';
-                break;
-              case 'Debug':
-                iconName = focused ? 'bug' : 'bug-outline';
-                break;
-              default:
-                iconName = 'help-outline';
-            }
-
-            return (
-              <View style={styles.iconContainer}>
-                <Ionicons name={iconName} size={size} color={color} />
-                {focused && (
-                  <View
-                    style={[
-                      styles.activeIndicator,
-                      { backgroundColor: colors.primary },
-                    ]}
-                  />
-                )}
-              </View>
-            );
-          },
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.tabIconDefault,
-          tabBarStyle: {
-            position: 'absolute',
-            bottom: tabBarBottomPosition,
-            marginHorizontal: (width - TAB_BAR_WIDTH) / 2,
-            backgroundColor: colors.card,
-            borderRadius: 35,
-            height: 60,
-            width: TAB_BAR_WIDTH,
-            paddingBottom: 5,
-            paddingTop: 5,
-            display: shouldShowTabBar() ? 'flex' : 'none',
-            elevation: 4,
-          },
-          tabBarItemStyle: {
-            height: 50,
-            width: TAB_WIDTH,
-          },
-          tabBarLabelStyle: {
-            fontWeight: '600',
-            fontSize: 10,
-            marginTop: 5,
-          },
-          headerStyle: {
-            backgroundColor: colors.card,
-          },
-          headerTintColor: colors.text,
-          headerShown: false,
-        })}
-        backBehavior="history"
-      >
-        <Tabs.Screen name="index" options={{ title: 'Home' }} />
-        <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
-        <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
-        <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
-        <Tabs.Screen
-          name="Debug"
-          options={{
-            title: 'Debug',
-            href: enableDebugTab ? undefined : null,
-          }}
-        />
-        <Tabs.Screen name="manga/[id]" options={{ href: null }} />
-        <Tabs.Screen
-          name="manga/[id]/chapter/[chapterNumber]"
-          options={{ href: null }}
-        />
-        <Tabs.Screen
-          name="manga/[id]/chapter/[chapterNumber].styles"
-          options={{ href: null }}
-        />
-        <Tabs.Screen
-          name="manga/[id].styles"
-          options={{ href: null }}
-        />
-      </Tabs>
-      
-      {shouldShowTabBar() && (
-        <Animated.View 
+    <SwipeGestureOverlay
+      enabled={canSwipeBack}
+      panResponder={panResponder}
+      swipeProgress={swipeProgress}
+      swipeOpacity={swipeOpacity}
+      isSwipingBack={isSwipingBack}
+    >
+      <View style={[styles.container, { backgroundColor: colors.card }]}>
+        {/* Update Indicator - Only shown during downloading or ready states */}
+        <Animated.View
           style={[
-            styles.lastButtonContainer,
-            { 
-              bottom: tabBarBottomPosition + 30,
-              transform: [{ scale: buttonScale }]
+            styles.updateIndicatorContainer,
+            {
+              backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#FFFFFF',
+              opacity: updateIndicatorOpacity,
+              top: insets.top + 8,
+              borderColor: colors.primary,
             },
           ]}
+          pointerEvents="none"
         >
-          <TouchableOpacity 
-            style={[
-              styles.lastButton, 
-              { 
-                backgroundColor: colors.primary,
-                borderColor: colors.card,
-              }
-            ]}
-            onPress={handleLastButtonPress}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="book" size={24} color="white" />
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <Ionicons
+              name="sync"
+              size={18}
+              color={colors.primary}
+              style={styles.updateIndicatorIcon}
+            />
+          </Animated.View>
+
+          <View style={styles.updateContentContainer}>
+            <Text
+              style={[
+                styles.updateIndicatorText,
+                { color: colorScheme === 'dark' ? '#FFFFFF' : '#333333' },
+              ]}
+            >
+              {getUpdateStatusMessage()}
+            </Text>
+
+            {/* Progress bar */}
+            <View
+              style={[
+                styles.progressBarContainer,
+                {
+                  backgroundColor:
+                    colorScheme === 'dark' ? '#333333' : '#EEEEEE',
+                },
+              ]}
+            >
+              <Animated.View
+                style={[
+                  styles.progressBar,
+                  {
+                    backgroundColor: colors.primary,
+                    width: progressBarWidth,
+                  },
+                ]}
+              />
+            </View>
+          </View>
         </Animated.View>
-      )}
-    </View>
+
+        <Tabs
+          screenOptions={({ route }) => ({
+            tabBarIcon: ({ focused, color, size }) => {
+              let iconName: keyof typeof Ionicons.glyphMap;
+
+              switch (route.name) {
+                case 'index':
+                  iconName = focused ? 'home' : 'home-outline';
+                  break;
+                case 'mangasearch':
+                  iconName = focused ? 'search' : 'search-outline';
+                  break;
+                case 'genres':
+                  iconName = focused ? 'albums' : 'albums-outline';
+                  break;
+                case 'bookmarks':
+                  iconName = focused ? 'bookmark' : 'bookmark-outline';
+                  break;
+                case 'settings':
+                  iconName = focused ? 'settings' : 'settings-outline';
+                  break;
+                case 'Debug':
+                  iconName = focused ? 'bug' : 'bug-outline';
+                  break;
+                default:
+                  iconName = 'help-outline';
+              }
+
+              return (
+                <View style={styles.iconContainer}>
+                  <Ionicons name={iconName} size={size} color={color} />
+                  {focused && (
+                    <View
+                      style={[
+                        styles.activeIndicator,
+                        { backgroundColor: colors.primary },
+                      ]}
+                    />
+                  )}
+                </View>
+              );
+            },
+            tabBarActiveTintColor: colors.primary,
+            tabBarInactiveTintColor: colors.tabIconDefault,
+            tabBarStyle: {
+              position: 'absolute',
+              bottom: tabBarBottomPosition,
+              marginHorizontal: (width - TAB_BAR_WIDTH) / 2,
+              backgroundColor: colors.card,
+              borderRadius: 35,
+              height: 60,
+              width: TAB_BAR_WIDTH,
+              paddingBottom: 5,
+              paddingTop: 5,
+              display: shouldShowTabBar() ? 'flex' : 'none',
+              elevation: 4,
+            },
+            tabBarItemStyle: {
+              height: 50,
+              width: TAB_WIDTH,
+            },
+            tabBarLabelStyle: {
+              fontWeight: '600',
+              fontSize: 10,
+              marginTop: 5,
+            },
+            headerStyle: {
+              backgroundColor: colors.card,
+            },
+            headerTintColor: colors.text,
+            headerShown: false,
+          })}
+          backBehavior="history"
+        >
+          <Tabs.Screen name="index" options={{ title: 'Home' }} />
+          <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
+          <Tabs.Screen name="genres" options={{ title: 'Genres' }} />
+          <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
+          <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+          <Tabs.Screen
+            name="Debug"
+            options={{
+              title: 'Debug',
+              href: enableDebugTab ? undefined : null,
+            } as any}
+          />
+          <Tabs.Screen name="manga/[id]" options={{ href: null }} />
+          <Tabs.Screen
+            name="manga/[id]/chapter/[chapterNumber]"
+            options={{ href: null }}
+          />
+          <Tabs.Screen
+            name="manga/[id]/chapter/[chapterNumber].styles"
+            options={{ href: null }}
+          />
+          <Tabs.Screen name="manga/[id].styles" options={{ href: null }} />
+        </Tabs>
+
+        {false && shouldShowTabBar() && (
+          <Animated.View
+            style={[
+              styles.lastButtonContainer,
+              {
+                bottom: tabBarBottomPosition + 30,
+                right: (width - TAB_BAR_WIDTH) / 2 - 10,
+                transform: [{ scale: buttonScale }],
+              },
+            ]}
+          >
+            {/*             <TouchableOpacity
+              style={[
+                styles.lastButton,
+                {
+                  backgroundColor: colors.primary,
+                  borderColor: colors.card,
+                },
+              ]}
+              onPress={handleLastButtonPress}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="book" size={24} color="white" />
+            </TouchableOpacity> */}
+          </Animated.View>
+        )}
+      </View>
+    </SwipeGestureOverlay>
   );
 }
 
@@ -513,8 +559,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   lastButtonContainer: {
-    position: 'absolute', 
-    alignSelf: 'center',
+    position: 'absolute',
     alignItems: 'center',
     zIndex: 100,
   },

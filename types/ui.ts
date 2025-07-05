@@ -1,12 +1,12 @@
 // Contains all UI component types
 
-import { ColorScheme } from '@/constants/Colors';
-import { ComponentProps } from 'react';
+/* import { ColorScheme } from '@/constants/Colors'; */
+/* import { ComponentProps } from 'react'; */
 import { Ionicons } from '@expo/vector-icons';
 import { TextStyle, ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { ThemeType } from './';
+import { ThemeType, BookmarkStatus } from './';
 
 // Define a comprehensive type for all icon names based on Ionicons
 export type IconName = keyof typeof Ionicons.glyphMap;
@@ -57,6 +57,8 @@ export interface MangaCardProps {
   onPress: () => void;
   lastReadChapter: string | null;
   style?: ViewStyle;
+  mangaId?: string;
+  onBookmarkChange?: (mangaId: string, newStatus: BookmarkStatus | null) => void;
 }
 
 export interface NessieAnimationProps {
@@ -68,7 +70,8 @@ export interface GenreTagProps {
   genre: string;
 }
 
-export interface CustomWebViewProps extends React.ComponentProps<typeof WebView> {
+export interface CustomWebViewProps
+  extends React.ComponentProps<typeof WebView> {
   allowedHosts?: string[];
   currentUrl?: string;
 }

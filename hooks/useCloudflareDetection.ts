@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 
 export const useCloudflareDetection = () => {
@@ -7,7 +7,10 @@ export const useCloudflareDetection = () => {
   const router = useRouter();
 
   const checkForCloudflare = (html: string, currentRoute?: string) => {
-    if (html.includes('cf-browser-verification') || html.includes('cf_captcha_kind')) {
+    if (
+      html.includes('cf-browser-verification') ||
+      html.includes('cf_captcha_kind')
+    ) {
       setIsCloudflareDetected(true);
       if (currentRoute) {
         setPreviousRoute(currentRoute);
@@ -30,6 +33,6 @@ export const useCloudflareDetection = () => {
     resetCloudflareDetection: () => {
       setIsCloudflareDetected(false);
       setPreviousRoute('/');
-    }
+    },
   };
 };
