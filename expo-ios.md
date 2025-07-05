@@ -29,6 +29,7 @@ expo prebuild --platform ios
 1. In the device selector at the top of Xcode, select **Any iOS Device (arm64)**
 2. From the top menu bar, select **Product > Archive**
 3. Wait for the build process to complete
+4. IF your build fails, run `cd /ios` and `pods install` and try again
 
 ## Step 4: Locate the Build
 
