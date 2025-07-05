@@ -3,16 +3,19 @@
 This guide walks you through the process of generating an IPA file from your Expo app using a free Apple Developer account.
 
 ## Prerequisites
+
 - Expo project
 - macOS with Xcode installed
 - Free Apple Developer account
 
 ## Step 1: Prepare Your Project
+
 ```bash
 expo prebuild --platform ios
 ```
 
 ## Step 2: Configure in Xcode
+
 1. Open the `appname.xcworkspace` file in Xcode (in the /ios folder after prebuilding)
 2. In the left sidebar, you'll see both `appname` and `Pods`
 3. Click on `appname`
@@ -22,16 +25,20 @@ expo prebuild --platform ios
 7. **Important:** Remove any notification permission entries (as these require a paid developer account)
 
 ## Step 3: Build Your App
+
 1. In the device selector at the top of Xcode, select **Any iOS Device (arm64)**
 2. From the top menu bar, select **Product > Archive**
 3. Wait for the build process to complete
+4. IF your build fails, run `cd /ios` and `pods install` and try again
 
 ## Step 4: Locate the Build
+
 1. After building, from the top menu bar, select **Window > Organizer**
 2. Find your recent build in the list
 3. Right-click on the build and select **Show in Finder**
 
 ## Step 5: Create the IPA File
+
 1. In Finder, right-click on the `.xarchive` file and select **Show Package Contents**
 2. Inside, you'll see 2 folders and an `info.plist` file
 3. Navigate to **Products > Applications**
@@ -42,4 +49,5 @@ expo prebuild --platform ios
 8. Rename `Payload.zip` to `appname.ipa`
 
 ## Step 6: Installation
+
 You now have an IPA file that can be installed using alternative app stores like AltStore.

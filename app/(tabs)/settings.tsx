@@ -10,6 +10,7 @@ import {
   Alert,
   Switch,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,17 +22,18 @@ import {
   importAppData,
   clearAppData,
   migrateToNewStorage,
-  refreshMangaImages
+  refreshMangaImages,
 } from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
-import { ActivityIndicator } from 'react-native';
+
 import Svg, { Path } from 'react-native-svg';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import CustomColorPicker from '@/components/CustomColorPicker';
+import { imageCache } from '@/services/CacheImages';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -43,7 +45,8 @@ interface ThemeOption {
 export default function SettingsScreen() {
   const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
-  const colorScheme = theme === 'system' ? systemColorScheme : (theme as ColorScheme);
+  const colorScheme =
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
   const [user, setUser] = useState<any>(null);
@@ -53,7 +56,11 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
-  const [selectedColor, setSelectedColor] = useState<string>(accentColor || colors.primary);
+  const [selectedColor, setSelectedColor] = useState<string>(
+    accentColor || colors.primary
+  );
+  const [cacheStats, setCacheStats] = useState<any>(null);
+  const [isCacheLoading, setIsCacheLoading] = useState(false);
 
   const themeOptions: ThemeOption[] = [
     { label: 'Light', value: 'light', icon: 'sunny-outline' },
@@ -64,12 +71,74 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkLoginStatus();
+    loadCacheStats();
 
     // Update selected color when accentColor changes
     if (accentColor) {
       setSelectedColor(accentColor);
     }
   }, [accentColor]);
+
+  const loadCacheStats = async () => {
+    try {
+      const stats = await imageCache.getCacheStats();
+      setCacheStats(stats);
+    } catch (error) {
+      console.error('Error loading cache stats:', error);
+    }
+  };
+
+  const handleClearImageCache = (context?: 'search' | 'manga') => {
+    const contextName =
+      context === 'search'
+        ? 'search cache'
+        : context === 'manga'
+          ? 'manga cache'
+          : 'all image cache';
+
+    Alert.alert(
+      'Clear Image Cache',
+      `Are you sure you want to clear the ${contextName}? This will free up storage space but images will need to be downloaded again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsCacheLoading(true);
+              await imageCache.clearCache(context);
+              // Force reload cache stats immediately
+              const newStats = await imageCache.getCacheStats();
+              setCacheStats(newStats);
+              Alert.alert(
+                'Success',
+                `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully.`
+              );
+            } catch (error) {
+              console.error('Error clearing cache:', error);
+              Alert.alert('Error', `Failed to clear ${contextName}.`);
+            } finally {
+              setIsCacheLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (timestamp: number): string => {
+    if (!timestamp) return 'Never';
+    return new Date(timestamp).toLocaleDateString();
+  };
 
   const loadEnableDebugTabSetting = async () => {
     try {
@@ -107,7 +176,7 @@ export default function SettingsScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(filePath, {
           mimeType: 'application/json',
-          dialogTitle: 'Export App Data'
+          dialogTitle: 'Export App Data',
         });
       }
     } catch (error) {
@@ -119,12 +188,14 @@ export default function SettingsScreen() {
   const handleImportData = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json'
+        type: 'application/json',
       });
 
       if (result.canceled) return;
 
-      const fileContent = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const fileContent = await FileSystem.readAsStringAsync(
+        result.assets?.[0]?.uri || ''
+      );
       const importedData = JSON.parse(fileContent);
 
       Alert.alert(
@@ -188,15 +259,18 @@ export default function SettingsScreen() {
       if (authData) {
         const userData = await AniListOAuth.getCurrentUser();
         setUser(userData.data.Viewer);
-        Alert.alert("Success", "Successfully logged in to AniList!");
+        Alert.alert('Success', 'Successfully logged in to AniList!');
       }
     } catch (error: unknown) {
       console.error('AniList login error:', error);
       if (error instanceof Error) {
         if (error.message.includes('cancelled')) {
-          Alert.alert("Cancelled", "Login was cancelled by user");
+          Alert.alert('Cancelled', 'Login was cancelled by user');
         } else {
-          Alert.alert("Error", `Failed to login with AniList: ${error.message}`);
+          Alert.alert(
+            'Error',
+            `Failed to login with AniList: ${error.message}`
+          );
         }
       }
     }
@@ -208,7 +282,7 @@ export default function SettingsScreen() {
       setUser(null);
     } catch (error: unknown) {
       console.error('AniList logout error:', error);
-      Alert.alert("Error", "Failed to logout");
+      Alert.alert('Error', 'Failed to logout');
     }
   };
 
@@ -216,10 +290,13 @@ export default function SettingsScreen() {
     try {
       setIsSyncing(true);
       const results = await syncAllMangaWithAniList();
-      Alert.alert("Sync Results", results.join('\n'));
+      Alert.alert('Sync Results', results.join('\n'));
     } catch (error) {
       console.error('Error syncing manga:', error);
-      Alert.alert("Error", `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      Alert.alert(
+        'Error',
+        `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     } finally {
       setIsSyncing(false);
     }
@@ -253,7 +330,10 @@ export default function SettingsScreen() {
           {themeOptions.map((option) => (
             <TouchableOpacity
               key={option.value}
-              style={[styles.option, theme === option.value && styles.activeOption]}
+              style={[
+                styles.option,
+                theme === option.value && styles.activeOption,
+              ]}
               onPress={() => setTheme(option.value)}
             >
               <Ionicons
@@ -279,9 +359,15 @@ export default function SettingsScreen() {
             style={[styles.option, { borderBottomWidth: 0 }]}
             onPress={() => setColorPickerVisible(true)}
           >
-            <Ionicons name="color-palette-outline" size={24} color={colors.text} />
+            <Ionicons
+              name="color-palette-outline"
+              size={24}
+              color={colors.text}
+            />
             <Text style={styles.optionText}>Accent Color</Text>
-            <View style={[styles.colorPreview, { backgroundColor: selectedColor }]} />
+            <View
+              style={[styles.colorPreview, { backgroundColor: selectedColor }]}
+            />
           </TouchableOpacity>
 
           {/* Reset accent color button */}
@@ -301,11 +387,21 @@ export default function SettingsScreen() {
           {user ? (
             <>
               <View style={styles.userInfo}>
-                <Image source={{ uri: user.avatar.large }} style={styles.avatar} />
+                <Image
+                  source={{ uri: user.avatar.large }}
+                  style={styles.avatar}
+                />
                 <Text style={styles.username}>{user.name}</Text>
               </View>
-              <TouchableOpacity style={styles.option} onPress={handleAniListLogout}>
-                <Ionicons name="log-out-outline" size={24} color={colors.text} />
+              <TouchableOpacity
+                style={styles.option}
+                onPress={handleAniListLogout}
+              >
+                <Ionicons
+                  name="log-out-outline"
+                  size={24}
+                  color={colors.text}
+                />
                 <Text style={styles.optionText}>Logout from AniList</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -315,13 +411,24 @@ export default function SettingsScreen() {
               >
                 <View style={styles.buttonContent}>
                   <Ionicons name="sync-outline" size={24} color={colors.card} />
-                  <Text style={styles.syncButtonText}>Sync All Manga with AniList</Text>
-                  {isSyncing && <ActivityIndicator size="small" color={colors.card} style={styles.spinner} />}
+                  <Text style={styles.syncButtonText}>
+                    Sync All Manga with AniList
+                  </Text>
+                  {isSyncing && (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.card}
+                      style={styles.spinner}
+                    />
+                  )}
                 </View>
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity style={styles.loginButton} onPress={handleAniListLogin}>
+            <TouchableOpacity
+              style={styles.loginButton}
+              onPress={handleAniListLogin}
+            >
               <View style={styles.buttonContent}>
                 <Svg width={24} height={24} viewBox="0 0 24 24">
                   <Path
@@ -339,6 +446,105 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Image Cache Management</Text>
+          {cacheStats && (
+            <View style={styles.cacheStatsContainer}>
+              <Text style={styles.cacheStatsTitle}>Cache Statistics</Text>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Total Size:</Text>
+                <Text style={styles.cacheStatsValue}>
+                  {formatFileSize(cacheStats.totalSize)}
+                </Text>
+              </View>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Total Files:</Text>
+                <Text style={styles.cacheStatsValue}>
+                  {cacheStats.totalFiles}
+                </Text>
+              </View>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Manga Images:</Text>
+                <Text style={styles.cacheStatsValue}>
+                  {cacheStats.mangaCount}
+                </Text>
+              </View>
+              <View style={styles.cacheStatsRow}>
+                <Text style={styles.cacheStatsLabel}>Search Cache:</Text>
+                <Text style={styles.cacheStatsValue}>
+                  {cacheStats.searchCount}
+                </Text>
+              </View>
+              {cacheStats.oldestEntry > 0 && (
+                <View style={styles.cacheStatsRow}>
+                  <Text style={styles.cacheStatsLabel}>Oldest Entry:</Text>
+                  <Text style={styles.cacheStatsValue}>
+                    {formatDate(cacheStats.oldestEntry)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.option}
+            onPress={() => handleClearImageCache('search')}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="images-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Clear Search Cache</Text>
+            {isCacheLoading && (
+              <ActivityIndicator size="small" color={colors.primary} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.option}
+            onPress={() => handleClearImageCache('manga')}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="library-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Clear Manga Cache</Text>
+            {isCacheLoading && (
+              <ActivityIndicator size="small" color={colors.primary} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.option}
+            onPress={() => handleClearImageCache()}
+            disabled={isCacheLoading}
+          >
+            <Ionicons
+              name="trash-outline"
+              size={24}
+              color={colors.notification}
+            />
+            <Text style={styles.optionText}>Clear All Image Cache</Text>
+            {isCacheLoading && (
+              <ActivityIndicator size="small" color={colors.primary} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.option}
+            onPress={async () => {
+              try {
+                setIsCacheLoading(true);
+                const newStats = await imageCache.getCacheStats();
+                setCacheStats(newStats);
+              } catch (error) {
+                console.error('Error refreshing cache stats:', error);
+              } finally {
+                setIsCacheLoading(false);
+              }
+            }}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="refresh-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Refresh Cache Stats</Text>
+            {isCacheLoading && (
+              <ActivityIndicator size="small" color={colors.primary} />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Data Management</Text>
           <TouchableOpacity style={styles.option} onPress={handleExportData}>
             <Ionicons name="download-outline" size={24} color={colors.text} />
@@ -349,7 +555,11 @@ export default function SettingsScreen() {
             <Text style={styles.optionText}>Import App Data</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.option} onPress={handleClearData}>
-            <Ionicons name="trash-outline" size={24} color={colors.notification} />
+            <Ionicons
+              name="trash-outline"
+              size={24}
+              color={colors.notification}
+            />
             <Text style={styles.optionText}>Clear App Data</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -363,7 +573,7 @@ export default function SettingsScreen() {
                   result.success ? 'Success' : 'Error',
                   result.message
                 );
-              } catch (error) {
+              } catch {
                 Alert.alert('Error', 'Failed to refresh manga images');
               } finally {
                 setIsRefreshing(false);
@@ -372,7 +582,13 @@ export default function SettingsScreen() {
           >
             <Ionicons name="refresh-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Refresh Manga Images</Text>
-            {isRefreshing && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
+            {isRefreshing && (
+              <ActivityIndicator
+                size="small"
+                color={colors.primary}
+                style={styles.spinner}
+              />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.option, { borderBottomWidth: 0 }]}
@@ -385,7 +601,7 @@ export default function SettingsScreen() {
                   result.success ? 'Success' : 'Error',
                   result.message
                 );
-              } catch (error) {
+              } catch {
                 Alert.alert('Error', 'Failed to migrate data');
               } finally {
                 setIsMigrating(false);
@@ -394,7 +610,13 @@ export default function SettingsScreen() {
           >
             <Ionicons name="sync-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Migrate to New Storage Format</Text>
-            {isMigrating && <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />}
+            {isMigrating && (
+              <ActivityIndicator
+                size="small"
+                color={colors.primary}
+                style={styles.spinner}
+              />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -406,8 +628,15 @@ export default function SettingsScreen() {
             <Switch
               value={enableDebugTab}
               onValueChange={toggleEnableDebugTab}
-              trackColor={{ false: colors.border, true: accentColor || colors.primary }}
-              thumbColor={enableDebugTab && Platform.OS === 'android' ? '#FFFFFF' : undefined}
+              trackColor={{
+                false: colors.border,
+                true: accentColor || colors.primary,
+              }}
+              thumbColor={
+                enableDebugTab && Platform.OS === 'android'
+                  ? '#FFFFFF'
+                  : undefined
+              }
             />
           </View>
           <Text style={styles.noteText}>
@@ -579,5 +808,31 @@ const getStyles = (colors: typeof Colors.light) =>
       marginLeft: 15,
       color: colors.text,
       fontWeight: '600',
+    },
+    cacheStatsContainer: {
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      padding: 15,
+      marginBottom: 15,
+    },
+    cacheStatsTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 10,
+    },
+    cacheStatsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 5,
+    },
+    cacheStatsLabel: {
+      fontSize: 14,
+      color: colors.text,
+    },
+    cacheStatsValue: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.primary,
     },
   });

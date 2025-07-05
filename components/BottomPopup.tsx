@@ -22,7 +22,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { Option, BottomPopupProps } from '@/types';
+import { BottomPopupProps } from '@/types';
 
 const BottomPopup: React.FC<BottomPopupProps> = ({
   visible,
@@ -101,9 +101,7 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
     >
       <View style={styles.modalContainer}>
         <TouchableWithoutFeedback onPress={onClose}>
-          <Animated.View
-            style={[styles.modalOverlay, overlayAnimatedStyle]}
-          />
+          <Animated.View style={[styles.modalOverlay, overlayAnimatedStyle]} />
         </TouchableWithoutFeedback>
         <Animated.View style={[styles.container, containerAnimatedStyle]}>
           <View style={styles.handle} />
@@ -148,10 +146,7 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
   );
 };
 
-const getStyles = (
-  colors: typeof Colors.light,
-  insets: { bottom: number }
-) =>
+const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
   StyleSheet.create({
     modalContainer: {
       flex: 1,
