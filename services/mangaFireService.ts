@@ -220,7 +220,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const bannerImage = bannerImageMatch ? bannerImageMatch[1] : '';
 
   const chaptersRegex =
-    /<li class="item".*?<a href="(.*?)".*?<span>Chapter (\d+):.*?<\/span>.*?<span>(.*?)<\/span>/g;
+    /<li class="item".*?<a href="(.*?)".*?<span>Chapter ([\d.]+):.*?<\/span>.*?<span>(.*?)<\/span>/g;
   const chapters = [];
   let match;
   while ((match = chaptersRegex.exec(html)) !== null) {

@@ -284,7 +284,7 @@ export default function ReadChapterScreen() {
   const handleNavigationStateChange = useCallback(
     async (navState: WebViewNavigation) => {
       if (navState.url !== chapterUrl) {
-        const newChapterMatch = navState.url.match(/\/chapter-(\d+)/);
+        const newChapterMatch = navState.url.match(/\/chapter-([\d.]+)/);
         if (newChapterMatch) {
           const newChapterNumber = newChapterMatch[1];
           if (mangaTitle && id && newChapterNumber) {

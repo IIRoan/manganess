@@ -168,7 +168,7 @@ class NavigationHistoryService {
     // Extract chapter number
     const chapterMatch = path.match(/\/chapter\/([^\/]+)/);
     if (chapterMatch) {
-      metadata.chapterNumber = parseInt(chapterMatch?.[1] || '0', 10);
+      metadata.chapterNumber = parseFloat(chapterMatch?.[1] || '0');
     }
 
     // Extract search query (if present in path)
