@@ -8,11 +8,42 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { useColorScheme, StatusBar } from 'react-native';
+import { AppState, AppStateStatus, StatusBar, useColorScheme } from 'react-native';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync();
+
+function useReactQueryFocusManager() {
+  useEffect(() => {
+    const handleChange = (status: AppStateStatus) => {
+      focusManager.setFocused(status === 'active');
+    };
+
+    const subscription = AppState.addEventListener('change', handleChange);
+    return () => subscription.remove();
+  }, []);
+}
+
+function AppProviders({ children }: { children: React.ReactNode }) {
+  const [queryClient] = React.useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 1000 * 60,
+            refetchOnReconnect: true,
+            refetchOnWindowFocus: true,
+          },
+        },
+      })
+  );
+
+  useReactQueryFocusManager();
+
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
 
 function RootLayoutNav() {
   const { theme } = useTheme();
@@ -61,9 +92,11 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
-      <ThemeProvider>
-        <RootLayoutNav />
-      </ThemeProvider>
+      <AppProviders>
+        <ThemeProvider>
+          <RootLayoutNav />
+        </ThemeProvider>
+      </AppProviders>
     </GestureHandlerRootView>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MangaItem } from '@/services/mangaFireService';
-import { MANGA_API_URL } from '@/constants/Config';
-import axios from 'axios';
+import { useGenreMangaQuery } from '@/hooks/queries/useMangaQueries';
 import { router } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
 import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
@@ -79,74 +78,39 @@ export default function GenresScreen() {
   const insets = useSafeAreaInsets();
 
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
-  const [mangaList, setMangaList] = useState<MangaItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchGenreManga = async (genre: Genre, isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
-    try {
-      const response = await axios.get(`${MANGA_API_URL}/genre/${genre.slug}`, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
-        },
-        timeout: 10000,
-      });
+  const selectedSlug = selectedGenre?.slug ?? null;
 
-      if (response.data && typeof response.data === 'string') {
-        const html = response.data as string;
-        const mangaItems = parseGenreManga(html);
-        setMangaList(mangaItems);
-      }
-    } catch (error) {
-      console.error('Error fetching genre manga:', error);
-      setMangaList([]);
-    } finally {
-      setLoading(false);
-      if (isRefresh) setRefreshing(false);
+  const {
+    data: genreManga = [] as MangaItem[],
+    isLoading: isGenreLoading,
+    isFetching: isGenreFetching,
+    error: genreError,
+    refetch: refetchGenre,
+  } = useGenreMangaQuery(selectedSlug, {
+    enabled: Boolean(selectedSlug),
+  });
+
+  const isRefreshing = Boolean(selectedSlug) && isGenreFetching && !isGenreLoading;
+
+  useEffect(() => {
+    if (genreError) {
+      console.error('Error fetching genre manga:', genreError);
     }
-  };
-
-  const parseGenreManga = (html: string): MangaItem[] => {
-    const mangaRegex =
-      /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
-    const matches = [...html.matchAll(mangaRegex)];
-
-    return matches
-      .map((match) => {
-        const link = match[1];
-        const id = link?.split('/').pop() || '';
-        const imageUrl = match[2];
-
-        return {
-          id,
-          link: `${MANGA_API_URL}${link}`,
-          title: match[4]?.trim() || '',
-          banner: imageUrl || '',
-          imageUrl: imageUrl || '',
-          type: match[3]?.trim() || '',
-        };
-      })
-      .filter((item) => item.id && item.title)
-      .slice(0, 20);
-  };
+  }, [genreError]);
 
   const handleGenreSelect = (genre: Genre) => {
     setSelectedGenre(genre);
-    setMangaList([]);
-    fetchGenreManga(genre);
   };
 
   const handleRefresh = () => {
-    if (selectedGenre) {
-      setRefreshing(true);
-      fetchGenreManga(selectedGenre, true);
+    if (selectedSlug) {
+      refetchGenre();
     }
   };
 
   const handleMangaPress = (manga: MangaItem) => {
-    router.push(`/manga/${manga.id}`);
+    router.push({ pathname: '/manga/[id]', params: { id: manga.id, title: manga.title, bannerImage: manga.imageUrl || manga.banner } });
   };
 
   const renderGenreItem = ({ item }: { item: Genre }) => (
@@ -180,19 +144,23 @@ export default function GenresScreen() {
     />
   );
 
+  const emptyStateMessage = genreError
+    ? 'Failed to load manga for this genre. Pull to retry.'
+    : 'No manga found for this genre';
+
   if (selectedGenre) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <FlatList
-          data={mangaList}
+          data={genreManga}
           renderItem={renderMangaItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item: MangaItem) => item.id}
           numColumns={2}
           columnWrapperStyle={styles.mangaRow}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <SmoothRefreshControl
-              refreshing={refreshing}
+              refreshing={isRefreshing}
               onRefresh={handleRefresh}
               colors={[themeColors.primary]}
               tintColor={themeColors.primary}
@@ -202,12 +170,9 @@ export default function GenresScreen() {
             <View style={styles.selectedGenreHeader}>
               <TouchableOpacity
                 style={styles.backButton}
-                onPress={() => {
-                  setSelectedGenre(null);
-                  setMangaList([]);
-                }}
+                onPress={() => setSelectedGenre(null)}
               >
-                <Ionicons name="arrow-back" size={24} color={colors.text} />
+                <Ionicons name="arrow-back" size={20} color={colors.text} />
               </TouchableOpacity>
               <Text
                 style={[
@@ -220,7 +185,7 @@ export default function GenresScreen() {
             </View>
           }
           ListEmptyComponent={
-            loading ? (
+            isGenreLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={themeColors.primary} />
                 <Text style={styles.loadingText}>Loading manga...</Text>
@@ -232,9 +197,7 @@ export default function GenresScreen() {
                   size={64}
                   color={colors.text}
                 />
-                <Text style={styles.emptyText}>
-                  No manga found for this genre
-                </Text>
+                <Text style={styles.emptyText}>{emptyStateMessage}</Text>
               </View>
             )
           }
@@ -248,20 +211,12 @@ export default function GenresScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <FlatList
         data={GENRES}
+        keyExtractor={(item: Genre) => item.slug}
         renderItem={renderGenreItem}
-        keyExtractor={(item) => item.slug}
-        numColumns={2}
-        columnWrapperStyle={styles.genreRow}
-        showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={styles.title}>Browse by Genre</Text>
-            <Text style={styles.subtitle}>
-              Discover manga by your favorite genres
-            </Text>
-          </View>
-        }
+        columnWrapperStyle={styles.genreRow}
+        numColumns={2}
+        showsVerticalScrollIndicator={false}
       />
     </View>
   );

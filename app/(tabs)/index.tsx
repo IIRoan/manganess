@@ -1,21 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
-  ScrollView,
-  Image,
-  Dimensions,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, ScrollView, Dimensions } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MANGA_API_URL } from '@/constants/Config';
 import MangaCard from '@/components/MangaCard';
 import {
   RecentlyReadSkeleton,
@@ -25,15 +16,13 @@ import {
 } from '@/components/SkeletonLoading';
 import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
 import { PageTransition } from '@/components/PageTransition';
-import {
-  parseMostViewedManga,
-  parseNewReleases,
-} from '@/services/mangaFireService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
-import axios from 'axios';
+import { useHomeContent, useRecentlyReadQuery } from '@/hooks/queries/useHomeQueries';
 import { MangaItem, RecentMangaItem } from '@/types';
-import { getRecentlyReadManga } from '@/services/readChapterService';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/hooks/queries/queryKeys';
+import { fetchMangaDetails } from '@/services/mangaFireService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -53,98 +42,59 @@ export default function HomeScreen() {
   const { checkForCloudflare, resetCloudflareDetection } =
     useCloudflareDetection();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
 
-  const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
-  const [newReleases, setNewReleases] = useState<MangaItem[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
+  const {
+    data: homeData,
+    isLoading: isHomeLoading,
+    isRefetching: isHomeRefetching,
+    error: homeError,
+    refetch: refetchHome,
+  } = useHomeContent(checkForCloudflare);
 
-  const [recentlyReadManga, setRecentlyReadManga] = useState<RecentMangaItem[]>(
-    []
-  );
-  const [isRecentMangaLoading, setIsRecentMangaLoading] =
-    useState<boolean>(true);
+  const {
+    data: recentMangaData,
+    isLoading: isRecentLoading,
+    isRefetching: isRecentRefetching,
+    refetch: refetchRecent,
+  } = useRecentlyReadQuery(6);
 
-  const fetchMangaData = useCallback(async () => {
-    try {
-      setError(null);
-      if (!isRefreshing) {
-        setIsLoading(true);
-      }
+  const mostViewedManga: MangaItem[] = (homeData as any)?.mostViewed ?? [];
+  const newReleases: MangaItem[] = (homeData as any)?.newReleases ?? [];
+  const featuredManga: MangaItem | null = (homeData as any)?.featured ?? null;
 
-      const response = await axios.get(`${MANGA_API_URL}/home`, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
-        },
-        timeout: 10000,
-      });
+  const recentlyReadManga = useMemo<RecentMangaItem[]>(() => {
+    return ((recentMangaData as any) ?? []).map((manga: RecentMangaItem) => ({
+      ...manga,
+      bannerImage: manga.bannerImage || DEFAULT_MANGA_COVER,
+    }));
+  }, [recentMangaData]);
 
-      const html = response.data as string;
-
-      if (checkForCloudflare(html)) {
-        return;
-      }
-
-      const parsedMostViewed = parseMostViewedManga(html);
-      const parsedNewReleases = parseNewReleases(html);
-
-      setMostViewedManga(parsedMostViewed);
-      setNewReleases(parsedNewReleases);
-
-      if (parsedMostViewed.length > 0) {
-        setFeaturedManga(parsedMostViewed[0] || null);
-      }
-    } catch (error) {
-      console.error('Error fetching manga data:', error);
-      setError(
-        'An error occurred while fetching manga data. Please try again.'
-      );
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [isRefreshing, checkForCloudflare]);
-
-  const fetchRecentlyReadManga = useCallback(async () => {
-    try {
-      setIsRecentMangaLoading(true);
-      const recentManga = await getRecentlyReadManga(6);
-
-      const processedManga = recentManga.map((manga) => ({
-        ...manga,
-        bannerImage: manga.bannerImage || DEFAULT_MANGA_COVER,
-      }));
-
-      setRecentlyReadManga(processedManga);
-    } catch (error) {
-      console.error('Error fetching recently read manga:', error);
-    } finally {
-      setIsRecentMangaLoading(false);
-    }
-  }, []);
+  const isRefreshing = isHomeRefetching || isRecentRefetching;
+  const homeErrorMessage =
+    homeError instanceof Error ? homeError.message : null;
+  const showHomeError =
+    !!homeErrorMessage && homeErrorMessage !== 'cloudflare-detected';
+  const homeErrorDisplay = showHomeError
+    ? 'An error occurred while fetching manga data. Please try again.'
+    : null;
 
   useEffect(() => {
-    fetchMangaData();
-    fetchRecentlyReadManga();
     return () => {
       resetCloudflareDetection();
     };
-  }, []);
+  }, [resetCloudflareDetection]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchRecentlyReadManga();
-    }, [fetchRecentlyReadManga])
+      refetchRecent();
+    }, [refetchRecent])
   );
 
   const handleRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    fetchMangaData();
-    fetchRecentlyReadManga();
-  }, [fetchMangaData, fetchRecentlyReadManga]);
+    refetchHome();
+    refetchRecent();
+  }, [refetchHome, refetchRecent]);
 
   const renderSectionTitle = useCallback(
     (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
@@ -177,7 +127,14 @@ export default function HomeScreen() {
     ({ item, index }: { item: MangaItem; index: number }) => (
       <TouchableOpacity
         style={[styles.trendingItem, { marginLeft: index === 0 ? 16 : 12 }]}
-        onPress={() => router.navigate(`/manga/${item.id}`)}
+        onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.imageUrl } })}
+        onPressIn={() =>
+          queryClient.prefetchQuery({
+            queryKey: queryKeys.manga.details(item.id),
+            queryFn: () => fetchMangaDetails(item.id),
+            staleTime: 1000 * 60 * 10,
+          })
+        }
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={`View ${item.title}`}
@@ -187,9 +144,13 @@ export default function HomeScreen() {
             : 'Currently trending manga'
         }
       >
-        <Image
+        <View style={styles.trendingImagePlaceholder} />
+        <ExpoImage
           source={{ uri: item.imageUrl }}
           style={styles.trendingImage}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
           accessibilityLabel={`Cover image for ${item.title}`}
         />
         <LinearGradient
@@ -233,7 +194,7 @@ export default function HomeScreen() {
           <MangaCard
             title={item.title}
             imageUrl={item.bannerImage}
-            onPress={() => router.navigate(`/manga/${item.id}`)}
+            onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.bannerImage } })}
             lastReadChapter={lastReadChapter}
             style={styles.recentlyReadCard}
             context="manga"
@@ -257,14 +218,14 @@ export default function HomeScreen() {
         {newReleases.map((item) => (
           <View key={item.id} style={styles.newReleaseWrapper}>
             <TouchableOpacity
-              onPress={() => router.navigate(`/manga/${item.id}`)}
+              onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.imageUrl } })}
               activeOpacity={0.7}
               style={styles.newReleaseCard}
             >
               <MangaCard
                 title={item.title}
                 imageUrl={item.imageUrl}
-                onPress={() => router.navigate(`/manga/${item.id}`)}
+                onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.imageUrl } })}
                 lastReadChapter={null}
                 style={styles.card}
                 context="manga"
@@ -286,7 +247,7 @@ export default function HomeScreen() {
   }, [newReleases, router, themeColors.text]);
 
   const renderContinueReadingSection = useCallback(() => {
-    if (isRecentMangaLoading) {
+    if (isRecentLoading) {
       return <RecentlyReadSkeleton />;
     }
 
@@ -346,7 +307,7 @@ export default function HomeScreen() {
       />
     );
   }, [
-    isRecentMangaLoading,
+    isRecentLoading,
     recentlyReadManga,
     themeColors,
     router,
@@ -359,12 +320,23 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={[styles.featuredContainer, { marginTop: insets.top + 16 }]}
-        onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
+        onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: featuredManga.id, title: featuredManga.title, bannerImage: featuredManga.imageUrl } })}
+        onPressIn={() =>
+          queryClient.prefetchQuery({
+            queryKey: queryKeys.manga.details(featuredManga.id),
+            queryFn: () => fetchMangaDetails(featuredManga.id),
+            staleTime: 1000 * 60 * 10,
+          })
+        }
         activeOpacity={0.8}
       >
-        <Image
+        <View style={styles.featuredImagePlaceholder} />
+        <ExpoImage
           source={{ uri: featuredManga.imageUrl }}
           style={styles.featuredImage}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={250}
         />
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.8)']}
@@ -383,7 +355,7 @@ export default function HomeScreen() {
                 styles.readNowButton,
                 { backgroundColor: themeColors.primary },
               ]}
-              onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
+              onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: featuredManga.id, title: featuredManga.title, bannerImage: featuredManga.imageUrl } })}
             >
               <Text style={styles.readNowText}>Read Now</Text>
             </TouchableOpacity>
@@ -393,7 +365,7 @@ export default function HomeScreen() {
     );
   }, [featuredManga, insets.top, router, themeColors.primary]);
 
-  if (isLoading) {
+  if (isHomeLoading) {
     return (
       <View
         style={[styles.container, { backgroundColor: themeColors.background }]}
@@ -437,7 +409,7 @@ export default function HomeScreen() {
           />
         }
       >
-        {error ? (
+        {showHomeError ? (
           <View
             style={[styles.errorContainer, { paddingTop: insets.top + 20 }]}
           >
@@ -449,14 +421,16 @@ export default function HomeScreen() {
             <Text
               style={[styles.errorText, { color: themeColors.notification }]}
             >
-              {error}
+              {homeErrorDisplay}
             </Text>
             <TouchableOpacity
               style={[
                 styles.retryButton,
                 { backgroundColor: themeColors.primary },
               ]}
-              onPress={fetchMangaData}
+              onPress={() => {
+                refetchHome();
+              }}
             >
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
@@ -553,9 +527,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  featuredImagePlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#00000014',
+  },
   featuredImage: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
     resizeMode: 'cover',
   },
   featuredGradient: {
@@ -619,9 +596,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
+  trendingImagePlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#00000014',
+  },
   trendingImage: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
     resizeMode: 'cover',
   },
   trendingGradient: {

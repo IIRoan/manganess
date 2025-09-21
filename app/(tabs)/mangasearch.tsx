@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   TextInput,
@@ -18,7 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-import { searchManga, type MangaItem } from '@/services/mangaFireService';
+import { type MangaItem } from '@/services/mangaFireService';
+import { useSearchMangaQuery } from '@/hooks/queries/useMangaQueries';
 import { getLastReadChapter } from '@/services/readChapterService';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -26,6 +27,8 @@ import { useDebounce } from '@/hooks/useDebounce';
 interface LastReadChapters {
   [key: string]: string | null;
 }
+
+const EMPTY_RESULTS: MangaItem[] = [];
 
 export default function MangaSearchScreen() {
   // Theme and layout settings
@@ -42,12 +45,20 @@ export default function MangaSearchScreen() {
   // State variables
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [/* error */, setError] = useState<string | null>(null);
-  const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>(
-    {}
-  );
+  const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>({});
+
+  const isQueryActive = debouncedSearchQuery.length > 2;
+
+  const {
+    data: fetchedResults = [],
+    isLoading: isSearchLoading,
+    isFetching: isSearchFetching,
+    error: searchError,
+  } = useSearchMangaQuery(debouncedSearchQuery);
+
+  const searchResults: MangaItem[] = useMemo(() => (isQueryActive ? fetchedResults : EMPTY_RESULTS), [isQueryActive, fetchedResults]);
+  const isLoadingResults =
+    isQueryActive && (isSearchLoading || isSearchFetching);
 
   // Focus input field on screen focus
   useFocusEffect(
@@ -58,34 +69,17 @@ export default function MangaSearchScreen() {
     }, [searchQuery])
   );
 
-  // Search function to handle input
   useEffect(() => {
-    const performSearch = async () => {
-      if (debouncedSearchQuery.length > 2) {
-        setIsLoading(true);
-        setError(null);
+    if (searchError) {
+      console.error(searchError);
+    }
+  }, [searchError]);
 
-        try {
-          const results = await searchManga(debouncedSearchQuery);
-          setSearchResults(results);
-        } catch (err) {
-          setError('Failed to fetch manga. Please try again.');
-          console.error(err);
-        } finally {
-          setIsLoading(false);
-        }
-      } else if (debouncedSearchQuery.length === 0) {
-        setSearchResults([]);
-      }
-    };
-
-    performSearch();
-  }, [debouncedSearchQuery]);
 
   // Clear search
   const clearSearch = useCallback(() => {
     setSearchQuery('');
-    setSearchResults([]);
+    setLastReadChapters({});
     inputRef.current?.focus();
   }, []);
 
@@ -106,17 +100,22 @@ export default function MangaSearchScreen() {
 
   // Fetch last read chapters
   useEffect(() => {
+    if (searchResults.length === 0) {
+      setLastReadChapters({});
+      return;
+    }
+    let cancelled = false;
     const fetchLastReadChapters = async () => {
       const chapters: LastReadChapters = {};
       for (const item of searchResults) {
         chapters[item.id] = await getLastReadChapter(item.id);
       }
-      setLastReadChapters(chapters);
+      if (!cancelled) setLastReadChapters(chapters);
     };
-
-    if (searchResults.length > 0) {
-      fetchLastReadChapters();
-    }
+    fetchLastReadChapters();
+    return () => {
+      cancelled = true;
+    };
   }, [searchResults]);
 
   // Render function for MangaCard component
@@ -140,7 +139,7 @@ export default function MangaSearchScreen() {
         </View>
       </View>
     ),
-    [handleMangaPress, lastReadChapters, styles]
+    [handleMangaPress, lastReadChapters]
   );
 
   // Key extractor for FlatList
@@ -208,12 +207,12 @@ export default function MangaSearchScreen() {
       </View>
 
       <View style={styles.contentContainer}>
-        {isLoading ? (
+        {isLoadingResults ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : (
-          <Animated.FlatList
+          <Animated.FlatList<MangaItem>
             data={searchResults}
             renderItem={renderMangaCard}
             keyExtractor={keyExtractor}

@@ -29,6 +29,7 @@ const getStyles = (colors: typeof Colors.light) =>
       height: 325,
       position: 'relative',
       overflow: 'hidden',
+      backfaceVisibility: 'hidden',
     },
     bannerImage: {
       width: '100%',
@@ -36,6 +37,7 @@ const getStyles = (colors: typeof Colors.light) =>
       resizeMode: 'cover',
       position: 'absolute',
       top: 0,
+      backfaceVisibility: 'hidden',
     },
     overlay: {
       ...StyleSheet.absoluteFillObject,

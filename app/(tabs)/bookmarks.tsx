@@ -35,6 +35,7 @@ import Animated, {
   withTiming,
   Easing,
   runOnJS,
+  useDerivedValue,
 } from 'react-native-reanimated';
 import {
   Gesture,
@@ -56,16 +57,10 @@ const VIEW_MODE_STORAGE_KEY = 'bookmarksViewMode';
 
 // Types
 type ViewMode = 'grid' | 'list';
-type AnimatedFlatListProps = Animated.AnimateProps<
-  React.ComponentProps<typeof FlatList<BookmarkItem>>
->;
 
 // Animated Components
 const AnimatedTouchableOpacity =
   Animated.createAnimatedComponent(TouchableOpacity);
-const AnimatedFlatList = Animated.createAnimatedComponent(
-  FlatList
-) as React.ComponentType<AnimatedFlatListProps>;
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 // Helper component for preloading images
@@ -102,10 +97,17 @@ export default function BookmarksScreen() {
   const translateX = useSharedValue(0);
   const sortOptionsHeight = useSharedValue(0);
   const isAnimating = useSharedValue(false);
+  const startX = useSharedValue(0);
+  const pageIndex = useSharedValue(0);
 
   // Refs
   const router = useRouter();
-  const flatListRef = useRef<FlatList<BookmarkItem>>(null);
+  const listRefs = useRef<Record<BookmarkStatus, FlatList<BookmarkItem> | null>>({
+    Reading: null,
+    'On Hold': null,
+    'To Read': null,
+    Read: null,
+  });
   const sectionScrollRef = useRef<ScrollView>(null);
   const searchInputRef = useRef<TextInput>(null);
 
@@ -143,14 +145,12 @@ export default function BookmarksScreen() {
         Read: [],
       };
 
-      // Filter by search query
       let filtered = items;
       if (query.trim()) {
         const q = query.toLowerCase();
         filtered = items.filter((it) => it.title.toLowerCase().includes(q));
       }
 
-      // Sort function based on selected option
       const sortFn = (arr: BookmarkItem[]) => {
         const a = [...arr];
         switch (sort) {
@@ -170,7 +170,6 @@ export default function BookmarksScreen() {
         return a;
       };
 
-      // Group by section
       filtered.forEach((it) => {
         const status = it.status as BookmarkStatus;
         if (status && sections[status]) {
@@ -178,7 +177,6 @@ export default function BookmarksScreen() {
         }
       });
 
-      // Sort each section
       for (const k in sections) {
         sections[k as BookmarkStatus] = sortFn(sections[k as BookmarkStatus]);
       }
@@ -297,118 +295,82 @@ export default function BookmarksScreen() {
     }
   }, [viewMode]);
 
-  // Section change animation completed
-  const onSectionAnimDone = useCallback((section: BookmarkStatus) => {
+  const updateAfterIndexChange = useCallback((index: number) => {
+    const section = SECTIONS[index] as BookmarkStatus;
     setActiveSection(section);
-
-    // Center tab in scroll view
-    const idx = SECTIONS.indexOf(section);
     if (sectionScrollRef.current) {
       const visibleTabs = Math.min(SECTIONS.length, 4);
       const tabWidth = SCREEN_WIDTH / visibleTabs;
-      const scrollX = Math.max(
-        0,
-        idx * tabWidth - tabWidth * (visibleTabs / 2 - 0.5)
-      );
+      const scrollX = Math.max(0, index * tabWidth - tabWidth * (visibleTabs / 2 - 0.5));
       sectionScrollRef.current.scrollTo({ x: scrollX, animated: true });
     }
-
-    // Scroll to top of list
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    isAnimating.value = false;
+    const ref = listRefs.current[section];
+    ref?.scrollToOffset({ offset: 0, animated: false });
   }, []);
 
-  // Handle section change with animation
+  useDerivedValue(() => {
+    const idx = Math.max(0, Math.min(SECTIONS.length - 1, Math.round(pageIndex.value)));
+    runOnJS(updateAfterIndexChange)(idx);
+  });
+
+  const goToIndex = useCallback((index: number) => {
+    if (index < 0 || index >= SECTIONS.length) return;
+    if (isAnimating.value) return;
+    isAnimating.value = true;
+    translateX.value = withTiming(
+      -index * SCREEN_WIDTH,
+      { duration: 250, easing: Easing.out(Easing.cubic) },
+      () => {
+        pageIndex.value = index;
+        isAnimating.value = false;
+      }
+    );
+  }, []);
+
   const changeSection = useCallback(
     (section: BookmarkStatus) => {
-      if (section === activeSection || isAnimating.value) return;
-
-      isAnimating.value = true;
-      const currentIndex = SECTIONS.indexOf(activeSection);
-      const nextIndex = SECTIONS.indexOf(section);
-      const direction = currentIndex < nextIndex ? 1 : -1;
-
-      // Animate out
-      translateX.value = withTiming(
-        -direction * SCREEN_WIDTH,
-        {
-          duration: 250,
-          easing: Easing.out(Easing.cubic),
-        },
-        (finished) => {
-          if (finished) {
-            // Jump to other side
-            translateX.value = direction * SCREEN_WIDTH;
-            // Update section
-            runOnJS(onSectionAnimDone)(section);
-            // Animate in
-            translateX.value = withTiming(0, {
-              duration: 250,
-              easing: Easing.out(Easing.cubic),
-            });
-          } else {
-            runOnJS(() => {
-              isAnimating.value = false;
-            })();
-            translateX.value = withTiming(0);
-          }
-        }
-      );
+      const idx = SECTIONS.indexOf(section);
+      if (idx === -1) return;
+      goToIndex(idx);
     },
-    [activeSection, onSectionAnimDone]
+    [goToIndex]
   );
 
   // Pan gesture for swipe between sections
   const pan = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-20, 20])
+        .activeOffsetX([-10, 10])
         .failOffsetY([-10, 10])
+        .onBegin(() => {
+          startX.value = translateX.value;
+        })
         .onUpdate((e) => {
-          if (!isAnimating.value) {
-            translateX.value = Math.max(
-              -SCREEN_WIDTH / 2,
-              Math.min(SCREEN_WIDTH / 2, e.translationX)
-            );
-          }
+          if (isAnimating.value) return;
+          const min = -(SECTIONS.length - 1) * SCREEN_WIDTH;
+          const max = 0;
+          const next = startX.value + e.translationX;
+          translateX.value = Math.max(min, Math.min(max, next));
         })
         .onEnd((e) => {
           if (isAnimating.value) return;
-
-          const { velocityX, translationX } = e;
-          const threshold = SCREEN_WIDTH * 0.25;
-          const velocityThreshold = 400;
-
-          if (
-            Math.abs(translationX) > threshold ||
-            Math.abs(velocityX) > velocityThreshold
-          ) {
-            const direction = translationX > 0 ? -1 : 1;
-            const currentIndex = SECTIONS.indexOf(activeSection);
-            const nextIndex = Math.max(
-              0,
-              Math.min(SECTIONS.length - 1, currentIndex + direction)
-            );
-
-            if (currentIndex !== nextIndex) {
-              const section = SECTIONS[nextIndex];
-              if (section) {
-                runOnJS(changeSection)(section);
-              }
-            } else {
-              translateX.value = withTiming(0, {
-                duration: 200,
-                easing: Easing.out(Easing.cubic),
-              });
-            }
-          } else {
-            translateX.value = withTiming(0, {
-              duration: 200,
-              easing: Easing.out(Easing.cubic),
-            });
+          const progress = -translateX.value / SCREEN_WIDTH;
+          let target = Math.round(progress);
+          if (Math.abs(e.velocityX) > 600) {
+            target = e.velocityX < 0 ? Math.ceil(progress) : Math.floor(progress);
           }
+          target = Math.max(0, Math.min(SECTIONS.length - 1, target));
+          isAnimating.value = true;
+          translateX.value = withTiming(
+            -target * SCREEN_WIDTH,
+            { duration: 250, easing: Easing.out(Easing.cubic) },
+            () => {
+              pageIndex.value = target;
+              isAnimating.value = false;
+            }
+          );
         }),
-    [activeSection, changeSection]
+    [goToIndex]
   );
 
   // Render bookmark item (grid or list view)
@@ -427,11 +389,9 @@ export default function BookmarksScreen() {
               context="bookmark"
               mangaId={item.id}
               onBookmarkChange={(_mangaId, newStatus) => {
-                // If unbookmarked (newStatus is null), refresh immediately
                 if (newStatus === null) {
                   fetchBookmarks();
                 } else {
-                  // For status changes, just refresh to update the display
                   fetchBookmarks();
                 }
               }}
@@ -456,11 +416,9 @@ export default function BookmarksScreen() {
               context="bookmark"
               mangaId={item.id}
               onBookmarkChange={(_mangaId, newStatus) => {
-                // If unbookmarked (newStatus is null), refresh immediately
                 if (newStatus === null) {
                   fetchBookmarks();
                 } else {
-                  // For status changes, just refresh to update the display
                   fetchBookmarks();
                 }
               }}
@@ -486,7 +444,6 @@ export default function BookmarksScreen() {
   // Render section button
   const renderSectionButton = useCallback(
     (title: BookmarkStatus) => {
-      // Select icon based on section
       let icon: keyof typeof Ionicons.glyphMap = 'book';
       switch (title) {
         case 'To Read':
@@ -543,12 +500,6 @@ export default function BookmarksScreen() {
       );
     },
     [activeSection, sectionData, changeSection, styles, colors]
-  );
-
-  // Current section's items
-  const currentItems = useMemo(
-    () => sectionData[activeSection] || [],
-    [sectionData, activeSection]
   );
 
   // Loading state
@@ -681,62 +632,65 @@ export default function BookmarksScreen() {
           </ScrollView>
         </View>
 
+        {/* Count */}
+        <Text style={styles.resultCount}>
+          {(sectionData[activeSection]?.length || 0)}{' '}
+          {(sectionData[activeSection]?.length || 0) > 1 ? 'mangas' : 'manga'}
+        </Text>
+
         {/* Content Area with Gesture Detector */}
         <GestureDetector gesture={pan}>
           <View style={styles.contentWrapper}>
             <AnimatedView style={[styles.contentContainer, contentAnim]}>
-              {currentItems.length === 0 ? (
-                <View style={styles.emptyStateContainer}>
-                  <Ionicons
-                    name="bookmark-outline"
-                    size={64}
-                    color={colors.tabIconDefault}
-                  />
-                  <Text style={styles.emptyStateText}>
-                    {searchQuery
-                      ? `No bookmarks found for "${searchQuery}"`
-                      : `No ${activeSection.toLowerCase()} manga found`}
-                  </Text>
-                  {searchQuery ? (
-                    <TouchableOpacity
-                      style={styles.clearSearchButton}
-                      onPress={handleClearSearch}
-                    >
-                      <Text style={styles.clearSearchButtonText}>
-                        Clear Search
+              {SECTIONS.map((sec) => (
+                <View key={sec} style={styles.page}>
+                  {(sectionData[sec]?.length || 0) === 0 ? (
+                    <View style={styles.emptyStateContainer}>
+                      <Ionicons
+                        name="bookmark-outline"
+                        size={64}
+                        color={colors.tabIconDefault}
+                      />
+                      <Text style={styles.emptyStateText}>
+                        {searchQuery
+                          ? `No bookmarks found for "${searchQuery}"`
+                          : `No ${sec.toLowerCase()} manga found`}
                       </Text>
-                    </TouchableOpacity>
-                  ) : null}
+                      {searchQuery ? (
+                        <TouchableOpacity
+                          style={styles.clearSearchButton}
+                          onPress={handleClearSearch}
+                        >
+                          <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <FlatList
+                      ref={(r: FlatList<BookmarkItem> | null) => {
+                        listRefs.current[sec] = r;
+                      }}
+                      data={sectionData[sec]}
+                      renderItem={renderBookmarkItem}
+                      keyExtractor={(item: BookmarkItem) => item.id}
+                      numColumns={viewMode === 'grid' ? 2 : 1}
+                      key={`${sec}-${viewMode}`}
+                      extraData={[viewMode]}
+                      columnWrapperStyle={
+                        viewMode === 'grid' ? styles.columnWrapper : undefined
+                      }
+                      contentContainerStyle={styles.listContentContainer}
+                      showsVerticalScrollIndicator={false}
+                      removeClippedSubviews
+                      initialNumToRender={10}
+                      maxToRenderPerBatch={10}
+                      windowSize={11}
+                      keyboardShouldPersistTaps="always"
+                      keyboardDismissMode="on-drag"
+                    />
+                  )}
                 </View>
-              ) : (
-                <>
-                  <Text style={styles.resultCount}>
-                    {currentItems.length}{' '}
-                    {currentItems.length > 1 ? 'mangas' : 'manga'}
-                  </Text>
-                  <AnimatedFlatList
-                    //@ts-ignore
-                    ref={flatListRef}
-                    data={currentItems}
-                    renderItem={renderBookmarkItem}
-                    keyExtractor={(item) => item.id}
-                    numColumns={viewMode === 'grid' ? 2 : 1}
-                    key={viewMode}
-                    extraData={[activeSection, viewMode]}
-                    columnWrapperStyle={
-                      viewMode === 'grid' ? styles.columnWrapper : undefined
-                    }
-                    contentContainerStyle={styles.listContentContainer}
-                    showsVerticalScrollIndicator={false}
-                    removeClippedSubviews
-                    initialNumToRender={10}
-                    maxToRenderPerBatch={10}
-                    windowSize={11}
-                    keyboardShouldPersistTaps="always"
-                    keyboardDismissMode="on-drag"
-                  />
-                </>
-              )}
+              ))}
             </AnimatedView>
           </View>
         </GestureDetector>
@@ -917,7 +871,8 @@ const getStyles = (colors: typeof Colors.light) =>
     contentContainer: {
       flex: 1,
       backgroundColor: colors.background,
-      width: '100%',
+      width: SCREEN_WIDTH * SECTIONS.length,
+      flexDirection: 'row',
     },
     resultCount: {
       paddingHorizontal: 20,
@@ -931,6 +886,9 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     columnWrapper: {
       justifyContent: 'space-between',
+    },
+    page: {
+      width: SCREEN_WIDTH,
     },
     bookmarkCardWrapper: {
       width: '48%',

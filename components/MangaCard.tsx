@@ -1,13 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  ActivityIndicator,
-  Animated,
-  Pressable,
-} from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Animated, Pressable } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import {
@@ -15,12 +8,14 @@ import {
   useMangaImageCache,
   type CacheContext,
 } from '@/services/CacheImages';
-import * as FileSystem from 'expo-file-system';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
 import BottomPopup from './BottomPopup';
 import { getBookmarkPopupConfig, getMangaData, saveBookmark, removeBookmark } from '@/services/bookmarkService';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/hooks/queries/queryKeys';
+import { fetchMangaDetails } from '@/services/mangaFireService';
 
 interface EnhancedMangaCardProps extends MangaCardProps {
   context?: CacheContext;
@@ -45,10 +40,12 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const chosenUriRef = useRef<string | null>(null);
   const [showBookmarkPopup, setShowBookmarkPopup] = useState(false);
   const [bookmarkStatus, setBookmarkStatus] = useState<BookmarkStatus | null>(null);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const haptics = useHapticFeedback();
+  const queryClient = useQueryClient();
 
   // Load bookmark status when component mounts or mangaId changes
   useEffect(() => {
@@ -67,28 +64,30 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   }, [mangaId]);
 
   // Use appropriate caching strategy based on context
-  const searchCachedPath = useImageCache(imageUrl, context, mangaId);
-  const mangaCachedPath = useMangaImageCache(mangaId || '', imageUrl);
+  const searchCached = useImageCache(imageUrl, context, mangaId);
+  const mangaCached = useMangaImageCache(mangaId || '', imageUrl);
 
   // Choose the right cached path based on context
-  const cachedImagePath =
-    context === 'manga' && mangaId ? mangaCachedPath : searchCachedPath;
+  const cached = context === 'manga' && mangaId ? mangaCached : searchCached;
+  const cachedImagePath = cached.path || '';
+  const cacheLoading = cached.loading;
 
-  const getImageSource = () => {
-    if (
-      cachedImagePath &&
-      typeof cachedImagePath === 'string' &&
-      cachedImagePath.startsWith(FileSystem.cacheDirectory || '')
-    ) {
-      return {
-        uri: `file://${cachedImagePath}`,
-      };
+  // Keep a stable image URI for this render lifecycle to avoid "pop-in"
+  useEffect(() => {
+    chosenUriRef.current = null;
+    setIsLoading(true);
+    setHasError(false);
+  }, [imageUrl, mangaId]);
+
+  useEffect(() => {
+    if (!chosenUriRef.current) {
+      const uri =
+        cachedImagePath && cachedImagePath.startsWith('file://')
+          ? cachedImagePath
+          : imageUrl;
+      chosenUriRef.current = uri;
     }
-
-    return {
-      uri: cachedImagePath || imageUrl,
-    };
-  };
+  }, [cachedImagePath, imageUrl]);
 
   const handleImageLoad = () => {
     setIsLoading(false);
@@ -102,6 +101,13 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   const handlePressIn = () => {
     haptics.onPress();
+    if (mangaId) {
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.manga.details(mangaId),
+        queryFn: () => fetchMangaDetails(mangaId),
+        staleTime: 1000 * 60 * 10,
+      });
+    }
     Animated.spring(scaleAnim, {
       toValue: 0.95,
       useNativeDriver: true,
@@ -227,13 +233,19 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
       >
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <View style={styles.imageContainer}>
-          <Image
-            source={getImageSource()}
-            style={styles.cardImage}
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-            accessibilityLabel={`Cover image for ${title}`}
-          />
+          <View style={styles.imagePlaceholder} />
+          {!cacheLoading && (
+            <ExpoImage
+              source={{ uri: chosenUriRef.current || imageUrl }}
+              style={styles.cardImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              accessibilityLabel={`Cover image for ${title}`}
+            />
+          )}
           {isLoading && (
             <View style={styles.loadingOverlay}>
               <ActivityIndicator size="small" color={colors.primary} />
@@ -293,9 +305,17 @@ const getStyles = (colors: typeof Colors.light) =>
     imageContainer: {
       position: 'relative',
     },
-    cardImage: {
+    imagePlaceholder: {
       width: '100%',
       aspectRatio: 3 / 4,
+      backgroundColor: colors.border,
+    },
+    cardImage: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       resizeMode: 'cover',
     },
     loadingOverlay: {
@@ -356,3 +376,4 @@ const getStyles = (colors: typeof Colors.light) =>
   });
 
 export default MangaCard;
+
