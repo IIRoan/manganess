@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import * as FileSystem from 'expo-file-system';
+import { Directory, File as FsFile, Paths, type FileInfo } from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // Using a simple hash function instead of expo-crypto to avoid adding dependencies
 function simpleHash(str: string): string {
   let hash = 0;
@@ -10,11 +12,10 @@ function simpleHash(str: string): string {
   }
   return Math.abs(hash).toString(36);
 }
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_CACHE_FOLDER = `${FileSystem.cacheDirectory}image_cache/`;
-const MANGA_CACHE_FOLDER = `${BASE_CACHE_FOLDER}manga_covers/`;
-const SEARCH_CACHE_FOLDER = `${BASE_CACHE_FOLDER}search_temp/`;
+const BASE_CACHE_DIRECTORY = new Directory(Paths.cache, 'image_cache');
+const MANGA_CACHE_DIRECTORY = new Directory(BASE_CACHE_DIRECTORY, 'manga_covers');
+const SEARCH_CACHE_DIRECTORY = new Directory(BASE_CACHE_DIRECTORY, 'search_temp');
 const CACHE_METADATA_KEY = 'image_cache_metadata';
 const MAX_CACHE_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_CACHE_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -64,15 +65,11 @@ class ImageCache {
     if (this.initialized) return;
 
     try {
-      // Create cache directories
-      await this.ensureDirectoryExists(BASE_CACHE_FOLDER);
-      await this.ensureDirectoryExists(MANGA_CACHE_FOLDER);
-      await this.ensureDirectoryExists(SEARCH_CACHE_FOLDER);
+      await this.ensureDirectoryExists(BASE_CACHE_DIRECTORY);
+      await this.ensureDirectoryExists(MANGA_CACHE_DIRECTORY);
+      await this.ensureDirectoryExists(SEARCH_CACHE_DIRECTORY);
 
-      // Load metadata
       await this.loadMetadata();
-
-      // Clean up expired entries
       await this.cleanupExpiredEntries();
 
       this.initialized = true;
@@ -81,10 +78,52 @@ class ImageCache {
     }
   }
 
-  private async ensureDirectoryExists(path: string) {
-    const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) {
-      await FileSystem.makeDirectoryAsync(path, { intermediates: true });
+  private async ensureDirectoryExists(directory: Directory) {
+    try {
+      directory.create({ intermediates: true, idempotent: true });
+    } catch (error) {
+      console.error(`Failed to create directory ${directory.uri}:`, error);
+      throw error;
+    }
+  }
+
+  private getDirectoryForContext(context: CacheContext): Directory {
+    return context === 'search' ? SEARCH_CACHE_DIRECTORY : MANGA_CACHE_DIRECTORY;
+  }
+
+  private getCacheFile(context: CacheContext, filename: string): FsFile {
+    const directory = this.getDirectoryForContext(context);
+    return new FsFile(directory, `${filename}.jpg`);
+  }
+
+  private readFileInfo(file: FsFile): FileInfo {
+    try {
+      return file.info();
+    } catch (error) {
+      console.error(`Failed to read file info for ${file.uri}:`, error);
+      return { exists: false };
+    }
+  }
+
+  private deleteFileIfExists(file: FsFile) {
+    const fileInfo = this.readFileInfo(file);
+    if (fileInfo.exists) {
+      try {
+        file.delete();
+      } catch (error) {
+        console.error(`Failed to delete file ${file.uri}:`, error);
+      }
+    }
+  }
+
+  private deleteDirectoryIfExists(directory: Directory) {
+    try {
+      const info = directory.info();
+      if (info.exists) {
+        directory.delete();
+      }
+    } catch (error) {
+      console.error(`Failed to delete directory ${directory.uri}:`, error);
     }
   }
 
@@ -121,12 +160,6 @@ class ImageCache {
     return `${prefix}${urlHash.substring(0, 12)}_${timestamp}`;
   }
 
-  private getCachePath(context: CacheContext, filename: string): string {
-    const folder =
-      context === 'search' ? SEARCH_CACHE_FOLDER : MANGA_CACHE_FOLDER;
-    return `${folder}${filename}.jpg`;
-  }
-
   private async retryWithBackoff<T>(
     operation: () => Promise<T>,
     maxAttempts: number = MAX_RETRY_ATTEMPTS
@@ -143,7 +176,6 @@ class ImageCache {
           throw lastError;
         }
 
-        // Exponential backoff with jitter
         const delay =
           RETRY_DELAY_BASE * Math.pow(2, attempt - 1) + Math.random() * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -159,16 +191,21 @@ class ImageCache {
 
   private async downloadImageWithRetry(
     url: string,
-    filePath: string
-  ): Promise<boolean> {
+    targetFile: FsFile
+  ): Promise<FsFile> {
     return this.retryWithBackoff(async () => {
-      const downloadResult = await FileSystem.downloadAsync(url, filePath);
-      if (downloadResult.status !== 200) {
-        throw new Error(
-          `Download failed with status: ${downloadResult.status}`
-        );
+      await this.ensureDirectoryExists(targetFile.parentDirectory);
+      this.deleteFileIfExists(targetFile);
+
+      const downloadResult = await FsFile.downloadFileAsync(url, targetFile);
+      const normalizedFile = new FsFile(downloadResult.uri);
+      const fileInfo = this.readFileInfo(normalizedFile);
+
+      if (!fileInfo.exists || (fileInfo.size ?? 0) === 0) {
+        throw new Error('Download completed but file is missing or empty');
       }
-      return true;
+
+      return normalizedFile;
     });
   }
 
@@ -182,12 +219,10 @@ class ImageCache {
     try {
       await this.initializeCache();
 
-      // For search context, use temporary caching with shorter lifespan
       if (context === 'search') {
         return this.getSearchImagePath(url);
       }
 
-      // For manga context, use persistent caching with validation
       return this.getMangaImagePath(url, mangaId || 'unknown');
     } catch (error) {
       console.error('Error getting cached image path:', error);
@@ -198,29 +233,25 @@ class ImageCache {
   private async getSearchImagePath(url: string): Promise<string> {
     const urlHash = simpleHash(url);
     const filename = `search_${urlHash.substring(0, 16)}`;
-    const filePath = this.getCachePath('search', filename);
+    const cacheFile = this.getCacheFile('search', filename);
 
-    // Check if we're already downloading this image
     const existingDownload = this.downloadQueue.get(url);
     if (existingDownload) {
       return existingDownload;
     }
 
-    const fileInfo = await FileSystem.getInfoAsync(filePath);
+    const fileInfo = this.readFileInfo(cacheFile);
 
-    // Check if file exists and is not too old
     if (fileInfo.exists) {
       const metadata = this.metadata.get(filename);
       if (metadata && Date.now() - metadata.lastUpdated < SEARCH_CACHE_AGE) {
-        // Update last accessed time
         metadata.lastAccessed = Date.now();
         this.saveMetadata();
-        return filePath;
+        return cacheFile.uri;
       }
     }
 
-    // Start download and add to queue
-    const downloadPromise = this.downloadSearchImage(url, filePath, filename);
+    const downloadPromise = this.downloadSearchImage(url, cacheFile, filename);
     this.downloadQueue.set(url, downloadPromise);
 
     try {
@@ -233,28 +264,27 @@ class ImageCache {
 
   private async downloadSearchImage(
     url: string,
-    filePath: string,
+    file: FsFile,
     filename: string
   ): Promise<string> {
     try {
-      await this.downloadImageWithRetry(url, filePath);
+      const downloadedFile = await this.downloadImageWithRetry(url, file);
+      const fileInfo = this.readFileInfo(downloadedFile);
 
-      // Store metadata for cleanup
-      const fileInfo = await FileSystem.getInfoAsync(filePath);
       this.metadata.set(filename, {
         originalUrl: url,
-        cachedPath: filePath,
+        cachedPath: downloadedFile.uri,
         lastAccessed: Date.now(),
         lastUpdated: Date.now(),
         context: 'search',
-        fileSize: fileInfo.exists ? fileInfo.size : 0,
+        fileSize: fileInfo.size ?? 0,
         urlHash: simpleHash(url),
       });
       await this.saveMetadata();
-      return filePath;
+      return downloadedFile.uri;
     } catch (error) {
       console.error('Failed to download search image after retries:', error);
-      return url; // Return original URL as fallback
+      return url;
     }
   }
 
@@ -263,9 +293,8 @@ class ImageCache {
     mangaId: string
   ): Promise<string> {
     const cacheKey = this.generateCacheKey(url, mangaId);
-    const filePath = this.getCachePath('manga', cacheKey);
+    const cacheFile = this.getCacheFile('manga', cacheKey);
 
-    // Check if we have a cached version for this manga
     const existingEntry = Array.from(this.metadata.values()).find(
       (entry) =>
         entry.mangaId === mangaId &&
@@ -274,14 +303,13 @@ class ImageCache {
     );
 
     if (existingEntry) {
-      const fileInfo = await FileSystem.getInfoAsync(existingEntry.cachedPath);
+      const existingFile = new FsFile(existingEntry.cachedPath);
+      const fileInfo = this.readFileInfo(existingFile);
       if (fileInfo.exists) {
-        // Update last accessed time
         existingEntry.lastAccessed = Date.now();
         await this.saveMetadata();
         return existingEntry.cachedPath;
       } else {
-        // Remove stale metadata
         const entryKey = Array.from(this.metadata.entries()).find(
           ([_, entry]) => entry === existingEntry
         )?.[0];
@@ -291,27 +319,25 @@ class ImageCache {
       }
     }
 
-    // Download new image
     try {
-      await this.downloadImageWithRetry(url, filePath);
+      const downloadedFile = await this.downloadImageWithRetry(url, cacheFile);
+      const fileInfo = this.readFileInfo(downloadedFile);
 
-      const fileInfo = await FileSystem.getInfoAsync(filePath);
       this.metadata.set(cacheKey, {
         mangaId,
         originalUrl: url,
-        cachedPath: filePath,
+        cachedPath: downloadedFile.uri,
         lastAccessed: Date.now(),
         lastUpdated: Date.now(),
         context: 'manga',
-        fileSize: fileInfo.exists ? fileInfo.size : 0,
+        fileSize: fileInfo.size ?? 0,
         urlHash: simpleHash(url),
       });
       await this.saveMetadata();
 
-      // Clean up if cache is getting too large
       await this.manageCacheSize();
 
-      return filePath;
+      return downloadedFile.uri;
     } catch (error) {
       console.error('Failed to download manga image after retries:', error);
     }
@@ -325,29 +351,21 @@ class ImageCache {
   ): Promise<string> {
     await this.initializeCache();
 
-    // Find existing cache entry for this manga
     const existingEntry = Array.from(this.metadata.values()).find(
       (entry) => entry.mangaId === mangaId && entry.context === 'manga'
     );
 
     if (existingEntry) {
-      // Check if URL has changed
       if (existingEntry.originalUrl !== currentUrl) {
         console.log(`Image URL changed for manga ${mangaId}, updating cache`);
 
-        // Remove old cached file
         try {
-          const fileInfo = await FileSystem.getInfoAsync(
-            existingEntry.cachedPath
-          );
-          if (fileInfo.exists) {
-            await FileSystem.deleteAsync(existingEntry.cachedPath);
-          }
+          const existingFile = new FsFile(existingEntry.cachedPath);
+          this.deleteFileIfExists(existingFile);
         } catch (error) {
           console.error('Error removing old cached file:', error);
         }
 
-        // Remove old metadata entry
         const entryKey = Array.from(this.metadata.entries()).find(
           ([_, entry]) => entry === existingEntry
         )?.[0];
@@ -355,24 +373,19 @@ class ImageCache {
           this.metadata.delete(entryKey);
         }
 
-        // Cache new image
         return this.getMangaImagePath(currentUrl, mangaId);
       } else {
-        // URL hasn't changed, return existing cached path
-        const fileInfo = await FileSystem.getInfoAsync(
-          existingEntry.cachedPath
-        );
+        const existingFile = new FsFile(existingEntry.cachedPath);
+        const fileInfo = this.readFileInfo(existingFile);
         if (fileInfo.exists) {
           existingEntry.lastAccessed = Date.now();
           await this.saveMetadata();
           return existingEntry.cachedPath;
         } else {
-          // File doesn't exist, re-download
           return this.getMangaImagePath(currentUrl, mangaId);
         }
       }
     } else {
-      // No existing entry, cache new image
       return this.getMangaImagePath(currentUrl, mangaId);
     }
   }
@@ -382,33 +395,28 @@ class ImageCache {
       await this.initializeCache();
 
       if (context === 'search') {
-        // Clear only search cache
-        await FileSystem.deleteAsync(SEARCH_CACHE_FOLDER);
-        await this.ensureDirectoryExists(SEARCH_CACHE_FOLDER);
+        this.deleteDirectoryIfExists(SEARCH_CACHE_DIRECTORY);
+        await this.ensureDirectoryExists(SEARCH_CACHE_DIRECTORY);
 
-        // Remove search metadata
         for (const [key, entry] of this.metadata.entries()) {
           if (entry.context === 'search') {
             this.metadata.delete(key);
           }
         }
       } else if (context === 'manga') {
-        // Clear only manga cache
-        await FileSystem.deleteAsync(MANGA_CACHE_FOLDER);
-        await this.ensureDirectoryExists(MANGA_CACHE_FOLDER);
+        this.deleteDirectoryIfExists(MANGA_CACHE_DIRECTORY);
+        await this.ensureDirectoryExists(MANGA_CACHE_DIRECTORY);
 
-        // Remove manga metadata
         for (const [key, entry] of this.metadata.entries()) {
           if (entry.context === 'manga') {
             this.metadata.delete(key);
           }
         }
       } else {
-        // Clear all cache
-        await FileSystem.deleteAsync(BASE_CACHE_FOLDER);
-        await this.ensureDirectoryExists(BASE_CACHE_FOLDER);
-        await this.ensureDirectoryExists(MANGA_CACHE_FOLDER);
-        await this.ensureDirectoryExists(SEARCH_CACHE_FOLDER);
+        this.deleteDirectoryIfExists(BASE_CACHE_DIRECTORY);
+        await this.ensureDirectoryExists(BASE_CACHE_DIRECTORY);
+        await this.ensureDirectoryExists(MANGA_CACHE_DIRECTORY);
+        await this.ensureDirectoryExists(SEARCH_CACHE_DIRECTORY);
 
         this.metadata.clear();
       }
@@ -416,10 +424,9 @@ class ImageCache {
       await this.saveMetadata();
     } catch (error) {
       console.error('Error clearing cache:', error);
-      // Ensure directories exist even if clearing failed
-      await this.ensureDirectoryExists(BASE_CACHE_FOLDER);
-      await this.ensureDirectoryExists(MANGA_CACHE_FOLDER);
-      await this.ensureDirectoryExists(SEARCH_CACHE_FOLDER);
+      await this.ensureDirectoryExists(BASE_CACHE_DIRECTORY);
+      await this.ensureDirectoryExists(MANGA_CACHE_DIRECTORY);
+      await this.ensureDirectoryExists(SEARCH_CACHE_DIRECTORY);
     }
   }
 
@@ -435,7 +442,7 @@ class ImageCache {
       let newestEntry = 0;
 
       for (const entry of this.metadata.values()) {
-        const fileInfo = await FileSystem.getInfoAsync(entry.cachedPath);
+        const fileInfo = this.readFileInfo(new FsFile(entry.cachedPath));
         if (fileInfo.exists) {
           totalSize += entry.fileSize;
           totalFiles++;
@@ -479,19 +486,15 @@ class ImageCache {
       if (now - entry.lastAccessed > maxAge) {
         expiredEntries.push(key);
 
-        // Remove file
         try {
-          const fileInfo = await FileSystem.getInfoAsync(entry.cachedPath);
-          if (fileInfo.exists) {
-            await FileSystem.deleteAsync(entry.cachedPath);
-          }
+          const file = new FsFile(entry.cachedPath);
+          this.deleteFileIfExists(file);
         } catch (error) {
           console.error('Error removing expired cache file:', error);
         }
       }
     }
 
-    // Remove metadata for expired entries
     for (const key of expiredEntries) {
       this.metadata.delete(key);
     }
@@ -510,21 +513,21 @@ class ImageCache {
         `Cache size (${Math.round(stats.totalSize / 1024 / 1024)}MB) exceeds limit, cleaning up...`
       );
 
-      // Get all entries sorted by last accessed (oldest first)
       const sortedEntries = Array.from(this.metadata.entries())
-        .filter(([_, entry]) => entry.context === 'manga') // Only clean manga cache, keep search temp
+        .filter(([_, entry]) => entry.context === 'manga')
         .sort(([_, a], [__, b]) => a.lastAccessed - b.lastAccessed);
 
       let cleanedSize = 0;
-      const targetCleanup = stats.totalSize - MAX_CACHE_SIZE * 0.8; // Clean to 80% of max
+      const targetCleanup = stats.totalSize - MAX_CACHE_SIZE * 0.8;
 
       for (const [key, entry] of sortedEntries) {
         if (cleanedSize >= targetCleanup) break;
 
         try {
-          const fileInfo = await FileSystem.getInfoAsync(entry.cachedPath);
+          const file = new FsFile(entry.cachedPath);
+          const fileInfo = this.readFileInfo(file);
           if (fileInfo.exists) {
-            await FileSystem.deleteAsync(entry.cachedPath);
+            this.deleteFileIfExists(file);
             cleanedSize += entry.fileSize;
           }
           this.metadata.delete(key);
@@ -547,28 +550,35 @@ export function useImageCache(
   url: string,
   context: CacheContext = 'search',
   mangaId?: string
-): string {
-  const [cachedPath, setCachedPath] = useState<string>(url);
+): { path: string; loading: boolean } {
+  const [path, setPath] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(Boolean(url));
 
   useEffect(() => {
     let isMounted = true;
 
     const cacheImage = async () => {
-      if (!url) return;
+      if (!url) {
+        if (isMounted) setLoading(false);
+        return;
+      }
 
       try {
-        const path = await imageCache.getCachedImagePath(url, context, mangaId);
+        const p = await imageCache.getCachedImagePath(url, context, mangaId);
         if (isMounted) {
-          setCachedPath(path);
+          setPath(p);
         }
       } catch (error) {
-        console.error('Error in useImageCache:', error);
         if (isMounted) {
-          setCachedPath(url);
+          setPath(url);
         }
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
+    setPath('');
+    setLoading(Boolean(url));
     cacheImage();
 
     return () => {
@@ -576,32 +586,38 @@ export function useImageCache(
     };
   }, [url, context, mangaId]);
 
-  return cachedPath;
+  return { path, loading };
 }
 
-// Hook for manga-specific caching with validation
-export function useMangaImageCache(mangaId: string, url: string): string {
-  const [cachedPath, setCachedPath] = useState<string>(url);
+export function useMangaImageCache(mangaId: string, url: string): { path: string; loading: boolean } {
+  const [path, setPath] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(Boolean(url && mangaId));
 
   useEffect(() => {
     let isMounted = true;
 
     const validateAndCache = async () => {
-      if (!url || !mangaId) return;
+      if (!url || !mangaId) {
+        if (isMounted) setLoading(false);
+        return;
+      }
 
       try {
-        const path = await imageCache.validateAndUpdateCache(mangaId, url);
+        const p = await imageCache.validateAndUpdateCache(mangaId, url);
         if (isMounted) {
-          setCachedPath(path);
+          setPath(p);
         }
       } catch (error) {
-        console.error('Error in useMangaImageCache:', error);
         if (isMounted) {
-          setCachedPath(url);
+          setPath(url);
         }
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
+    setPath('');
+    setLoading(Boolean(url && mangaId));
     validateAndCache();
 
     return () => {
@@ -609,5 +625,6 @@ export function useMangaImageCache(mangaId: string, url: string): string {
     };
   }, [url, mangaId]);
 
-  return cachedPath;
+  return { path, loading };
 }
+

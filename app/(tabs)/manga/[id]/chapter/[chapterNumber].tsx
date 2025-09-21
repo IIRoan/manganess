@@ -8,13 +8,15 @@ import {
   Platform,
   useColorScheme,
   Animated,
+  Modal,
+  ScrollView,
   StatusBar,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
+import { useMangaDetailsQuery } from '@/hooks/queries/useMangaQueries';
 import { WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 
 import { getMangaData } from '@/services/bookmarkService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,8 +24,6 @@ import {
   getChapterUrl,
   markChapterAsRead,
   getInjectedJavaScript,
-  fetchMangaDetails,
-  MangaDetails,
 } from '@/services/mangaFireService';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
@@ -53,14 +53,18 @@ export default function ReadChapterScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
-  const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
+  const {
+  data: mangaDetails,
+  refetch: refetchMangaDetails,
+} = useMangaDetailsQuery(id, {
+  enabled: Boolean(id),
+});
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [guideStep, setGuideStep] = useState(1);
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
-  const bottomSheetRef = useRef<BottomSheet>(null);
   const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const { theme } = useTheme();
@@ -229,36 +233,25 @@ export default function ReadChapterScreen() {
   const markChapterAsReadWithFallback = useCallback(async () => {
     try {
       let mangaData = await getMangaData(id);
-      let title;
-      if (mangaData?.title) {
-        title = mangaData.title;
-      } else {
-        const details = await fetchMangaDetails(id);
-        title = details.title;
+      let title = mangaData?.title;
+
+      if (!title) {
+        const details = mangaDetails ?? (await refetchMangaDetails()).data;
+        title = details?.title || '';
       }
+
       await markChapterAsRead(id, chapterNumber, title);
       setMangaTitle(title);
     } catch (error) {
       console.error('Error marking chapter as read:', error);
     }
-  }, [id, chapterNumber]);
+  }, [chapterNumber, id, mangaDetails, refetchMangaDetails]);
 
-  const fetchDetails = useCallback(async () => {
-    try {
-      const details = await fetchMangaDetails(id);
-      setMangaDetails(details);
-    } catch (error) {
-      console.error('Error fetching manga details:', error);
-    }
-  }, [id]);
 
   useEffect(() => {
     markChapterAsReadWithFallback();
   }, [markChapterAsReadWithFallback]);
 
-  useEffect(() => {
-    fetchDetails();
-  }, [fetchDetails]);
 
   useFocusEffect(
     useCallback(() => {
@@ -298,7 +291,6 @@ export default function ReadChapterScreen() {
   );
 
   const handleChapterPress = (chapterNum: string) => {
-    bottomSheetRef.current?.close();
     router.navigate(`/manga/${id}/chapter/${chapterNum}`);
   };
 
@@ -380,7 +372,8 @@ export default function ReadChapterScreen() {
 `;
 
   const closeBottomSheet = () => {
-    bottomSheetRef.current?.close();
+    setIsBottomSheetOpen(false);
+    handleBottomSheetChange(-1);
   };
 
   const enhancedBackButtonSize = ensureMinimumSize(40);
@@ -473,7 +466,7 @@ export default function ReadChapterScreen() {
                     onPress={() => {
                       // Don't open chapter list during first step of the guide
                       if (!showGuide || guideStep > 1) {
-                        bottomSheetRef.current?.expand();
+                        setIsBottomSheetOpen(true);
                         handleBottomSheetChange(1);
                       }
                     }}
@@ -571,33 +564,27 @@ export default function ReadChapterScreen() {
             showControls={showNavControls}
           />
 
-          <BottomSheet
-            ref={bottomSheetRef}
-            snapPoints={['60%', '80%']}
-            index={-1}
-            enablePanDownToClose
-            onChange={handleBottomSheetChange}
-            backgroundStyle={styles.bottomSheetBackground}
-            handleIndicatorStyle={styles.bottomSheetIndicator}
-          >
-            <View style={styles.bottomSheetContainer}>
-              <BottomSheetScrollView
-                contentContainerStyle={styles.bottomSheetContent}
-              >
-                <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
-                <Text style={styles.currentChapterTitle}>
-                  Current: Chapter {chapterNumber}
-                </Text>
-                {renderChapterList()}
-              </BottomSheetScrollView>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={closeBottomSheet}
-              >
-                <Text style={styles.closeButtonText}>Close</Text>
-              </TouchableOpacity>
+          <Modal visible={isBottomSheetOpen} transparent animationType="slide" onRequestClose={closeBottomSheet}>
+            <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+              <View style={styles.bottomSheetBackground}>
+                <View style={styles.bottomSheetContainer}>
+                  <ScrollView contentContainerStyle={styles.bottomSheetContent}>
+                    <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
+                    <Text style={styles.currentChapterTitle}>
+                      Current: Chapter {chapterNumber}
+                    </Text>
+                    {renderChapterList()}
+                  </ScrollView>
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={closeBottomSheet}
+                  >
+                    <Text style={styles.closeButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </BottomSheet>
+          </Modal>
         </>
       )}
     </View>

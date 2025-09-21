@@ -8,8 +8,8 @@ import {
   ScrollView,
   useColorScheme,
   Alert,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useTheme, Theme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -46,10 +46,12 @@ export default function OnboardingScreen() {
       <ScrollView contentContainerStyle={styles.contentContainer}>
         {/* Reworked Look */}
         <View style={styles.logoContainer}>
-          <Image
+          <View style={styles.logoPlaceholder} />
+          <ExpoImage
             source={require('@/assets/images/nessie.png')}
-            style={styles.logo}
-            resizeMode="contain"
+            style={StyleSheet.absoluteFillObject}
+            contentFit="contain"
+            transition={150}
           />
         </View>
 
@@ -115,6 +117,12 @@ const getStyles = (colors: typeof Colors.light) =>
     logoContainer: {
       alignItems: 'center',
       marginBottom: 30,
+    },
+    logoPlaceholder: {
+      width: 120,
+      height: 120,
+      backgroundColor: colors.border,
+      borderRadius: 12,
     },
     logo: {
       width: 120,

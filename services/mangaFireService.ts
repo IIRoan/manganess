@@ -9,35 +9,109 @@ import {
 import { getMangaData, setMangaData } from '@/services/bookmarkService';
 import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
-
-export interface MangaItem {
-  id: string;
-  title: string;
-  banner: string;
-  imageUrl: string;
-  link: string;
-  type: string;
-}
-
-export interface MangaDetails {
-  title: string;
-  alternativeTitle: string;
-  status: string;
-  description: string;
-  author: string[];
-  published: string;
-  genres: string[];
-  rating: string;
-  reviewCount: string;
-  bannerImage: string;
-  chapters: { number: string; title: string; date: string; url: string }[];
-}
+import type { MangaItem, MangaDetails } from '@/types';
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
+
+export type { MangaItem, MangaDetails, Chapter } from '@/types';
+
+const REQUEST_TIMEOUT = 10000;
+
+async function fetchHtmlContent(url: string): Promise<string> {
+  const response = await axios.get(url, {
+    headers: {
+      'User-Agent': USER_AGENT,
+    },
+    timeout: REQUEST_TIMEOUT,
+  });
+
+  if (!response.data || typeof response.data !== 'string') {
+    throw new Error('Invalid response data');
+  }
+
+  return response.data as string;
+}
+
+function parseMangaList(html: string): MangaItem[] {
+  const items: MangaItem[] = [];
+  const seenIds = new Set<string>();
+  const mainRegex =
+    /<a href="\/manga\/([^"?#]+)"[^>]*>[\s\S]*?<img[^>]+(?:data-src|src)="([^">]+)"[^>]*?(?:alt|title)="([^">]*)"/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = mainRegex.exec(html)) !== null) {
+    const id = match[1]?.trim();
+    if (!id || seenIds.has(id)) {
+      continue;
+    }
+
+    const imageUrl = match[2]?.trim() ?? '';
+    const title = decode(match[3]?.trim() ?? '') || 'Unknown';
+
+    const item: MangaItem = {
+      id,
+      title,
+      banner: imageUrl,
+      imageUrl,
+      link: `/manga/${id}`,
+      type: 'manga',
+    };
+
+    items.push(item);
+    seenIds.add(id);
+  }
+
+  if (items.length === 0) {
+    const fallbackRegex =
+      /data-id="([^"']+)"[\s\S]*?data-thumbnail="([^"']+)"[\s\S]*?data-title="([^"']+)"/g;
+
+    while ((match = fallbackRegex.exec(html)) !== null) {
+      const id = match[1]?.trim();
+      if (!id || seenIds.has(id)) {
+        continue;
+      }
+
+      const imageUrl = match[2]?.trim() ?? '';
+      const title = decode(match[3]?.trim() ?? '') || 'Unknown';
+
+      items.push({
+        id,
+        title,
+        banner: imageUrl,
+        imageUrl,
+        link: `/manga/${id}`,
+        type: 'manga',
+      });
+      seenIds.add(id);
+    }
+  }
+
+  return items;
+}
+
+export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
+  const normalizedId = id?.trim();
+  if (!normalizedId) {
+    throw new Error('Manga id is required');
+  }
+
+  return performanceMonitor.measureAsync(`fetchMangaDetails:${normalizedId}`, () =>
+    retryApiCall(async () => {
+      const detailsUrl = `${MANGA_API_URL}/manga/${normalizedId}`;
+
+      if (!validateUrl(detailsUrl)) {
+        throw new Error('Invalid manga details URL');
+      }
+
+      const html = await fetchHtmlContent(detailsUrl);
+      return parseMangaDetails(html, normalizedId);
+    })
+  );
+};
 
 // Utility function for retrying API calls with exponential backoff
 async function retryApiCall<T>(
@@ -102,70 +176,42 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       }
 
       const html = response.data as string;
-      return parseSearchResults(html);
+      return parseMangaList(html);
     })
   );
 };
 
-// Extract search result parsing into separate function
-function parseSearchResults(html: string): MangaItem[] {
-  const mangaRegex =
-    /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
-  const matches = [...html.matchAll(mangaRegex)];
+export const fetchGenreManga = async (slug: string): Promise<MangaItem[]> => {
+  const trimmedSlug = slug?.trim();
 
-  return matches
-    .map((match) => {
-      const link = match[1];
-      const id = link ? link.split('/').pop() || '' : '';
-      const imageUrl = match[2];
-
-      // Validate image URL
-      const validImageUrl = validateUrl(imageUrl || '') ? imageUrl : '';
-
-      return {
-        id,
-        link: `${MANGA_API_URL}${link || ''}`,
-        title: decode(match[4]?.trim() || ''),
-        banner: validImageUrl || '',
-        imageUrl: validImageUrl || '',
-        type: decode(match[3]?.trim() || ''),
-      };
-    })
-    .filter((item) => item.id && item.title); // Filter out incomplete results
-}
-
-export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
-  if (!id || id.trim().length === 0) {
-    throw new Error('Manga ID is required');
+  if (!trimmedSlug) {
+    throw new Error('Genre slug is required');
   }
 
-  return performanceMonitor.measureAsync(`fetchMangaDetails:${id}`, () =>
+  return performanceMonitor.measureAsync(`fetchGenre:${trimmedSlug}`, () =>
     retryApiCall(async () => {
-      const detailsUrl = `${MANGA_API_URL}/manga/${id.trim()}`;
+      const genreUrl = `${MANGA_API_URL}/genre/${trimmedSlug}`;
 
-      if (!validateUrl(detailsUrl)) {
-        throw new Error('Invalid manga details URL');
+      if (!validateUrl(genreUrl)) {
+        throw new Error('Invalid genre URL');
       }
 
-      const response = await axios.get(detailsUrl, {
+      const response = await axios.get(genreUrl, {
         headers: {
           'User-Agent': USER_AGENT,
         },
-        timeout: 15000, // Longer timeout for details page
+        timeout: 10000,
       });
 
       if (!response.data || typeof response.data !== 'string') {
         throw new Error('Invalid response data');
       }
 
-      const html = response.data as string;
-      const details = parseMangaDetails(html);
-      return { ...details, id: id.trim() };
+      return parseMangaList(response.data as string);
     })
   );
 };
-
-const parseMangaDetails = (html: string): MangaDetails => {
+const parseMangaDetails = (html: string, id: string): MangaDetails => {
   const title = decode(
     html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title'
   );
@@ -233,6 +279,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   }
 
   return {
+    id,
     title,
     alternativeTitle,
     status,
@@ -525,3 +572,12 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
     })();
   `;
 };
+
+
+
+
+
+
+
+
+

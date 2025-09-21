@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Image as ExpoImage } from 'expo-image';
 import {
   View,
   Text,
@@ -6,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   useColorScheme,
-  Image,
   Alert,
   Switch,
   Platform,
@@ -29,7 +29,7 @@ import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
 
 import Svg, { Path } from 'react-native-svg';
-import * as FileSystem from 'expo-file-system';
+import { File as FsFile, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import CustomColorPicker from '@/components/CustomColorPicker';
@@ -160,21 +160,20 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleExportData = async () => {
+    const handleExportData = async () => {
     try {
       const exportedData = await exportAppData();
 
       // Create JSON file
       const jsonString = JSON.stringify(exportedData, null, 2);
       const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
-      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+      const exportFile = new FsFile(Paths.document, fileName);
 
-      // Write file
-      await FileSystem.writeAsStringAsync(filePath, jsonString);
+      exportFile.create({ intermediates: true, overwrite: true });
+      exportFile.write(jsonString);
 
-      // Share file
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(filePath, {
+        await Sharing.shareAsync(exportFile.uri, {
           mimeType: 'application/json',
           dialogTitle: 'Export App Data',
         });
@@ -193,9 +192,13 @@ export default function SettingsScreen() {
 
       if (result.canceled) return;
 
-      const fileContent = await FileSystem.readAsStringAsync(
-        result.assets?.[0]?.uri || ''
-      );
+            const pickedUri = result.assets?.[0]?.uri;
+      if (!pickedUri) {
+        throw new Error('No file selected');
+      }
+
+      const importFile = new FsFile(pickedUri);
+      const fileContent = await importFile.text();
       const importedData = JSON.parse(fileContent);
 
       Alert.alert(
@@ -387,9 +390,13 @@ export default function SettingsScreen() {
           {user ? (
             <>
               <View style={styles.userInfo}>
-                <Image
+                <View style={styles.avatarPlaceholder} />
+                <ExpoImage
                   source={{ uri: user.avatar.large }}
                   style={styles.avatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={150}
                 />
                 <Text style={styles.username}>{user.name}</Text>
               </View>
@@ -646,10 +653,11 @@ export default function SettingsScreen() {
         {/* Add bottom padding space */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
-      <Image
+      <ExpoImage
         source={require('@/assets/images/nessie.png')}
         style={styles.nessieImage}
-        resizeMode="contain"
+        contentFit="contain"
+        transition={150}
       />
     </View>
   );
@@ -746,8 +754,17 @@ const getStyles = (colors: typeof Colors.light) =>
       backgroundColor: colors.background,
       padding: 10,
       borderRadius: 10,
+      position: 'relative',
+    },
+    avatarPlaceholder: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      marginRight: 10,
+      backgroundColor: colors.border,
     },
     avatar: {
+      position: 'absolute',
       width: 50,
       height: 50,
       borderRadius: 25,
@@ -836,3 +853,5 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.primary,
     },
   });
+
+
