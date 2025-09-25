@@ -14,17 +14,14 @@ jobs:
   format:
     name: Run formatting check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Set up Bun and install dependencies
+        uses: ./.github/actions/setup-bun-install
 
       - name: Check formatting
         run: bun run format:check

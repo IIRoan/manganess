@@ -1,0 +1,36 @@
+name: Setup Bun with install cache
+
+inputs:
+  bun-version:
+    description: Bun version to install
+    required: false
+    default: latest
+  lockfile:
+    description: Path to the Bun lockfile used for cache busting
+    required: false
+    default: bun.lockb
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: ${{ inputs.bun-version }}
+
+    - name: Cache dependencies
+      id: bun-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.bun/install/cache
+          node_modules
+        key: ${{ runner.os }}-bun-${{ inputs.bun-version }}-${{ hashFiles(inputs.lockfile) }}
+        restore-keys: |
+          ${{ runner.os }}-bun-${{ inputs.bun-version }}-
+          ${{ runner.os }}-bun-
+
+    - name: Install dependencies
+      if: steps.bun-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bun install --frozen-lockfile
