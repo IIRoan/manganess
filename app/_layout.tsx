@@ -9,9 +9,10 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { AppState, AppStateStatus, StatusBar, useColorScheme } from 'react-native';
-import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { queryClient } from '@/utils/queryClient';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,19 +28,6 @@ function useReactQueryFocusManager() {
 }
 
 function AppProviders({ children }: { children: React.ReactNode }) {
-  const [queryClient] = React.useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 1000 * 60,
-            refetchOnReconnect: true,
-            refetchOnWindowFocus: true,
-          },
-        },
-      })
-  );
-
   useReactQueryFocusManager();
 
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;

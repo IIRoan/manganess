@@ -22,7 +22,7 @@ import { useHomeContent, useRecentlyReadQuery } from '@/hooks/queries/useHomeQue
 import { MangaItem, RecentMangaItem } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
-import { fetchMangaDetails } from '@/services/mangaFireService';
+import { mangaDetailsQueryOptions } from '@/services/mangaFireService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -129,11 +129,7 @@ export default function HomeScreen() {
         style={[styles.trendingItem, { marginLeft: index === 0 ? 16 : 12 }]}
         onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.imageUrl } })}
         onPressIn={() =>
-          queryClient.prefetchQuery({
-            queryKey: queryKeys.manga.details(item.id),
-            queryFn: () => fetchMangaDetails(item.id),
-            staleTime: 1000 * 60 * 10,
-          })
+          queryClient.prefetchQuery(mangaDetailsQueryOptions(item.id))
         }
         activeOpacity={0.7}
         accessibilityRole="button"
@@ -322,11 +318,9 @@ export default function HomeScreen() {
         style={[styles.featuredContainer, { marginTop: insets.top + 16 }]}
         onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: featuredManga.id, title: featuredManga.title, bannerImage: featuredManga.imageUrl } })}
         onPressIn={() =>
-          queryClient.prefetchQuery({
-            queryKey: queryKeys.manga.details(featuredManga.id),
-            queryFn: () => fetchMangaDetails(featuredManga.id),
-            staleTime: 1000 * 60 * 10,
-          })
+          queryClient.prefetchQuery(
+            mangaDetailsQueryOptions(featuredManga.id)
+          )
         }
         activeOpacity={0.8}
       >

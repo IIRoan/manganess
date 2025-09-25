@@ -14,8 +14,7 @@ import BottomPopup from './BottomPopup';
 import { getBookmarkPopupConfig, getMangaData, saveBookmark, removeBookmark } from '@/services/bookmarkService';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/hooks/queries/queryKeys';
-import { fetchMangaDetails } from '@/services/mangaFireService';
+import { mangaDetailsQueryOptions } from '@/services/mangaFireService';
 
 interface EnhancedMangaCardProps extends MangaCardProps {
   context?: CacheContext;
@@ -102,11 +101,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const handlePressIn = () => {
     haptics.onPress();
     if (mangaId) {
-      queryClient.prefetchQuery({
-        queryKey: queryKeys.manga.details(mangaId),
-        queryFn: () => fetchMangaDetails(mangaId),
-        staleTime: 1000 * 60 * 10,
-      });
+      queryClient.prefetchQuery(mangaDetailsQueryOptions(mangaId));
     }
     Animated.spring(scaleAnim, {
       toValue: 0.95,

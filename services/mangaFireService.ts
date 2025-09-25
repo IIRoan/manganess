@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { EnsureQueryDataOptions } from '@tanstack/react-query';
 import { decode } from 'html-entities';
 import { MANGA_API_URL } from '@/constants/Config';
 import {
@@ -9,7 +10,9 @@ import {
 import { getMangaData, setMangaData } from '@/services/bookmarkService';
 import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
-import type { MangaItem, MangaDetails } from '@/types';
+import { queryClient } from '@/utils/queryClient';
+import { queryKeys } from '@/hooks/queries/queryKeys';
+import type { MangaItem, MangaDetails, Chapter } from '@/types';
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
@@ -20,20 +23,43 @@ const RETRY_DELAY = 1000;
 export type { MangaItem, MangaDetails, Chapter } from '@/types';
 
 const REQUEST_TIMEOUT = 10000;
+const STALE_TIME_ONE_MINUTE = 1000 * 60;
+const STALE_TIME_SIX_HOURS = 1000 * 60 * 60 * 6;
+const GC_TIME_ONE_DAY = 1000 * 60 * 60 * 24;
+
+type MangaDetailsQueryKey = ReturnType<typeof queryKeys.manga.details>;
+type MangaSearchQueryKey = ReturnType<typeof queryKeys.search>;
+type MangaGenreQueryKey = ReturnType<typeof queryKeys.genres>;
+
+type MangaDetailsQueryOptions = EnsureQueryDataOptions<
+  MangaDetails,
+  Error,
+  MangaDetails,
+  MangaDetailsQueryKey
+>;
+
+type MangaListQueryOptions<TQueryKey extends readonly unknown[]> = EnsureQueryDataOptions<
+  MangaItem[],
+  Error,
+  MangaItem[],
+  TQueryKey
+>;
 
 async function fetchHtmlContent(url: string): Promise<string> {
-  const response = await axios.get(url, {
+  const response = await axios.get<string>(url, {
     headers: {
       'User-Agent': USER_AGENT,
     },
     timeout: REQUEST_TIMEOUT,
   });
 
-  if (!response.data || typeof response.data !== 'string') {
+  const { data } = response;
+
+  if (!data || typeof data !== 'string') {
     throw new Error('Invalid response data');
   }
 
-  return response.data as string;
+  return data;
 }
 
 function parseMangaList(html: string): MangaItem[] {
@@ -93,25 +119,128 @@ function parseMangaList(html: string): MangaItem[] {
   return items;
 }
 
-export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
-  const normalizedId = id?.trim();
-  if (!normalizedId) {
-    throw new Error('Manga id is required');
-  }
+const createMangaDetailsQueryOptions = (
+  rawId: string
+): MangaDetailsQueryOptions => {
+  const normalizedId = rawId.trim();
 
-  return performanceMonitor.measureAsync(`fetchMangaDetails:${normalizedId}`, () =>
-    retryApiCall(async () => {
-      const detailsUrl = `${MANGA_API_URL}/manga/${normalizedId}`;
-
-      if (!validateUrl(detailsUrl)) {
-        throw new Error('Invalid manga details URL');
+  return {
+    queryKey: queryKeys.manga.details(normalizedId),
+    queryFn: async () => {
+      if (!normalizedId) {
+        throw new Error('Manga id is required');
       }
 
-      const html = await fetchHtmlContent(detailsUrl);
-      return parseMangaDetails(html, normalizedId);
-    })
-  );
+      return performanceMonitor.measureAsync(
+        `fetchMangaDetails:${normalizedId}`,
+        () =>
+          retryApiCall(async () => {
+            const detailsUrl = `${MANGA_API_URL}/manga/${normalizedId}`;
+
+            if (!validateUrl(detailsUrl)) {
+              throw new Error('Invalid manga details URL');
+            }
+
+            const html = await fetchHtmlContent(detailsUrl);
+            return parseMangaDetails(html, normalizedId);
+          })
+      );
+    },
+    staleTime: STALE_TIME_SIX_HOURS,
+    gcTime: GC_TIME_ONE_DAY,
+  } satisfies MangaDetailsQueryOptions;
 };
+
+const createSearchMangaQueryOptions = (
+  rawKeyword: string
+): MangaListQueryOptions<MangaSearchQueryKey> => {
+  const normalizedKeyword = rawKeyword.trim();
+
+  return {
+    queryKey: queryKeys.search(normalizedKeyword),
+    queryFn: async () => {
+      if (!normalizedKeyword) {
+        throw new Error('Search keyword is required');
+      }
+
+      return performanceMonitor.measureAsync(
+        `searchManga:${normalizedKeyword}`,
+        () =>
+          retryApiCall(async () => {
+            const searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(
+              normalizedKeyword
+            )}`;
+
+            if (!validateUrl(searchUrl)) {
+              throw new Error('Invalid search URL');
+            }
+
+            const html = await fetchHtmlContent(searchUrl);
+            return parseMangaList(html);
+          })
+      );
+    },
+    staleTime: STALE_TIME_ONE_MINUTE,
+    gcTime: GC_TIME_ONE_DAY,
+    placeholderData: (previous) => previous ?? [],
+  } satisfies MangaListQueryOptions<MangaSearchQueryKey>;
+};
+
+const createGenreMangaQueryOptions = (
+  rawSlug: string
+): MangaListQueryOptions<MangaGenreQueryKey> => {
+  const normalizedSlug = rawSlug.trim();
+
+  return {
+    queryKey: queryKeys.genres(normalizedSlug),
+    queryFn: async () => {
+      if (!normalizedSlug) {
+        throw new Error('Genre slug is required');
+      }
+
+      return performanceMonitor.measureAsync(
+        `fetchGenre:${normalizedSlug}`,
+        () =>
+          retryApiCall(async () => {
+            const genreUrl = `${MANGA_API_URL}/genre/${normalizedSlug}`;
+
+            if (!validateUrl(genreUrl)) {
+              throw new Error('Invalid genre URL');
+            }
+
+            const html = await fetchHtmlContent(genreUrl);
+            return parseMangaList(html);
+          })
+      );
+    },
+    staleTime: STALE_TIME_ONE_MINUTE,
+    gcTime: GC_TIME_ONE_DAY,
+    placeholderData: (previous) => previous ?? [],
+  } satisfies MangaListQueryOptions<MangaGenreQueryKey>;
+};
+
+export const mangaDetailsQueryOptions = (
+  id: string
+): MangaDetailsQueryOptions => createMangaDetailsQueryOptions(id);
+
+export const searchMangaQueryOptions = (
+  keyword: string
+): MangaListQueryOptions<MangaSearchQueryKey> =>
+  createSearchMangaQueryOptions(keyword);
+
+export const genreMangaQueryOptions = (
+  slug: string
+): MangaListQueryOptions<MangaGenreQueryKey> =>
+  createGenreMangaQueryOptions(slug);
+
+export const fetchMangaDetails = async (id: string): Promise<MangaDetails> =>
+  queryClient.ensureQueryData(mangaDetailsQueryOptions(id));
+
+export const searchManga = async (keyword: string): Promise<MangaItem[]> =>
+  queryClient.ensureQueryData(searchMangaQueryOptions(keyword));
+
+export const fetchGenreManga = async (slug: string): Promise<MangaItem[]> =>
+  queryClient.ensureQueryData(genreMangaQueryOptions(slug));
 
 // Utility function for retrying API calls with exponential backoff
 async function retryApiCall<T>(
@@ -151,66 +280,6 @@ function validateUrl(url: string): boolean {
   }
 }
 
-export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
-  if (!keyword || keyword.trim().length === 0) {
-    throw new Error('Search keyword is required');
-  }
-
-  return performanceMonitor.measureAsync(`searchManga:${keyword}`, () =>
-    retryApiCall(async () => {
-      const searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword.trim())}`;
-
-      if (!validateUrl(searchUrl)) {
-        throw new Error('Invalid search URL');
-      }
-
-      const response = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-        },
-        timeout: 10000,
-      });
-
-      if (!response.data || typeof response.data !== 'string') {
-        throw new Error('Invalid response data');
-      }
-
-      const html = response.data as string;
-      return parseMangaList(html);
-    })
-  );
-};
-
-export const fetchGenreManga = async (slug: string): Promise<MangaItem[]> => {
-  const trimmedSlug = slug?.trim();
-
-  if (!trimmedSlug) {
-    throw new Error('Genre slug is required');
-  }
-
-  return performanceMonitor.measureAsync(`fetchGenre:${trimmedSlug}`, () =>
-    retryApiCall(async () => {
-      const genreUrl = `${MANGA_API_URL}/genre/${trimmedSlug}`;
-
-      if (!validateUrl(genreUrl)) {
-        throw new Error('Invalid genre URL');
-      }
-
-      const response = await axios.get(genreUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-        },
-        timeout: 10000,
-      });
-
-      if (!response.data || typeof response.data !== 'string') {
-        throw new Error('Invalid response data');
-      }
-
-      return parseMangaList(response.data as string);
-    })
-  );
-};
 const parseMangaDetails = (html: string, id: string): MangaDetails => {
   const title = decode(
     html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title'
@@ -267,14 +336,23 @@ const parseMangaDetails = (html: string, id: string): MangaDetails => {
 
   const chaptersRegex =
     /<li class="item".*?<a href="(.*?)".*?<span>Chapter ([\d.]+):.*?<\/span>.*?<span>(.*?)<\/span>/g;
-  const chapters = [];
-  let match;
-  while ((match = chaptersRegex.exec(html)) !== null) {
+  const chapters: Chapter[] = [];
+  let chapterMatch: RegExpExecArray | null;
+
+  while ((chapterMatch = chaptersRegex.exec(html)) !== null) {
+    const chapterNumber = chapterMatch[2]?.trim() ?? '';
+    const chapterUrl = chapterMatch[1]?.trim() ?? '';
+    const chapterDate = chapterMatch[3]?.trim() ?? '';
+
+    if (!chapterNumber || !chapterUrl || !chapterDate) {
+      continue;
+    }
+
     chapters.push({
-      url: match[1] || '',
-      number: match[2] || '',
-      title: `Chapter ${match[2] || ''}`,
-      date: match[3] || '',
+      url: chapterUrl,
+      number: chapterNumber,
+      title: `Chapter ${chapterNumber}`,
+      date: chapterDate,
     });
   }
 
@@ -290,7 +368,7 @@ const parseMangaDetails = (html: string, id: string): MangaDetails => {
     rating,
     reviewCount,
     bannerImage: bannerImage || '',
-    chapters: chapters.filter(ch => ch.number && ch.url && ch.date),
+    chapters,
   };
 };
 

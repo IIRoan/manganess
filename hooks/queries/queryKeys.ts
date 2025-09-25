@@ -11,6 +11,9 @@ export const queryKeys = {
     readChapters: (id: string) => ['manga', id, 'readChapters'] as const,
     lastRead: (id: string) => ['manga', id, 'lastRead'] as const,
   },
+  anilist: {
+    search: (title: string) => ['anilist', 'search', title] as const,
+  },
   bookmarks: {
     all: ['bookmarks'] as const,
   },

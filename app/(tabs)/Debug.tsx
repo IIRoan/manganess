@@ -22,6 +22,7 @@ import axios, { isAxiosError } from 'axios';
 import { MANGA_API_URL } from '@/constants/Config';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMutation } from '@tanstack/react-query';
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -321,33 +322,46 @@ export default function DebugScreen() {
     };
   };
 
-  const sendSuspiciousRequest = async (endpoint: string) => {
-    const headers = generateSuspiciousHeaders();
-    addLog(`Sending request to ${endpoint} with suspicious headers`);
-    try {
-      const response = await axios.get(`${MANGA_API_URL}${endpoint}`, {
-        headers,
-        timeout: 5000,
-        validateStatus: (status) => status < 500, // Accept any status < 500
-      });
+  const suspiciousRequestMutation = useMutation<boolean, Error, string>({
+    mutationKey: ['debug', 'suspicious-request'],
+    mutationFn: async (endpoint: string) => {
+      const headers = generateSuspiciousHeaders();
+      addLog(`Sending request to ${endpoint} with suspicious headers`);
 
-      addLog(`Response status: ${response.status}`);
-      if (response.data?.includes('cf-browser-verification')) {
-        addLog('Cloudflare verification detected in response!');
-        return true;
-      }
-      return false;
-    } catch (error) {
-      if (isAxiosError(error)) {
-        if (error.response?.data?.includes('cf-browser-verification')) {
-          addLog('Cloudflare verification detected in error response!');
+      try {
+        const response = await axios.get<string>(
+          `${MANGA_API_URL}${endpoint}`,
+          {
+            headers,
+            timeout: 5000,
+            validateStatus: (status) => status < 500,
+          }
+        );
+
+        addLog(`Response status: ${response.status}`);
+
+        if (response.data?.includes('cf-browser-verification')) {
+          addLog('Cloudflare verification detected in response!');
           return true;
         }
-        addLog(`Request failed: ${error.response?.status || error.message}`);
+
+        return false;
+      } catch (error) {
+        if (isAxiosError(error)) {
+          if (error.response?.data?.includes('cf-browser-verification')) {
+            addLog('Cloudflare verification detected in error response!');
+            return true;
+          }
+
+          addLog(`Request failed: ${error.response?.status || error.message}`);
+        } else if (error instanceof Error) {
+          addLog(`Request failed: ${error.message}`);
+        }
+
+        return false;
       }
-      return false;
-    }
-  };
+    },
+  });
 
   const resetChapterGuide = async () => {
     try {
@@ -402,8 +416,10 @@ export default function DebugScreen() {
               for (let i = 0; i < 3; i++) {
                 addLog(`\nAttempt ${i + 1}:`);
 
-                for (const endpoint of endpoints) {
-                  const triggered = await sendSuspiciousRequest(endpoint);
+              for (const endpoint of endpoints) {
+                const triggered = await suspiciousRequestMutation.mutateAsync(
+                  endpoint
+                );
                   if (triggered) {
                     setIsTriggering(false);
                     showAlertWithConfig({
@@ -437,7 +453,9 @@ export default function DebugScreen() {
 
                 for (const agent of crawlerAgents) {
                   addLog(`Trying crawler User-Agent: ${agent}`);
-                  const triggered = await sendSuspiciousRequest('/home');
+              const triggered = await suspiciousRequestMutation.mutateAsync(
+                '/home'
+              );
                   if (triggered) {
                     setIsTriggering(false);
                     showAlertWithConfig({

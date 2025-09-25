@@ -1,22 +1,46 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getAuthData } from './anilistOAuth';
 import { decode } from 'html-entities';
+import type { EnsureQueryDataOptions } from '@tanstack/react-query';
+import { getAuthData } from './anilistOAuth';
 import { getMangaData } from './bookmarkService';
 import {
   saveMangaMapping as saveMapping,
   getAnilistIdFromInternalId as getMapping,
 } from './mangaMappingService';
+import { queryClient } from '@/utils/queryClient';
+import { queryKeys } from '@/hooks/queries/queryKeys';
+import type { AnilistManga } from '@/types';
 
 const ANILIST_API_URL = 'https://graphql.anilist.co';
+const ANILIST_SEARCH_QUERY = `
+  query ($search: String) {
+    Media(search: $search, type: MANGA) {
+      id
+      title {
+        romaji
+        english
+        native
+      }
+    }
+  }
+`;
 
-interface AnilistManga {
-  id: number;
-  title: {
-    romaji: string;
-    english: string;
-    native: string;
-  };
+interface GraphQLResponse<TData> {
+  data?: TData;
+  errors?: { message: string }[];
 }
+
+type AniListSearchQueryKey = ReturnType<typeof queryKeys.anilist.search>;
+
+type AniListSearchQueryOptions = EnsureQueryDataOptions<
+  AnilistManga | null,
+  Error,
+  AnilistManga | null,
+  AniListSearchQueryKey
+>;
+
+const STALE_TIME_ONE_HOUR = 1000 * 60 * 60;
+const GC_TIME_ONE_DAY = 1000 * 60 * 60 * 24;
 
 export const isLoggedInToAniList = async (): Promise<boolean> => {
   try {
@@ -28,11 +52,40 @@ export const isLoggedInToAniList = async (): Promise<boolean> => {
   }
 };
 
-async function makeGraphQLRequest(
+const createAniListSearchQueryOptions = (
+  rawName: string
+): AniListSearchQueryOptions => {
+  const normalizedName = rawName.trim();
+
+  return {
+    queryKey: queryKeys.anilist.search(normalizedName),
+    queryFn: async () => {
+      if (!normalizedName) {
+        throw new Error('Search term is required');
+      }
+
+      const data = await makeGraphQLRequest<{
+        Media: AnilistManga | null;
+      }>(ANILIST_SEARCH_QUERY, {
+        search: normalizedName,
+      });
+
+      return data.Media ?? null;
+    },
+    staleTime: STALE_TIME_ONE_HOUR,
+    gcTime: GC_TIME_ONE_DAY,
+  } satisfies AniListSearchQueryOptions;
+};
+
+export const anilistSearchQueryOptions = (
+  name: string
+): AniListSearchQueryOptions => createAniListSearchQueryOptions(name);
+
+async function makeGraphQLRequest<TData>(
   query: string,
-  variables: any,
+  variables: Record<string, unknown>,
   accessToken?: string
-) {
+): Promise<TData> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -48,36 +101,37 @@ async function makeGraphQLRequest(
     body: JSON.stringify({ query, variables }),
   });
 
-  const data = await response.json();
-  if (data.errors) {
-    throw new Error(data.errors[0].message);
+  const data = (await response.json()) as GraphQLResponse<TData>;
+
+  if (data.errors?.length) {
+    throw new Error(data.errors[0]?.message ?? 'Unknown AniList error');
   }
+
+  if (!data.data) {
+    throw new Error('No data returned from AniList');
+  }
+
   return data.data;
 }
 
 export async function searchAnilistMangaByName(
   name: string
 ): Promise<AnilistManga | null> {
-  const query = `
-    query ($search: String) {
-      Media(search: $search, type: MANGA) {
-        id
-        title {
-          romaji
-          english
-          native
-        }
-      }
-    }
-  `;
+  const normalizedName = name.trim();
 
-  const variables = { search: name };
+  if (!normalizedName) {
+    return null;
+  }
 
   try {
-    const data = await makeGraphQLRequest(query, variables);
-    return data.Media || null;
+    return await queryClient.ensureQueryData(
+      anilistSearchQueryOptions(normalizedName)
+    );
   } catch (error) {
     console.error('Error searching AniList:', error);
+    queryClient.removeQueries({
+      queryKey: queryKeys.anilist.search(normalizedName),
+    });
     return null;
   }
 }

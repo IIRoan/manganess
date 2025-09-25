@@ -25,12 +25,12 @@ export const useHomeContent = (
   useQuery<HomeContent, Error>({
     queryKey: queryKeys.home,
     queryFn: async () => {
-      const response = await axios.get(`${MANGA_API_URL}/home`, {
+      const response = await axios.get<string>(`${MANGA_API_URL}/home`, {
         headers: HOME_REQUEST_HEADERS,
         timeout: 10000,
       });
 
-      const html = response.data as string;
+      const html = response.data;
 
       if (checkForCloudflare(html, '/')) {
         throw new Error('cloudflare-detected');
