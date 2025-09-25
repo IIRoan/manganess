@@ -24,4 +24,4 @@ jobs:
         uses: ./.github/actions/setup-bun-install
 
       - name: Run Expo Doctor
-        run: bunx --bun expo-doctor --ci
+        run: bunx --bun expo-doctor . --ci
