@@ -1,0 +1,30 @@
+name: Expo Doctor
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: expo-doctor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doctor:
+    name: Validate project health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run Expo Doctor
+        run: bunx --bun expo-doctor --ci
