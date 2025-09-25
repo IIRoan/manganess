@@ -8,8 +8,17 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { AppState, AppStateStatus, StatusBar, useColorScheme } from 'react-native';
-import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import {
+  AppState,
+  AppStateStatus,
+  StatusBar,
+  useColorScheme,
+} from 'react-native';
+import {
+  QueryClient,
+  QueryClientProvider,
+  focusManager,
+} from '@tanstack/react-query';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 
@@ -42,7 +51,9 @@ function AppProviders({ children }: { children: React.ReactNode }) {
 
   useReactQueryFocusManager();
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 function RootLayoutNav() {

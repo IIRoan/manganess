@@ -1,5 +1,14 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, useColorScheme, Animated, StyleSheet, type ViewToken } from 'react-native';
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  TouchableOpacity,
+  useColorScheme,
+  Animated,
+  StyleSheet,
+  type ViewToken,
+} from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -32,12 +41,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '@/utils/haptics';
 import getStyles from './[id].styles';
 import { useMangaImageCache } from '@/services/CacheImages';
-import type {
-  AlertConfig,
-  Option,
-  BookmarkStatus,
-  Chapter,
-} from '@/types';
+import type { AlertConfig, Option, BookmarkStatus, Chapter } from '@/types';
 
 /* Type Definitions */
 type BookmarkPopupConfig = {
@@ -51,7 +55,10 @@ const MangaBannerImage: React.FC<{
   bannerUrl: string;
   style: any;
 }> = ({ mangaId, bannerUrl, style }) => {
-  const { path, loading: cacheLoading } = useMangaImageCache(mangaId, bannerUrl);
+  const { path, loading: cacheLoading } = useMangaImageCache(
+    mangaId,
+    bannerUrl
+  );
   const [imgLoaded, setImgLoaded] = useState(false);
   const chosenUriRef = useRef<string | null>(null);
 
@@ -68,7 +75,12 @@ const MangaBannerImage: React.FC<{
 
   return (
     <View style={[style, { position: 'relative' }]}>
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#00000022' }]} />
+      <View
+        style={[
+          StyleSheet.absoluteFillObject,
+          { backgroundColor: '#00000022' },
+        ]}
+      />
       <ExpoImage
         source={{ uri: chosenUriRef.current || bannerUrl }}
         style={StyleSheet.absoluteFillObject}
@@ -107,8 +119,14 @@ export default function MangaDetailScreen() {
   const { id } = params as any;
   const [error, setError] = useState<string | null>(null);
   const mangaId = typeof id === 'string' ? (id as string) : undefined;
-  const routeTitle = typeof (params as any)?.title === 'string' ? ((params as any).title as string) : undefined;
-  const routeBanner = typeof (params as any)?.bannerImage === 'string' ? ((params as any).bannerImage as string) : undefined;
+  const routeTitle =
+    typeof (params as any)?.title === 'string'
+      ? ((params as any).title as string)
+      : undefined;
+  const routeBanner =
+    typeof (params as any)?.bannerImage === 'string'
+      ? ((params as any).bannerImage as string)
+      : undefined;
 
   const {
     data: fetchedMangaDetails,
@@ -119,22 +137,24 @@ export default function MangaDetailScreen() {
     enabled: Boolean(mangaId),
   });
 
-  const mangaDetails = fetchedMangaDetails ?? (routeTitle && routeBanner && mangaId
-    ? {
-        id: mangaId,
-        title: routeTitle,
-        alternativeTitle: '',
-        status: '',
-        description: '',
-        author: [],
-        published: '',
-        genres: [],
-        rating: 'N/A',
-        reviewCount: '0',
-        bannerImage: routeBanner,
-        chapters: [],
-      }
-    : null);
+  const mangaDetails =
+    fetchedMangaDetails ??
+    (routeTitle && routeBanner && mangaId
+      ? {
+          id: mangaId,
+          title: routeTitle,
+          alternativeTitle: '',
+          status: '',
+          description: '',
+          author: [],
+          published: '',
+          genres: [],
+          rating: 'N/A',
+          reviewCount: '0',
+          bannerImage: routeBanner,
+          chapters: [],
+        }
+      : null);
   const [readChapters, setReadChapters] = useState<string[]>([]);
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
   const [currentlyOpenSwipeable, setCurrentlyOpenSwipeable] =
@@ -177,7 +197,10 @@ export default function MangaDetailScreen() {
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
-  const listExtraData = useMemo(() => ({ readChapters, lastReadChapter }), [readChapters, lastReadChapter]);
+  const listExtraData = useMemo(
+    () => ({ readChapters, lastReadChapter }),
+    [readChapters, lastReadChapter]
+  );
 
   useEffect(() => {
     setReadChapters([]);
@@ -241,7 +264,12 @@ export default function MangaDetailScreen() {
       fetchData();
 
       return () => {};
-    }, [mangaId, fetchReadChapters, fetchBookmarkStatusData, fetchLastReadChapter])
+    }, [
+      mangaId,
+      fetchReadChapters,
+      fetchBookmarkStatusData,
+      fetchLastReadChapter,
+    ])
   );
   const handleBookmark = () => {
     if (!mangaDetails) return;
@@ -438,7 +466,9 @@ export default function MangaDetailScreen() {
     );
   }
 
-  const detailsErrorMessage = detailsError ? 'Failed to load manga details. Please try again.' : null;
+  const detailsErrorMessage = detailsError
+    ? 'Failed to load manga details. Please try again.'
+    : null;
   const combinedError = error ?? detailsErrorMessage;
 
   if (combinedError) {
@@ -551,9 +581,7 @@ export default function MangaDetailScreen() {
                 <View style={styles.infoContainer}>
                   <View style={styles.progressContainer}>
                     <View style={styles.progressHeader}>
-                      <Text style={styles.progressTitle}>
-                        Reading Progress
-                      </Text>
+                      <Text style={styles.progressTitle}>Reading Progress</Text>
                       <Text style={styles.progressPercentage}>
                         {readingProgress}%
                       </Text>
@@ -573,7 +601,8 @@ export default function MangaDetailScreen() {
                           size={14}
                           color={colors.text}
                         />
-                        {readChapters.length}/{mangaDetails?.chapters?.length || 0}
+                        {readChapters.length}/
+                        {mangaDetails?.chapters?.length || 0}
                         chapters read
                       </Text>
                       <Text style={styles.progressStat}>
@@ -619,17 +648,23 @@ export default function MangaDetailScreen() {
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Rating</Text>
                       <View style={styles.ratingContainer}>
-                        <Text style={styles.rating}>{mangaDetails?.rating || ''}</Text>
+                        <Text style={styles.rating}>
+                          {mangaDetails?.rating || ''}
+                        </Text>
                         <Text style={styles.ratingText}>
                           /10 ({mangaDetails?.reviewCount || '0'} reviews)
                         </Text>
                       </View>
                     </View>
-                    <Text style={[styles.detailLabel, { marginTop: 10 }]}>Genres</Text>
+                    <Text style={[styles.detailLabel, { marginTop: 10 }]}>
+                      Genres
+                    </Text>
                     <View style={styles.genresContainer}>
-                      {(mangaDetails?.genres || []).map((genre: string, index: number) => (
-                        <GenreTag key={index} genre={genre} />
-                      ))}
+                      {(mangaDetails?.genres || []).map(
+                        (genre: string, index: number) => (
+                          <GenreTag key={index} genre={genre} />
+                        )
+                      )}
                     </View>
                   </View>
                 </View>
@@ -642,10 +677,18 @@ export default function MangaDetailScreen() {
           data={mangaDetails?.chapters || []}
           extraData={listExtraData}
           keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
-          renderItem={({ item: chapter, index }: { item: Chapter; index: number }) => {
+          renderItem={({
+            item: chapter,
+            index,
+          }: {
+            item: Chapter;
+            index: number;
+          }) => {
             const isRead = readChapters.includes(chapter.number);
-            const isLastItem = index === (mangaDetails?.chapters?.length || 0) - 1;
-            const isCurrentlyLastRead = lastReadChapter === `Chapter ${chapter.number}`;
+            const isLastItem =
+              index === (mangaDetails?.chapters?.length || 0) - 1;
+            const isCurrentlyLastRead =
+              lastReadChapter === `Chapter ${chapter.number}`;
             return (
               <SwipeableChapterItem
                 chapter={chapter}
@@ -669,14 +712,21 @@ export default function MangaDetailScreen() {
         />
         {isDetailsLoading && (
           <View style={styles.loadingContainer} pointerEvents="none">
-            <ActivityIndicator testID="loading-indicator" size="large" color={colors.primary} />
+            <ActivityIndicator
+              testID="loading-indicator"
+              size="large"
+              color={colors.primary}
+            />
           </View>
         )}
 
         <Animated.View
           style={[
             styles.scrollToBottomButton,
-            { opacity: scrollBottomButtonOpacity, bottom: insets.bottom + 100 + 60 },
+            {
+              opacity: scrollBottomButtonOpacity,
+              bottom: insets.bottom + 100 + 60,
+            },
           ]}
           pointerEvents={showScrollToBottomButton ? 'auto' : 'none'}
         >
@@ -689,7 +739,12 @@ export default function MangaDetailScreen() {
             accessibilityLabel="Scroll to bottom"
             accessibilityHint="Scroll to the last chapter"
           >
-            <Ionicons name="arrow-down" size={20} color="white" accessibilityElementsHidden={true} />
+            <Ionicons
+              name="arrow-down"
+              size={20}
+              color="white"
+              accessibilityElementsHidden={true}
+            />
           </TouchableOpacity>
         </Animated.View>
 
@@ -702,14 +757,22 @@ export default function MangaDetailScreen() {
         >
           <TouchableOpacity
             onPress={() => {
-              flashListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              flashListRef.current?.scrollToOffset({
+                offset: 0,
+                animated: true,
+              });
             }}
             style={styles.scrollToTopButtonTouchable}
             accessibilityRole="button"
             accessibilityLabel="Scroll to top"
             accessibilityHint="Scroll to the manga details"
           >
-            <Ionicons name="arrow-up" size={20} color="white" accessibilityElementsHidden={true} />
+            <Ionicons
+              name="arrow-up"
+              size={20}
+              color="white"
+              accessibilityElementsHidden={true}
+            />
           </TouchableOpacity>
         </Animated.View>
       </View>

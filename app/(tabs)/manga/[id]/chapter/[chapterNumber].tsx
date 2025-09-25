@@ -53,12 +53,10 @@ export default function ReadChapterScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
-  const {
-  data: mangaDetails,
-  refetch: refetchMangaDetails,
-} = useMangaDetailsQuery(id, {
-  enabled: Boolean(id),
-});
+  const { data: mangaDetails, refetch: refetchMangaDetails } =
+    useMangaDetailsQuery(id, {
+      enabled: Boolean(id),
+    });
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -247,11 +245,9 @@ export default function ReadChapterScreen() {
     }
   }, [chapterNumber, id, mangaDetails, refetchMangaDetails]);
 
-
   useEffect(() => {
     markChapterAsReadWithFallback();
   }, [markChapterAsReadWithFallback]);
-
 
   useFocusEffect(
     useCallback(() => {
@@ -564,8 +560,19 @@ export default function ReadChapterScreen() {
             showControls={showNavControls}
           />
 
-          <Modal visible={isBottomSheetOpen} transparent animationType="slide" onRequestClose={closeBottomSheet}>
-            <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          <Modal
+            visible={isBottomSheetOpen}
+            transparent
+            animationType="slide"
+            onRequestClose={closeBottomSheet}
+          >
+            <View
+              style={{
+                flex: 1,
+                justifyContent: 'flex-end',
+                backgroundColor: 'rgba(0,0,0,0.4)',
+              }}
+            >
               <View style={styles.bottomSheetBackground}>
                 <View style={styles.bottomSheetContainer}>
                   <ScrollView contentContainerStyle={styles.bottomSheetContent}>

@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { MANGA_API_URL } from '@/constants/Config';
-import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireService';
+import {
+  parseMostViewedManga,
+  parseNewReleases,
+} from '@/services/mangaFireService';
 import { getRecentlyReadManga } from '@/services/readChapterService';
 import { queryKeys } from './queryKeys';
 import type { MangaItem, MangaData } from '@/types';
@@ -19,9 +22,7 @@ const HOME_REQUEST_HEADERS = {
     'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
 };
 
-export const useHomeContent = (
-  checkForCloudflare: CloudflareDetector
-) =>
+export const useHomeContent = (checkForCloudflare: CloudflareDetector) =>
   useQuery<HomeContent, Error>({
     queryKey: queryKeys.home,
     queryFn: async () => {

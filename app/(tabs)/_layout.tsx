@@ -493,10 +493,12 @@ export default function TabLayout() {
           <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
           <Tabs.Screen
             name="Debug"
-            options={{
-              title: 'Debug',
-              href: enableDebugTab ? undefined : null,
-            } as any}
+            options={
+              {
+                title: 'Debug',
+                href: enableDebugTab ? undefined : null,
+              } as any
+            }
           />
           <Tabs.Screen name="manga/[id]" options={{ href: null }} />
           <Tabs.Screen

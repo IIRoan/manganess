@@ -160,7 +160,7 @@ export default function SettingsScreen() {
     }
   };
 
-    const handleExportData = async () => {
+  const handleExportData = async () => {
     try {
       const exportedData = await exportAppData();
 
@@ -192,7 +192,7 @@ export default function SettingsScreen() {
 
       if (result.canceled) return;
 
-            const pickedUri = result.assets?.[0]?.uri;
+      const pickedUri = result.assets?.[0]?.uri;
       if (!pickedUri) {
         throw new Error('No file selected');
       }
@@ -853,5 +853,3 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.primary,
     },
   });
-
-

@@ -43,7 +43,6 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
     setIsExpanded((prev) => !prev);
   }, [isTruncated]);
 
-
   return (
     <TouchableOpacity
       onPress={toggleExpand}

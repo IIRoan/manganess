@@ -91,7 +91,8 @@ export default function GenresScreen() {
     enabled: Boolean(selectedSlug),
   });
 
-  const isRefreshing = Boolean(selectedSlug) && isGenreFetching && !isGenreLoading;
+  const isRefreshing =
+    Boolean(selectedSlug) && isGenreFetching && !isGenreLoading;
 
   useEffect(() => {
     if (genreError) {
@@ -110,7 +111,14 @@ export default function GenresScreen() {
   };
 
   const handleMangaPress = (manga: MangaItem) => {
-    router.push({ pathname: '/manga/[id]', params: { id: manga.id, title: manga.title, bannerImage: manga.imageUrl || manga.banner } });
+    router.push({
+      pathname: '/manga/[id]',
+      params: {
+        id: manga.id,
+        title: manga.title,
+        bannerImage: manga.imageUrl || manga.banner,
+      },
+    });
   };
 
   const renderGenreItem = ({ item }: { item: Genre }) => (

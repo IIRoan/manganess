@@ -493,7 +493,6 @@ class NavigationHistoryService {
     }, 'getPreviousRouteTime');
   }
 
-
   private findPreviousContext(
     history: NavigationHistory,
     currentContextType: NavigationContextType

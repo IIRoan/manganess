@@ -19,12 +19,20 @@ type QueryOptions<TData, TQueryKey extends readonly unknown[]> = Omit<
 
 export const useMangaDetailsQuery = (
   id: string | undefined,
-  options?: QueryOptions<MangaDetails, ReturnType<typeof queryKeys.manga.details>>
+  options?: QueryOptions<
+    MangaDetails,
+    ReturnType<typeof queryKeys.manga.details>
+  >
 ) => {
   const normalizedId = id?.trim();
   const { enabled, ...restOptions } = options ?? {};
 
-  return useQuery<MangaDetails, Error, MangaDetails, ReturnType<typeof queryKeys.manga.details>>({
+  return useQuery<
+    MangaDetails,
+    Error,
+    MangaDetails,
+    ReturnType<typeof queryKeys.manga.details>
+  >({
     queryKey: queryKeys.manga.details(normalizedId ?? ''),
     queryFn: () => {
       if (!normalizedId) {
@@ -46,7 +54,12 @@ export const useSearchMangaQuery = (
   const normalizedQuery = query.trim();
   const { enabled, ...restOptions } = options ?? {};
 
-  return useQuery<MangaItem[], Error, MangaItem[], ReturnType<typeof queryKeys.search>>({
+  return useQuery<
+    MangaItem[],
+    Error,
+    MangaItem[],
+    ReturnType<typeof queryKeys.search>
+  >({
     queryKey: queryKeys.search(normalizedQuery),
     queryFn: () => {
       if (normalizedQuery.length <= 2) {
@@ -69,7 +82,12 @@ export const useGenreMangaQuery = (
   const normalizedSlug = slug?.trim() ?? '';
   const { enabled, ...restOptions } = options ?? {};
 
-  return useQuery<MangaItem[], Error, MangaItem[], ReturnType<typeof queryKeys.genres>>({
+  return useQuery<
+    MangaItem[],
+    Error,
+    MangaItem[],
+    ReturnType<typeof queryKeys.genres>
+  >({
     queryKey: queryKeys.genres(normalizedSlug),
     queryFn: () => {
       if (!normalizedSlug) {
@@ -84,6 +102,3 @@ export const useGenreMangaQuery = (
     ...restOptions,
   });
 };
-
-
-

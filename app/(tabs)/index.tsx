@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, ScrollView, Dimensions } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  ScrollView,
+  Dimensions,
+} from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,7 +26,10 @@ import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
 import { PageTransition } from '@/components/PageTransition';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
-import { useHomeContent, useRecentlyReadQuery } from '@/hooks/queries/useHomeQueries';
+import {
+  useHomeContent,
+  useRecentlyReadQuery,
+} from '@/hooks/queries/useHomeQueries';
 import { MangaItem, RecentMangaItem } from '@/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
@@ -127,7 +138,16 @@ export default function HomeScreen() {
     ({ item, index }: { item: MangaItem; index: number }) => (
       <TouchableOpacity
         style={[styles.trendingItem, { marginLeft: index === 0 ? 16 : 12 }]}
-        onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.imageUrl } })}
+        onPress={() =>
+          router.navigate({
+            pathname: '/manga/[id]',
+            params: {
+              id: item.id,
+              title: item.title,
+              bannerImage: item.imageUrl,
+            },
+          })
+        }
         onPressIn={() =>
           queryClient.prefetchQuery({
             queryKey: queryKeys.manga.details(item.id),
@@ -194,7 +214,16 @@ export default function HomeScreen() {
           <MangaCard
             title={item.title}
             imageUrl={item.bannerImage}
-            onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.bannerImage } })}
+            onPress={() =>
+              router.navigate({
+                pathname: '/manga/[id]',
+                params: {
+                  id: item.id,
+                  title: item.title,
+                  bannerImage: item.bannerImage,
+                },
+              })
+            }
             lastReadChapter={lastReadChapter}
             style={styles.recentlyReadCard}
             context="manga"
@@ -218,14 +247,32 @@ export default function HomeScreen() {
         {newReleases.map((item) => (
           <View key={item.id} style={styles.newReleaseWrapper}>
             <TouchableOpacity
-              onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.imageUrl } })}
+              onPress={() =>
+                router.navigate({
+                  pathname: '/manga/[id]',
+                  params: {
+                    id: item.id,
+                    title: item.title,
+                    bannerImage: item.imageUrl,
+                  },
+                })
+              }
               activeOpacity={0.7}
               style={styles.newReleaseCard}
             >
               <MangaCard
                 title={item.title}
                 imageUrl={item.imageUrl}
-                onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: item.id, title: item.title, bannerImage: item.imageUrl } })}
+                onPress={() =>
+                  router.navigate({
+                    pathname: '/manga/[id]',
+                    params: {
+                      id: item.id,
+                      title: item.title,
+                      bannerImage: item.imageUrl,
+                    },
+                  })
+                }
                 lastReadChapter={null}
                 style={styles.card}
                 context="manga"
@@ -320,7 +367,16 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={[styles.featuredContainer, { marginTop: insets.top + 16 }]}
-        onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: featuredManga.id, title: featuredManga.title, bannerImage: featuredManga.imageUrl } })}
+        onPress={() =>
+          router.navigate({
+            pathname: '/manga/[id]',
+            params: {
+              id: featuredManga.id,
+              title: featuredManga.title,
+              bannerImage: featuredManga.imageUrl,
+            },
+          })
+        }
         onPressIn={() =>
           queryClient.prefetchQuery({
             queryKey: queryKeys.manga.details(featuredManga.id),
@@ -355,7 +411,16 @@ export default function HomeScreen() {
                 styles.readNowButton,
                 { backgroundColor: themeColors.primary },
               ]}
-              onPress={() => router.navigate({ pathname: '/manga/[id]', params: { id: featuredManga.id, title: featuredManga.title, bannerImage: featuredManga.imageUrl } })}
+              onPress={() =>
+                router.navigate({
+                  pathname: '/manga/[id]',
+                  params: {
+                    id: featuredManga.id,
+                    title: featuredManga.title,
+                    bannerImage: featuredManga.imageUrl,
+                  },
+                })
+              }
             >
               <Text style={styles.readNowText}>Read Now</Text>
             </TouchableOpacity>

@@ -99,17 +99,19 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
     throw new Error('Manga id is required');
   }
 
-  return performanceMonitor.measureAsync(`fetchMangaDetails:${normalizedId}`, () =>
-    retryApiCall(async () => {
-      const detailsUrl = `${MANGA_API_URL}/manga/${normalizedId}`;
+  return performanceMonitor.measureAsync(
+    `fetchMangaDetails:${normalizedId}`,
+    () =>
+      retryApiCall(async () => {
+        const detailsUrl = `${MANGA_API_URL}/manga/${normalizedId}`;
 
-      if (!validateUrl(detailsUrl)) {
-        throw new Error('Invalid manga details URL');
-      }
+        if (!validateUrl(detailsUrl)) {
+          throw new Error('Invalid manga details URL');
+        }
 
-      const html = await fetchHtmlContent(detailsUrl);
-      return parseMangaDetails(html, normalizedId);
-    })
+        const html = await fetchHtmlContent(detailsUrl);
+        return parseMangaDetails(html, normalizedId);
+      })
   );
 };
 
@@ -290,7 +292,7 @@ const parseMangaDetails = (html: string, id: string): MangaDetails => {
     rating,
     reviewCount,
     bannerImage: bannerImage || '',
-    chapters: chapters.filter(ch => ch.number && ch.url && ch.date),
+    chapters: chapters.filter((ch) => ch.number && ch.url && ch.date),
   };
 };
 
@@ -572,12 +574,3 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
     })();
   `;
 };
-
-
-
-
-
-
-
-
-

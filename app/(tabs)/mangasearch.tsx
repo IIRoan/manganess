@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+} from 'react';
 import {
   View,
   TextInput,
@@ -45,7 +51,9 @@ export default function MangaSearchScreen() {
   // State variables
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>({});
+  const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>(
+    {}
+  );
 
   const isQueryActive = debouncedSearchQuery.length > 2;
 
@@ -56,7 +64,10 @@ export default function MangaSearchScreen() {
     error: searchError,
   } = useSearchMangaQuery(debouncedSearchQuery);
 
-  const searchResults: MangaItem[] = useMemo(() => (isQueryActive ? fetchedResults : EMPTY_RESULTS), [isQueryActive, fetchedResults]);
+  const searchResults: MangaItem[] = useMemo(
+    () => (isQueryActive ? fetchedResults : EMPTY_RESULTS),
+    [isQueryActive, fetchedResults]
+  );
   const isLoadingResults =
     isQueryActive && (isSearchLoading || isSearchFetching);
 
@@ -74,7 +85,6 @@ export default function MangaSearchScreen() {
       console.error(searchError);
     }
   }, [searchError]);
-
 
   // Clear search
   const clearSearch = useCallback(() => {

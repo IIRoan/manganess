@@ -58,7 +58,10 @@ export interface MangaCardProps {
   lastReadChapter: string | null;
   style?: ViewStyle;
   mangaId?: string;
-  onBookmarkChange?: (mangaId: string, newStatus: BookmarkStatus | null) => void;
+  onBookmarkChange?: (
+    mangaId: string,
+    newStatus: BookmarkStatus | null
+  ) => void;
 }
 
 export interface NessieAnimationProps {

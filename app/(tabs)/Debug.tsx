@@ -197,7 +197,10 @@ export default function DebugScreen() {
 
   const checkImageCache = async () => {
     try {
-      const { size, count } = await (imageCache as any).getCacheSize?.() || { size: 0, count: 0 };
+      const { size, count } = (await (imageCache as any).getCacheSize?.()) || {
+        size: 0,
+        count: 0,
+      };
       const sizeInMB = (size / (1024 * 1024)).toFixed(2);
 
       showAlertWithConfig({

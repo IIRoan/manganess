@@ -88,7 +88,9 @@ export default function BookmarksScreen() {
   const [isViewModeLoading, setIsViewModeLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<BookmarkStatus>('Reading');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState(SORT_OPTIONS[0]?.id || 'title-asc');
+  const [sortOption, setSortOption] = useState(
+    SORT_OPTIONS[0]?.id || 'title-asc'
+  );
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showSortOptions, setShowSortOptions] = useState(false);
   const [allImageUrls, setAllImageUrls] = useState<string[]>([]);
@@ -102,7 +104,9 @@ export default function BookmarksScreen() {
 
   // Refs
   const router = useRouter();
-  const listRefs = useRef<Record<BookmarkStatus, FlatList<BookmarkItem> | null>>({
+  const listRefs = useRef<
+    Record<BookmarkStatus, FlatList<BookmarkItem> | null>
+  >({
     Reading: null,
     'On Hold': null,
     'To Read': null,
@@ -301,7 +305,10 @@ export default function BookmarksScreen() {
     if (sectionScrollRef.current) {
       const visibleTabs = Math.min(SECTIONS.length, 4);
       const tabWidth = SCREEN_WIDTH / visibleTabs;
-      const scrollX = Math.max(0, index * tabWidth - tabWidth * (visibleTabs / 2 - 0.5));
+      const scrollX = Math.max(
+        0,
+        index * tabWidth - tabWidth * (visibleTabs / 2 - 0.5)
+      );
       sectionScrollRef.current.scrollTo({ x: scrollX, animated: true });
     }
     const ref = listRefs.current[section];
@@ -309,7 +316,10 @@ export default function BookmarksScreen() {
   }, []);
 
   useDerivedValue(() => {
-    const idx = Math.max(0, Math.min(SECTIONS.length - 1, Math.round(pageIndex.value)));
+    const idx = Math.max(
+      0,
+      Math.min(SECTIONS.length - 1, Math.round(pageIndex.value))
+    );
     runOnJS(updateAfterIndexChange)(idx);
   });
 
@@ -357,7 +367,8 @@ export default function BookmarksScreen() {
           const progress = -translateX.value / SCREEN_WIDTH;
           let target = Math.round(progress);
           if (Math.abs(e.velocityX) > 600) {
-            target = e.velocityX < 0 ? Math.ceil(progress) : Math.floor(progress);
+            target =
+              e.velocityX < 0 ? Math.ceil(progress) : Math.floor(progress);
           }
           target = Math.max(0, Math.min(SECTIONS.length - 1, target));
           isAnimating.value = true;
@@ -634,7 +645,7 @@ export default function BookmarksScreen() {
 
         {/* Count */}
         <Text style={styles.resultCount}>
-          {(sectionData[activeSection]?.length || 0)}{' '}
+          {sectionData[activeSection]?.length || 0}{' '}
           {(sectionData[activeSection]?.length || 0) > 1 ? 'mangas' : 'manga'}
         </Text>
 
@@ -661,7 +672,9 @@ export default function BookmarksScreen() {
                           style={styles.clearSearchButton}
                           onPress={handleClearSearch}
                         >
-                          <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+                          <Text style={styles.clearSearchButtonText}>
+                            Clear Search
+                          </Text>
                         </TouchableOpacity>
                       ) : null}
                     </View>

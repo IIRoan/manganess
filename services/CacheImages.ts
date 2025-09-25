@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Directory, File as FsFile, Paths, type FileInfo } from 'expo-file-system';
+import {
+  Directory,
+  File as FsFile,
+  Paths,
+  type FileInfo,
+} from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Using a simple hash function instead of expo-crypto to avoid adding dependencies
@@ -14,8 +19,14 @@ function simpleHash(str: string): string {
 }
 
 const BASE_CACHE_DIRECTORY = new Directory(Paths.cache, 'image_cache');
-const MANGA_CACHE_DIRECTORY = new Directory(BASE_CACHE_DIRECTORY, 'manga_covers');
-const SEARCH_CACHE_DIRECTORY = new Directory(BASE_CACHE_DIRECTORY, 'search_temp');
+const MANGA_CACHE_DIRECTORY = new Directory(
+  BASE_CACHE_DIRECTORY,
+  'manga_covers'
+);
+const SEARCH_CACHE_DIRECTORY = new Directory(
+  BASE_CACHE_DIRECTORY,
+  'search_temp'
+);
 const CACHE_METADATA_KEY = 'image_cache_metadata';
 const MAX_CACHE_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_CACHE_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -88,7 +99,9 @@ class ImageCache {
   }
 
   private getDirectoryForContext(context: CacheContext): Directory {
-    return context === 'search' ? SEARCH_CACHE_DIRECTORY : MANGA_CACHE_DIRECTORY;
+    return context === 'search'
+      ? SEARCH_CACHE_DIRECTORY
+      : MANGA_CACHE_DIRECTORY;
   }
 
   private getCacheFile(context: CacheContext, filename: string): FsFile {
@@ -589,7 +602,10 @@ export function useImageCache(
   return { path, loading };
 }
 
-export function useMangaImageCache(mangaId: string, url: string): { path: string; loading: boolean } {
+export function useMangaImageCache(
+  mangaId: string,
+  url: string
+): { path: string; loading: boolean } {
   const [path, setPath] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(Boolean(url && mangaId));
 
@@ -627,4 +643,3 @@ export function useMangaImageCache(mangaId: string, url: string): { path: string
 
   return { path, loading };
 }
-
