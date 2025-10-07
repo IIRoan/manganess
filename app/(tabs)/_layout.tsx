@@ -19,7 +19,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { imageCache } from '@/services/CacheImages';
-import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
+import { getLastReadManga } from '@/services/readChapterService';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
 import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { SwipeGestureOverlay } from '@/components/SwipeBackIndicator';
@@ -45,9 +45,6 @@ export default function TabLayout() {
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<
     boolean | null
   >(null);
-  const [_lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
-    null
-  );
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   // Get update status from the hook
@@ -78,6 +75,55 @@ export default function TabLayout() {
   // Only show for downloading updates or when ready to apply, not for checks
   const shouldShowUpdateIndicator =
     isUpdateInProgress && (updateStatus.isDownloading || updateStatus.isReady);
+
+  const loadEnableDebugTabSetting = useCallback(async () => {
+    try {
+      const enabled = await getDebugTabEnabled();
+      setEnableDebugTab(enabled);
+    } catch (error) {
+      console.error('Error loading enable debug tab setting:', error);
+    }
+  }, []);
+
+  const refreshLastReadManga = useCallback(async () => {
+    try {
+      await getLastReadManga();
+    } catch (error) {
+      console.error('Error refreshing last read manga:', error);
+    }
+  }, []);
+
+  const checkOnboardingStatus = useCallback(async () => {
+    try {
+      const completed = await checkOnboarding();
+      setIsOnboardingCompleted(completed);
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      setIsOnboardingCompleted(false);
+    }
+  }, []);
+
+  const performUpdateCheck = useCallback(async () => {
+    console.log('Performing update check...');
+    try {
+      // First check if update is available
+      const checkResult = await checkForUpdate();
+      console.log('Update check result:', checkResult);
+
+      if (checkResult.success) {
+        console.log('Update available, downloading and applying...');
+        // If an update is available, download and apply it
+        await updateAndReload();
+      } else {
+        console.log(
+          'No update available or unable to check:',
+          checkResult.message
+        );
+      }
+    } catch (error) {
+      console.error('Error in update process:', error);
+    }
+  }, [checkForUpdate, updateAndReload]);
 
   useEffect(() => {
     loadEnableDebugTabSetting();
@@ -113,7 +159,13 @@ export default function TabLayout() {
         progressAnimationRef.current.stop();
       }
     };
-  }, [navigation]);
+  }, [
+    navigation,
+    loadEnableDebugTabSetting,
+    checkOnboardingStatus,
+    performUpdateCheck,
+    refreshLastReadManga,
+  ]);
 
   useEffect(() => {
     if (
@@ -124,7 +176,7 @@ export default function TabLayout() {
     ) {
       refreshLastReadManga();
     }
-  }, [pathname]);
+  }, [pathname, refreshLastReadManga]);
 
   // Update animation based on whether we should show the indicator
   useEffect(() => {
@@ -217,7 +269,13 @@ export default function TabLayout() {
         updateIndicatorRotation.setValue(0);
       }
     }
-  }, [shouldShowUpdateIndicator, progressStarted]);
+  }, [
+    shouldShowUpdateIndicator,
+    progressStarted,
+    updateIndicatorOpacity,
+    updateIndicatorRotation,
+    updateProgressWidth,
+  ]);
 
   useEffect(() => {
     // Special case for when update is ready - fill the progress bar
@@ -229,57 +287,7 @@ export default function TabLayout() {
         useNativeDriver: false,
       }).start();
     }
-  }, [updateStatus.isReady]);
-
-  const loadEnableDebugTabSetting = async () => {
-    try {
-      const enabled = await getDebugTabEnabled();
-      setEnableDebugTab(enabled);
-    } catch (error) {
-      console.error('Error loading enable debug tab setting:', error);
-    }
-  };
-
-  const refreshLastReadManga = async () => {
-    try {
-      const lastRead = await getLastReadManga();
-      setLastReadManga(lastRead);
-    } catch (error) {
-      console.error('Error refreshing last read manga:', error);
-    }
-  };
-
-  const checkOnboardingStatus = async () => {
-    try {
-      const completed = await checkOnboarding();
-      setIsOnboardingCompleted(completed);
-    } catch (error) {
-      console.error('Error checking onboarding status:', error);
-      setIsOnboardingCompleted(false);
-    }
-  };
-
-  const performUpdateCheck = useCallback(async () => {
-    console.log('Performing update check...');
-    try {
-      // First check if update is available
-      const checkResult = await checkForUpdate();
-      console.log('Update check result:', checkResult);
-
-      if (checkResult.success) {
-        console.log('Update available, downloading and applying...');
-        // If an update is available, download and apply it
-        await updateAndReload();
-      } else {
-        console.log(
-          'No update available or unable to check:',
-          checkResult.message
-        );
-      }
-    } catch (error) {
-      console.error('Error in update process:', error);
-    }
-  }, [checkForUpdate, updateAndReload]);
+  }, [updateStatus.isReady, updateProgressWidth]);
 
   // const handleLastButtonPress = () => {
   //   Animated.sequence([

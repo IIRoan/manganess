@@ -29,7 +29,7 @@ import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
 
 import Svg, { Path } from 'react-native-svg';
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import CustomColorPicker from '@/components/CustomColorPicker';
@@ -167,14 +167,15 @@ export default function SettingsScreen() {
       // Create JSON file
       const jsonString = JSON.stringify(exportedData, null, 2);
       const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
-      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+      const file = new File(Paths.document, fileName);
 
-      // Write file
-      await FileSystem.writeAsStringAsync(filePath, jsonString);
+      // Create and write file
+      try { file.create(); } catch {}
+      file.write(jsonString, { encoding: 'utf8' });
 
       // Share file
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(filePath, {
+        await Sharing.shareAsync(file.uri, {
           mimeType: 'application/json',
           dialogTitle: 'Export App Data',
         });
@@ -193,9 +194,10 @@ export default function SettingsScreen() {
 
       if (result.canceled) return;
 
-      const fileContent = await FileSystem.readAsStringAsync(
-        result.assets?.[0]?.uri || ''
-      );
+      const asset = result.assets?.[0];
+      if (!asset) return;
+      const file = new File(asset.uri || '');
+      const fileContent = await file.text();
       const importedData = JSON.parse(fileContent);
 
       Alert.alert(

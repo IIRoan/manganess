@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -49,7 +49,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const { actualTheme, accentColor } = useTheme();
   const colors = Colors[actualTheme];
-  const themeColors = { ...colors, primary: accentColor || colors.primary };
+  const themeColors = useMemo(
+    () => ({ ...colors, primary: accentColor || colors.primary }),
+    [colors, accentColor]
+  );
   const { checkForCloudflare, resetCloudflareDetection } =
     useCloudflareDetection();
   const insets = useSafeAreaInsets();
@@ -78,13 +81,16 @@ export default function HomeScreen() {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': MANGA_API_URL,
         },
-        timeout: 10000,
+        timeout: 20000,
       });
 
       const html = response.data as string;
 
-      if (checkForCloudflare(html)) {
+      if (checkForCloudflare(html, '/(tabs)')) {
         return;
       }
 
@@ -132,7 +138,7 @@ export default function HomeScreen() {
     return () => {
       resetCloudflareDetection();
     };
-  }, []);
+  }, [fetchMangaData, fetchRecentlyReadManga, resetCloudflareDetection]);
 
   useFocusEffect(
     useCallback(() => {

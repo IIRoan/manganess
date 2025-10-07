@@ -10,6 +10,26 @@ import { getMangaData, setMangaData } from '@/services/bookmarkService';
 import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
 
+export class CloudflareDetectedError extends Error {
+  html: string;
+  constructor(html: string) {
+    super('Cloudflare verification detected');
+    this.name = 'CloudflareDetectedError';
+    this.html = html;
+  }
+}
+
+function isCloudflareHtml(html: string): boolean {
+  if (!html) return false;
+  const lowered = html.toLowerCase();
+  return (
+    lowered.includes('cf-browser-verification') ||
+    lowered.includes('cf_captcha_kind') ||
+    lowered.includes('just a moment') ||
+    lowered.includes('cloudflare')
+  );
+}
+
 export interface MangaItem {
   id: string;
   title: string;
@@ -93,8 +113,11 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       const response = await axios.get(searchUrl, {
         headers: {
           'User-Agent': USER_AGENT,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': MANGA_API_URL,
         },
-        timeout: 10000,
+        timeout: 20000,
       });
 
       if (!response.data || typeof response.data !== 'string') {
@@ -102,6 +125,9 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
       }
 
       const html = response.data as string;
+      if (isCloudflareHtml(html)) {
+        throw new CloudflareDetectedError(html);
+      }
       return parseSearchResults(html);
     })
   );

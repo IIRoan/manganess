@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
+import * as Reanimated from 'react-native-reanimated';
 
 interface SwipeableChapterItemProps {
   chapter: {
@@ -43,6 +44,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   setCurrentlyOpenSwipeable,
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
+  const supportsWorkletCallback = typeof (Reanimated as any).useWorkletCallback === 'function';
 
   useEffect(() => {
     if (
@@ -86,8 +88,8 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     );
   };
 
-  // If the chapter is not read, render a non-swipeable view
-  if (!isRead) {
+  // If Reanimated's useWorkletCallback is unavailable or chapter is unread, render a non-swipeable view
+  if (!isRead || !supportsWorkletCallback) {
     return (
       <View
         style={[styles.container, isLastItem && parentStyles.lastChapterItem]}
@@ -104,9 +106,9 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
           </View>
           <View style={parentStyles.chapterStatus}>
             <Ionicons
-              name="ellipse-outline"
+              name={isRead ? 'checkmark-circle' : 'ellipse-outline'}
               size={24}
-              color={colors.tabIconDefault}
+              color={isRead ? colors.primary : colors.tabIconDefault}
             />
           </View>
         </TouchableOpacity>
