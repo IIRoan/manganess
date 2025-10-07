@@ -19,6 +19,7 @@ import AlertComponent from '@/components/Alert';
 import SwipeableChapterItem from '@/components/SwipeChapterItem';
 import BottomPopup from '@/components/BottomPopup';
 import { FlashList } from '@shopify/flash-list';
+import type { FlashListRef } from '@shopify/flash-list';
 import { fetchMangaDetails } from '@/services/mangaFireService';
 import {
   fetchBookmarkStatus,
@@ -45,6 +46,7 @@ import type {
   Option,
   MangaDetails,
   BookmarkStatus,
+  Chapter,
 } from '@/types';
 
 /* Type Definitions */
@@ -100,7 +102,7 @@ export default function MangaDetailScreen() {
   const [showScrollToTopButton, setShowScrollToTopButton] = useState(false);
   const [showScrollToBottomButton, setShowScrollToBottomButton] =
     useState(false);
-  const flashListRef = useRef<FlashList<any>>(null);
+  const flashListRef = useRef<FlashListRef<Chapter> | null>(null);
 
   // Animated value for the scroll button opacities
   const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
@@ -122,7 +124,7 @@ export default function MangaDetailScreen() {
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
 
-  const fetchMangaDetailsData = async () => {
+  const fetchMangaDetailsData = useCallback(async () => {
     try {
       const details = await fetchMangaDetails(id as string);
       setMangaDetails({ ...details, id: id as string });
@@ -130,9 +132,9 @@ export default function MangaDetailScreen() {
       console.error(err);
       throw new Error('Failed to load manga details');
     }
-  };
+  }, [id]);
 
-  const fetchBookmarkStatusData = async () => {
+  const fetchBookmarkStatusData = useCallback(async () => {
     try {
       const status = await fetchBookmarkStatus(id as string);
       setBookmarkStatus(status);
@@ -140,7 +142,7 @@ export default function MangaDetailScreen() {
       console.error(err);
       throw new Error('Failed to load bookmark status');
     }
-  };
+  }, [id]);
 
   const fetchReadChapters = useCallback(async () => {
     try {
@@ -187,7 +189,13 @@ export default function MangaDetailScreen() {
       fetchData();
 
       return () => {};
-    }, [id, fetchReadChapters, fetchLastReadChapter])
+    }, [
+      id,
+      fetchReadChapters,
+      fetchLastReadChapter,
+      fetchMangaDetailsData,
+      fetchBookmarkStatusData,
+    ])
   );
 
   const handleBookmark = () => {
@@ -427,9 +435,8 @@ export default function MangaDetailScreen() {
       />
 
       <View style={{ flex: 1 }}>
-        <FlashList
+        <FlashList<Chapter>
           ref={flashListRef}
-          estimatedItemSize={70}
           removeClippedSubviews={true}
           drawDistance={100}
           ListHeaderComponent={() => (

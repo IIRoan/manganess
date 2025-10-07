@@ -15,7 +15,6 @@ import {
   useMangaImageCache,
   type CacheContext,
 } from '@/services/CacheImages';
-import * as FileSystem from 'expo-file-system';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
 import BottomPopup from './BottomPopup';
@@ -75,19 +74,15 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
     context === 'manga' && mangaId ? mangaCachedPath : searchCachedPath;
 
   const getImageSource = () => {
-    if (
-      cachedImagePath &&
-      typeof cachedImagePath === 'string' &&
-      cachedImagePath.startsWith(FileSystem.cacheDirectory || '')
-    ) {
-      return {
-        uri: `file://${cachedImagePath}`,
-      };
-    }
-
-    return {
-      uri: cachedImagePath || imageUrl,
-    };
+    const uri = (() => {
+      const v = cachedImagePath || imageUrl;
+      if (!v) return v;
+      if (typeof v !== 'string') return v as any;
+      if (v.startsWith('http://') || v.startsWith('https://')) return v;
+      if (v.startsWith('file://') || v.startsWith('content://')) return v;
+      return `file://${v}`;
+    })();
+    return { uri } as const;
   };
 
   const handleImageLoad = () => {

@@ -18,9 +18,10 @@ import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-import { searchManga, type MangaItem } from '@/services/mangaFireService';
+import { searchManga, type MangaItem, CloudflareDetectedError } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 
 /* Type Definitions */
 interface LastReadChapters {
@@ -58,6 +59,7 @@ export default function MangaSearchScreen() {
     }, [searchQuery])
   );
 
+  const { checkForCloudflare } = useCloudflareDetection();
   // Search function to handle input
   useEffect(() => {
     const performSearch = async () => {
@@ -68,7 +70,12 @@ export default function MangaSearchScreen() {
         try {
           const results = await searchManga(debouncedSearchQuery);
           setSearchResults(results);
-        } catch (err) {
+        } catch (err: any) {
+          if (err instanceof CloudflareDetectedError) {
+            // Navigate to Cloudflare verification and return early
+            checkForCloudflare(err.html, '/mangasearch');
+            return;
+          }
           setError('Failed to fetch manga. Please try again.');
           console.error(err);
         } finally {
@@ -80,7 +87,7 @@ export default function MangaSearchScreen() {
     };
 
     performSearch();
-  }, [debouncedSearchQuery]);
+  }, [debouncedSearchQuery, checkForCloudflare]);
 
   // Clear search
   const clearSearch = useCallback(() => {

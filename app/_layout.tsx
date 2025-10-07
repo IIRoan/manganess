@@ -1,3 +1,4 @@
+import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   DarkTheme,
