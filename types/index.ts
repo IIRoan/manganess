@@ -7,3 +7,4 @@ export * from './settings';
 export * from './ui';
 export * from './api';
 export * from './errors';
+export * from './logging';

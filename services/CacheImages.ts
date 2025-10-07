@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import { File as FSFile, Directory as FSDirectory, Paths } from 'expo-file-system';
+import {
+  File as FSFile,
+  Directory as FSDirectory,
+  Paths,
+} from 'expo-file-system';
 // Using a simple hash function instead of expo-crypto to avoid adding dependencies
 function simpleHash(str: string): string {
   let hash = 0;
@@ -11,6 +15,7 @@ function simpleHash(str: string): string {
   return Math.abs(hash).toString(36);
 }
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isDebugEnabled } from '@/constants/env';
 
 function normalizeUri(u: string): string {
   if (!u) return u;
@@ -159,9 +164,10 @@ class ImageCache {
           RETRY_DELAY_BASE * Math.pow(2, attempt - 1) + Math.random() * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
 
-        console.log(
-          `Retry attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`
-        );
+        if (isDebugEnabled())
+          console.log(
+            `Retry attempt ${attempt} failed, retrying in ${Math.round(delay)}ms...`
+          );
       }
     }
 
@@ -247,7 +253,10 @@ class ImageCache {
 
       // Store metadata for cleanup
       const fileInfo = output.info();
-      const sz = fileInfo.exists && typeof fileInfo.size === 'number' ? fileInfo.size : 0;
+      const sz =
+        fileInfo.exists && typeof fileInfo.size === 'number'
+          ? fileInfo.size
+          : 0;
       this.metadata.set(filename, {
         originalUrl: url,
         cachedPath: output.uri,
@@ -303,7 +312,10 @@ class ImageCache {
       const output = await this.downloadImageWithRetry(url, file);
 
       const fileInfo = output.info();
-      const sz = fileInfo.exists && typeof fileInfo.size === 'number' ? fileInfo.size : 0;
+      const sz =
+        fileInfo.exists && typeof fileInfo.size === 'number'
+          ? fileInfo.size
+          : 0;
       this.metadata.set(cacheKey, {
         mangaId,
         originalUrl: url,
@@ -341,7 +353,8 @@ class ImageCache {
     if (existingEntry) {
       // Check if URL has changed
       if (existingEntry.originalUrl !== currentUrl) {
-        console.log(`Image URL changed for manga ${mangaId}, updating cache`);
+        if (isDebugEnabled())
+          console.log(`Image URL changed for manga ${mangaId}, updating cache`);
 
         // Remove old cached file
         try {
@@ -502,7 +515,10 @@ class ImageCache {
     }
 
     if (expiredEntries.length > 0) {
-      console.log(`Cleaned up ${expiredEntries.length} expired cache entries`);
+      if (isDebugEnabled())
+        console.log(
+          `Cleaned up ${expiredEntries.length} expired cache entries`
+        );
       await this.saveMetadata();
     }
   }
@@ -511,9 +527,10 @@ class ImageCache {
     const stats = await this.getCacheStats();
 
     if (stats.totalSize > MAX_CACHE_SIZE) {
-      console.log(
-        `Cache size (${Math.round(stats.totalSize / 1024 / 1024)}MB) exceeds limit, cleaning up...`
-      );
+      if (isDebugEnabled())
+        console.log(
+          `Cache size (${Math.round(stats.totalSize / 1024 / 1024)}MB) exceeds limit, cleaning up...`
+        );
 
       // Get all entries sorted by last accessed (oldest first)
       const sortedEntries = Array.from(this.metadata.entries())
@@ -538,9 +555,10 @@ class ImageCache {
         }
       }
 
-      console.log(
-        `Cleaned up ${Math.round(cleanedSize / 1024 / 1024)}MB of cache data`
-      );
+      if (isDebugEnabled())
+        console.log(
+          `Cleaned up ${Math.round(cleanedSize / 1024 / 1024)}MB of cache data`
+        );
       await this.saveMetadata();
     }
   }

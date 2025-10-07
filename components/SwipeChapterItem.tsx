@@ -44,7 +44,8 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   setCurrentlyOpenSwipeable,
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
-  const supportsWorkletCallback = typeof (Reanimated as any).useWorkletCallback === 'function';
+  const supportsWorkletCallback =
+    typeof (Reanimated as any).useWorkletCallback === 'function';
 
   useEffect(() => {
     if (

@@ -36,6 +36,8 @@ import {
   hasSeenChapterGuide,
 } from '@/components/ChapterGuideOverlay';
 import getStyles from './[chapterNumber].styles';
+import { logger } from '@/utils/logger';
+import { isDebugEnabled } from '@/constants/env';
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
@@ -74,7 +76,12 @@ export default function ReadChapterScreen() {
   const insets = useSafeAreaInsets();
 
   const chapterUrl = getChapterUrl(id, chapterNumber);
-  const supportsWorklets = typeof (Reanimated as any).useWorkletCallback === 'function';
+  const webLoadStartRef = useRef<number>(
+    (globalThis as any).performance?.now?.() ?? Date.now()
+  );
+  const log = logger();
+  const supportsWorklets =
+    typeof (Reanimated as any).useWorkletCallback === 'function';
   const currentChapterIndex = mangaDetails?.chapters?.findIndex(
     (chapter) => chapter.number === chapterNumber
   );
@@ -306,7 +313,21 @@ export default function ReadChapterScreen() {
     }, [navigateBack])
   );
 
-  const handleLoadEnd = () => setIsLoading(false);
+  const handleLoadEnd = () => {
+    setIsLoading(false);
+    if (isDebugEnabled()) {
+      const dur =
+        ((globalThis as any).performance?.now?.() ?? Date.now()) -
+        (webLoadStartRef.current ??
+          (globalThis as any).performance?.now?.() ??
+          Date.now());
+      log.info('UI', 'ChapterWebView load complete', {
+        id,
+        chapterNumber,
+        durationMs: Math.round(dur),
+      });
+    }
+  };
   const handleBackPress = () => navigateBack();
   const handleError = () => {
     setError('Failed to load chapter. Please try again.');
@@ -410,7 +431,6 @@ export default function ReadChapterScreen() {
     });
   })();
 `;
-
 
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
@@ -637,7 +657,9 @@ export default function ReadChapterScreen() {
                 <Text style={styles.currentChapterTitle}>
                   Current: Chapter {chapterNumber}
                 </Text>
-                <View style={[styles.bottomSheetContent, { paddingBottom: 24 }]}>
+                <View
+                  style={[styles.bottomSheetContent, { paddingBottom: 24 }]}
+                >
                   {renderChapterList()}
                 </View>
               </View>

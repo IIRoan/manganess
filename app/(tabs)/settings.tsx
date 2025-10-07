@@ -170,7 +170,9 @@ export default function SettingsScreen() {
       const file = new File(Paths.document, fileName);
 
       // Create and write file
-      try { file.create(); } catch {}
+      try {
+        file.create();
+      } catch {}
       file.write(jsonString, { encoding: 'utf8' });
 
       // Share file
