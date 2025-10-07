@@ -36,8 +36,8 @@ class DebugLogger implements Logger {
       level,
       scope,
       msg,
-      data,
-      durationMs,
+      ...(typeof data !== 'undefined' ? { data } : {}),
+      ...(typeof durationMs !== 'undefined' ? { durationMs } : {}),
     };
     this.push(entry);
 

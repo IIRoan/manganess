@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isDebugEnabled } from '@/constants/env';
 import { logger } from '@/utils/logger';
 
-type KeyVal = [string, string | null];
+// Use readonly tuple types matching AsyncStorage's public API
+type KeyVal = readonly [string, string];
 
 type Patched = Partial<typeof AsyncStorage> & { __patched?: boolean };
 
@@ -51,10 +52,10 @@ export function enableAsyncStorageLogging() {
     }
   };
 
-  AsyncStorage.multiGet = async (keys: string[]) => {
+  AsyncStorage.multiGet = async (keys: readonly string[]) => {
     const start = (globalThis as any).performance?.now?.() ?? Date.now();
     try {
-      return await originals!.multiGet!(keys);
+      return await originals!.multiGet!(keys as readonly string[]);
     } finally {
       const dur =
         ((globalThis as any).performance?.now?.() ?? Date.now()) - start;
@@ -65,10 +66,12 @@ export function enableAsyncStorageLogging() {
     }
   };
 
-  AsyncStorage.multiSet = async (pairs: KeyVal[]) => {
+  AsyncStorage.multiSet = async (pairs: readonly KeyVal[]) => {
     const start = (globalThis as any).performance?.now?.() ?? Date.now();
     try {
-      return await originals!.multiSet!(pairs);
+      return await originals!.multiSet!(
+        pairs as readonly (readonly [string, string])[]
+      );
     } finally {
       const dur =
         ((globalThis as any).performance?.now?.() ?? Date.now()) - start;

@@ -73,7 +73,7 @@
     "dev": "expo start --dev-client",
     "prebuild": "expo prebuild --clean",
     "export": "expo export",
-    "check": "npm run lint && npm run typecheck",
+    "check": "bun run lint && bun run typecheck",
     "format:check": "prettier --check .",
     "format:write": "prettier --write ."
   },

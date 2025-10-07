@@ -113,7 +113,8 @@ export async function updateMangaStatus(
 ): Promise<void> {
   const isLoggedIn = await isLoggedInToAniList();
   if (!isLoggedIn) {
-    console.log('User is not logged in to AniList. Skipping update.');
+    if (isDebugEnabled())
+      console.log('User is not logged in to AniList. Skipping update.');
     return;
   }
   const authData = await getAuthData();
@@ -154,7 +155,8 @@ export async function updateAniListStatus(
   try {
     const isLoggedIn = await isLoggedInToAniList();
     if (!isLoggedIn) {
-      console.log('User is not logged in to AniList. Skipping update.');
+      if (isDebugEnabled())
+        console.log('User is not logged in to AniList. Skipping update.');
       return {
         success: false,
         message: `User is not logged in to AniList. Skipping update.`,
@@ -183,15 +185,17 @@ export async function updateAniListStatus(
       }
 
       await updateMangaStatus(anilistManga.id, anilistStatus, progress);
-      console.log(
-        `Updated AniList status for ${mangaTitle} to ${anilistStatus}`
-      );
+      if (isDebugEnabled())
+        console.log(
+          `Updated AniList status for ${mangaTitle} to ${anilistStatus}`
+        );
       return {
         success: true,
         message: `Updated AniList status for "${mangaTitle}" to ${status}`,
       };
     } else {
-      console.log(`Manga ${mangaTitle} not found on AniList`);
+      if (isDebugEnabled())
+        console.log(`Manga ${mangaTitle} not found on AniList`);
       return {
         success: false,
         message: `"${mangaTitle}" was not found on AniList. Only local status was updated.`,
@@ -208,7 +212,7 @@ export async function updateAniListStatus(
 
 export async function syncAllMangaWithAniList(): Promise<string[]> {
   const debug = (message: string, data?: any) => {
-    console.log(`[Manga Sync] ${message}`, data || '');
+    if (isDebugEnabled()) console.log(`[Manga Sync] ${message}`, data || '');
   };
 
   try {
