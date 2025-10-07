@@ -19,6 +19,8 @@ web-build/
 expo-env.d.ts
 # @end expo-cli
 android
+# Ignore any env.ts by default, but keep the committed constants/env.ts stub for CI
 env.ts
+!constants/env.ts
 .idea/
 
