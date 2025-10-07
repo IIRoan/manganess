@@ -9,6 +9,7 @@ import {
   AppState,
 } from 'react-native';
 import { Tabs, usePathname, useNavigation } from 'expo-router';
+import { isDebugEnabled } from '@/constants/env';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getDebugTabEnabled,
@@ -104,21 +105,23 @@ export default function TabLayout() {
   }, []);
 
   const performUpdateCheck = useCallback(async () => {
-    console.log('Performing update check...');
+    if (isDebugEnabled()) console.log('Performing update check...');
     try {
       // First check if update is available
       const checkResult = await checkForUpdate();
-      console.log('Update check result:', checkResult);
+      if (isDebugEnabled()) console.log('Update check result:', checkResult);
 
       if (checkResult.success) {
-        console.log('Update available, downloading and applying...');
+        if (isDebugEnabled())
+          console.log('Update available, downloading and applying...');
         // If an update is available, download and apply it
         await updateAndReload();
       } else {
-        console.log(
-          'No update available or unable to check:',
-          checkResult.message
-        );
+        if (isDebugEnabled())
+          console.log(
+            'No update available or unable to check:',
+            checkResult.message
+          );
       }
     } catch (error) {
       console.error('Error in update process:', error);
@@ -138,7 +141,10 @@ export default function TabLayout() {
         appState.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
-        console.log('App has come to the foreground, checking for updates...');
+        if (isDebugEnabled())
+          console.log(
+            'App has come to the foreground, checking for updates...'
+          );
         performUpdateCheck();
       }
 
@@ -501,10 +507,12 @@ export default function TabLayout() {
           <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
           <Tabs.Screen
             name="Debug"
-            options={{
-              title: 'Debug',
-              href: enableDebugTab ? undefined : null,
-            } as any}
+            options={
+              {
+                title: 'Debug',
+                href: enableDebugTab ? undefined : null,
+              } as any
+            }
           />
           <Tabs.Screen name="manga/[id]" options={{ href: null }} />
           <Tabs.Screen

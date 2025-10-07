@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthData } from './anilistOAuth';
 import { decode } from 'html-entities';
 import { getMangaData } from './bookmarkService';
+import { isDebugEnabled } from '@/constants/env';
 import {
   saveMangaMapping as saveMapping,
   getAnilistIdFromInternalId as getMapping,

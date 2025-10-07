@@ -282,12 +282,15 @@ export default function BookmarksScreen() {
     }
   }, [showSortOptions, sortOptionsHeight]);
 
-  const selectSort = useCallback((opt: string) => {
-    setSortOption(opt);
-    sortOptionsHeight.value = withTiming(0, { duration: 200 }, () =>
-      runOnJS(setShowSortOptions)(false)
-    );
-  }, [sortOptionsHeight]);
+  const selectSort = useCallback(
+    (opt: string) => {
+      setSortOption(opt);
+      sortOptionsHeight.value = withTiming(0, { duration: 200 }, () =>
+        runOnJS(setShowSortOptions)(false)
+      );
+    },
+    [sortOptionsHeight]
+  );
 
   const toggleView = useCallback(async () => {
     const newMode: ViewMode = viewMode === 'grid' ? 'list' : 'grid';
@@ -323,19 +326,22 @@ export default function BookmarksScreen() {
     runOnJS(updateAfterIndexChange)(idx);
   });
 
-  const goToIndex = useCallback((index: number) => {
-    if (index < 0 || index >= SECTIONS.length) return;
-    if (isAnimating.value) return;
-    isAnimating.value = true;
-    translateX.value = withTiming(
-      -index * SCREEN_WIDTH,
-      { duration: 250, easing: Easing.out(Easing.cubic) },
-      () => {
-        pageIndex.value = index;
-        isAnimating.value = false;
-      }
-    );
-  }, [isAnimating, pageIndex, translateX]);
+  const goToIndex = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= SECTIONS.length) return;
+      if (isAnimating.value) return;
+      isAnimating.value = true;
+      translateX.value = withTiming(
+        -index * SCREEN_WIDTH,
+        { duration: 250, easing: Easing.out(Easing.cubic) },
+        () => {
+          pageIndex.value = index;
+          isAnimating.value = false;
+        }
+      );
+    },
+    [isAnimating, pageIndex, translateX]
+  );
 
   const changeSection = useCallback(
     (section: BookmarkStatus) => {
@@ -449,7 +455,13 @@ export default function BookmarksScreen() {
         </TouchableOpacity>
       );
     },
-    [viewMode, handleBookmarkPress, styles, colors.tabIconDefault, fetchBookmarks]
+    [
+      viewMode,
+      handleBookmarkPress,
+      styles,
+      colors.tabIconDefault,
+      fetchBookmarks,
+    ]
   );
 
   // Render section button

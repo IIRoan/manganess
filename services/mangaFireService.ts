@@ -9,6 +9,8 @@ import {
 import { getMangaData, setMangaData } from '@/services/bookmarkService';
 import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
+import { logger } from '@/utils/logger';
+import { isDebugEnabled } from '@/constants/env';
 
 export class CloudflareDetectedError extends Error {
   html: string;
@@ -102,35 +104,46 @@ export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
     throw new Error('Search keyword is required');
   }
 
-  return performanceMonitor.measureAsync(`searchManga:${keyword}`, () =>
-    retryApiCall(async () => {
-      const searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword.trim())}`;
+  const log = logger();
+  if (isDebugEnabled()) log.info('Service', 'searchManga:start', { keyword });
+  const result = await performanceMonitor.measureAsync(
+    `searchManga:${keyword}`,
+    () =>
+      retryApiCall(async () => {
+        const searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword.trim())}`;
 
-      if (!validateUrl(searchUrl)) {
-        throw new Error('Invalid search URL');
-      }
+        if (!validateUrl(searchUrl)) {
+          throw new Error('Invalid search URL');
+        }
 
-      const response = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': MANGA_API_URL,
-        },
-        timeout: 20000,
-      });
+        const response = await axios.get(searchUrl, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            Accept:
+              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            Referer: MANGA_API_URL,
+          },
+          timeout: 20000,
+        });
 
-      if (!response.data || typeof response.data !== 'string') {
-        throw new Error('Invalid response data');
-      }
+        if (!response.data || typeof response.data !== 'string') {
+          throw new Error('Invalid response data');
+        }
 
-      const html = response.data as string;
-      if (isCloudflareHtml(html)) {
-        throw new CloudflareDetectedError(html);
-      }
-      return parseSearchResults(html);
-    })
+        const html = response.data as string;
+        if (isCloudflareHtml(html)) {
+          throw new CloudflareDetectedError(html);
+        }
+        const items = parseSearchResults(html);
+        if (isDebugEnabled())
+          log.info('Service', 'searchManga:parsed', { count: items.length });
+        return items;
+      })
   );
+  if (isDebugEnabled())
+    log.info('Service', 'searchManga:done', { keyword, count: result.length });
+  return result;
 };
 
 // Extract search result parsing into separate function
@@ -165,30 +178,40 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
     throw new Error('Manga ID is required');
   }
 
-  return performanceMonitor.measureAsync(`fetchMangaDetails:${id}`, () =>
-    retryApiCall(async () => {
-      const detailsUrl = `${MANGA_API_URL}/manga/${id.trim()}`;
+  const log = logger();
+  if (isDebugEnabled()) log.info('Service', 'fetchMangaDetails:start', { id });
+  const details = await performanceMonitor.measureAsync(
+    `fetchMangaDetails:${id}`,
+    () =>
+      retryApiCall(async () => {
+        const detailsUrl = `${MANGA_API_URL}/manga/${id.trim()}`;
 
-      if (!validateUrl(detailsUrl)) {
-        throw new Error('Invalid manga details URL');
-      }
+        if (!validateUrl(detailsUrl)) {
+          throw new Error('Invalid manga details URL');
+        }
 
-      const response = await axios.get(detailsUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-        },
-        timeout: 15000, // Longer timeout for details page
-      });
+        const response = await axios.get(detailsUrl, {
+          headers: {
+            'User-Agent': USER_AGENT,
+          },
+          timeout: 15000, // Longer timeout for details page
+        });
 
-      if (!response.data || typeof response.data !== 'string') {
-        throw new Error('Invalid response data');
-      }
+        if (!response.data || typeof response.data !== 'string') {
+          throw new Error('Invalid response data');
+        }
 
-      const html = response.data as string;
-      const details = parseMangaDetails(html);
-      return { ...details, id: id.trim() };
-    })
+        const html = response.data as string;
+        const details = parseMangaDetails(html);
+        return { ...details, id: id.trim() };
+      })
   );
+  if (isDebugEnabled())
+    log.info('Service', 'fetchMangaDetails:done', {
+      id,
+      chapterCount: details.chapters?.length ?? 0,
+    });
+  return details;
 };
 
 const parseMangaDetails = (html: string): MangaDetails => {
@@ -269,7 +292,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
     rating,
     reviewCount,
     bannerImage: bannerImage || '',
-    chapters: chapters.filter(ch => ch.number && ch.url && ch.date),
+    chapters: chapters.filter((ch) => ch.number && ch.url && ch.date),
   };
 };
 
@@ -291,11 +314,12 @@ export const markChapterAsRead = async (
   }
 
   try {
-    console.log('Updating last read manga in mangaFireService:', {
-      id,
-      mangaTitle,
-      chapterNumber,
-    });
+    if (isDebugEnabled())
+      console.log('Updating last read manga in mangaFireService:', {
+        id,
+        mangaTitle,
+        chapterNumber,
+      });
     await setLastReadManga(id, mangaTitle, chapterNumber);
 
     const mangaData = await getMangaData(id);
@@ -313,9 +337,10 @@ export const markChapterAsRead = async (
         lastUpdated: Date.now(),
       });
 
-      console.log(
-        `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`
-      );
+      if (isDebugEnabled())
+        console.log(
+          `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`
+        );
     } else {
       await setMangaData({
         id,
@@ -411,7 +436,7 @@ export const parseNewReleases = (html: string): MangaItem[] => {
     }
   }
 
-  console.log('Could not find "New Release" section');
+  if (isDebugEnabled()) console.log('Could not find "New Release" section');
   return [];
 };
 

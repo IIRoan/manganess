@@ -41,6 +41,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '@/utils/haptics';
 import getStyles from './[id].styles';
 import { useMangaImageCache } from '@/services/CacheImages';
+import { logger } from '@/utils/logger';
+import { isDebugEnabled } from '@/constants/env';
 import type {
   AlertConfig,
   Option,
@@ -61,6 +63,8 @@ const MangaBannerImage: React.FC<{
   bannerUrl: string;
   style: any;
 }> = ({ mangaId, bannerUrl, style }) => {
+  const log = logger();
+  const imgStartRef = useRef<number | null>(null);
   const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl);
 
   return (
@@ -68,6 +72,27 @@ const MangaBannerImage: React.FC<{
       source={{ uri: cachedBannerPath }}
       style={style}
       onError={(error) => console.error('Error loading banner image:', error)}
+      onLoadStart={() => {
+        if (isDebugEnabled()) {
+          imgStartRef.current =
+            (globalThis as any).performance?.now?.() ?? Date.now();
+          log.debug('UI', 'Banner image load start', { mangaId });
+        }
+      }}
+      onLoadEnd={() => {
+        if (isDebugEnabled()) {
+          const s =
+            imgStartRef.current ??
+            (globalThis as any).performance?.now?.() ??
+            Date.now();
+          const d =
+            ((globalThis as any).performance?.now?.() ?? Date.now()) - s;
+          log.info('UI', 'Banner image load complete', {
+            mangaId,
+            durationMs: Math.round(d),
+          });
+        }
+      }}
     />
   );
 };
@@ -166,17 +191,40 @@ export default function MangaDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const log = logger();
       const fetchData = async () => {
         if (typeof id === 'string') {
           setIsLoading(true);
           setError(null);
           try {
-            await Promise.all([
-              fetchMangaDetailsData(),
-              fetchReadChapters(),
-              fetchBookmarkStatusData(),
-              fetchLastReadChapter(),
-            ]);
+            await log.measureAsync(
+              `UI:MangaDetail:initialLoad:${id as string}`,
+              'UI',
+              async () => {
+                await Promise.all([
+                  log.measureAsync(
+                    `Service:fetchMangaDetails:${id as string}`,
+                    'Service',
+                    () => fetchMangaDetailsData()
+                  ),
+                  log.measureAsync(
+                    `Storage:getReadChapters:${id as string}`,
+                    'Storage',
+                    () => fetchReadChapters()
+                  ),
+                  log.measureAsync(
+                    `Service:fetchBookmarkStatus:${id as string}`,
+                    'Service',
+                    () => fetchBookmarkStatusData()
+                  ),
+                  log.measureAsync(
+                    `Storage:getLastReadChapter:${id as string}`,
+                    'Storage',
+                    () => fetchLastReadChapter()
+                  ),
+                ]);
+              }
+            );
           } catch (error) {
             console.error('Error fetching data:', error);
             setError('Failed to load manga details. Please try again.');

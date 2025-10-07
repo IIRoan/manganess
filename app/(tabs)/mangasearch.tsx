@@ -18,7 +18,11 @@ import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-import { searchManga, type MangaItem, CloudflareDetectedError } from '@/services/mangaFireService';
+import {
+  searchManga,
+  type MangaItem,
+  CloudflareDetectedError,
+} from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
@@ -45,7 +49,7 @@ export default function MangaSearchScreen() {
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [searchResults, setSearchResults] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [/* error */, setError] = useState<string | null>(null);
+  const [, /* error */ setError] = useState<string | null>(null);
   const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>(
     {}
   );
