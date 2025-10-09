@@ -64,6 +64,15 @@ class ImageCache {
   private metadataLoaded: boolean = false;
   private downloadQueue: Map<string, Promise<string>> = new Map();
 
+  // Throttled persistence and maintenance
+  private saveTimer: any = null;
+  private lastSaveTs: number = 0;
+  private static readonly SAVE_DEBOUNCE_MS = 2000; // debounce metadata writes
+
+  private manageTimer: any = null;
+  private lastManageTs: number = 0;
+  private static readonly MANAGE_DEBOUNCE_MS = 15000; // throttle cache size management
+
   private constructor() {}
 
   static getInstance(): ImageCache {
@@ -126,9 +135,35 @@ class ImageCache {
     try {
       const data = Object.fromEntries(this.metadata.entries());
       await AsyncStorage.setItem(CACHE_METADATA_KEY, JSON.stringify(data));
+      this.lastSaveTs = Date.now();
     } catch (error) {
       console.error('Failed to save cache metadata:', error);
     }
+  }
+
+  private scheduleSaveMetadata() {
+    if (this.saveTimer) return;
+    const delay = ImageCache.SAVE_DEBOUNCE_MS;
+    this.saveTimer = setTimeout(async () => {
+      this.saveTimer = null;
+      try {
+        await this.saveMetadata();
+      } catch {}
+    }, delay);
+  }
+
+  private scheduleManageCacheSize() {
+    if (this.manageTimer) return;
+    const delay = ImageCache.MANAGE_DEBOUNCE_MS;
+    this.manageTimer = setTimeout(async () => {
+      this.manageTimer = null;
+      try {
+        await this.manageCacheSize();
+        this.lastManageTs = Date.now();
+      } catch (e) {
+        console.error('Error in scheduled cache maintenance:', e);
+      }
+    }, delay);
   }
 
   private generateCacheKey(url: string, mangaId?: string): string {
@@ -220,15 +255,30 @@ class ImageCache {
 
     const info = file.info();
 
-    // Check if file exists and is not too old
+    // If file exists, prefer using it to avoid collisions. Update or create metadata.
     if (info.exists) {
-      const metadata = this.metadata.get(filename);
-      if (metadata && Date.now() - metadata.lastUpdated < SEARCH_CACHE_AGE) {
-        // Update last accessed time
-        metadata.lastAccessed = Date.now();
-        this.saveMetadata();
-        return normalizeUri(file.uri);
+      const now = Date.now();
+      const existingMeta = this.metadata.get(filename);
+      const size = typeof info.size === 'number' ? info.size : 0;
+      if (existingMeta) {
+        existingMeta.lastAccessed = now;
+        // If stale, mark it as refreshed logically to suppress re-downloads during searches
+        if (now - existingMeta.lastUpdated >= SEARCH_CACHE_AGE) {
+          existingMeta.lastUpdated = now;
+        }
+      } else {
+        this.metadata.set(filename, {
+          originalUrl: url,
+          cachedPath: file.uri,
+          lastAccessed: now,
+          lastUpdated: now,
+          context: 'search',
+          fileSize: size,
+          urlHash: simpleHash(url),
+        });
       }
+      this.scheduleSaveMetadata();
+      return normalizeUri(file.uri);
     }
 
     // Start download and add to queue
@@ -249,6 +299,14 @@ class ImageCache {
     filename: string
   ): Promise<string> {
     try {
+      // Ensure destination path is free to avoid "Destination already exists"
+      const preInfo = file.info();
+      if (preInfo.exists) {
+        try {
+          file.delete();
+        } catch {}
+      }
+
       const output = await this.downloadImageWithRetry(url, file);
 
       // Store metadata for cleanup
@@ -266,9 +324,26 @@ class ImageCache {
         fileSize: sz,
         urlHash: simpleHash(url),
       });
-      await this.saveMetadata();
+      this.scheduleSaveMetadata();
       return normalizeUri(output.uri);
-    } catch (error) {
+    } catch (error: any) {
+      // If the file already exists, treat it as success and update metadata
+      const info = file.info();
+      if (info.exists) {
+        const now = Date.now();
+        const size = typeof info.size === 'number' ? info.size : 0;
+        this.metadata.set(filename, {
+          originalUrl: url,
+          cachedPath: file.uri,
+          lastAccessed: now,
+          lastUpdated: now,
+          context: 'search',
+          fileSize: size,
+          urlHash: simpleHash(url),
+        });
+        this.scheduleSaveMetadata();
+        return normalizeUri(file.uri);
+      }
       console.error('Failed to download search image after retries:', error);
       return url; // Return original URL as fallback
     }
@@ -294,7 +369,7 @@ class ImageCache {
       if (existingFile.exists) {
         // Update last accessed time
         existingEntry.lastAccessed = Date.now();
-        await this.saveMetadata();
+        this.scheduleSaveMetadata();
         return normalizeUri(existingFile.uri);
       } else {
         // Remove stale metadata
@@ -326,10 +401,10 @@ class ImageCache {
         fileSize: sz,
         urlHash: simpleHash(url),
       });
-      await this.saveMetadata();
+      this.scheduleSaveMetadata();
 
       // Clean up if cache is getting too large
-      await this.manageCacheSize();
+      this.scheduleManageCacheSize();
 
       return normalizeUri(output.uri);
     } catch (error) {
@@ -381,7 +456,7 @@ class ImageCache {
         const existingFile = new FSFile(existingEntry.cachedPath);
         if (existingFile.exists) {
           existingEntry.lastAccessed = Date.now();
-          await this.saveMetadata();
+          this.scheduleSaveMetadata();
           return normalizeUri(existingFile.uri);
         } else {
           // File doesn't exist, re-download
@@ -519,7 +594,7 @@ class ImageCache {
         console.log(
           `Cleaned up ${expiredEntries.length} expired cache entries`
         );
-      await this.saveMetadata();
+      this.scheduleSaveMetadata();
     }
   }
 
@@ -559,7 +634,7 @@ class ImageCache {
         console.log(
           `Cleaned up ${Math.round(cleanedSize / 1024 / 1024)}MB of cache data`
         );
-      await this.saveMetadata();
+      this.scheduleSaveMetadata();
     }
   }
 }
