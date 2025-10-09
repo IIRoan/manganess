@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  ActivityIndicator,
   useWindowDimensions,
   Platform,
   Animated,
@@ -357,7 +356,14 @@ export default function MangaSearchScreen() {
         </Text>
       </View>
     );
-  }, [styles, colors.primary, colors.error, tokenError, searchQuery, isLoading]);
+  }, [
+    styles,
+    colors.primary,
+    colors.error,
+    tokenError,
+    searchQuery,
+    isLoading,
+  ]);
 
   return (
     <SafeAreaView style={styles.container}>

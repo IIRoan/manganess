@@ -66,11 +66,9 @@ class ImageCache {
 
   // Throttled persistence and maintenance
   private saveTimer: any = null;
-  private lastSaveTs: number = 0;
   private static readonly SAVE_DEBOUNCE_MS = 2000; // debounce metadata writes
 
   private manageTimer: any = null;
-  private lastManageTs: number = 0;
   private static readonly MANAGE_DEBOUNCE_MS = 15000; // throttle cache size management
 
   private constructor() {}
@@ -135,7 +133,6 @@ class ImageCache {
     try {
       const data = Object.fromEntries(this.metadata.entries());
       await AsyncStorage.setItem(CACHE_METADATA_KEY, JSON.stringify(data));
-      this.lastSaveTs = Date.now();
     } catch (error) {
       console.error('Failed to save cache metadata:', error);
     }
@@ -159,7 +156,6 @@ class ImageCache {
       this.manageTimer = null;
       try {
         await this.manageCacheSize();
-        this.lastManageTs = Date.now();
       } catch (e) {
         console.error('Error in scheduled cache maintenance:', e);
       }
