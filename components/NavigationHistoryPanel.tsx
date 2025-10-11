@@ -190,7 +190,10 @@ const NavigationHistoryPanel: React.FC<NavigationHistoryPanelProps> = ({
               {Object.entries(groupedHistory).map(([date, entries]) => (
                 <View key={date} style={styles.dateGroup}>
                   <Text
-                    style={[styles.dateHeader, { color: colors.tabIconDefault }]}
+                    style={[
+                      styles.dateHeader,
+                      { color: colors.tabIconDefault },
+                    ]}
                   >
                     {date === new Date().toDateString() ? 'Today' : date}
                   </Text>

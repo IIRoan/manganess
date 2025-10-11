@@ -15,11 +15,15 @@ import {
   useMangaImageCache,
   type CacheContext,
 } from '@/services/CacheImages';
-import * as FileSystem from 'expo-file-system';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
 import BottomPopup from './BottomPopup';
-import { getBookmarkPopupConfig, getMangaData, saveBookmark, removeBookmark } from '@/services/bookmarkService';
+import {
+  getBookmarkPopupConfig,
+  getMangaData,
+  saveBookmark,
+  removeBookmark,
+} from '@/services/bookmarkService';
 import { Ionicons } from '@expo/vector-icons';
 
 interface EnhancedMangaCardProps extends MangaCardProps {
@@ -46,7 +50,9 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [showBookmarkPopup, setShowBookmarkPopup] = useState(false);
-  const [bookmarkStatus, setBookmarkStatus] = useState<BookmarkStatus | null>(null);
+  const [bookmarkStatus, setBookmarkStatus] = useState<BookmarkStatus | null>(
+    null
+  );
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const haptics = useHapticFeedback();
 
@@ -75,19 +81,15 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
     context === 'manga' && mangaId ? mangaCachedPath : searchCachedPath;
 
   const getImageSource = () => {
-    if (
-      cachedImagePath &&
-      typeof cachedImagePath === 'string' &&
-      cachedImagePath.startsWith(FileSystem.cacheDirectory || '')
-    ) {
-      return {
-        uri: `file://${cachedImagePath}`,
-      };
-    }
-
-    return {
-      uri: cachedImagePath || imageUrl,
-    };
+    const uri = (() => {
+      const v = cachedImagePath || imageUrl;
+      if (!v) return v;
+      if (typeof v !== 'string') return v as any;
+      if (v.startsWith('http://') || v.startsWith('https://')) return v;
+      if (v.startsWith('file://') || v.startsWith('content://')) return v;
+      return `file://${v}`;
+    })();
+    return { uri } as const;
   };
 
   const handleImageLoad = () => {
@@ -124,11 +126,11 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
       onLongPress();
       return;
     }
-    
+
     if (!mangaId) return;
-    
+
     haptics.onLongPress();
-    
+
     try {
       const mangaData = await getMangaData(mangaId);
       setBookmarkStatus(mangaData?.bookmarkStatus || null);
@@ -140,19 +142,19 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   const handleSaveBookmark = async (status: BookmarkStatus) => {
     if (!mangaId) return;
-    
+
     try {
       // Update local state immediately for instant feedback
       setBookmarkStatus(status);
       setShowBookmarkPopup(false);
-      
+
       const mangaData = await getMangaData(mangaId);
       const mockMangaDetails = {
         title: title,
         bannerImage: imageUrl,
         chapters: [],
       };
-      
+
       await saveBookmark(
         mangaId,
         status,
@@ -162,7 +164,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
         () => {},
         () => {}
       );
-      
+
       // Notify parent component about bookmark change
       if (onBookmarkChange) {
         onBookmarkChange(mangaId, status);
@@ -177,18 +179,18 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   const handleRemoveBookmark = async () => {
     if (!mangaId) return;
-    
+
     try {
       // Update local state immediately for instant feedback
       setBookmarkStatus(null);
       setShowBookmarkPopup(false);
-      
+
       await removeBookmark(
         mangaId,
         (newStatus) => setBookmarkStatus(newStatus as BookmarkStatus | null),
         () => {}
       );
-      
+
       // Notify parent component about bookmark change
       if (onBookmarkChange) {
         onBookmarkChange(mangaId, null);
@@ -225,61 +227,61 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
             : 'Tap to view manga details'
         }
       >
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-        <View style={styles.imageContainer}>
-          <Image
-            source={getImageSource()}
-            style={styles.cardImage}
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-            accessibilityLabel={`Cover image for ${title}`}
-          />
-          {isLoading && (
-            <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          )}
-          {hasError && (
-            <View style={styles.errorOverlay}>
-              <Text style={styles.errorText}>Failed to load image</Text>
-            </View>
-          )}
-          {bookmarkStatus && context !== 'bookmark' && (
-            <View style={styles.bookmarkIndicator}>
-              <Ionicons name="bookmark" size={16} color={colors.primary} />
-            </View>
-          )}
-        </View>
-        <View style={styles.cardInfo}>
-          <Text
-            style={styles.cardTitle}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-            accessibilityRole="header"
-          >
-            {title}
-          </Text>
-          {lastReadChapter && (
+        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+          <View style={styles.imageContainer}>
+            <Image
+              source={getImageSource()}
+              style={styles.cardImage}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              accessibilityLabel={`Cover image for ${title}`}
+            />
+            {isLoading && (
+              <View style={styles.loadingOverlay}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            )}
+            {hasError && (
+              <View style={styles.errorOverlay}>
+                <Text style={styles.errorText}>Failed to load image</Text>
+              </View>
+            )}
+            {bookmarkStatus && context !== 'bookmark' && (
+              <View style={styles.bookmarkIndicator}>
+                <Ionicons name="bookmark" size={16} color={colors.primary} />
+              </View>
+            )}
+          </View>
+          <View style={styles.cardInfo}>
             <Text
-              style={styles.lastReadChapter}
-              numberOfLines={1}
+              style={styles.cardTitle}
+              numberOfLines={2}
               ellipsizeMode="tail"
-              accessibilityLabel={`Last read chapter: ${lastReadChapter}`}
+              accessibilityRole="header"
             >
-              Last read: {lastReadChapter}
+              {title}
             </Text>
-          )}
-        </View>
-      </Animated.View>
-    </Pressable>
-    
-    <BottomPopup
-      visible={showBookmarkPopup}
-      title={bookmarkPopupConfig.title}
-      onClose={() => setShowBookmarkPopup(false)}
-      options={bookmarkPopupConfig.options}
-    />
-  </>
+            {lastReadChapter && (
+              <Text
+                style={styles.lastReadChapter}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                accessibilityLabel={`Last read chapter: ${lastReadChapter}`}
+              >
+                Last read: {lastReadChapter}
+              </Text>
+            )}
+          </View>
+        </Animated.View>
+      </Pressable>
+
+      <BottomPopup
+        visible={showBookmarkPopup}
+        title={bookmarkPopupConfig.title}
+        onClose={() => setShowBookmarkPopup(false)}
+        options={bookmarkPopupConfig.options}
+      />
+    </>
   );
 };
 

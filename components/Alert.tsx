@@ -43,7 +43,7 @@ const Alert: React.FC<CustomAlertProps> = ({
         useNativeDriver: true,
       }).start();
     }
-  }, [visible]);
+  }, [visible, scaleValue]);
 
   const renderContent = () => {
     if (type === 'bookmarks') {

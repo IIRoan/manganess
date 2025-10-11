@@ -9,6 +9,29 @@ import {
 import { getMangaData, setMangaData } from '@/services/bookmarkService';
 import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
+import { logger } from '@/utils/logger';
+import { isDebugEnabled } from '@/constants/env';
+
+export class CloudflareDetectedError extends Error {
+  html: string;
+  constructor(html: string) {
+    super('Cloudflare verification detected');
+    this.name = 'CloudflareDetectedError';
+    this.html = html;
+  }
+}
+
+function isCloudflareHtml(html: string): boolean {
+  if (!html) return false;
+  const lowered = html.toLowerCase();
+  // Be strict: only treat as Cloudflare challenge when known markers are present
+  return (
+    lowered.includes('cf-browser-verification') ||
+    lowered.includes('cf_captcha_kind') ||
+    lowered.includes('attention required') ||
+    /\bjust a moment\b/.test(lowered)
+  );
+}
 
 export interface MangaItem {
   id: string;
@@ -77,61 +100,113 @@ function validateUrl(url: string): boolean {
   }
 }
 
-export const searchManga = async (keyword: string): Promise<MangaItem[]> => {
+let sessionVrfToken: string | null = null;
+export function setVrfToken(token: string) {
+  sessionVrfToken = token || null;
+}
+export function getVrfToken(): string | null {
+  return sessionVrfToken;
+}
+
+export const searchManga = async (keyword: string, vrfToken?: string): Promise<MangaItem[]> => {
   if (!keyword || keyword.trim().length === 0) {
     throw new Error('Search keyword is required');
   }
 
-  return performanceMonitor.measureAsync(`searchManga:${keyword}`, () =>
-    retryApiCall(async () => {
-      const searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword.trim())}`;
+  const log = logger();
+  if (isDebugEnabled()) log.info('Service', 'searchManga:start', { keyword });
+  
+  const result = await performanceMonitor.measureAsync(
+    `searchManga:${keyword}`,
+    () =>
+      retryApiCall(async () => {
+        let searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword.trim())}`;
+        
+        // Add VRF token if provided or from session store
+        const tokenToUse = vrfToken || sessionVrfToken || '';
+        if (tokenToUse) {
+          searchUrl += `&vrf=${encodeURIComponent(tokenToUse)}`;
+        }
 
-      if (!validateUrl(searchUrl)) {
-        throw new Error('Invalid search URL');
-      }
+        if (!validateUrl(searchUrl)) {
+          throw new Error('Invalid search URL');
+        }
 
-      const response = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-        },
-        timeout: 10000,
-      });
+        const response = await axios.get(searchUrl, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            Accept:
+              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            Referer: MANGA_API_URL,
+          },
+          timeout: 20000,
+        });
 
-      if (!response.data || typeof response.data !== 'string') {
-        throw new Error('Invalid response data');
-      }
+        if (!response.data || typeof response.data !== 'string') {
+          throw new Error('Invalid response data');
+        }
 
-      const html = response.data as string;
-      return parseSearchResults(html);
-    })
+        const html = response.data as string;
+        if (isCloudflareHtml(html)) {
+          throw new CloudflareDetectedError(html);
+        }
+        const items = parseSearchResults(html);
+        if (isDebugEnabled())
+          log.info('Service', 'searchManga:parsed', { count: items.length });
+        return items;
+      })
   );
+  if (isDebugEnabled())
+    log.info('Service', 'searchManga:done', { keyword, count: result.length });
+  return result;
 };
 
 // Extract search result parsing into separate function
-function parseSearchResults(html: string): MangaItem[] {
-  const mangaRegex =
-    /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
-  const matches = [...html.matchAll(mangaRegex)];
+export function parseSearchResults(html: string): MangaItem[] {
+  // Pattern 1: legacy 'unit item-*' cards
+  const pattern1 =
+    /<div class=\"unit item-\d+\">[\s\S]*?<a href=\"(\/manga\/[^\"]+)\"[\s\S]*?<img src=\"([^\"]+)\"[\s\S]*?<span class=\"type\">([^<]+)<\/span>[\s\S]*?<a href=\"\/manga\/[^\"]+\">([^<]+)<\/a>/g;
 
-  return matches
-    .map((match) => {
-      const link = match[1];
-      const id = link ? link.split('/').pop() || '' : '';
-      const imageUrl = match[2];
+  // Pattern 2: Filter grid cards (more generic: anchor->img + type + inner anchor title)
+  const pattern2 =
+    /<a href=\"(\/manga\/[^\"]+)\"[^>]*>[\s\S]*?<img[^>]*src=\"([^\"]+)\"[^>]*>[\s\S]*?<span class=\"type\">([^<]+)<\/span>[\s\S]*?<a href=\"\/manga\/[^\"]+\">([^<]+)<\/a>/g;
 
-      // Validate image URL
-      const validImageUrl = validateUrl(imageUrl || '') ? imageUrl : '';
+  const toItems = (matches: RegExpMatchArray[]): MangaItem[] =>
+    matches
+      .map((match) => {
+        const link = match[1];
+        const id = link ? link.split('/').pop() || '' : '';
+        const imageUrl = match[2];
+        const validImageUrl = validateUrl(imageUrl || '') ? imageUrl : '';
+        return {
+          id,
+          link: `${MANGA_API_URL}${link || ''}`,
+          title: decode(match[4]?.trim() || ''),
+          banner: validImageUrl || '',
+          imageUrl: validImageUrl || '',
+          type: decode(match[3]?.trim() || ''),
+        } as MangaItem;
+      })
+      .filter((item) => item.id && item.title);
 
-      return {
-        id,
-        link: `${MANGA_API_URL}${link || ''}`,
-        title: decode(match[4]?.trim() || ''),
-        banner: validImageUrl || '',
-        imageUrl: validImageUrl || '',
-        type: decode(match[3]?.trim() || ''),
-      };
-    })
-    .filter((item) => item.id && item.title); // Filter out incomplete results
+  const m1 = [...html.matchAll(pattern1)];
+  let items = toItems(m1 as unknown as RegExpMatchArray[]);
+
+  if (items.length === 0) {
+    const m2 = [...html.matchAll(pattern2)];
+    items = toItems(m2 as unknown as RegExpMatchArray[]);
+  }
+
+  // Deduplicate by id
+  const seen = new Set<string>();
+  const unique = items.filter((it) => {
+    if (seen.has(it.id)) return false;
+    seen.add(it.id);
+    return true;
+  });
+
+  return unique;
 }
 
 export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
@@ -139,30 +214,40 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
     throw new Error('Manga ID is required');
   }
 
-  return performanceMonitor.measureAsync(`fetchMangaDetails:${id}`, () =>
-    retryApiCall(async () => {
-      const detailsUrl = `${MANGA_API_URL}/manga/${id.trim()}`;
+  const log = logger();
+  if (isDebugEnabled()) log.info('Service', 'fetchMangaDetails:start', { id });
+  const details = await performanceMonitor.measureAsync(
+    `fetchMangaDetails:${id}`,
+    () =>
+      retryApiCall(async () => {
+        const detailsUrl = `${MANGA_API_URL}/manga/${id.trim()}`;
 
-      if (!validateUrl(detailsUrl)) {
-        throw new Error('Invalid manga details URL');
-      }
+        if (!validateUrl(detailsUrl)) {
+          throw new Error('Invalid manga details URL');
+        }
 
-      const response = await axios.get(detailsUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-        },
-        timeout: 15000, // Longer timeout for details page
-      });
+        const response = await axios.get(detailsUrl, {
+          headers: {
+            'User-Agent': USER_AGENT,
+          },
+          timeout: 15000, // Longer timeout for details page
+        });
 
-      if (!response.data || typeof response.data !== 'string') {
-        throw new Error('Invalid response data');
-      }
+        if (!response.data || typeof response.data !== 'string') {
+          throw new Error('Invalid response data');
+        }
 
-      const html = response.data as string;
-      const details = parseMangaDetails(html);
-      return { ...details, id: id.trim() };
-    })
+        const html = response.data as string;
+        const details = parseMangaDetails(html);
+        return { ...details, id: id.trim() };
+      })
   );
+  if (isDebugEnabled())
+    log.info('Service', 'fetchMangaDetails:done', {
+      id,
+      chapterCount: details.chapters?.length ?? 0,
+    });
+  return details;
 };
 
 const parseMangaDetails = (html: string): MangaDetails => {
@@ -243,7 +328,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
     rating,
     reviewCount,
     bannerImage: bannerImage || '',
-    chapters: chapters.filter(ch => ch.number && ch.url && ch.date),
+    chapters: chapters.filter((ch) => ch.number && ch.url && ch.date),
   };
 };
 
@@ -265,11 +350,12 @@ export const markChapterAsRead = async (
   }
 
   try {
-    console.log('Updating last read manga in mangaFireService:', {
-      id,
-      mangaTitle,
-      chapterNumber,
-    });
+    if (isDebugEnabled())
+      console.log('Updating last read manga in mangaFireService:', {
+        id,
+        mangaTitle,
+        chapterNumber,
+      });
     await setLastReadManga(id, mangaTitle, chapterNumber);
 
     const mangaData = await getMangaData(id);
@@ -287,9 +373,10 @@ export const markChapterAsRead = async (
         lastUpdated: Date.now(),
       });
 
-      console.log(
-        `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`
-      );
+      if (isDebugEnabled())
+        console.log(
+          `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`
+        );
     } else {
       await setMangaData({
         id,
@@ -385,7 +472,7 @@ export const parseNewReleases = (html: string): MangaItem[] => {
     }
   }
 
-  console.log('Could not find "New Release" section');
+  if (isDebugEnabled()) console.log('Could not find "New Release" section');
   return [];
 };
 

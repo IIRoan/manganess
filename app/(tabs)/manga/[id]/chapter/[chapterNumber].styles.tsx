@@ -14,6 +14,34 @@ export default function getStyles(colorScheme: ColorScheme) {
       : 'rgba(255, 255, 255, 0.85)';
 
   return StyleSheet.create({
+    modalOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    fallbackSheetContainer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: bottomSheetBg,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: 24,
+      paddingBottom: 32,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -3 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    fallbackSheetHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.text + '40',
+      alignSelf: 'center',
+      marginBottom: 12,
+    },
     container: {
       flex: 1,
       backgroundColor: colors.background,

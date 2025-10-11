@@ -357,20 +357,23 @@ class NavigationHistoryService {
         // Don't add if it's the same as the last entry in global stack
         const lastEntry = history.globalStack[history.globalStack.length - 1];
         if (lastEntry && lastEntry.path === path) {
-          console.log('🔍 Navigation Debug - Skipping duplicate path:', path);
+          if ((require('../constants/env') as any).isDebugEnabled?.())
+            console.log('🔍 Navigation Debug - Skipping duplicate path:', path);
           return;
         }
 
         // NEVER store chapter routes in history - they should only be accessible via SwipeChapterItem
         if (path.includes('/manga/') && path.includes('/chapter/')) {
-          console.log(
-            '🚫 Navigation Debug - Skipping chapter route from history:',
-            path
-          );
+          if ((require('../constants/env') as any).isDebugEnabled?.())
+            console.log(
+              '🚫 Navigation Debug - Skipping chapter route from history:',
+              path
+            );
           return;
         }
 
-        console.log('🔍 Navigation Debug - Adding to history:', path);
+        if ((require('../constants/env') as any).isDebugEnabled?.())
+          console.log('🔍 Navigation Debug - Adding to history:', path);
 
         // Create navigation entry
         const entry: NavigationEntry = {
@@ -423,11 +426,13 @@ class NavigationHistoryService {
       try {
         const history = await this.getHistory();
 
-        console.log('🔍 Navigation Debug - Current Path:', currentPath);
-        console.log(
-          '🔍 Navigation Debug - Global Stack:',
-          history.globalStack.map((entry) => entry.path)
-        );
+        if ((require('../constants/env') as any).isDebugEnabled?.())
+          console.log('🔍 Navigation Debug - Current Path:', currentPath);
+        if ((require('../constants/env') as any).isDebugEnabled?.())
+          console.log(
+            '🔍 Navigation Debug - Global Stack:',
+            history.globalStack.map((entry) => entry.path)
+          );
 
         // Special handling for chapter pages - go back to manga detail
         if (
@@ -437,10 +442,11 @@ class NavigationHistoryService {
           const mangaMatch = currentPath.match(/\/manga\/([^\/]+)/);
           if (mangaMatch) {
             const previousRoute = `/manga/${mangaMatch[1]}`;
-            console.log(
-              '🔍 Navigation Debug - Chapter -> Manga:',
-              previousRoute
-            );
+            if ((require('../constants/env') as any).isDebugEnabled?.())
+              console.log(
+                '🔍 Navigation Debug - Chapter -> Manga:',
+                previousRoute
+              );
             return previousRoute;
           }
           return DEFAULT_ROUTE;
@@ -448,9 +454,10 @@ class NavigationHistoryService {
 
         // Use global stack for simple, accurate navigation
         if (history.globalStack.length < 2) {
-          console.log(
-            '🔍 Navigation Debug - Insufficient history, using default'
-          );
+          if ((require('../constants/env') as any).isDebugEnabled?.())
+            console.log(
+              '🔍 Navigation Debug - Insufficient history, using default'
+            );
           return DEFAULT_ROUTE;
         }
 
@@ -463,12 +470,14 @@ class NavigationHistoryService {
           }
         }
 
-        console.log('🔍 Navigation Debug - Current Index:', currentIndex);
+        if ((require('../constants/env') as any).isDebugEnabled?.())
+          console.log('🔍 Navigation Debug - Current Index:', currentIndex);
 
         // If current path found and there's a previous entry
         if (currentIndex > 0) {
           const previousRoute = history.globalStack[currentIndex - 1]?.path;
-          console.log('🔍 Navigation Debug - Found previous:', previousRoute);
+          if ((require('../constants/env') as any).isDebugEnabled?.())
+            console.log('🔍 Navigation Debug - Found previous:', previousRoute);
           return previousRoute || DEFAULT_ROUTE;
         }
 
@@ -476,15 +485,17 @@ class NavigationHistoryService {
         for (let i = history.globalStack.length - 1; i >= 0; i--) {
           if (history.globalStack[i]?.path !== currentPath) {
             const previousRoute = history.globalStack[i]?.path;
-            console.log(
-              '🔍 Navigation Debug - Using last different path:',
-              previousRoute
-            );
+            if ((require('../constants/env') as any).isDebugEnabled?.())
+              console.log(
+                '🔍 Navigation Debug - Using last different path:',
+                previousRoute
+              );
             return previousRoute || DEFAULT_ROUTE;
           }
         }
 
-        console.log('🔍 Navigation Debug - Fallback to default');
+        if ((require('../constants/env') as any).isDebugEnabled?.())
+          console.log('🔍 Navigation Debug - Fallback to default');
         return DEFAULT_ROUTE;
       } catch (error) {
         console.error('Error getting previous route:', error);
@@ -492,7 +503,6 @@ class NavigationHistoryService {
       }
     }, 'getPreviousRouteTime');
   }
-
 
   private findPreviousContext(
     history: NavigationHistory,

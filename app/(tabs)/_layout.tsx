@@ -9,6 +9,7 @@ import {
   AppState,
 } from 'react-native';
 import { Tabs, usePathname, useNavigation } from 'expo-router';
+import { isDebugEnabled } from '@/constants/env';
 import { Ionicons } from '@expo/vector-icons';
 import {
   getDebugTabEnabled,
@@ -19,7 +20,7 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { imageCache } from '@/services/CacheImages';
-import { getLastReadManga, LastReadManga } from '@/services/readChapterService';
+import { getLastReadManga } from '@/services/readChapterService';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
 import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { SwipeGestureOverlay } from '@/components/SwipeBackIndicator';
@@ -37,7 +38,7 @@ export default function TabLayout() {
   const { width } = Dimensions.get('window');
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const TAB_BAR_WIDTH = width * 0.9;
-  const visibleTabCount = enableDebugTab ? 6 : 5;
+  const visibleTabCount = enableDebugTab ? 5 : 4;
   const TAB_WIDTH = TAB_BAR_WIDTH / visibleTabCount;
 
   const appState = useRef(AppState.currentState);
@@ -45,9 +46,6 @@ export default function TabLayout() {
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<
     boolean | null
   >(null);
-  const [_lastReadManga, setLastReadManga] = useState<LastReadManga | null>(
-    null
-  );
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   // Get update status from the hook
@@ -79,6 +77,57 @@ export default function TabLayout() {
   const shouldShowUpdateIndicator =
     isUpdateInProgress && (updateStatus.isDownloading || updateStatus.isReady);
 
+  const loadEnableDebugTabSetting = useCallback(async () => {
+    try {
+      const enabled = await getDebugTabEnabled();
+      setEnableDebugTab(enabled);
+    } catch (error) {
+      console.error('Error loading enable debug tab setting:', error);
+    }
+  }, []);
+
+  const refreshLastReadManga = useCallback(async () => {
+    try {
+      await getLastReadManga();
+    } catch (error) {
+      console.error('Error refreshing last read manga:', error);
+    }
+  }, []);
+
+  const checkOnboardingStatus = useCallback(async () => {
+    try {
+      const completed = await checkOnboarding();
+      setIsOnboardingCompleted(completed);
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      setIsOnboardingCompleted(false);
+    }
+  }, []);
+
+  const performUpdateCheck = useCallback(async () => {
+    if (isDebugEnabled()) console.log('Performing update check...');
+    try {
+      // First check if update is available
+      const checkResult = await checkForUpdate();
+      if (isDebugEnabled()) console.log('Update check result:', checkResult);
+
+      if (checkResult.success) {
+        if (isDebugEnabled())
+          console.log('Update available, downloading and applying...');
+        // If an update is available, download and apply it
+        await updateAndReload();
+      } else {
+        if (isDebugEnabled())
+          console.log(
+            'No update available or unable to check:',
+            checkResult.message
+          );
+      }
+    } catch (error) {
+      console.error('Error in update process:', error);
+    }
+  }, [checkForUpdate, updateAndReload]);
+
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkOnboardingStatus();
@@ -92,7 +141,10 @@ export default function TabLayout() {
         appState.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
-        console.log('App has come to the foreground, checking for updates...');
+        if (isDebugEnabled())
+          console.log(
+            'App has come to the foreground, checking for updates...'
+          );
         performUpdateCheck();
       }
 
@@ -113,7 +165,13 @@ export default function TabLayout() {
         progressAnimationRef.current.stop();
       }
     };
-  }, [navigation]);
+  }, [
+    navigation,
+    loadEnableDebugTabSetting,
+    checkOnboardingStatus,
+    performUpdateCheck,
+    refreshLastReadManga,
+  ]);
 
   useEffect(() => {
     if (
@@ -124,7 +182,7 @@ export default function TabLayout() {
     ) {
       refreshLastReadManga();
     }
-  }, [pathname]);
+  }, [pathname, refreshLastReadManga]);
 
   // Update animation based on whether we should show the indicator
   useEffect(() => {
@@ -217,7 +275,13 @@ export default function TabLayout() {
         updateIndicatorRotation.setValue(0);
       }
     }
-  }, [shouldShowUpdateIndicator, progressStarted]);
+  }, [
+    shouldShowUpdateIndicator,
+    progressStarted,
+    updateIndicatorOpacity,
+    updateIndicatorRotation,
+    updateProgressWidth,
+  ]);
 
   useEffect(() => {
     // Special case for when update is ready - fill the progress bar
@@ -229,57 +293,7 @@ export default function TabLayout() {
         useNativeDriver: false,
       }).start();
     }
-  }, [updateStatus.isReady]);
-
-  const loadEnableDebugTabSetting = async () => {
-    try {
-      const enabled = await getDebugTabEnabled();
-      setEnableDebugTab(enabled);
-    } catch (error) {
-      console.error('Error loading enable debug tab setting:', error);
-    }
-  };
-
-  const refreshLastReadManga = async () => {
-    try {
-      const lastRead = await getLastReadManga();
-      setLastReadManga(lastRead);
-    } catch (error) {
-      console.error('Error refreshing last read manga:', error);
-    }
-  };
-
-  const checkOnboardingStatus = async () => {
-    try {
-      const completed = await checkOnboarding();
-      setIsOnboardingCompleted(completed);
-    } catch (error) {
-      console.error('Error checking onboarding status:', error);
-      setIsOnboardingCompleted(false);
-    }
-  };
-
-  const performUpdateCheck = useCallback(async () => {
-    console.log('Performing update check...');
-    try {
-      // First check if update is available
-      const checkResult = await checkForUpdate();
-      console.log('Update check result:', checkResult);
-
-      if (checkResult.success) {
-        console.log('Update available, downloading and applying...');
-        // If an update is available, download and apply it
-        await updateAndReload();
-      } else {
-        console.log(
-          'No update available or unable to check:',
-          checkResult.message
-        );
-      }
-    } catch (error) {
-      console.error('Error in update process:', error);
-    }
-  }, [checkForUpdate, updateAndReload]);
+  }, [updateStatus.isReady, updateProgressWidth]);
 
   // const handleLastButtonPress = () => {
   //   Animated.sequence([
@@ -424,9 +438,6 @@ export default function TabLayout() {
                 case 'mangasearch':
                   iconName = focused ? 'search' : 'search-outline';
                   break;
-                case 'genres':
-                  iconName = focused ? 'albums' : 'albums-outline';
-                  break;
                 case 'bookmarks':
                   iconName = focused ? 'bookmark' : 'bookmark-outline';
                   break;
@@ -488,16 +499,18 @@ export default function TabLayout() {
         >
           <Tabs.Screen name="index" options={{ title: 'Home' }} />
           <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
-          <Tabs.Screen name="genres" options={{ title: 'Genres' }} />
           <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
           <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
           <Tabs.Screen
             name="Debug"
-            options={{
-              title: 'Debug',
-              href: enableDebugTab ? undefined : null,
-            } as any}
+            options={
+              {
+                title: 'Debug',
+                href: enableDebugTab ? undefined : null,
+              } as any
+            }
           />
+          <Tabs.Screen name="genres" options={{ href: null }} />
           <Tabs.Screen name="manga/[id]" options={{ href: null }} />
           <Tabs.Screen
             name="manga/[id]/chapter/[chapterNumber]"

@@ -55,8 +55,6 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
         stiffness: 200,
         mass: 0.5,
         overshootClamping: false,
-        restDisplacementThreshold: 0.1,
-        restSpeedThreshold: 0.1,
       });
       overlayOpacity.value = withTiming(1, {
         duration: 100,
@@ -77,7 +75,7 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
         easing: Easing.in(Easing.ease),
       });
     }
-  }, [visible]);
+  }, [visible, translateY, screenHeight, overlayOpacity]);
 
   const containerAnimatedStyle = useAnimatedStyle(() => {
     return {

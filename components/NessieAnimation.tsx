@@ -82,7 +82,7 @@ export const NessieAnimation: React.FC<NessieAnimationProps> = ({
       progress.stopAnimation();
       backflipRotation.stopAnimation();
     };
-  }, [generateNewWalkCycle, animateWithDelay]);
+  }, [generateNewWalkCycle, animateWithDelay, progress, backflipRotation]);
 
   const translateX = progress.interpolate({
     inputRange: [0, 5 / 12, 1 / 2, 11 / 12, 1],

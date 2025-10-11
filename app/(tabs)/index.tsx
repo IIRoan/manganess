@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -49,7 +49,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const { actualTheme, accentColor } = useTheme();
   const colors = Colors[actualTheme];
-  const themeColors = { ...colors, primary: accentColor || colors.primary };
+  const themeColors = useMemo(
+    () => ({ ...colors, primary: accentColor || colors.primary }),
+    [colors, accentColor]
+  );
   const { checkForCloudflare, resetCloudflareDetection } =
     useCloudflareDetection();
   const insets = useSafeAreaInsets();
@@ -78,13 +81,17 @@ export default function HomeScreen() {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          Referer: MANGA_API_URL,
         },
-        timeout: 10000,
+        timeout: 20000,
       });
 
       const html = response.data as string;
 
-      if (checkForCloudflare(html)) {
+      if (checkForCloudflare(html, '/(tabs)')) {
         return;
       }
 
@@ -132,7 +139,7 @@ export default function HomeScreen() {
     return () => {
       resetCloudflareDetection();
     };
-  }, []);
+  }, [fetchMangaData, fetchRecentlyReadManga, resetCloudflareDetection]);
 
   useFocusEffect(
     useCallback(() => {
@@ -500,6 +507,58 @@ export default function HomeScreen() {
               </View>
             </PageTransition>
 
+            <PageTransition transitionType="slide" duration={400} delay={250}>
+              <View style={styles.section}>
+                {renderSectionTitle('Browse Genres', 'albums')}
+                <TouchableOpacity
+                  style={[
+                    styles.genresCard,
+                    {
+                      backgroundColor: themeColors.card,
+                      borderColor: themeColors.border,
+                    },
+                  ]}
+                  onPress={() => router.navigate('/genres')}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.genresCardContent}>
+                    <View
+                      style={[
+                        styles.genresIconContainer,
+                        { backgroundColor: themeColors.primary + '20' },
+                      ]}
+                    >
+                      <Ionicons
+                        name="albums"
+                        size={32}
+                        color={themeColors.primary}
+                      />
+                    </View>
+                    <View style={styles.genresTextContainer}>
+                      <Text
+                        style={[styles.genresTitle, { color: themeColors.text }]}
+                      >
+                        Explore by Genre
+                      </Text>
+                      <Text
+                        style={[
+                          styles.genresSubtitle,
+                          { color: themeColors.text + '80' },
+                        ]}
+                      >
+                        Discover manga by your favorite categories
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={24}
+                      color={themeColors.text + '60'}
+                    />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </PageTransition>
+
             <PageTransition transitionType="slide" duration={400} delay={300}>
               <View style={styles.section}>
                 {renderSectionTitle('New Releases', 'sparkles')}
@@ -768,5 +827,40 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 6,
     textAlign: 'center',
+  },
+  genresCard: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  genresCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+  },
+  genresIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  genresTextContainer: {
+    flex: 1,
+  },
+  genresTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  genresSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
