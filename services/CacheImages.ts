@@ -104,11 +104,11 @@ class ImageCache {
   private async ensureDirectoryExists(dir: FSDirectory) {
     try {
       if (!dir.exists) {
-        dir.create();
+        await dir.create();
       }
     } catch (e) {
       // If create failed due to hierarchy, try creating parents explicitly
-      dir.create();
+      await dir.create();
     }
   }
 
