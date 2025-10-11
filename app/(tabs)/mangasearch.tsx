@@ -19,6 +19,7 @@ import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { MANGA_API_URL } from '@/constants/Config';
 import CustomWebView from '@/components/CustomWebView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   type MangaItem,
   CloudflareDetectedError,
@@ -41,11 +42,13 @@ export default function MangaSearchScreen() {
   const colors = Colors[actualTheme];
   const { width, height } = useWindowDimensions();
   const styles = getStyles(colors, width, height);
+  const insets = useSafeAreaInsets();
 
   // Router and Input Ref
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
+  const [isFocused, setIsFocused] = useState(false);
 
   // State variables
   const [searchQuery, setSearchQuery] = useState('');
@@ -374,10 +377,19 @@ export default function MangaSearchScreen() {
           headerShown: false,
         }}
       />
-      <View style={styles.headerWrapper}>
-        <View style={{ height: 32, backgroundColor: colors.card }} />
+      <View style={[styles.headerWrapper, { paddingTop: insets.top }]}>
         <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
+          <View
+            style={[
+              styles.searchInputContainer,
+              isFocused && {
+                borderColor: colors.primary + '60',
+                borderWidth: 1.25,
+                shadowOpacity: 0.15,
+                elevation: 3,
+              },
+            ]}
+          >
             <Ionicons
               name="search"
               size={20}
@@ -392,6 +404,8 @@ export default function MangaSearchScreen() {
               value={searchQuery}
               onChangeText={(query) => setSearchQuery(query)}
               returnKeyType="search"
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
               onSubmitEditing={() => {
                 const q = searchQuery.trim();
                 if (q.length > 2) {
@@ -403,6 +417,7 @@ export default function MangaSearchScreen() {
               <TouchableOpacity
                 onPress={clearSearch}
                 style={styles.clearButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons
                   name="close-circle-outline"
@@ -415,7 +430,7 @@ export default function MangaSearchScreen() {
         </View>
       </View>
 
-      <View style={styles.contentContainer}>
+      <View style={[styles.contentContainer, { marginTop: insets.top }]}>
         <Animated.FlatList
           data={searchResults}
           renderItem={renderMangaCard}
@@ -485,38 +500,45 @@ const getStyles = (
       right: 0,
       zIndex: 10,
       backgroundColor: colors.card,
+      borderBottomColor: colors.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
     },
     contentContainer: {
       flex: 1,
       marginTop: 46,
     },
     searchContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 16,
-      gap: 12,
-      backgroundColor: colors.card,
+      paddingHorizontal: 20,
+      paddingTop: 6,
+      paddingBottom: 6,
     },
     searchInputContainer: {
-      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.card,
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      height: 44,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      height: 36,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 1.5,
+      elevation: 2,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     searchIcon: {
-      marginRight: 8,
+      marginRight: 5,
     },
     searchInput: {
       flex: 1,
-      fontSize: 16,
+      fontSize: 15,
       color: colors.text,
-      paddingVertical: 8,
+      paddingVertical: Platform.OS === 'ios' ? 5 : 3,
     },
     clearButton: {
-      padding: 8,
+      padding: 3,
+      marginLeft: 3,
     },
     loadingContainer: {
       flex: 1,
@@ -585,6 +607,13 @@ const getStyles = (
       color: '#ffffff',
       fontSize: 16,
       fontWeight: '600',
+    },
+    resultCount: {
+      paddingHorizontal: 4,
+      paddingTop: 8,
+      fontSize: 13,
+      color: colors.tabIconDefault,
+      alignSelf: 'flex-start',
     },
   });
 };
