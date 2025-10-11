@@ -17,7 +17,6 @@ import { MANGA_API_URL } from '@/constants/Config';
 import axios from 'axios';
 import { router } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
-import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
 
 interface Genre {
   name: string;
@@ -190,14 +189,6 @@ export default function GenresScreen() {
           numColumns={2}
           columnWrapperStyle={styles.mangaRow}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <SmoothRefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={[themeColors.primary]}
-              tintColor={themeColors.primary}
-            />
-          }
           ListHeaderComponent={
             <View style={styles.selectedGenreHeader}>
               <TouchableOpacity
