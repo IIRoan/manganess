@@ -38,7 +38,7 @@ export default function TabLayout() {
   const { width } = Dimensions.get('window');
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const TAB_BAR_WIDTH = width * 0.9;
-  const visibleTabCount = enableDebugTab ? 6 : 5;
+  const visibleTabCount = enableDebugTab ? 5 : 4;
   const TAB_WIDTH = TAB_BAR_WIDTH / visibleTabCount;
 
   const appState = useRef(AppState.currentState);
@@ -438,9 +438,6 @@ export default function TabLayout() {
                 case 'mangasearch':
                   iconName = focused ? 'search' : 'search-outline';
                   break;
-                case 'genres':
-                  iconName = focused ? 'albums' : 'albums-outline';
-                  break;
                 case 'bookmarks':
                   iconName = focused ? 'bookmark' : 'bookmark-outline';
                   break;
@@ -502,7 +499,6 @@ export default function TabLayout() {
         >
           <Tabs.Screen name="index" options={{ title: 'Home' }} />
           <Tabs.Screen name="mangasearch" options={{ title: 'Search' }} />
-          <Tabs.Screen name="genres" options={{ title: 'Genres' }} />
           <Tabs.Screen name="bookmarks" options={{ title: 'Saved' }} />
           <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
           <Tabs.Screen
@@ -514,6 +510,7 @@ export default function TabLayout() {
               } as any
             }
           />
+          <Tabs.Screen name="genres" options={{ href: null }} />
           <Tabs.Screen name="manga/[id]" options={{ href: null }} />
           <Tabs.Screen
             name="manga/[id]/chapter/[chapterNumber]"
