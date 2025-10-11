@@ -48,7 +48,7 @@ jobs:
           echo "$BUILD_OUTPUT"
 
           # Extract the APK URL from the JSON output
-          APK_URL=$(echo "$BUILD_OUTPUT" | jq -r '.artifacts.buildUrl // empty')
+          APK_URL=$(echo "$BUILD_OUTPUT" | jq -r '.[0].artifacts.buildUrl // empty')
 
           # Fallback: try to extract URL from text output if JSON parsing fails
           if [ -z "$APK_URL" ] || [ "$APK_URL" = "null" ]; then
