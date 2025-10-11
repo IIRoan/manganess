@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getMangaData, setMangaData } from './bookmarkService';
 import { MangaData } from '@/types';
+import { isDebugEnabled } from '@/constants/env';
 
 const LAST_READ_MANGA_KEY = 'last_read_manga';
 
@@ -150,7 +151,8 @@ export const setLastReadManga = async (
       timestamp: Date.now(),
     };
 
-    console.log('Setting last read manga:', lastReadManga);
+    if (isDebugEnabled())
+      console.log('Setting last read manga:', lastReadManga);
     await AsyncStorage.setItem(
       LAST_READ_MANGA_KEY,
       JSON.stringify(lastReadManga)

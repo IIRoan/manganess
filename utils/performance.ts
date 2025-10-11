@@ -10,7 +10,18 @@ interface PerformanceMetric {
 class PerformanceMonitor {
   private static instance: PerformanceMonitor;
   private metrics: Map<string, PerformanceMetric> = new Map();
-  private isEnabled: boolean = __DEV__; // Only enable in development
+  private isEnabled: boolean = ((): boolean => {
+    try {
+      // Lazy import to avoid cycles
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const env = require('../constants/env');
+      return typeof env.isDebugEnabled === 'function'
+        ? env.isDebugEnabled()
+        : __DEV__;
+    } catch {
+      return __DEV__;
+    }
+  })();
 
   private constructor() {}
 

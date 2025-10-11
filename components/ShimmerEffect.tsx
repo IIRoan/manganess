@@ -1,10 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, View, ViewStyle } from 'react-native';
+import { Animated, View, ViewStyle, DimensionValue } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/constants/ThemeContext';
 // import { Colors } from '@/constants/Colors';
-
-import { DimensionValue } from 'react-native';
 
 interface ShimmerEffectProps {
   width?: DimensionValue;

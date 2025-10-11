@@ -9,7 +9,10 @@ import {
   useColorScheme,
   Animated,
   StatusBar,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import * as Reanimated from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 import { WebViewNavigation } from 'react-native-webview';
@@ -33,6 +36,8 @@ import {
   hasSeenChapterGuide,
 } from '@/components/ChapterGuideOverlay';
 import getStyles from './[chapterNumber].styles';
+import { logger } from '@/utils/logger';
+import { isDebugEnabled } from '@/constants/env';
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
@@ -71,6 +76,12 @@ export default function ReadChapterScreen() {
   const insets = useSafeAreaInsets();
 
   const chapterUrl = getChapterUrl(id, chapterNumber);
+  const webLoadStartRef = useRef<number>(
+    (globalThis as any).performance?.now?.() ?? Date.now()
+  );
+  const log = logger();
+  const supportsWorklets =
+    typeof (Reanimated as any).useWorkletCallback === 'function';
   const currentChapterIndex = mangaDetails?.chapters?.findIndex(
     (chapter) => chapter.number === chapterNumber
   );
@@ -207,16 +218,44 @@ export default function ReadChapterScreen() {
   const handleBottomSheetChange = useCallback(
     (index: number) => {
       setIsBottomSheetOpen(index >= 0);
-      index >= 0 ? hideControls() : showControls();
+      if (index >= 0) {
+        hideControls();
+      } else {
+        showControls();
+      }
     },
     [hideControls, showControls]
   );
+
+  const openChapterList = useCallback(() => {
+    if (supportsWorklets) {
+      bottomSheetRef.current?.expand();
+      handleBottomSheetChange(1);
+    } else {
+      setIsBottomSheetOpen(true);
+      hideControls();
+    }
+  }, [supportsWorklets, hideControls, handleBottomSheetChange]);
+
+  const closeChapterList = useCallback(() => {
+    if (supportsWorklets) {
+      bottomSheetRef.current?.close();
+      handleBottomSheetChange(-1);
+    } else {
+      setIsBottomSheetOpen(false);
+      showControls();
+    }
+  }, [supportsWorklets, showControls, handleBottomSheetChange]);
 
   const toggleControls = useCallback(() => {
     // Don't toggle controls during the first step of the guide
     if (isBottomSheetOpen || (showGuide && guideStep === 1)) return;
 
-    isControlsVisible ? hideControls() : showControls();
+    if (isControlsVisible) {
+      hideControls();
+    } else {
+      showControls();
+    }
   }, [
     isControlsVisible,
     hideControls,
@@ -274,7 +313,21 @@ export default function ReadChapterScreen() {
     }, [navigateBack])
   );
 
-  const handleLoadEnd = () => setIsLoading(false);
+  const handleLoadEnd = () => {
+    setIsLoading(false);
+    if (isDebugEnabled()) {
+      const dur =
+        ((globalThis as any).performance?.now?.() ?? Date.now()) -
+        (webLoadStartRef.current ??
+          (globalThis as any).performance?.now?.() ??
+          Date.now());
+      log.info('UI', 'ChapterWebView load complete', {
+        id,
+        chapterNumber,
+        durationMs: Math.round(dur),
+      });
+    }
+  };
   const handleBackPress = () => navigateBack();
   const handleError = () => {
     setError('Failed to load chapter. Please try again.');
@@ -298,7 +351,7 @@ export default function ReadChapterScreen() {
   );
 
   const handleChapterPress = (chapterNum: string) => {
-    bottomSheetRef.current?.close();
+    closeChapterList();
     router.navigate(`/manga/${id}/chapter/${chapterNum}`);
   };
 
@@ -378,10 +431,6 @@ export default function ReadChapterScreen() {
     });
   })();
 `;
-
-  const closeBottomSheet = () => {
-    bottomSheetRef.current?.close();
-  };
 
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
@@ -473,8 +522,7 @@ export default function ReadChapterScreen() {
                     onPress={() => {
                       // Don't open chapter list during first step of the guide
                       if (!showGuide || guideStep > 1) {
-                        bottomSheetRef.current?.expand();
-                        handleBottomSheetChange(1);
+                        openChapterList();
                       }
                     }}
                     style={styles.titleContainer}
@@ -571,33 +619,52 @@ export default function ReadChapterScreen() {
             showControls={showNavControls}
           />
 
-          <BottomSheet
-            ref={bottomSheetRef}
-            snapPoints={['60%', '80%']}
-            index={-1}
-            enablePanDownToClose
-            onChange={handleBottomSheetChange}
-            backgroundStyle={styles.bottomSheetBackground}
-            handleIndicatorStyle={styles.bottomSheetIndicator}
-          >
-            <View style={styles.bottomSheetContainer}>
-              <BottomSheetScrollView
-                contentContainerStyle={styles.bottomSheetContent}
-              >
+          {supportsWorklets ? (
+            <BottomSheet
+              ref={bottomSheetRef}
+              snapPoints={['60%', '80%']}
+              index={-1}
+              enablePanDownToClose
+              onChange={handleBottomSheetChange}
+              backgroundStyle={styles.bottomSheetBackground}
+              handleIndicatorStyle={styles.bottomSheetIndicator}
+            >
+              <View style={styles.bottomSheetContainer}>
+                <BottomSheetScrollView
+                  contentContainerStyle={styles.bottomSheetContent}
+                >
+                  <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
+                  <Text style={styles.currentChapterTitle}>
+                    Current: Chapter {chapterNumber}
+                  </Text>
+                  {renderChapterList()}
+                </BottomSheetScrollView>
+              </View>
+            </BottomSheet>
+          ) : (
+            <Modal
+              visible={isBottomSheetOpen}
+              transparent
+              animationType="slide"
+              onRequestClose={closeChapterList}
+            >
+              <TouchableWithoutFeedback onPress={closeChapterList}>
+                <View style={styles.modalOverlay} />
+              </TouchableWithoutFeedback>
+              <View style={styles.fallbackSheetContainer}>
+                <View style={styles.fallbackSheetHandle} />
                 <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
                 <Text style={styles.currentChapterTitle}>
                   Current: Chapter {chapterNumber}
                 </Text>
-                {renderChapterList()}
-              </BottomSheetScrollView>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={closeBottomSheet}
-              >
-                <Text style={styles.closeButtonText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </BottomSheet>
+                <View
+                  style={[styles.bottomSheetContent, { paddingBottom: 24 }]}
+                >
+                  {renderChapterList()}
+                </View>
+              </View>
+            </Modal>
+          )}
         </>
       )}
     </View>
