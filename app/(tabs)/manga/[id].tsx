@@ -28,7 +28,7 @@ import {
   getBookmarkPopupConfig,
   getChapterLongPressAlertConfig,
 } from '@/services/bookmarkService';
-import EnhancedBackButton from '@/components/EnhancedBackButton';
+import BackButton from '@/components/BackButton';
 import { GenreTag } from '@/components/GanreTag';
 import {
   getLastReadChapter,
@@ -498,10 +498,12 @@ export default function MangaDetailScreen() {
                 <View style={styles.overlay} />
                 <View style={styles.headerContent}>
                   <View style={styles.headerButtons}>
-                    <EnhancedBackButton
+                    <BackButton
+                      variant="enhanced"
                       size={30}
                       color="#FFFFFF"
                       style={styles.headerButton}
+                      showHistoryOnLongPress={true}
                     />
                     <TouchableOpacity
                       testID="bookmark-button"
