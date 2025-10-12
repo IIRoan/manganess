@@ -1,7 +1,16 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useRef } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Dimensions,
+  Animated,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SWIPE_ACTION_WIDTH = SCREEN_WIDTH * 0.3; // 30% of screen width
 
 interface Chapter {
   number: string;
@@ -37,17 +46,44 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   currentlyOpenSwipeable,
   setCurrentlyOpenSwipeable,
 }) => {
-  const renderRightActions = () => {
+  const swipeableRef = useRef<Swipeable>(null);
+
+  const renderRightActions = (
+    _progress: Animated.AnimatedAddition<number>,
+    dragX: Animated.AnimatedAddition<number>
+  ) => {
     if (!isRead) return null;
 
+    const trans = dragX.interpolate({
+      inputRange: [-SWIPE_ACTION_WIDTH, 0],
+      outputRange: [0, SWIPE_ACTION_WIDTH],
+      extrapolate: 'clamp',
+    });
+
     return (
-      <View
-        style={[styles.rightAction, { backgroundColor: colors.notification }]}
-      >
-        <TouchableOpacity style={styles.actionButton} onPress={onUnread}>
-          <Ionicons name="refresh" size={20} color="white" />
-          <Text style={styles.actionText}>Mark Unread</Text>
-        </TouchableOpacity>
+      <View style={[styles.rightAction, { width: SWIPE_ACTION_WIDTH }]}>
+        <Animated.View
+          style={[
+            styles.actionContainer,
+            {
+              backgroundColor: colors.notification,
+              transform: [{ translateX: trans }],
+              width: SWIPE_ACTION_WIDTH,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => {
+              onUnread();
+              swipeableRef.current?.close();
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={18} color="white" />
+            <Text style={styles.actionText}>Unread</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
     );
   };
@@ -55,6 +91,8 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   return (
     <Swipeable
       renderRightActions={renderRightActions}
+      rightThreshold={40}
+      friction={2}
       onSwipeableOpen={(direction) => {
         if (direction === 'right') {
           if (
@@ -64,6 +102,11 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             currentlyOpenSwipeable.close();
           }
           setCurrentlyOpenSwipeable(swipeableRef.current);
+        }
+      }}
+      onSwipeableClose={() => {
+        if (currentlyOpenSwipeable === swipeableRef.current) {
+          setCurrentlyOpenSwipeable(null);
         }
       }}
       ref={swipeableRef}
@@ -82,20 +125,12 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
         <View style={styles.chapterContent}>
           <View style={styles.chapterInfo}>
             <Text
-              style={[
-                styles.chapterTitle,
-                isRead && styles.readChapterTitle,
-                { color: colors.text },
-              ]}
+              style={[styles.chapterTitle, isRead && styles.readChapterTitle]}
               numberOfLines={1}
             >
               {chapter.title}
             </Text>
-            <Text
-              style={[styles.chapterDate, { color: colors.tabIconDefault }]}
-            >
-              {chapter.date}
-            </Text>
+            <Text style={styles.chapterDate}>{chapter.date}</Text>
           </View>
           <View style={styles.chapterActions}>
             {isRead && (
@@ -105,24 +140,11 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 color={colors.primary}
               />
             )}
-            {isCurrentlyLastRead && (
-              <View
-                style={[
-                  styles.lastReadBadge,
-                  { backgroundColor: colors.primary },
-                ]}
-              >
-                <Text style={styles.lastReadText}>Last Read</Text>
-              </View>
-            )}
           </View>
         </View>
       </TouchableOpacity>
     </Swipeable>
   );
 };
-
-// Create a ref for the swipeable
-const swipeableRef = React.createRef<Swipeable>();
 
 export default SwipeableChapterItem;
