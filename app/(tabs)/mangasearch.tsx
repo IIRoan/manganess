@@ -258,7 +258,7 @@ export default function MangaSearchScreen() {
         setTokenError(true);
         setIsLoading(false);
       }
-    } catch (e) {
+    } catch {
       // Ignore non-JSON messages
     }
   }, []);
