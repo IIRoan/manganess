@@ -1,24 +1,20 @@
-import React, { useRef, useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Animated,
-} from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import * as Reanimated from 'react-native-reanimated';
+
+interface Chapter {
+  number: string;
+  title: string;
+  date: string;
+  url: string;
+}
 
 interface SwipeableChapterItemProps {
-  chapter: {
-    number: string;
-    title: string;
-    date: string;
-  };
+  chapter: Chapter;
   isRead: boolean;
   isLastItem: boolean;
-  isCurrentlyLastRead?: boolean;
+  isCurrentlyLastRead: boolean;
   onPress: () => void;
   onLongPress: () => void;
   onUnread: () => void;
@@ -28,108 +24,39 @@ interface SwipeableChapterItemProps {
   setCurrentlyOpenSwipeable: (swipeable: Swipeable | null) => void;
 }
 
-const BUTTON_WIDTH = 75;
-
 const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   chapter,
   isRead,
   isLastItem,
-  isCurrentlyLastRead = false,
+  isCurrentlyLastRead,
   onPress,
   onLongPress,
   onUnread,
   colors,
-  styles: parentStyles,
+  styles,
   currentlyOpenSwipeable,
   setCurrentlyOpenSwipeable,
 }) => {
-  const swipeableRef = useRef<Swipeable>(null);
-  const supportsWorkletCallback =
-    typeof (Reanimated as any).useWorkletCallback === 'function';
+  const renderRightActions = () => {
+    if (!isRead) return null;
 
-  useEffect(() => {
-    if (
-      currentlyOpenSwipeable &&
-      currentlyOpenSwipeable !== swipeableRef.current
-    ) {
-      swipeableRef.current?.close();
-    }
-  }, [currentlyOpenSwipeable]);
-
-  const renderRightActions = (
-    _progress: Animated.AnimatedInterpolation<number>,
-    dragX: Animated.AnimatedInterpolation<number>
-  ) => {
-    const trans = dragX.interpolate({
-      inputRange: [-BUTTON_WIDTH, 0],
-      outputRange: [0, BUTTON_WIDTH],
-      extrapolate: 'clamp',
-    });
-
-    return (
-      <Animated.View
-        style={[
-          styles.rightActionContainer,
-          {
-            transform: [{ translateX: trans }],
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            onUnread();
-            swipeableRef.current?.close();
-          }}
-        >
-          <Ionicons name="close-circle-outline" size={24} color="white" />
-          <Text style={styles.buttonText}>Unread</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  };
-
-  // If Reanimated's useWorkletCallback is unavailable or chapter is unread, render a non-swipeable view
-  if (!isRead || !supportsWorkletCallback) {
     return (
       <View
-        style={[styles.container, isLastItem && parentStyles.lastChapterItem]}
+        style={[styles.rightAction, { backgroundColor: colors.notification }]}
       >
-        <TouchableOpacity
-          testID="chapter-item"
-          onPress={onPress}
-          onLongPress={onLongPress}
-          style={[parentStyles.chapterItem, styles.content]}
-        >
-          <View style={parentStyles.chapterInfo}>
-            <Text style={parentStyles.chapterTitle}>{chapter.title}</Text>
-            <Text style={parentStyles.chapterDate}>{chapter.date}</Text>
-          </View>
-          <View style={parentStyles.chapterStatus}>
-            <Ionicons
-              name={isRead ? 'checkmark-circle' : 'ellipse-outline'}
-              size={24}
-              color={isRead ? colors.primary : colors.tabIconDefault}
-            />
-          </View>
+        <TouchableOpacity style={styles.actionButton} onPress={onUnread}>
+          <Ionicons name="refresh" size={20} color="white" />
+          <Text style={styles.actionText}>Mark Unread</Text>
         </TouchableOpacity>
       </View>
     );
-  }
+  };
 
   return (
-    <View
-      style={[styles.container, isLastItem && parentStyles.lastChapterItem]}
-    >
-      <Swipeable
-        testID="chapter-item"
-        ref={swipeableRef}
-        renderRightActions={renderRightActions}
-        friction={2}
-        leftThreshold={30}
-        rightThreshold={40}
-        overshootRight={false}
-        onSwipeableOpen={() => {
+    <Swipeable
+      renderRightActions={renderRightActions}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'right') {
           if (
             currentlyOpenSwipeable &&
             currentlyOpenSwipeable !== swipeableRef.current
@@ -137,78 +64,65 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             currentlyOpenSwipeable.close();
           }
           setCurrentlyOpenSwipeable(swipeableRef.current);
-        }}
-        onSwipeableClose={() => {
-          if (currentlyOpenSwipeable === swipeableRef.current) {
-            setCurrentlyOpenSwipeable(null);
-          }
-        }}
+        }
+      }}
+      ref={swipeableRef}
+    >
+      <TouchableOpacity
+        style={[
+          styles.chapterItem,
+          isRead && styles.readChapterItem,
+          isCurrentlyLastRead && styles.currentlyLastReadItem,
+          isLastItem && styles.lastChapterItem,
+        ]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        activeOpacity={0.7}
       >
-        <TouchableOpacity
-          onPress={onPress}
-          onLongPress={onLongPress}
-          style={[
-            parentStyles.chapterItem,
-            styles.content,
-            isCurrentlyLastRead && styles.lastReadChapterItem,
-          ]}
-        >
-          <View style={parentStyles.chapterInfo}>
+        <View style={styles.chapterContent}>
+          <View style={styles.chapterInfo}>
             <Text
               style={[
-                parentStyles.chapterTitle,
-                isRead && parentStyles.readChapterTitle,
-                isCurrentlyLastRead && styles.lastReadChapterText,
+                styles.chapterTitle,
+                isRead && styles.readChapterTitle,
+                { color: colors.text },
               ]}
+              numberOfLines={1}
             >
               {chapter.title}
             </Text>
-            <Text style={parentStyles.chapterDate}>{chapter.date}</Text>
+            <Text
+              style={[styles.chapterDate, { color: colors.tabIconDefault }]}
+            >
+              {chapter.date}
+            </Text>
           </View>
-          <View style={parentStyles.chapterStatus}>
-            <Ionicons
-              name="checkmark-circle"
-              size={24}
-              color={
-                isCurrentlyLastRead ? colors.primary : colors.primary + '99'
-              }
-            />
+          <View style={styles.chapterActions}>
+            {isRead && (
+              <Ionicons
+                name="checkmark-circle"
+                size={20}
+                color={colors.primary}
+              />
+            )}
+            {isCurrentlyLastRead && (
+              <View
+                style={[
+                  styles.lastReadBadge,
+                  { backgroundColor: colors.primary },
+                ]}
+              >
+                <Text style={styles.lastReadText}>Last Read</Text>
+              </View>
+            )}
           </View>
-        </TouchableOpacity>
-      </Swipeable>
-    </View>
+        </View>
+      </TouchableOpacity>
+    </Swipeable>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-    backgroundColor: 'transparent',
-  },
-  content: {
-    backgroundColor: 'transparent',
-  },
-  rightActionContainer: {
-    width: BUTTON_WIDTH,
-    height: '100%',
-  },
-  button: {
-    width: BUTTON_WIDTH,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  lastReadChapterItem: {
-    backgroundColor: 'rgba(0, 128, 0, 0.05)',
-  },
-  lastReadChapterText: {
-    fontWeight: '700',
-  },
-});
+// Create a ref for the swipeable
+const swipeableRef = React.createRef<Swipeable>();
 
 export default SwipeableChapterItem;
