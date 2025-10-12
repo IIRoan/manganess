@@ -146,12 +146,6 @@ export default function HomeScreen() {
     }, [fetchRecentlyReadManga])
   );
 
-  const handleRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    fetchMangaData();
-    fetchRecentlyReadManga();
-  }, [fetchMangaData, fetchRecentlyReadManga]);
-
   const renderSectionTitle = useCallback(
     (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
       <View style={styles.sectionTitleContainer}>
