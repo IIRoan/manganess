@@ -23,7 +23,6 @@ import {
   NewReleasesSkeleton,
   FeaturedMangaSkeleton,
 } from '@/components/SkeletonLoading';
-import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
 import { PageTransition } from '@/components/PageTransition';
 import {
   parseMostViewedManga,
@@ -146,12 +145,6 @@ export default function HomeScreen() {
       fetchRecentlyReadManga();
     }, [fetchRecentlyReadManga])
   );
-
-  const handleRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    fetchMangaData();
-    fetchRecentlyReadManga();
-  }, [fetchMangaData, fetchRecentlyReadManga]);
 
   const renderSectionTitle = useCallback(
     (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
@@ -437,12 +430,6 @@ export default function HomeScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content]}
-        refreshControl={
-          <SmoothRefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-          />
-        }
       >
         {error ? (
           <View
@@ -536,7 +523,10 @@ export default function HomeScreen() {
                     </View>
                     <View style={styles.genresTextContainer}>
                       <Text
-                        style={[styles.genresTitle, { color: themeColors.text }]}
+                        style={[
+                          styles.genresTitle,
+                          { color: themeColors.text },
+                        ]}
                       >
                         Explore by Genre
                       </Text>
