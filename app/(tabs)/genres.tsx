@@ -17,7 +17,6 @@ import { MANGA_API_URL } from '@/constants/Config';
 import axios from 'axios';
 import { router } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
-import { SmoothRefreshControl } from '@/components/SmoothRefreshControl';
 
 interface Genre {
   name: string;
@@ -81,7 +80,6 @@ export default function GenresScreen() {
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
   const [mangaList, setMangaList] = useState<MangaItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
   const fetchGenreManga = async (genre: Genre, isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -102,9 +100,6 @@ export default function GenresScreen() {
     } catch (error) {
       console.error('Error fetching genre manga:', error);
       setMangaList([]);
-    } finally {
-      setLoading(false);
-      if (isRefresh) setRefreshing(false);
     }
   };
 
@@ -136,13 +131,6 @@ export default function GenresScreen() {
     setSelectedGenre(genre);
     setMangaList([]);
     fetchGenreManga(genre);
-  };
-
-  const handleRefresh = () => {
-    if (selectedGenre) {
-      setRefreshing(true);
-      fetchGenreManga(selectedGenre, true);
-    }
   };
 
   const handleMangaPress = (manga: MangaItem) => {
@@ -190,14 +178,6 @@ export default function GenresScreen() {
           numColumns={2}
           columnWrapperStyle={styles.mangaRow}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <SmoothRefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={[themeColors.primary]}
-              tintColor={themeColors.primary}
-            />
-          }
           ListHeaderComponent={
             <View style={styles.selectedGenreHeader}>
               <TouchableOpacity
