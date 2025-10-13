@@ -1,24 +1,29 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import {
-  StyleSheet,
-  Text,
   View,
+  Text,
   TouchableOpacity,
+  Dimensions,
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
-import * as Reanimated from 'react-native-reanimated';
+import { Swipeable } from 'react-native-gesture-handler';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SWIPE_ACTION_WIDTH = SCREEN_WIDTH * 0.3; // 30% of screen width
+
+interface Chapter {
+  number: string;
+  title: string;
+  date: string;
+  url: string;
+}
 
 interface SwipeableChapterItemProps {
-  chapter: {
-    number: string;
-    title: string;
-    date: string;
-  };
+  chapter: Chapter;
   isRead: boolean;
   isLastItem: boolean;
-  isCurrentlyLastRead?: boolean;
+  isCurrentlyLastRead: boolean;
   onPress: () => void;
   onLongPress: () => void;
   onUnread: () => void;
@@ -28,108 +33,72 @@ interface SwipeableChapterItemProps {
   setCurrentlyOpenSwipeable: (swipeable: Swipeable | null) => void;
 }
 
-const BUTTON_WIDTH = 75;
-
 const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   chapter,
   isRead,
   isLastItem,
-  isCurrentlyLastRead = false,
+  isCurrentlyLastRead,
   onPress,
   onLongPress,
   onUnread,
   colors,
-  styles: parentStyles,
+  styles,
   currentlyOpenSwipeable,
   setCurrentlyOpenSwipeable,
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
-  const supportsWorkletCallback =
-    typeof (Reanimated as any).useWorkletCallback === 'function';
-
-  useEffect(() => {
-    if (
-      currentlyOpenSwipeable &&
-      currentlyOpenSwipeable !== swipeableRef.current
-    ) {
-      swipeableRef.current?.close();
-    }
-  }, [currentlyOpenSwipeable]);
+  const isSwipingRef = useRef(false);
 
   const renderRightActions = (
-    _progress: Animated.AnimatedInterpolation<number>,
-    dragX: Animated.AnimatedInterpolation<number>
+    _progress: Animated.AnimatedAddition<number>,
+    dragX: Animated.AnimatedAddition<number>
   ) => {
+    if (!isRead) return null;
+
     const trans = dragX.interpolate({
-      inputRange: [-BUTTON_WIDTH, 0],
-      outputRange: [0, BUTTON_WIDTH],
+      inputRange: [-SWIPE_ACTION_WIDTH, 0],
+      outputRange: [0, SWIPE_ACTION_WIDTH],
       extrapolate: 'clamp',
     });
 
     return (
-      <Animated.View
-        style={[
-          styles.rightActionContainer,
-          {
-            transform: [{ translateX: trans }],
-          },
-        ]}
-      >
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            onUnread();
-            swipeableRef.current?.close();
-          }}
+      <View style={[styles.rightAction, { width: SWIPE_ACTION_WIDTH }]}>
+        <Animated.View
+          style={[
+            styles.actionContainer,
+            {
+              backgroundColor: colors.notification,
+              transform: [{ translateX: trans }],
+              width: SWIPE_ACTION_WIDTH,
+            },
+          ]}
         >
-          <Ionicons name="close-circle-outline" size={24} color="white" />
-          <Text style={styles.buttonText}>Unread</Text>
-        </TouchableOpacity>
-      </Animated.View>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => {
+              onUnread();
+              swipeableRef.current?.close();
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="refresh" size={18} color="white" />
+            <Text style={styles.actionText}>Unread</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
     );
   };
 
-  // If Reanimated's useWorkletCallback is unavailable or chapter is unread, render a non-swipeable view
-  if (!isRead || !supportsWorkletCallback) {
-    return (
-      <View
-        style={[styles.container, isLastItem && parentStyles.lastChapterItem]}
-      >
-        <TouchableOpacity
-          testID="chapter-item"
-          onPress={onPress}
-          onLongPress={onLongPress}
-          style={[parentStyles.chapterItem, styles.content]}
-        >
-          <View style={parentStyles.chapterInfo}>
-            <Text style={parentStyles.chapterTitle}>{chapter.title}</Text>
-            <Text style={parentStyles.chapterDate}>{chapter.date}</Text>
-          </View>
-          <View style={parentStyles.chapterStatus}>
-            <Ionicons
-              name={isRead ? 'checkmark-circle' : 'ellipse-outline'}
-              size={24}
-              color={isRead ? colors.primary : colors.tabIconDefault}
-            />
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
-    <View
-      style={[styles.container, isLastItem && parentStyles.lastChapterItem]}
-    >
-      <Swipeable
-        testID="chapter-item"
-        ref={swipeableRef}
-        renderRightActions={renderRightActions}
-        friction={2}
-        leftThreshold={30}
-        rightThreshold={40}
-        overshootRight={false}
-        onSwipeableOpen={() => {
+    <Swipeable
+      renderRightActions={renderRightActions}
+      rightThreshold={40}
+      friction={2}
+      onSwipeableWillOpen={() => {
+        isSwipingRef.current = true;
+      }}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'right') {
           if (
             currentlyOpenSwipeable &&
             currentlyOpenSwipeable !== swipeableRef.current
@@ -137,78 +106,68 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             currentlyOpenSwipeable.close();
           }
           setCurrentlyOpenSwipeable(swipeableRef.current);
-        }}
-        onSwipeableClose={() => {
-          if (currentlyOpenSwipeable === swipeableRef.current) {
-            setCurrentlyOpenSwipeable(null);
+        }
+      }}
+      onSwipeableClose={() => {
+        isSwipingRef.current = false;
+        if (currentlyOpenSwipeable === swipeableRef.current) {
+          setCurrentlyOpenSwipeable(null);
+        }
+      }}
+      ref={swipeableRef}
+    >
+      <TouchableOpacity
+        style={[
+          styles.chapterItem,
+          isRead && styles.readChapterItem,
+          isCurrentlyLastRead && styles.currentlyLastReadItem,
+          isLastItem && styles.lastChapterItem,
+        ]}
+        onPress={() => {
+          // Prevent navigation if currently swiping or if another swipeable is open
+          if (isSwipingRef.current || currentlyOpenSwipeable) {
+            if (currentlyOpenSwipeable) {
+              currentlyOpenSwipeable.close();
+            }
+            return;
           }
+          onPress();
         }}
+        onLongPress={() => {
+          // Prevent long press if currently swiping or if another swipeable is open
+          if (isSwipingRef.current || currentlyOpenSwipeable) {
+            if (currentlyOpenSwipeable) {
+              currentlyOpenSwipeable.close();
+            }
+            return;
+          }
+          onLongPress();
+        }}
+        activeOpacity={0.7}
       >
-        <TouchableOpacity
-          onPress={onPress}
-          onLongPress={onLongPress}
-          style={[
-            parentStyles.chapterItem,
-            styles.content,
-            isCurrentlyLastRead && styles.lastReadChapterItem,
-          ]}
-        >
-          <View style={parentStyles.chapterInfo}>
+        <View style={styles.chapterContent}>
+          <View style={styles.chapterInfo}>
             <Text
-              style={[
-                parentStyles.chapterTitle,
-                isRead && parentStyles.readChapterTitle,
-                isCurrentlyLastRead && styles.lastReadChapterText,
-              ]}
+              style={[styles.chapterTitle, isRead && styles.readChapterTitle]}
+              numberOfLines={1}
             >
               {chapter.title}
             </Text>
-            <Text style={parentStyles.chapterDate}>{chapter.date}</Text>
+            <Text style={styles.chapterDate}>{chapter.date}</Text>
           </View>
-          <View style={parentStyles.chapterStatus}>
-            <Ionicons
-              name="checkmark-circle"
-              size={24}
-              color={
-                isCurrentlyLastRead ? colors.primary : colors.primary + '99'
-              }
-            />
+          <View style={styles.chapterActions}>
+            {isRead && (
+              <Ionicons
+                name="checkmark-circle"
+                size={20}
+                color={colors.primary}
+              />
+            )}
           </View>
-        </TouchableOpacity>
-      </Swipeable>
-    </View>
+        </View>
+      </TouchableOpacity>
+    </Swipeable>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-    backgroundColor: 'transparent',
-  },
-  content: {
-    backgroundColor: 'transparent',
-  },
-  rightActionContainer: {
-    width: BUTTON_WIDTH,
-    height: '100%',
-  },
-  button: {
-    width: BUTTON_WIDTH,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  lastReadChapterItem: {
-    backgroundColor: 'rgba(0, 128, 0, 0.05)',
-  },
-  lastReadChapterText: {
-    fontWeight: '700',
-  },
-});
 
 export default SwipeableChapterItem;

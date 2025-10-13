@@ -1,94 +1,56 @@
-// Contains all navigation-related types
-
-export type NavigationContextType =
-  | 'browse'
-  | 'reading'
-  | 'settings'
-  | 'search';
-
 export interface NavigationEntry {
   path: string;
-  title: string;
   timestamp: number;
-  context: NavigationContextType;
-  metadata: {
-    mangaId?: string;
-    chapterNumber?: number;
-    searchQuery?: string;
-    scrollPosition?: number;
-    pageTitle?: string;
-    previousPath?: string;
-  };
+  title?: string;
 }
 
-export interface NavigationContext {
-  id: string;
-  type: NavigationContextType;
-  stack: NavigationEntry[];
-  metadata: {
-    lastAccessed: number;
-    sessionId: string;
-    totalVisits: number;
-    averageTimeSpent: number;
-  };
+export interface NavigationState {
+  contextHistory: NavigationEntry[];
+  currentDepth: number;
 }
 
 export interface NavigationHistory {
-  contexts: Record<string, NavigationContext>;
-  globalStack: NavigationEntry[];
-  currentContext: string;
-  settings: NavigationSettings;
-  lastUpdated: number;
-  version: number;
+  entries: NavigationEntry[];
+  currentIndex: number;
 }
+
+export interface NavigationContext {
+  type: 'manga' | 'chapter' | 'search' | 'home' | 'bookmarks' | 'settings';
+  id?: string;
+  title?: string;
+}
+
+export type NavigationContextType = NavigationContext['type'];
 
 export interface NavigationSettings {
   maxHistorySize: number;
-  enableGestures: boolean;
-  swipeSensitivity: number;
-  showBreadcrumbs: boolean;
-  enableSmartSuggestions: boolean;
-  contextSeparation: boolean;
+  enableBreadcrumbs: boolean;
+  showBackButton: boolean;
 }
 
-export interface NavigationGestureConfig {
-  enabled: boolean;
-  sensitivity: number;
-  edgeThreshold: number;
-  velocityThreshold: number;
-  distanceThreshold: number;
+export interface BreadcrumbItem {
+  label: string;
+  path: string;
+  icon?: string;
 }
 
 export interface NavigationAnalytics {
   totalNavigations: number;
   averageSessionLength: number;
   mostVisitedPaths: Record<string, number>;
-  navigationPatterns: string[];
-  gestureUsageStats: {
-    swipeBack: number;
-    tapBack: number;
-    breadcrumbUsage: number;
-  };
 }
 
-export interface BreadcrumbItem {
-  path: string;
-  title: string;
-  icon?: string;
-  isClickable: boolean;
-}
-
-export interface NavigationState {
-  canGoBack: boolean;
-  canGoForward: boolean;
-  currentDepth: number;
-  contextHistory: NavigationEntry[];
-  breadcrumbs: BreadcrumbItem[];
-  suggestions: string[];
-}
-
-// Legacy interface for backward compatibility
 export interface LegacyNavigationHistory {
-  paths: string[];
-  lastUpdated: number;
+  history: string[];
+  currentIndex: number;
+}
+
+export interface NavigationGestureConfig {
+  threshold: number;
+  velocity: number;
+  enabled: boolean;
+  sensitivity: number;
+  distanceThreshold: number;
+  edgeThreshold: number;
+  velocityThreshold: number;
 }

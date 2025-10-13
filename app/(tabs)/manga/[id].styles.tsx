@@ -173,14 +173,11 @@ const getStyles = (colors: typeof Colors.light) =>
     },
 
     chapterItem: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingVertical: 15,
+      paddingVertical: 16,
       paddingHorizontal: 20,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
       backgroundColor: colors.card,
+      borderBottomWidth: 0.5,
+      borderBottomColor: colors.border + '50',
     },
     lastChapterItem: {
       borderBottomWidth: 0,
@@ -192,18 +189,20 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 16,
       fontWeight: '500',
       color: colors.text,
+      lineHeight: 20,
     },
     chapterDate: {
-      fontSize: 14,
+      fontSize: 13,
       color: colors.tabIconDefault,
-      marginTop: 5,
+      marginTop: 4,
+      opacity: 0.8,
     },
     chapterStatus: {
       marginLeft: 10,
     },
     readChapterTitle: {
       color: colors.primary,
-      fontWeight: '600',
+      fontWeight: '500',
     },
     scrollToTopButton: {
       position: 'absolute',
@@ -289,6 +288,53 @@ const getStyles = (colors: typeof Colors.light) =>
     progressStat: {
       fontSize: 12,
       color: colors.tabIconDefault,
+    },
+
+    // Chapter item styles for SwipeableChapterItem
+    readChapterItem: {
+      opacity: 0.6,
+    },
+    currentlyLastReadItem: {
+      backgroundColor: colors.primary + '05',
+      borderLeftWidth: 3,
+      borderLeftColor: colors.primary,
+    },
+    chapterContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      flex: 1,
+    },
+    chapterActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: 12,
+    },
+
+    rightAction: {
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      paddingRight: 0,
+      height: '100%',
+    },
+    actionContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100%',
+    },
+    actionButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      minWidth: 80,
+    },
+    actionText: {
+      color: 'white',
+      fontSize: 11,
+      fontWeight: '600',
+      marginTop: 2,
     },
   });
 

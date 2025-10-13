@@ -15,6 +15,8 @@ const DEFAULT_CONFIG: NavigationGestureConfig = {
   edgeThreshold: 50,
   velocityThreshold: 100,
   distanceThreshold: 80,
+  threshold: 100,
+  velocity: 300,
 };
 
 export const useSwipeBack = ({
