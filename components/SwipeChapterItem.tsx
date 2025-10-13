@@ -7,7 +7,7 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { Swipeable } from 'react-native-gesture-handler';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_ACTION_WIDTH = SCREEN_WIDTH * 0.3; // 30% of screen width
@@ -47,6 +47,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   setCurrentlyOpenSwipeable,
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
+  const isSwipingRef = useRef(false);
 
   const renderRightActions = (
     _progress: Animated.AnimatedAddition<number>,
@@ -93,6 +94,9 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
       renderRightActions={renderRightActions}
       rightThreshold={40}
       friction={2}
+      onSwipeableWillOpen={() => {
+        isSwipingRef.current = true;
+      }}
       onSwipeableOpen={(direction) => {
         if (direction === 'right') {
           if (
@@ -105,6 +109,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
         }
       }}
       onSwipeableClose={() => {
+        isSwipingRef.current = false;
         if (currentlyOpenSwipeable === swipeableRef.current) {
           setCurrentlyOpenSwipeable(null);
         }
@@ -118,8 +123,26 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
           isCurrentlyLastRead && styles.currentlyLastReadItem,
           isLastItem && styles.lastChapterItem,
         ]}
-        onPress={onPress}
-        onLongPress={onLongPress}
+        onPress={() => {
+          // Prevent navigation if currently swiping or if another swipeable is open
+          if (isSwipingRef.current || currentlyOpenSwipeable) {
+            if (currentlyOpenSwipeable) {
+              currentlyOpenSwipeable.close();
+            }
+            return;
+          }
+          onPress();
+        }}
+        onLongPress={() => {
+          // Prevent long press if currently swiping or if another swipeable is open
+          if (isSwipingRef.current || currentlyOpenSwipeable) {
+            if (currentlyOpenSwipeable) {
+              currentlyOpenSwipeable.close();
+            }
+            return;
+          }
+          onLongPress();
+        }}
         activeOpacity={0.7}
       >
         <View style={styles.chapterContent}>

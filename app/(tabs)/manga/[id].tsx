@@ -212,7 +212,39 @@ export default function MangaDetailScreen() {
     }, [id])
   );
 
-  const handleBookmark = () => {
+  const handleSaveBookmark = useCallback(
+    async (status: BookmarkStatus) => {
+      if (!mangaDetails) return;
+      try {
+        await saveBookmark(
+          id as string,
+          status,
+          mangaDetails,
+          readChapters,
+          setBookmarkStatus,
+          setIsBookmarkPopupVisible,
+          setReadChapters
+        );
+      } catch (error) {
+        console.error('Error saving bookmark:', error);
+      }
+    },
+    [id, mangaDetails, readChapters]
+  );
+
+  const handleRemoveBookmark = useCallback(async () => {
+    try {
+      await removeBookmark(
+        id as string,
+        setBookmarkStatus,
+        setIsBookmarkPopupVisible
+      );
+    } catch (error) {
+      console.error('Error removing bookmark:', error);
+    }
+  }, [id]);
+
+  const handleBookmark = useCallback(() => {
     if (!mangaDetails) return;
 
     haptics.onBookmark();
@@ -226,7 +258,13 @@ export default function MangaDetailScreen() {
 
     setBookmarkPopupConfig(config as BookmarkPopupConfig);
     setIsBookmarkPopupVisible(true);
-  };
+  }, [
+    mangaDetails,
+    haptics,
+    bookmarkStatus,
+    handleSaveBookmark,
+    handleRemoveBookmark,
+  ]);
 
   const handleChapterLongPress = (chapterNumber: string) => {
     haptics.onLongPress();
@@ -277,41 +315,15 @@ export default function MangaDetailScreen() {
     [id, readChapters, currentlyOpenSwipeable]
   );
 
-  const handleSaveBookmark = async (status: BookmarkStatus) => {
-    if (!mangaDetails) return;
-    try {
-      await saveBookmark(
-        id as string,
-        status,
-        mangaDetails,
-        readChapters,
-        setBookmarkStatus,
-        setIsBookmarkPopupVisible,
-        setReadChapters
-      );
-    } catch (error) {
-      console.error('Error saving bookmark:', error);
-    }
-  };
+  const handleChapterPress = useCallback(
+    (chapterNumber: string | number) => {
+      haptics.onSelection();
+      router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
+    },
+    [haptics, router, id]
+  );
 
-  const handleRemoveBookmark = async () => {
-    try {
-      await removeBookmark(
-        id as string,
-        setBookmarkStatus,
-        setIsBookmarkPopupVisible
-      );
-    } catch (error) {
-      console.error('Error removing bookmark:', error);
-    }
-  };
-
-  const handleChapterPress = (chapterNumber: string | number) => {
-    haptics.onSelection();
-    router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
-  };
-
-  const handleLastReadChapterPress = () => {
+  const handleLastReadChapterPress = useCallback(() => {
     if (!lastReadChapter || lastReadChapter === 'Not started') {
       if (
         mangaDetails &&
@@ -328,7 +340,7 @@ export default function MangaDetailScreen() {
       const chapterNumber = lastReadChapter.replace('Chapter ', '');
       handleChapterPress(chapterNumber);
     }
-  };
+  }, [lastReadChapter, mangaDetails, handleChapterPress]);
 
   const calculateReadingProgress = () => {
     if (
@@ -560,7 +572,7 @@ export default function MangaDetailScreen() {
       id,
       mangaDetails,
       bookmarkStatus,
-      readChapters.length,
+      readChapters,
       lastReadChapter,
       readingProgress,
       remainingReadingTime,
