@@ -17,6 +17,7 @@ import { MANGA_API_URL } from '@/constants/Config';
 import axios from 'axios';
 import { router } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
+import BackButton from '@/components/BackButton';
 
 interface Genre {
   name: string;
@@ -180,15 +181,16 @@ export default function GenresScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             <View style={styles.selectedGenreHeader}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => {
+              <BackButton
+                variant="smart"
+                size={24}
+                customOnPress={() => {
                   setSelectedGenre(null);
                   setMangaList([]);
                 }}
-              >
-                <Ionicons name="arrow-back" size={24} color={colors.text} />
-              </TouchableOpacity>
+                accessibilityLabel="Go back to genres"
+                accessibilityHint="Return to the genres list"
+              />
               <Text
                 style={[
                   styles.selectedGenreTitle,
@@ -236,10 +238,21 @@ export default function GenresScreen() {
         contentContainerStyle={styles.contentContainer}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>Browse by Genre</Text>
-            <Text style={styles.subtitle}>
-              Discover manga by your favorite genres
-            </Text>
+            <View style={styles.headerTop}>
+              <BackButton
+                variant="smart"
+                size={24}
+                showLabel={false}
+                accessibilityLabel="Go back to home"
+                accessibilityHint="Return to the home screen"
+              />
+              <View style={styles.headerTitleContainer}>
+                <Text style={styles.title}>Browse by Genre</Text>
+                <Text style={styles.subtitle}>
+                  Discover manga by your favorite genres
+                </Text>
+              </View>
+            </View>
           </View>
         }
       />
@@ -260,6 +273,15 @@ const getStyles = (colors: typeof Colors.light) =>
     header: {
       marginBottom: 25,
       marginTop: 10,
+    },
+    headerTop: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginBottom: 5,
+    },
+    headerTitleContainer: {
+      flex: 1,
+      marginLeft: 12,
     },
     title: {
       fontSize: 32,
@@ -306,22 +328,13 @@ const getStyles = (colors: typeof Colors.light) =>
       alignItems: 'center',
       marginBottom: 25,
       marginTop: 10,
-    },
-    backButton: {
-      padding: 8,
-      marginRight: 15,
-      borderRadius: 20,
-      backgroundColor: colors.background,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 2,
-      elevation: 2,
+      paddingRight: 15,
     },
     selectedGenreTitle: {
       fontSize: 24,
       fontWeight: 'bold',
       flex: 1,
+      marginLeft: 12,
     },
     mangaRow: {
       justifyContent: 'space-between',
