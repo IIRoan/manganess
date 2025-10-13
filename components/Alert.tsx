@@ -20,7 +20,6 @@ const Alert: React.FC<CustomAlertProps> = ({
   visible,
   title,
   onClose,
-  type,
   options,
   message,
 }) => {
@@ -110,7 +109,7 @@ const Alert: React.FC<CustomAlertProps> = ({
 
   if (!isMounted) return null;
 
-  const styles = getStyles(colors, insets);
+  const styles = getStyles(colors);
   const actionOptions = options ?? [];
   const tabBarBottomOffset = insets.bottom + 15;
   const tabBarHeight = 60;
@@ -205,7 +204,7 @@ const Alert: React.FC<CustomAlertProps> = ({
   );
 };
 
-const getStyles = (colors: typeof Colors.light, insets: any) =>
+const getStyles = (colors: typeof Colors.light) =>
   StyleSheet.create({
     root: {
       position: 'absolute',
