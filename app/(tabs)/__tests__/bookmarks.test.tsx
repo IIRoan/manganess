@@ -35,19 +35,32 @@ jest.mock('@/services/CacheImages', () => ({
 }));
 
 jest.mock('@expo/vector-icons', () => ({
-  Ionicons: jest.fn(({ name }: { name: string }) => name),
+  Ionicons: ({ name }: { name: string }) => {
+    const React = jest.requireActual('react');
+    const { Text } = jest.requireActual('react-native');
+    return React.createElement(Text, {}, name);
+  },
 }));
 
-jest.mock('@/components/MangaCard', () =>
-  jest.fn(({ title, onPress }: { title: string; onPress: () => void }) => ({
-    type: 'TouchableOpacity',
-    props: {
-      onPress,
-      testID: `manga-card-${title}`,
-      children: title,
-    },
-  }))
-);
+jest.mock('@/components/MangaCard', () => {
+  const MockMangaCard = ({
+    title,
+    onPress,
+  }: {
+    title: string;
+    onPress: () => void;
+  }) => {
+    const React = jest.requireActual('react');
+    const { TouchableOpacity, Text } = jest.requireActual('react-native');
+    return React.createElement(
+      TouchableOpacity,
+      { onPress, testID: `manga-card-${title}` },
+      React.createElement(Text, {}, title)
+    );
+  };
+  MockMangaCard.displayName = 'MockMangaCard';
+  return MockMangaCard;
+});
 
 const initialMetrics = {
   frame: { x: 0, y: 0, width: 320, height: 640 },
