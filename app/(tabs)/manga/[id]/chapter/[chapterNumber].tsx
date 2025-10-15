@@ -662,10 +662,16 @@ export default function ReadChapterScreen() {
                   >
                     <View style={styles.fallbackSheetHandle} />
                   </TouchableOpacity>
-                  <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
-                  <Text style={styles.currentChapterTitle}>
-                    Current: Chapter {chapterNumber}
-                  </Text>
+                  <TouchableOpacity
+                    onPress={closeChapterList}
+                    style={styles.fallbackSheetHeaderContainer}
+                    activeOpacity={1}
+                  >
+                    <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
+                    <Text style={styles.currentChapterTitle}>
+                      Current: Chapter {chapterNumber}
+                    </Text>
+                  </TouchableOpacity>
                   <ScrollView
                     style={styles.fallbackSheetScrollView}
                     contentContainerStyle={styles.fallbackSheetScrollContent}
@@ -673,6 +679,12 @@ export default function ReadChapterScreen() {
                   >
                     {renderChapterList()}
                   </ScrollView>
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={closeChapterList}
+                  >
+                    <Text style={styles.closeButtonText}>Close</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </Modal>

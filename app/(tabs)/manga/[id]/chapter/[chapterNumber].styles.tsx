@@ -47,6 +47,9 @@ export default function getStyles(colorScheme: ColorScheme) {
       borderRadius: 2,
       backgroundColor: colors.text + '40',
     },
+    fallbackSheetHeaderContainer: {
+      paddingBottom: 16,
+    },
     fallbackSheetScrollView: {
       flex: 1,
       marginHorizontal: -24,
@@ -187,7 +190,6 @@ export default function getStyles(colorScheme: ColorScheme) {
       fontSize: 16,
       fontWeight: '500',
       color: colors.primary,
-      marginBottom: 24,
       paddingBottom: 16,
       borderBottomWidth: 1,
       borderBottomColor: colors.border + '40',
@@ -244,18 +246,18 @@ export default function getStyles(colorScheme: ColorScheme) {
       flex: 1,
     },
     closeButton: {
-      position: 'absolute',
-      bottom: 40,
-      left: 20,
-      right: 20,
-      padding: 10,
+      marginTop: 16,
+      marginHorizontal: -24,
+      paddingHorizontal: 24,
+      paddingVertical: 16,
       alignItems: 'center',
-      backgroundColor: Colors[colorScheme].primary,
-      borderRadius: 5,
+      backgroundColor: colors.primary,
+      borderRadius: 0,
     },
     closeButtonText: {
-      color: Colors[colorScheme].card,
+      color: '#FFFFFF',
       fontWeight: 'bold',
+      fontSize: 16,
     },
   });
 }
