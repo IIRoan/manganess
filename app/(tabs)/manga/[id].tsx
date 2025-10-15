@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+} from 'react';
 import {
   View,
   Text,
@@ -190,7 +196,9 @@ export default function MangaDetailScreen() {
                     `Storage:getLastReadChapter:${id as string}`,
                     'Storage',
                     async () => {
-                      const lastChapter = await getLastReadChapter(id as string);
+                      const lastChapter = await getLastReadChapter(
+                        id as string
+                      );
                       setLastReadChapter(lastChapter);
                     }
                   ),
@@ -411,163 +419,163 @@ export default function MangaDetailScreen() {
   const remainingReadingTime = estimateRemainingReadingTime();
 
   const ListHeader = useMemo(
-    () => 
+    () =>
       !mangaDetails ? null : (
-      <>
-        <View style={styles.headerContainer}>
-          <MangaBannerImage
-            mangaId={id as string}
-            bannerUrl={mangaDetails.bannerImage}
-            style={styles.bannerImage}
-          />
-          <View style={styles.overlay} />
-          <View style={styles.headerContent}>
-            <View style={styles.headerButtons}>
-              <BackButton
-                variant="enhanced"
-                size={30}
-                color="#FFFFFF"
-                style={styles.headerButton}
-                showHistoryOnLongPress={true}
-              />
-              <TouchableOpacity
-                testID="bookmark-button"
-                onPress={handleBookmark}
-                style={styles.headerButton}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  bookmarkStatus ? 'Remove bookmark' : 'Add bookmark'
-                }
-                accessibilityHint={`Currently ${bookmarkStatus || 'not bookmarked'}. Tap to ${bookmarkStatus ? 'remove' : 'add'} bookmark.`}
-              >
-                <Ionicons
-                  name={bookmarkStatus ? 'bookmark' : 'bookmark-outline'}
+        <>
+          <View style={styles.headerContainer}>
+            <MangaBannerImage
+              mangaId={id as string}
+              bannerUrl={mangaDetails.bannerImage}
+              style={styles.bannerImage}
+            />
+            <View style={styles.overlay} />
+            <View style={styles.headerContent}>
+              <View style={styles.headerButtons}>
+                <BackButton
+                  variant="enhanced"
                   size={30}
-                  color={colors.primary}
-                  accessibilityElementsHidden={true}
+                  color="#FFFFFF"
+                  style={styles.headerButton}
+                  showHistoryOnLongPress={true}
                 />
-              </TouchableOpacity>
-            </View>
-            <Text
-              style={styles.title}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-              accessibilityRole="header"
-            >
-              {mangaDetails.title}
-            </Text>
-            {mangaDetails.alternativeTitle && (
-              <ExpandableText
-                text={mangaDetails.alternativeTitle}
-                initialLines={1}
-                style={styles.alternativeTitle}
-                stateKey={`alt-title-${id}`}
-              />
-            )}
-            <View style={styles.statusContainer}>
+                <TouchableOpacity
+                  testID="bookmark-button"
+                  onPress={handleBookmark}
+                  style={styles.headerButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    bookmarkStatus ? 'Remove bookmark' : 'Add bookmark'
+                  }
+                  accessibilityHint={`Currently ${bookmarkStatus || 'not bookmarked'}. Tap to ${bookmarkStatus ? 'remove' : 'add'} bookmark.`}
+                >
+                  <Ionicons
+                    name={bookmarkStatus ? 'bookmark' : 'bookmark-outline'}
+                    size={30}
+                    color={colors.primary}
+                    accessibilityElementsHidden={true}
+                  />
+                </TouchableOpacity>
+              </View>
               <Text
-                style={styles.statusText}
-                accessibilityLabel={`Publication status: ${mangaDetails.status}`}
+                style={styles.title}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+                accessibilityRole="header"
               >
-                {mangaDetails.status}
+                {mangaDetails.title}
               </Text>
+              {mangaDetails.alternativeTitle && (
+                <ExpandableText
+                  text={mangaDetails.alternativeTitle}
+                  initialLines={1}
+                  style={styles.alternativeTitle}
+                  stateKey={`alt-title-${id}`}
+                />
+              )}
+              <View style={styles.statusContainer}>
+                <Text
+                  style={styles.statusText}
+                  accessibilityLabel={`Publication status: ${mangaDetails.status}`}
+                >
+                  {mangaDetails.status}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        <View style={styles.contentContainer}>
-          <View style={styles.infoContainer}>
-            {/* Reading Progress Bar */}
-            <View style={styles.progressContainer}>
-              <View style={styles.progressHeader}>
-                <Text style={styles.progressTitle}>Reading Progress </Text>
-                <Text style={styles.progressPercentage}>
-                  {readingProgress}%
-                </Text>
-              </View>
-              <View style={styles.progressBarContainer}>
-                <View
-                  style={[
-                    styles.progressBar,
-                    { width: `${readingProgress}%` },
-                  ]}
-                />
-              </View>
-              <View style={styles.progressStats}>
-                <Text style={styles.progressStat}>
-                  <Ionicons
-                    name="book-outline"
-                    size={14}
-                    color={colors.text}
-                  />{' '}
-                  {readChapters.length}/{mangaDetails.chapters.length} chapters
-                  read
-                </Text>
-                <Text style={styles.progressStat}>
-                  <Ionicons
-                    name="time-outline"
-                    size={14}
-                    color={colors.text}
-                  />{' '}
-                  ~{remainingReadingTime} min remaining
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <ExpandableText
-                text={mangaDetails.description}
-                initialLines={3}
-                style={styles.description}
-                stateKey={`description-${id}`}
-              />
-              <LastReadChapterBar
-                lastReadChapter={lastReadChapter}
-                onPress={handleLastReadChapterPress}
-                colors={colors}
-                readChapters={readChapters}
-              />
-            </View>
-            <View style={styles.detailsContainer}>
-              <Text style={styles.sectionTitle}>Details</Text>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Author</Text>
-                <Text style={styles.detailValue}>
-                  {(mangaDetails.author || []).join(', ')}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Published</Text>
-                <Text style={styles.detailValue}>
-                  {mangaDetails.published}
-                </Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Rating</Text>
-                <View style={styles.ratingContainer}>
-                  <Text style={styles.rating}>{mangaDetails.rating}</Text>
-                  <Text style={styles.ratingText}>
-                    /10 ({mangaDetails.reviewCount} reviews)
+          <View style={styles.contentContainer}>
+            <View style={styles.infoContainer}>
+              {/* Reading Progress Bar */}
+              <View style={styles.progressContainer}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressTitle}>Reading Progress </Text>
+                  <Text style={styles.progressPercentage}>
+                    {readingProgress}%
+                  </Text>
+                </View>
+                <View style={styles.progressBarContainer}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      { width: `${readingProgress}%` },
+                    ]}
+                  />
+                </View>
+                <View style={styles.progressStats}>
+                  <Text style={styles.progressStat}>
+                    <Ionicons
+                      name="book-outline"
+                      size={14}
+                      color={colors.text}
+                    />{' '}
+                    {readChapters.length}/{mangaDetails.chapters.length}{' '}
+                    chapters read
+                  </Text>
+                  <Text style={styles.progressStat}>
+                    <Ionicons
+                      name="time-outline"
+                      size={14}
+                      color={colors.text}
+                    />{' '}
+                    ~{remainingReadingTime} min remaining
                   </Text>
                 </View>
               </View>
-              <Text style={[styles.detailLabel, { marginTop: 10 }]}>
-                Genres
-              </Text>
-              <View style={styles.genresContainer}>
-                {(mangaDetails.genres || []).map((genre, index) => (
-                  <GenreTag key={index} genre={genre} />
-                ))}
+
+              <View style={styles.descriptionContainer}>
+                <Text style={styles.sectionTitle}>Description</Text>
+                <ExpandableText
+                  text={mangaDetails.description}
+                  initialLines={3}
+                  style={styles.description}
+                  stateKey={`description-${id}`}
+                />
+                <LastReadChapterBar
+                  lastReadChapter={lastReadChapter}
+                  onPress={handleLastReadChapterPress}
+                  colors={colors}
+                  readChapters={readChapters}
+                />
+              </View>
+              <View style={styles.detailsContainer}>
+                <Text style={styles.sectionTitle}>Details</Text>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Author</Text>
+                  <Text style={styles.detailValue}>
+                    {(mangaDetails.author || []).join(', ')}
+                  </Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Published</Text>
+                  <Text style={styles.detailValue}>
+                    {mangaDetails.published}
+                  </Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Rating</Text>
+                  <View style={styles.ratingContainer}>
+                    <Text style={styles.rating}>{mangaDetails.rating}</Text>
+                    <Text style={styles.ratingText}>
+                      /10 ({mangaDetails.reviewCount} reviews)
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.detailLabel, { marginTop: 10 }]}>
+                  Genres
+                </Text>
+                <View style={styles.genresContainer}>
+                  {(mangaDetails.genres || []).map((genre, index) => (
+                    <GenreTag key={index} genre={genre} />
+                  ))}
+                </View>
               </View>
             </View>
           </View>
-        </View>
-        <View style={styles.chaptersContainer}>
-          <Text style={styles.sectionTitle}>Chapters</Text>
-        </View>
-      </>
-    ),
+          <View style={styles.chaptersContainer}>
+            <Text style={styles.sectionTitle}>Chapters</Text>
+          </View>
+        </>
+      ),
     [
       id,
       mangaDetails,
@@ -630,95 +638,95 @@ export default function MangaDetailScreen() {
               drawDistance={100}
               ListHeaderComponent={ListHeader}
               data={mangaDetails.chapters}
-          extraData={[readChapters, lastReadChapter]}
-          keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
-          renderItem={({ item: chapter, index }) => {
-            const isRead = readChapters.includes(chapter.number);
-            const isLastItem = index === mangaDetails.chapters.length - 1;
-            const isCurrentlyLastRead =
-              lastReadChapter === `Chapter ${chapter.number}`;
+              extraData={[readChapters, lastReadChapter]}
+              keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
+              renderItem={({ item: chapter, index }) => {
+                const isRead = readChapters.includes(chapter.number);
+                const isLastItem = index === mangaDetails.chapters.length - 1;
+                const isCurrentlyLastRead =
+                  lastReadChapter === `Chapter ${chapter.number}`;
 
-            return (
-              <SwipeableChapterItem
-                chapter={chapter}
-                isRead={isRead}
-                isLastItem={isLastItem}
-                isCurrentlyLastRead={isCurrentlyLastRead}
-                onPress={() => handleChapterPress(chapter.number)}
-                onLongPress={() => handleChapterLongPress(chapter.number)}
-                onUnread={() => handleMarkAsUnread(chapter.number)}
-                colors={colors}
-                styles={styles}
-                currentlyOpenSwipeable={currentlyOpenSwipeable}
-                setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeable}
-              />
-            );
-          }}
-          ListFooterComponent={<View style={{ height: 120 }} />}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
-        />
-
-        {/* Scroll to Bottom Button */}
-        <Animated.View
-          style={[
-            styles.scrollToBottomButton,
-            {
-              opacity: scrollBottomButtonOpacity,
-              bottom: insets.bottom + 100 + 60,
-            },
-          ]}
-          pointerEvents={showScrollToBottomButton ? 'auto' : 'none'}
-        >
-          <TouchableOpacity
-            onPress={() => {
-              flashListRef.current?.scrollToEnd({ animated: true });
-            }}
-            style={styles.scrollToBottomButtonTouchable}
-            accessibilityRole="button"
-            accessibilityLabel="Scroll to bottom"
-            accessibilityHint="Scroll to the last chapter"
-          >
-            <Ionicons
-              name="arrow-down"
-              size={20}
-              color="white"
-              accessibilityElementsHidden={true}
+                return (
+                  <SwipeableChapterItem
+                    chapter={chapter}
+                    isRead={isRead}
+                    isLastItem={isLastItem}
+                    isCurrentlyLastRead={isCurrentlyLastRead}
+                    onPress={() => handleChapterPress(chapter.number)}
+                    onLongPress={() => handleChapterLongPress(chapter.number)}
+                    onUnread={() => handleMarkAsUnread(chapter.number)}
+                    colors={colors}
+                    styles={styles}
+                    currentlyOpenSwipeable={currentlyOpenSwipeable}
+                    setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeable}
+                  />
+                );
+              }}
+              ListFooterComponent={<View style={{ height: 120 }} />}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
             />
-          </TouchableOpacity>
-        </Animated.View>
 
-        {/* Scroll to Top Button */}
-        <Animated.View
-          style={[
-            styles.scrollToTopButton,
-            {
-              opacity: scrollButtonOpacity,
-              bottom: insets.bottom + 100,
-            },
-          ]}
-          pointerEvents={showScrollToTopButton ? 'auto' : 'none'}
-        >
-          <TouchableOpacity
-            onPress={() => {
-              flashListRef.current?.scrollToOffset({
-                offset: 0,
-                animated: true,
-              });
-            }}
-            style={styles.scrollToTopButtonTouchable}
-            accessibilityRole="button"
-            accessibilityLabel="Scroll to top"
-            accessibilityHint="Scroll to the manga details"
-          >
-            <Ionicons
-              name="arrow-up"
-              size={20}
-              color="white"
-              accessibilityElementsHidden={true}
-            />
-          </TouchableOpacity>
-        </Animated.View>
+            {/* Scroll to Bottom Button */}
+            <Animated.View
+              style={[
+                styles.scrollToBottomButton,
+                {
+                  opacity: scrollBottomButtonOpacity,
+                  bottom: insets.bottom + 100 + 60,
+                },
+              ]}
+              pointerEvents={showScrollToBottomButton ? 'auto' : 'none'}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  flashListRef.current?.scrollToEnd({ animated: true });
+                }}
+                style={styles.scrollToBottomButtonTouchable}
+                accessibilityRole="button"
+                accessibilityLabel="Scroll to bottom"
+                accessibilityHint="Scroll to the last chapter"
+              >
+                <Ionicons
+                  name="arrow-down"
+                  size={20}
+                  color="white"
+                  accessibilityElementsHidden={true}
+                />
+              </TouchableOpacity>
+            </Animated.View>
+
+            {/* Scroll to Top Button */}
+            <Animated.View
+              style={[
+                styles.scrollToTopButton,
+                {
+                  opacity: scrollButtonOpacity,
+                  bottom: insets.bottom + 100,
+                },
+              ]}
+              pointerEvents={showScrollToTopButton ? 'auto' : 'none'}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  flashListRef.current?.scrollToOffset({
+                    offset: 0,
+                    animated: true,
+                  });
+                }}
+                style={styles.scrollToTopButtonTouchable}
+                accessibilityRole="button"
+                accessibilityLabel="Scroll to top"
+                accessibilityHint="Scroll to the manga details"
+              >
+                <Ionicons
+                  name="arrow-up"
+                  size={20}
+                  color="white"
+                  accessibilityElementsHidden={true}
+                />
+              </TouchableOpacity>
+            </Animated.View>
           </View>
         </>
       )}
