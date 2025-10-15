@@ -7,8 +7,9 @@ import {
   useColorScheme,
   Animated,
   AppState,
+  InteractionManager,
 } from 'react-native';
-import { Tabs, usePathname, useNavigation } from 'expo-router';
+import { Tabs, usePathname, useNavigation, router } from 'expo-router';
 import { isDebugEnabled } from '@/constants/env';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -172,6 +173,37 @@ export default function TabLayout() {
     performUpdateCheck,
     refreshLastReadManga,
   ]);
+
+  useEffect(() => {
+    if (isOnboardingCompleted !== true) {
+      return;
+    }
+
+    // Preload key tab routes to avoid a loading penalty on first navigation.
+    const routesToPrefetch = ['/', '/bookmarks'];
+
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      Promise.all(
+        routesToPrefetch.map(async (routePath) => {
+          try {
+            await router.prefetch(routePath);
+          } catch (error) {
+            if (isDebugEnabled()) {
+              console.warn(`Failed to prefetch route ${routePath}`, error);
+            }
+          }
+        })
+      ).catch((error) => {
+        if (isDebugEnabled()) {
+          console.warn('Route prefetch promise rejected', error);
+        }
+      });
+    });
+
+    return () => {
+      interactionHandle?.cancel?.();
+    };
+  }, [isOnboardingCompleted]);
 
   useEffect(() => {
     if (
