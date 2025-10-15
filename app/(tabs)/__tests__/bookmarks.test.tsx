@@ -2,6 +2,10 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Text, TouchableOpacity } from 'react-native';
+
+import BookmarksScreen from '../bookmarks';
+import { getMangaData } from '@/services/bookmarkService';
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: jest.fn(),
@@ -35,12 +39,10 @@ jest.mock('@expo/vector-icons', () => {
   const React = require('react');
   const { Text } = require('react-native');
   return {
-    Ionicons: ({ name }: { name: string }) => <Text>{name}</Text>,
+    Ionicons: ({ name }: { name: string }) =>
+      React.createElement(Text, {}, name),
   };
 });
-
-import BookmarksScreen from '../bookmarks';
-import { getMangaData } from '@/services/bookmarkService';
 
 jest.mock('@/components/MangaCard', () => {
   const React = require('react');
@@ -53,10 +55,10 @@ jest.mock('@/components/MangaCard', () => {
     title: string;
     onPress: () => void;
   }) {
-    return (
-      <TouchableOpacity onPress={onPress} testID={`manga-card-${title}`}>
-        <Text>{title}</Text>
-      </TouchableOpacity>
+    return React.createElement(
+      TouchableOpacity,
+      { onPress, testID: `manga-card-${title}` },
+      React.createElement(Text, {}, title)
     );
   };
 });
@@ -84,13 +86,17 @@ describe('BookmarksScreen', () => {
       bookmarksViewMode: 'grid',
     };
 
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      return storage[key] ?? null;
-    });
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(
+      async (key: string) => {
+        return storage[key] ?? null;
+      }
+    );
 
-    (AsyncStorage.setItem as jest.Mock).mockImplementation(async (key: string, value: string) => {
-      storage[key] = value;
-    });
+    (AsyncStorage.setItem as jest.Mock).mockImplementation(
+      async (key: string, value: string) => {
+        storage[key] = value;
+      }
+    );
 
     (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
       if (id === '1') {
@@ -156,7 +162,10 @@ describe('BookmarksScreen', () => {
     fireEvent.press(getByTestId('bookmarks-toggle-view'));
 
     await waitFor(() =>
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith('bookmarksViewMode', 'list')
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        'bookmarksViewMode',
+        'list'
+      )
     );
   });
 });

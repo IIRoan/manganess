@@ -57,13 +57,17 @@ describe('useNavigationPerf', () => {
 
     act(() => {
       mockPathname = '/next';
-      rerender();
+      rerender({});
     });
 
-    expect(mockLoggerInfo).toHaveBeenCalledWith('Navigation', 'routeChangeStart', {
-      from: '/initial',
-      to: '/next',
-    });
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'Navigation',
+      'routeChangeStart',
+      {
+        from: '/initial',
+        to: '/next',
+      }
+    );
 
     expect(mockLoggerInfo).toHaveBeenCalledWith(
       'Navigation',

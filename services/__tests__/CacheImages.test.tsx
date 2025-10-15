@@ -1,4 +1,3 @@
-import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 jest.mock('expo-file-system', () => {
@@ -74,7 +73,8 @@ describe('CacheImages hooks', () => {
       .mockResolvedValue('validated-uri');
 
     const { result, rerender } = renderHook(
-      ({ mangaId, url }) => useMangaImageCache(mangaId, url),
+      ({ mangaId, url }: { mangaId: string; url: string }) =>
+        useMangaImageCache(mangaId, url),
       { initialProps: { mangaId: 'm1', url: 'https://img/m1.jpg' } }
     );
 

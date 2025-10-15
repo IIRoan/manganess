@@ -42,7 +42,10 @@ jest.mock('react-native', () => {
       parallel,
     },
     PanResponder: {
-      create: (config: any) => config,
+      create: (config: any) => ({
+        ...config,
+        panHandlers: {},
+      }),
     },
     Dimensions: {
       get: () => ({ width: 400 }),
@@ -76,17 +79,16 @@ describe('useSwipeBack', () => {
     const { result } = renderHook(() => useSwipeBack());
     const startEvent: any = { nativeEvent: { locationX: 10 } };
 
-    const shouldCapture = result.current.panResponder.onStartShouldSetPanResponder(
-      startEvent
-    );
+    const shouldCapture = (
+      result.current.panResponder as any
+    ).onStartShouldSetPanResponder(startEvent);
     expect(shouldCapture).toBe(true);
 
     mockCanGoBack = false;
     const { result: resultCannotGoBack } = renderHook(() => useSwipeBack());
-    const shouldCaptureWhenCannot =
-      resultCannotGoBack.current.panResponder.onStartShouldSetPanResponder(
-        startEvent
-      );
+    const shouldCaptureWhenCannot = (
+      resultCannotGoBack.current.panResponder as any
+    ).onStartShouldSetPanResponder(startEvent);
     expect(shouldCaptureWhenCannot).toBe(false);
   });
 
@@ -94,7 +96,7 @@ describe('useSwipeBack', () => {
     const { result } = renderHook(() => useSwipeBack());
 
     act(() => {
-      result.current.panResponder.onPanResponderGrant();
+      (result.current.panResponder as any).onPanResponderGrant();
     });
 
     expect(result.current.isSwipingBack).toBe(true);
