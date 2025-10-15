@@ -20,7 +20,10 @@ import {
   ListRenderItemInfo,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getMangaData } from '@/services/bookmarkService';
+import {
+  getCachedBookmarkSummaries,
+  loadBookmarkSummaries,
+} from '@/services/bookmarkService';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
@@ -75,7 +78,12 @@ const ImagePreloader = ({ urls }: { urls: string[] }) => {
 
 export default function BookmarksScreen() {
   // State
-  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
+  const preloadedBookmarksRef = useRef<BookmarkItem[] | null>(
+    getCachedBookmarkSummaries()
+  );
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>(
+    preloadedBookmarksRef.current ?? []
+  );
   const [sectionData, setSectionData] = useState<
     Record<BookmarkStatus, BookmarkItem[]>
   >({
@@ -84,7 +92,9 @@ export default function BookmarksScreen() {
     'To Read': [],
     Read: [],
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(
+    !preloadedBookmarksRef.current
+  );
   const [isViewModeLoading, setIsViewModeLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<BookmarkStatus>('Reading');
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,41 +201,43 @@ export default function BookmarksScreen() {
     []
   );
 
-  // Fetch bookmarks from storage
-  const fetchBookmarks = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const raw = await AsyncStorage.getItem('bookmarkKeys');
-      const keys = raw ? JSON.parse(raw) : [];
-      const arr = await Promise.all(
-        keys.map(async (key: string) => {
-          const id = key.split('_')[1];
-          if (!id) return null;
-          const d = await getMangaData(id);
-          if (!d) return null;
-          return {
-            id: d.id,
-            title: d.title,
-            status: (d.bookmarkStatus as BookmarkStatus) || 'Reading',
-            lastReadChapter: d.lastReadChapter
-              ? `Chapter ${d.lastReadChapter}`
-              : 'Not started',
-            imageUrl: d.bannerImage || '',
-            lastUpdated: d.lastUpdated ?? 0,
-          } as BookmarkItem;
-        })
-      );
-      setBookmarks(arr.filter((x): x is BookmarkItem => x != null));
-    } catch (e) {
-      console.error('Failed to fetch bookmarks:', e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const bookmarksCountRef = useRef<number>(bookmarks.length);
+
+  useEffect(() => {
+    bookmarksCountRef.current = bookmarks.length;
+  }, [bookmarks.length]);
+
+  // Fetch bookmarks from storage (with optional cache)
+  const fetchBookmarks = useCallback(
+    async ({
+      force = false,
+      showSpinner,
+    }: { force?: boolean; showSpinner?: boolean } = {}) => {
+      const shouldShowSpinner =
+        showSpinner ?? (force || bookmarksCountRef.current === 0);
+
+      if (shouldShowSpinner) {
+        setIsLoading(true);
+      }
+
+      try {
+        const data = await loadBookmarkSummaries({ force });
+        preloadedBookmarksRef.current = data;
+        setBookmarks(data);
+      } catch (e) {
+        console.error('Failed to fetch bookmarks:', e);
+      } finally {
+        if (shouldShowSpinner) {
+          setIsLoading(false);
+        }
+      }
+    },
+    []
+  );
 
   // Initial fetch
   useEffect(() => {
-    fetchBookmarks();
+    fetchBookmarks({ showSpinner: !preloadedBookmarksRef.current });
   }, [fetchBookmarks]);
 
   // Process bookmarks when data, search or sort changes
@@ -239,7 +251,7 @@ export default function BookmarksScreen() {
       const checkForChanges = async () => {
         const changed = await AsyncStorage.getItem('bookmarkChanged');
         if (changed === 'true') {
-          await fetchBookmarks();
+          await fetchBookmarks({ force: true });
           await AsyncStorage.setItem('bookmarkChanged', 'false');
         }
       };

@@ -2,9 +2,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { updateAniListStatus } from './anilistService';
-import { BookmarkStatus, MangaData, IconName } from '@/types';
+import {
+  BookmarkItem,
+  BookmarkStatus,
+  IconName,
+  MangaData,
+} from '@/types';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
+const BOOKMARK_KEYS_STORAGE_KEY = 'bookmarkKeys';
+
+let bookmarkSummariesCache: BookmarkItem[] | null = null;
+let bookmarkSummariesPromise: Promise<BookmarkItem[]> | null = null;
+let bookmarkSummariesRequestId = 0;
 
 export const getMangaData = async (id: string): Promise<MangaData | null> => {
   try {
@@ -15,6 +25,110 @@ export const getMangaData = async (id: string): Promise<MangaData | null> => {
     return null;
   }
 };
+
+const buildBookmarkItem = (data: MangaData): BookmarkItem => {
+  const status: BookmarkStatus = data.bookmarkStatus ?? 'Reading';
+  return {
+    id: data.id,
+    title: data.title,
+    status,
+    lastReadChapter: data.lastReadChapter
+      ? `Chapter ${data.lastReadChapter}`
+      : 'Not started',
+    imageUrl: data.bannerImage || '',
+    lastUpdated: data.lastUpdated ?? 0,
+  };
+};
+
+const resolveBookmarkSummaries = async (): Promise<BookmarkItem[]> => {
+  let parsedKeys: unknown = [];
+  try {
+    const raw = await AsyncStorage.getItem(BOOKMARK_KEYS_STORAGE_KEY);
+    parsedKeys = raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    console.error('Error parsing bookmark keys:', error);
+    parsedKeys = [];
+  }
+
+  if (!Array.isArray(parsedKeys) || parsedKeys.length === 0) {
+    return [];
+  }
+
+  const entries = await Promise.all(
+    parsedKeys.map(async (key: unknown) => {
+      if (typeof key !== 'string') return null;
+      const id = key.startsWith('bookmark_') ? key.substring(9) : key;
+      if (!id) return null;
+      const data = await getMangaData(id);
+      if (!data) return null;
+      return buildBookmarkItem(data);
+    })
+  );
+
+  return entries.filter(
+    (entry): entry is BookmarkItem => entry !== null
+  );
+};
+
+const startBookmarkSummariesFetch = (): Promise<BookmarkItem[]> => {
+  const requestId = ++bookmarkSummariesRequestId;
+  const promise = resolveBookmarkSummaries()
+    .then((summaries) => {
+      if (bookmarkSummariesRequestId === requestId) {
+        bookmarkSummariesCache = summaries;
+      }
+      return summaries;
+    })
+    .catch((error) => {
+      if (bookmarkSummariesRequestId === requestId) {
+        bookmarkSummariesCache = null;
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (bookmarkSummariesRequestId === requestId) {
+        bookmarkSummariesPromise = null;
+      }
+    });
+
+  bookmarkSummariesPromise = promise;
+  return promise;
+};
+
+export const preloadBookmarkSummaries = (): Promise<BookmarkItem[]> => {
+  if (bookmarkSummariesCache) {
+    return Promise.resolve(bookmarkSummariesCache);
+  }
+  if (bookmarkSummariesPromise) {
+    return bookmarkSummariesPromise;
+  }
+  return startBookmarkSummariesFetch();
+};
+
+export const invalidateBookmarkSummaries = () => {
+  bookmarkSummariesCache = null;
+  bookmarkSummariesPromise = null;
+  bookmarkSummariesRequestId += 1;
+};
+
+export const loadBookmarkSummaries = ({
+  force = false,
+}: { force?: boolean } = {}): Promise<BookmarkItem[]> => {
+  if (force) {
+    invalidateBookmarkSummaries();
+    return startBookmarkSummariesFetch();
+  }
+  if (bookmarkSummariesCache) {
+    return Promise.resolve(bookmarkSummariesCache);
+  }
+  if (bookmarkSummariesPromise) {
+    return bookmarkSummariesPromise;
+  }
+  return startBookmarkSummariesFetch();
+};
+
+export const getCachedBookmarkSummaries = (): BookmarkItem[] | null =>
+  bookmarkSummariesCache;
 
 export const setMangaData = async (data: MangaData): Promise<void> => {
   try {
@@ -31,6 +145,7 @@ export const setMangaData = async (data: MangaData): Promise<void> => {
     }
     // Set the bookmark changed flag
     await AsyncStorage.setItem('bookmarkChanged', 'true');
+    invalidateBookmarkSummaries();
   } catch (e) {
     console.error('Error saving manga data:', e);
   }
@@ -186,6 +301,7 @@ export const removeBookmark = async (
     setBookmarkStatus(null);
     setIsAlertVisible(false);
     await AsyncStorage.setItem('bookmarkChanged', 'true');
+    invalidateBookmarkSummaries();
   } catch (error) {
     console.error('Error removing bookmark:', error);
   }
