@@ -13,6 +13,7 @@
     "allowUnusedLabels": false,
     "allowUnreachableCode": false,
     "forceConsistentCasingInFileNames": true,
+    "types": ["jest"],
     "paths": {
       "@/*": ["./*"]
     }
