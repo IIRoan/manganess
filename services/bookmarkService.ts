@@ -8,6 +8,7 @@ import {
   IconName,
   MangaData,
 } from '@/types';
+import { imageCache } from '@/services/CacheImages';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
 const BOOKMARK_KEYS_STORAGE_KEY = 'bookmarkKeys';
@@ -76,6 +77,11 @@ const startBookmarkSummariesFetch = (): Promise<BookmarkItem[]> => {
     .then((summaries) => {
       if (bookmarkSummariesRequestId === requestId) {
         bookmarkSummariesCache = summaries;
+        summaries.forEach((item) => {
+          if (item.imageUrl) {
+            imageCache.getCachedImagePath(item.imageUrl, 'bookmark');
+          }
+        });
       }
       return summaries;
     })

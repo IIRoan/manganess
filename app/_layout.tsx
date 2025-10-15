@@ -6,10 +6,10 @@ import {
   ThemeProvider as NavigationThemeProvider,
 } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { useColorScheme, StatusBar } from 'react-native';
+import { useColorScheme, StatusBar, InteractionManager } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { isDebugEnabled } from '@/constants/env';
@@ -18,6 +18,7 @@ import { installNetworkMonitor } from '@/utils/networkMonitor';
 import { useNavigationPerf } from '@/hooks/useNavigationPerf';
 import { logger } from '@/utils/logger';
 import Constants from 'expo-constants';
+import { preloadBookmarkSummaries } from '@/services/bookmarkService';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -73,6 +74,39 @@ export default function RootLayout() {
     if (loaded) {
       SplashScreen.hideAsync();
     }
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!loaded) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) {
+        return;
+      }
+
+      Promise.resolve()
+        .then(() => router.prefetch('/bookmarks'))
+        .catch((error: unknown) => {
+          if (isDebugEnabled()) {
+            console.warn('Failed to prefetch /bookmarks', error);
+          }
+        });
+
+      preloadBookmarkSummaries().catch((error: unknown) => {
+        if (isDebugEnabled()) {
+          console.warn('Failed to preload bookmark summaries', error);
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      interactionHandle?.cancel?.();
+    };
   }, [loaded]);
 
   if (!loaded) {

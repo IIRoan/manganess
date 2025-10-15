@@ -22,7 +22,6 @@ import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { imageCache } from '@/services/CacheImages';
 import { getLastReadManga } from '@/services/readChapterService';
-import { preloadBookmarkSummaries } from '@/services/bookmarkService';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
 import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { SwipeGestureOverlay } from '@/components/SwipeBackIndicator';
@@ -184,8 +183,8 @@ export default function TabLayout() {
     const routesToPrefetch = ['/', '/bookmarks'];
 
     const interactionHandle = InteractionManager.runAfterInteractions(() => {
-      const tasks = [
-        ...routesToPrefetch.map((routePath) =>
+      Promise.all(
+        routesToPrefetch.map((routePath) =>
           Promise.resolve()
             .then(() => router.prefetch(routePath))
             .catch((error: unknown) => {
@@ -193,15 +192,8 @@ export default function TabLayout() {
                 console.warn(`Failed to prefetch route ${routePath}`, error);
               }
             })
-        ),
-        preloadBookmarkSummaries().catch((error: unknown) => {
-          if (isDebugEnabled()) {
-            console.warn('Failed to preload bookmark summaries', error);
-          }
-        }),
-      ];
-
-      Promise.all(tasks).catch((error: unknown) => {
+        )
+      ).catch((error: unknown) => {
         if (isDebugEnabled()) {
           console.warn('Prefetch tasks rejected', error);
         }
