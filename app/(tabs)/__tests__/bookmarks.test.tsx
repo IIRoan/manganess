@@ -2,7 +2,6 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Text, TouchableOpacity } from 'react-native';
 
 import BookmarksScreen from '../bookmarks';
 import { getMangaData } from '@/services/bookmarkService';
@@ -35,33 +34,20 @@ jest.mock('@/services/CacheImages', () => ({
   },
 }));
 
-jest.mock('@expo/vector-icons', () => {
-  const React = require('react');
-  const { Text } = require('react-native');
-  return {
-    Ionicons: ({ name }: { name: string }) =>
-      React.createElement(Text, {}, name),
-  };
-});
+jest.mock('@expo/vector-icons', () => ({
+  Ionicons: jest.fn(({ name }: { name: string }) => name),
+}));
 
-jest.mock('@/components/MangaCard', () => {
-  const React = require('react');
-  const { Text, TouchableOpacity } = require('react-native');
-
-  return function MockMangaCard({
-    title,
-    onPress,
-  }: {
-    title: string;
-    onPress: () => void;
-  }) {
-    return React.createElement(
-      TouchableOpacity,
-      { onPress, testID: `manga-card-${title}` },
-      React.createElement(Text, {}, title)
-    );
-  };
-});
+jest.mock('@/components/MangaCard', () =>
+  jest.fn(({ title, onPress }: { title: string; onPress: () => void }) => ({
+    type: 'TouchableOpacity',
+    props: {
+      onPress,
+      testID: `manga-card-${title}`,
+      children: title,
+    },
+  }))
+);
 
 const initialMetrics = {
   frame: { x: 0, y: 0, width: 320, height: 640 },

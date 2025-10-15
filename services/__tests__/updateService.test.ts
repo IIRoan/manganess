@@ -22,16 +22,16 @@ describe('updateService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (global as any).__DEV__ = false;
+    (globalThis as any).__DEV__ = false;
   });
 
   afterAll(() => {
-    (global as any).__DEV__ = originalDev;
+    (globalThis as any).__DEV__ = originalDev;
   });
 
   describe('checkForUpdate', () => {
     it('short-circuits in development mode', async () => {
-      (global as any).__DEV__ = true;
+      (globalThis as any).__DEV__ = true;
 
       const result = await checkForUpdate();
       expect(result).toEqual({
@@ -60,7 +60,7 @@ describe('updateService', () => {
 
   describe('downloadUpdate', () => {
     it('rejects in development mode', async () => {
-      (global as any).__DEV__ = true;
+      (globalThis as any).__DEV__ = true;
 
       const result = await downloadUpdate();
       expect(result).toEqual({
@@ -71,7 +71,7 @@ describe('updateService', () => {
     });
 
     it('downloads update when available', async () => {
-      (global as any).__DEV__ = false;
+      (globalThis as any).__DEV__ = false;
       Updates.fetchUpdateAsync.mockResolvedValue(undefined);
 
       const result = await downloadUpdate();
@@ -84,11 +84,11 @@ describe('updateService', () => {
 
   describe('applyUpdate', () => {
     it('prevents update on web or dev', async () => {
-      (global as any).__DEV__ = true;
+      (globalThis as any).__DEV__ = true;
       const devResult = await applyUpdate();
       expect(devResult.success).toBe(false);
 
-      (global as any).__DEV__ = false;
+      (globalThis as any).__DEV__ = false;
       const reactNative = require('react-native');
       reactNative.Platform.OS = 'web';
 
@@ -100,7 +100,7 @@ describe('updateService', () => {
     });
 
     it('reloads app when allowed', async () => {
-      (global as any).__DEV__ = false;
+      (globalThis as any).__DEV__ = false;
       const reactNative = require('react-native');
       reactNative.Platform.OS = 'ios';
 
@@ -123,7 +123,10 @@ describe('updateService', () => {
         (status) => statuses.push(status)
       );
 
-      expect(result).toEqual({ success: true, message: 'Update applied successfully' });
+      expect(result).toEqual({
+        success: true,
+        message: 'Update applied successfully',
+      });
       expect(Updates.checkForUpdateAsync).toHaveBeenCalled();
       expect(Updates.fetchUpdateAsync).toHaveBeenCalled();
       expect(Updates.reloadAsync).toHaveBeenCalled();
@@ -134,10 +137,7 @@ describe('updateService', () => {
     it('propagates failure details and respects silent flag', async () => {
       Updates.checkForUpdateAsync.mockResolvedValue({ isAvailable: false });
 
-      const result = await performFullUpdateFlow(
-        { silent: true },
-        jest.fn()
-      );
+      const result = await performFullUpdateFlow({ silent: true }, jest.fn());
 
       expect(Updates.checkForUpdateAsync).toHaveBeenCalled();
       expect(result.success).toBe(false);

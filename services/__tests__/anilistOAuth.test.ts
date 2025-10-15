@@ -1,5 +1,14 @@
-import { loginWithAniList, logout, makeAniListRequest, getCurrentUser } from '../anilistOAuth';
-import { saveAuthData, getAuthData, clearAuthData } from '../anilistAuthService';
+import {
+  loginWithAniList,
+  logout,
+  makeAniListRequest,
+  getCurrentUser,
+} from '../anilistOAuth';
+import {
+  saveAuthData,
+  getAuthData,
+  clearAuthData,
+} from '../anilistAuthService';
 
 jest.mock('expo-web-browser', () => ({
   openAuthSessionAsync: jest.fn(),
@@ -15,14 +24,15 @@ jest.mock('../anilistAuthService', () => ({
   clearAuthData: jest.fn(),
 }));
 
-const mockOpenAuthSessionAsync = require('expo-web-browser').openAuthSessionAsync as jest.Mock;
+const mockOpenAuthSessionAsync = require('expo-web-browser')
+  .openAuthSessionAsync as jest.Mock;
 
 describe('anilistOAuth', () => {
   const originalDateNow = Date.now;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    global.fetch = jest.fn();
+    globalThis.fetch = jest.fn();
     Date.now = jest.fn(() => 1_000_000);
   });
 
@@ -55,7 +65,9 @@ describe('anilistOAuth', () => {
   it('throws when authentication fails', async () => {
     mockOpenAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
 
-    await expect(loginWithAniList()).rejects.toThrow('Authentication failed: cancel');
+    await expect(loginWithAniList()).rejects.toThrow(
+      'Authentication failed: cancel'
+    );
     expect(saveAuthData).not.toHaveBeenCalled();
   });
 
@@ -74,11 +86,11 @@ describe('anilistOAuth', () => {
       ok: true,
       json: () => Promise.resolve({ data: { viewer: { id: 1 } } }),
     } as any;
-    (global.fetch as jest.Mock).mockResolvedValue(mockResponse);
+    (globalThis.fetch as jest.Mock).mockResolvedValue(mockResponse);
 
     const data = await makeAniListRequest('query Test', { var: 1 });
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://graphql.anilist.co',
       expect.objectContaining({
         method: 'POST',
@@ -94,10 +106,15 @@ describe('anilistOAuth', () => {
   it('throws when request fails or user not logged in', async () => {
     (getAuthData as jest.Mock).mockResolvedValue(null);
 
-    await expect(makeAniListRequest('query', {})).rejects.toThrow('User is not logged in');
+    await expect(makeAniListRequest('query', {})).rejects.toThrow(
+      'User is not logged in'
+    );
 
-    (getAuthData as jest.Mock).mockResolvedValue({ accessToken: 'abc', expiresAt: Date.now() + 1000 });
-    (global.fetch as jest.Mock).mockResolvedValue({
+    (getAuthData as jest.Mock).mockResolvedValue({
+      accessToken: 'abc',
+      expiresAt: Date.now() + 1000,
+    });
+    (globalThis.fetch as jest.Mock).mockResolvedValue({
       ok: false,
       json: () => Promise.resolve({ errors: [{ message: 'Boom' }] }),
     });
@@ -110,7 +127,7 @@ describe('anilistOAuth', () => {
       accessToken: 'token-xyz',
       expiresAt: Date.now() + 1000,
     });
-    (global.fetch as jest.Mock).mockResolvedValue({
+    (globalThis.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: () =>
         Promise.resolve({ data: { Viewer: { id: 42, name: 'User' } } }),
@@ -118,7 +135,7 @@ describe('anilistOAuth', () => {
 
     const result = await getCurrentUser();
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://graphql.anilist.co',
       expect.objectContaining({
         body: expect.stringContaining('Viewer'),
