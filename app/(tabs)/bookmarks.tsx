@@ -547,16 +547,22 @@ export default function BookmarksScreen() {
           <Text style={styles.headerTitle}>My Bookmarks</Text>
           <View style={styles.headerButtons}>
             <TouchableOpacity
+              testID="bookmarks-toggle-sort"
               style={styles.headerButton}
               onPress={toggleSortOptions}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle sort options"
             >
               <Ionicons name="options-outline" size={22} color={colors.text} />
             </TouchableOpacity>
             <TouchableOpacity
+              testID="bookmarks-toggle-view"
               style={styles.headerButton}
               onPress={toggleView}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle view mode"
             >
               <Ionicons
                 name={viewMode === 'grid' ? 'list-outline' : 'grid-outline'}
