@@ -12,6 +12,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
   ScrollView,
+  PanResponder,
 } from 'react-native';
 import * as Reanimated from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -69,6 +70,25 @@ export default function ReadChapterScreen() {
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
   const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
+  const panResponderRef = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          // Only allow downward swipes
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 50) {
+          // If swiped down more than 50 pixels, close the sheet
+          closeChapterList();
+        }
+      },
+    })
+  ).current;
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -655,23 +675,21 @@ export default function ReadChapterScreen() {
                   <View style={styles.modalOverlay} />
                 </TouchableWithoutFeedback>
                 <View style={styles.fallbackSheetContainer}>
-                  <TouchableOpacity
-                    onPress={closeChapterList}
-                    style={styles.fallbackSheetHandleContainer}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.fallbackSheetHandle} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={closeChapterList}
-                    style={styles.fallbackSheetHeaderContainer}
-                    activeOpacity={1}
-                  >
-                    <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
-                    <Text style={styles.currentChapterTitle}>
-                      Current: Chapter {chapterNumber}
-                    </Text>
-                  </TouchableOpacity>
+                  <View {...panResponderRef.panHandlers}>
+                    <TouchableOpacity
+                      onPress={closeChapterList}
+                      style={styles.fallbackSheetHandleContainer}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.fallbackSheetHandle} />
+                    </TouchableOpacity>
+                    <View style={styles.fallbackSheetHeaderContainer}>
+                      <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
+                      <Text style={styles.currentChapterTitle}>
+                        Current: Chapter {chapterNumber}
+                      </Text>
+                    </View>
+                  </View>
                   <ScrollView
                     style={styles.fallbackSheetScrollView}
                     contentContainerStyle={styles.fallbackSheetScrollContent}

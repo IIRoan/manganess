@@ -247,12 +247,14 @@ export default function getStyles(colorScheme: ColorScheme) {
     },
     closeButton: {
       marginTop: 16,
-      marginHorizontal: -24,
-      paddingHorizontal: 24,
+      marginHorizontal: 'auto',
+      paddingHorizontal: 32,
       paddingVertical: 16,
       alignItems: 'center',
       backgroundColor: colors.primary,
-      borderRadius: 0,
+      borderRadius: 12,
+      alignSelf: 'center',
+      width: '80%',
     },
     closeButtonText: {
       color: '#FFFFFF',
