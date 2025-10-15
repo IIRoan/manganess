@@ -6,7 +6,7 @@ import {
   ThemeProvider as NavigationThemeProvider,
 } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useRef, useState } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
@@ -74,8 +74,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     let isActive = true;
-
-    router.prefetch('/bookmarks');
 
     preloadBookmarkSummaries()
       .catch((error: unknown) => {
