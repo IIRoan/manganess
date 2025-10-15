@@ -16,9 +16,7 @@ describe('useThemeColor', () => {
   });
 
   it('falls back to predefined palette when prop missing', () => {
-    const { result } = renderHook(() =>
-      useThemeColor({}, 'background')
-    );
+    const { result } = renderHook(() => useThemeColor({}, 'background'));
 
     expect(typeof result.current).toBe('string');
   });

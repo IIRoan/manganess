@@ -69,7 +69,9 @@ describe('mangaFireService', () => {
   });
 
   it('requires a non-empty search keyword', async () => {
-    await expect(searchManga(' ')).rejects.toThrow('Search keyword is required');
+    await expect(searchManga(' ')).rejects.toThrow(
+      'Search keyword is required'
+    );
   });
 
   it('searches manga and appends VRF token when present', async () => {
@@ -85,7 +87,9 @@ describe('mangaFireService', () => {
   });
 
   it('throws CloudflareDetectedError when challenge HTML detected', async () => {
-    mockedAxios.get.mockResolvedValue({ data: '<html>cf-browser-verification</html>' });
+    mockedAxios.get.mockResolvedValue({
+      data: '<html>cf-browser-verification</html>',
+    });
 
     await expect(searchManga('test')).rejects.toBeInstanceOf(
       CloudflareDetectedError

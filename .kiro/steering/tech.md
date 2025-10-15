@@ -38,12 +38,11 @@ bun run ios        # Run on iOS
 ### Code Quality
 
 ```bash
-bun run lint       # Run ESLint
 bun run lint:fix   # Fix ESLint issues
-bun run typecheck  # TypeScript type checking
 bun run check      # Run both lint and typecheck
 bun run format:check  # Check Prettier formatting
 bun run format:write  # Apply Prettier formatting
+bun run test # Run tests
 ```
 
 ### Building

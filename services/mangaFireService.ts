@@ -108,20 +108,23 @@ export function getVrfToken(): string | null {
   return sessionVrfToken;
 }
 
-export const searchManga = async (keyword: string, vrfToken?: string): Promise<MangaItem[]> => {
+export const searchManga = async (
+  keyword: string,
+  vrfToken?: string
+): Promise<MangaItem[]> => {
   if (!keyword || keyword.trim().length === 0) {
     throw new Error('Search keyword is required');
   }
 
   const log = logger();
   if (isDebugEnabled()) log.info('Service', 'searchManga:start', { keyword });
-  
+
   const result = await performanceMonitor.measureAsync(
     `searchManga:${keyword}`,
     () =>
       retryApiCall(async () => {
         let searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword.trim())}`;
-        
+
         // Add VRF token if provided or from session store
         const tokenToUse = vrfToken || sessionVrfToken || '';
         if (tokenToUse) {
