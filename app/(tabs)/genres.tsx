@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -17,7 +18,6 @@ import { MANGA_API_URL } from '@/constants/Config';
 import axios from 'axios';
 import { router } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
-import BackButton from '@/components/BackButton';
 
 interface Genre {
   name: string;
@@ -81,6 +81,14 @@ export default function GenresScreen() {
   const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
   const [mangaList, setMangaList] = useState<MangaItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filteredGenres = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = [...GENRES].sort((a, b) => a.name.localeCompare(b.name));
+    if (!q) return base;
+    return base.filter((g) => g.name.toLowerCase().includes(q));
+  }, [query]);
 
   const fetchGenreManga = async (genre: Genre, isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -143,7 +151,7 @@ export default function GenresScreen() {
       style={[
         styles.genreCard,
         {
-          backgroundColor: colors.background,
+          backgroundColor: colors.card,
           borderColor: colors.border,
         },
       ]}
@@ -181,16 +189,15 @@ export default function GenresScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             <View style={styles.selectedGenreHeader}>
-              <BackButton
-                variant="smart"
-                size={24}
-                customOnPress={() => {
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => {
                   setSelectedGenre(null);
                   setMangaList([]);
                 }}
-                accessibilityLabel="Go back to genres"
-                accessibilityHint="Return to the genres list"
-              />
+              >
+                <Ionicons name="arrow-back" size={24} color={colors.text} />
+              </TouchableOpacity>
               <Text
                 style={[
                   styles.selectedGenreTitle,
@@ -229,7 +236,7 @@ export default function GenresScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <FlatList
-        data={GENRES}
+        data={filteredGenres}
         renderItem={renderGenreItem}
         keyExtractor={(item) => item.slug}
         numColumns={2}
@@ -238,20 +245,35 @@ export default function GenresScreen() {
         contentContainerStyle={styles.contentContainer}
         ListHeaderComponent={
           <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <BackButton
-                variant="smart"
-                size={24}
-                showLabel={false}
-                accessibilityLabel="Go back to home"
-                accessibilityHint="Return to the home screen"
+            <Text style={styles.title}>Genres</Text>
+            <View
+              style={[
+                styles.searchInputContainer,
+                { borderColor: colors.border, backgroundColor: colors.card },
+              ]}
+            >
+              <Ionicons
+                name="search"
+                size={18}
+                color={colors.tabIconDefault}
+                style={styles.searchIcon}
               />
-              <View style={styles.headerTitleContainer}>
-                <Text style={styles.title}>Browse by Genre</Text>
-                <Text style={styles.subtitle}>
-                  Discover manga by your favorite genres
-                </Text>
-              </View>
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search genres"
+                placeholderTextColor={colors.tabIconDefault}
+                style={[styles.searchInput, { color: colors.text }]}
+              />
+              {query.length > 0 && (
+                <TouchableOpacity onPress={() => setQuery('')}>
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={18}
+                    color={colors.tabIconDefault}
+                  />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         }
@@ -264,53 +286,50 @@ const getStyles = (colors: typeof Colors.light) =>
   StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.card,
+      backgroundColor: colors.background,
     },
     contentContainer: {
-      paddingHorizontal: 20,
+      paddingHorizontal: 16,
       paddingBottom: 100,
     },
     header: {
-      marginBottom: 25,
-      marginTop: 10,
-    },
-    headerTop: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      marginBottom: 5,
-    },
-    headerTitleContainer: {
-      flex: 1,
-      marginLeft: 12,
+      marginBottom: 16,
+      marginTop: 8,
     },
     title: {
-      fontSize: 32,
-      fontWeight: 'bold',
+      fontSize: 24,
+      fontWeight: '700',
       color: colors.text,
-      marginBottom: 8,
+      marginBottom: 12,
     },
-    subtitle: {
-      fontSize: 16,
-      color: colors.text,
-      opacity: 0.7,
+    searchInputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      height: 36,
+      borderWidth: 1,
+    },
+    searchIcon: {
+      marginRight: 6,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 14,
+      paddingVertical: 6,
     },
     genreRow: {
       justifyContent: 'space-between',
       marginBottom: 12,
     },
     genreCard: {
-      width: (SCREEN_WIDTH - 52) / 2,
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      borderRadius: 12,
+      width: (SCREEN_WIDTH - 48) / 2,
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      borderRadius: 10,
       borderWidth: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 4,
-      elevation: 1,
     },
     genreColorDot: {
       width: 12,
@@ -319,36 +338,39 @@ const getStyles = (colors: typeof Colors.light) =>
       marginRight: 12,
     },
     genreText: {
-      fontSize: 14,
-      fontWeight: '500',
+      fontSize: 15,
+      fontWeight: '600',
       flex: 1,
     },
     selectedGenreHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 25,
-      marginTop: 10,
-      paddingRight: 15,
+      marginBottom: 16,
+      marginTop: 8,
+    },
+    backButton: {
+      padding: 6,
+      marginRight: 12,
+      borderRadius: 8,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     selectedGenreTitle: {
-      fontSize: 24,
-      fontWeight: 'bold',
+      fontSize: 20,
+      fontWeight: '700',
       flex: 1,
-      marginLeft: 12,
     },
     mangaRow: {
       justifyContent: 'space-between',
       marginBottom: 15,
     },
     mangaCard: {
-      width: (SCREEN_WIDTH - 52) / 2,
-      backgroundColor: colors.background,
-      borderRadius: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 2,
+      width: (SCREEN_WIDTH - 48) / 2,
+      backgroundColor: colors.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     loadingContainer: {
       flex: 1,
