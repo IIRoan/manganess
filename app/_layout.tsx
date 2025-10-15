@@ -12,6 +12,7 @@ import React, { useEffect } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { ToastProvider } from '../components/ToastProvider';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
@@ -36,17 +37,19 @@ function RootLayoutNav() {
         value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}
       >
         <ErrorBoundary>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="cloudflare"
-              options={{
-                headerShown: true,
-                title: 'Cloudflare Verification',
-                presentation: 'modal',
-              }}
-            />
-          </Stack>
+          <ToastProvider>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="cloudflare"
+                options={{
+                  headerShown: true,
+                  title: 'Cloudflare Verification',
+                  presentation: 'modal',
+                }}
+              />
+            </Stack>
+          </ToastProvider>
         </ErrorBoundary>
       </NavigationThemeProvider>
     </>

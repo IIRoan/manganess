@@ -3,6 +3,7 @@ import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { updateAniListStatus } from './anilistService';
 import { BookmarkStatus, MangaData, IconName } from '@/types';
+import { toastService } from './toastService';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
 
@@ -110,6 +111,25 @@ export const saveBookmark = async (
     setBookmarkStatus(status);
     setIsAlertVisible(false);
 
+    // Show toast notification
+    const statusIcons: Record<BookmarkStatus, string> = {
+      'To Read': 'book-outline',
+      'Reading': 'book',
+      'On Hold': 'pause-circle-outline',
+      'Read': 'checkmark-circle-outline',
+    };
+    const statusMessages: Record<BookmarkStatus, string> = {
+      'To Read': 'Added to To Read',
+      'Reading': 'Marked as Reading',
+      'On Hold': 'Marked as On Hold',
+      'Read': 'Marked as Read',
+    };
+    toastService.show({
+      message: statusMessages[status],
+      icon: statusIcons[status],
+      duration: 2500,
+    });
+
     if (status === 'Read') {
       Alert.alert(
         'Mark All Chapters as Read',
@@ -186,6 +206,13 @@ export const removeBookmark = async (
     setBookmarkStatus(null);
     setIsAlertVisible(false);
     await AsyncStorage.setItem('bookmarkChanged', 'true');
+
+    // Show toast notification
+    toastService.show({
+      message: 'Bookmark removed',
+      icon: 'close-circle-outline',
+      duration: 2500,
+    });
   } catch (error) {
     console.error('Error removing bookmark:', error);
   }
