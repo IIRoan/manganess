@@ -15,8 +15,16 @@ import {
   PanResponder,
 } from 'react-native';
 import * as Reanimated from 'react-native-reanimated';
+import {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
+import { Dimensions } from 'react-native';
 
 import { WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,6 +78,11 @@ export default function ReadChapterScreen() {
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
   const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const screenHeight = Dimensions.get('window').height;
+  const translateY = useSharedValue(screenHeight);
+  const overlayOpacity = useSharedValue(0);
+
   const panResponderRef = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -264,10 +277,20 @@ export default function ReadChapterScreen() {
       bottomSheetRef.current?.close();
       handleBottomSheetChange(-1);
     } else {
-      setIsBottomSheetOpen(false);
-      showControls();
+      translateY.value = withTiming(screenHeight, {
+        duration: 250,
+        easing: Easing.in(Easing.ease),
+      });
+      overlayOpacity.value = withTiming(0, {
+        duration: 250,
+        easing: Easing.in(Easing.ease),
+      });
+      setTimeout(() => {
+        setIsBottomSheetOpen(false);
+        showControls();
+      }, 250);
     }
-  }, [supportsWorklets, showControls, handleBottomSheetChange]);
+  }, [supportsWorklets, showControls, handleBottomSheetChange, translateY, overlayOpacity, screenHeight]);
 
   const toggleControls = useCallback(() => {
     // Don't toggle controls during the first step of the guide
@@ -320,6 +343,23 @@ export default function ReadChapterScreen() {
   useEffect(() => {
     fetchDetails();
   }, [fetchDetails]);
+
+  useEffect(() => {
+    if (!supportsWorklets) {
+      if (isBottomSheetOpen) {
+        translateY.value = withSpring(0, {
+          damping: 25,
+          stiffness: 200,
+          mass: 0.5,
+          overshootClamping: false,
+        });
+        overlayOpacity.value = withTiming(1, {
+          duration: 250,
+          easing: Easing.out(Easing.ease),
+        });
+      }
+    }
+  }, [isBottomSheetOpen, supportsWorklets, translateY, overlayOpacity]);
 
   useFocusEffect(
     useCallback(() => {
@@ -456,6 +496,18 @@ export default function ReadChapterScreen() {
 
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
+
+  const containerAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: translateY.value }],
+    };
+  });
+
+  const overlayAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: overlayOpacity.value,
+    };
+  });
 
   return (
     <View style={styles.container}>
@@ -667,14 +719,14 @@ export default function ReadChapterScreen() {
             <Modal
               visible={isBottomSheetOpen}
               transparent
-              animationType="slide"
+              animationType="none"
               onRequestClose={closeChapterList}
             >
               <View style={styles.modalContainer}>
                 <TouchableWithoutFeedback onPress={closeChapterList}>
-                  <View style={styles.modalOverlay} />
+                  <Reanimated.default.View style={[styles.modalOverlay, overlayAnimatedStyle]} />
                 </TouchableWithoutFeedback>
-                <View style={styles.fallbackSheetContainer}>
+                <Reanimated.default.View style={[styles.fallbackSheetContainer, containerAnimatedStyle]}>
                   <View {...panResponderRef.panHandlers}>
                     <TouchableOpacity
                       onPress={closeChapterList}
@@ -703,7 +755,7 @@ export default function ReadChapterScreen() {
                   >
                     <Text style={styles.closeButtonText}>Close</Text>
                   </TouchableOpacity>
-                </View>
+                </Reanimated.default.View>
               </View>
             </Modal>
           )}
