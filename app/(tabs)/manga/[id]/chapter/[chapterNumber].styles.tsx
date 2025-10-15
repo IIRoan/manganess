@@ -14,19 +14,21 @@ export default function getStyles(colorScheme: ColorScheme) {
       : 'rgba(255, 255, 255, 0.85)';
 
   return StyleSheet.create({
+    modalContainer: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
     modalOverlay: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: 'rgba(0,0,0,0.5)',
     },
     fallbackSheetContainer: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      bottom: 0,
+      maxHeight: '80%',
       backgroundColor: bottomSheetBg,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      padding: 24,
+      paddingTop: 8,
+      paddingHorizontal: 24,
       paddingBottom: 32,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: -3 },
@@ -34,13 +36,24 @@ export default function getStyles(colorScheme: ColorScheme) {
       shadowRadius: 8,
       elevation: 8,
     },
+    fallbackSheetHandleContainer: {
+      paddingVertical: 12,
+      marginHorizontal: -24,
+      alignItems: 'center',
+    },
     fallbackSheetHandle: {
       width: 40,
       height: 4,
       borderRadius: 2,
       backgroundColor: colors.text + '40',
-      alignSelf: 'center',
-      marginBottom: 12,
+    },
+    fallbackSheetScrollView: {
+      flex: 1,
+      marginHorizontal: -24,
+    },
+    fallbackSheetScrollContent: {
+      paddingHorizontal: 24,
+      paddingBottom: 24,
     },
     container: {
       flex: 1,

@@ -11,6 +11,7 @@ import {
   StatusBar,
   Modal,
   TouchableWithoutFeedback,
+  ScrollView,
 } from 'react-native';
 import * as Reanimated from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -649,19 +650,29 @@ export default function ReadChapterScreen() {
               animationType="slide"
               onRequestClose={closeChapterList}
             >
-              <TouchableWithoutFeedback onPress={closeChapterList}>
-                <View style={styles.modalOverlay} />
-              </TouchableWithoutFeedback>
-              <View style={styles.fallbackSheetContainer}>
-                <View style={styles.fallbackSheetHandle} />
-                <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
-                <Text style={styles.currentChapterTitle}>
-                  Current: Chapter {chapterNumber}
-                </Text>
-                <View
-                  style={[styles.bottomSheetContent, { paddingBottom: 24 }]}
-                >
-                  {renderChapterList()}
+              <View style={styles.modalContainer}>
+                <TouchableWithoutFeedback onPress={closeChapterList}>
+                  <View style={styles.modalOverlay} />
+                </TouchableWithoutFeedback>
+                <View style={styles.fallbackSheetContainer}>
+                  <TouchableOpacity
+                    onPress={closeChapterList}
+                    style={styles.fallbackSheetHandleContainer}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.fallbackSheetHandle} />
+                  </TouchableOpacity>
+                  <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
+                  <Text style={styles.currentChapterTitle}>
+                    Current: Chapter {chapterNumber}
+                  </Text>
+                  <ScrollView
+                    style={styles.fallbackSheetScrollView}
+                    contentContainerStyle={styles.fallbackSheetScrollContent}
+                    showsVerticalScrollIndicator={true}
+                  >
+                    {renderChapterList()}
+                  </ScrollView>
                 </View>
               </View>
             </Modal>
