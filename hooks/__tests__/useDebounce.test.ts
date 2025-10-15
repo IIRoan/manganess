@@ -13,7 +13,7 @@ describe('useDebounce', () => {
 
   it('returns debounced value after delay', () => {
     const { result, rerender } = renderHook(
-      ({ value }) => useDebounce(value, 100),
+      ({ value }: { value: string }) => useDebounce(value, 100),
       { initialProps: { value: 'first' } }
     );
 

@@ -44,7 +44,7 @@ describe('mangaMappingService', () => {
 
     const mappings = await getMangaMappings();
     expect(Object.keys(mappings)).toEqual(expect.arrayContaining(['a', 'b']));
-    expect(mappings.a.anilistId).toBe(1);
+    expect(mappings.a?.anilistId).toBe(1);
   });
 
   it('removes individual mappings and clears all', async () => {

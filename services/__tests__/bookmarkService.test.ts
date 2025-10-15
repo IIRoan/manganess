@@ -16,7 +16,9 @@ jest.mock('react-native', () => ({
 }));
 
 jest.mock('@/services/anilistService', () => ({
-  updateAniListStatus: jest.fn().mockResolvedValue({ success: true, message: '' }),
+  updateAniListStatus: jest
+    .fn()
+    .mockResolvedValue({ success: true, message: '' }),
 }));
 
 const { Alert } = require('react-native');
@@ -33,7 +35,7 @@ describe('bookmarkService', () => {
       id: '123',
       title: 'Example',
       bannerImage: 'image.jpg',
-      bookmarkStatus: 'Reading',
+      bookmarkStatus: 'Reading' as const,
       readChapters: ['1'],
       lastUpdated: 111,
       totalChapters: 10,
@@ -159,11 +161,7 @@ describe('bookmarkService', () => {
     );
 
     const mangaDetails = {
-      chapters: [
-        { number: '1' },
-        { number: '2' },
-        { number: '3' },
-      ],
+      chapters: [{ number: '1' }, { number: '2' }, { number: '3' }],
     };
 
     const config = getChapterLongPressAlertConfig(
@@ -176,7 +174,7 @@ describe('bookmarkService', () => {
     );
 
     expect(config?.options).toHaveLength(2);
-    await config?.options?.[1].onPress();
+    await config?.options?.[1]?.onPress?.();
 
     const stored = await AsyncStorage.getItem('manga_1');
     const parsed = stored ? JSON.parse(stored) : null;

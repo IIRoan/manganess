@@ -35,7 +35,7 @@ describe('useAppUpdates', () => {
 
   it('runs full update flow and marks readiness', async () => {
     updateService.performFullUpdateFlow.mockImplementation(
-      async (_options, statusCallback) => {
+      async (_options: any, statusCallback: any) => {
         statusCallback({
           isChecking: false,
           isUpdateAvailable: true,
@@ -50,7 +50,9 @@ describe('useAppUpdates', () => {
     const { result } = renderHook(() => useAppUpdates());
 
     await act(async () => {
-      const response = await result.current.checkAndDownload({ forceReload: false });
+      const response = await result.current.checkAndDownload({
+        forceReload: false,
+      });
       expect(response.success).toBe(true);
     });
 
@@ -60,7 +62,7 @@ describe('useAppUpdates', () => {
 
   it('applies ready updates via applyReadyUpdate', async () => {
     updateService.performFullUpdateFlow.mockImplementation(
-      async (_options, statusCallback) => {
+      async (_options: any, statusCallback: any) => {
         statusCallback({
           isChecking: false,
           isUpdateAvailable: true,
