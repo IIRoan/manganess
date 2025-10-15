@@ -23,7 +23,7 @@ export default function getStyles(colorScheme: ColorScheme) {
       backgroundColor: 'rgba(0,0,0,0.5)',
     },
     fallbackSheetContainer: {
-      maxHeight: '80%',
+      height: '80%',
       backgroundColor: bottomSheetBg,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
