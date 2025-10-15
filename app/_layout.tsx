@@ -8,8 +8,8 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import React, { useEffect } from 'react';
-import { useColorScheme, StatusBar, InteractionManager } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { useColorScheme, StatusBar } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { isDebugEnabled } from '@/constants/env';
@@ -55,6 +55,8 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const [bookmarksReady, setBookmarksReady] = useState(false);
+  const splashHiddenRef = useRef(false);
   useEffect(() => {
     if (!isDebugEnabled()) return;
     enableAsyncStorageLogging();
@@ -71,43 +73,39 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+    let isActive = true;
 
-  useEffect(() => {
-    if (!loaded) {
-      return;
-    }
+    router.prefetch('/bookmarks');
 
-    let cancelled = false;
-
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
-      if (cancelled) {
-        return;
-      }
-
-      Promise.resolve()
-        .then(() => router.prefetch('/bookmarks'))
-        .catch((error: unknown) => {
-          if (isDebugEnabled()) {
-            console.warn('Failed to prefetch /bookmarks', error);
-          }
-        });
-
-      preloadBookmarkSummaries().catch((error: unknown) => {
+    preloadBookmarkSummaries()
+      .catch((error: unknown) => {
         if (isDebugEnabled()) {
           console.warn('Failed to preload bookmark summaries', error);
         }
+      })
+      .finally(() => {
+        if (isActive) {
+          setBookmarksReady(true);
+        }
       });
-    });
 
     return () => {
-      cancelled = true;
-      interactionHandle?.cancel?.();
+      isActive = false;
     };
-  }, [loaded]);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded || !bookmarksReady || splashHiddenRef.current) {
+      return;
+    }
+
+    splashHiddenRef.current = true;
+    SplashScreen.hideAsync().catch((error: unknown) => {
+      if (isDebugEnabled()) {
+        console.warn('Failed to hide splash screen', error);
+      }
+    });
+  }, [loaded, bookmarksReady]);
 
   if (!loaded) {
     return null;
