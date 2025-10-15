@@ -24,16 +24,16 @@ const { getAuthData } = require('../anilistOAuth');
 const mapping = require('../mangaMappingService');
 
 describe('anilistService', () => {
-  const originalFetch = global.fetch;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    global.fetch = jest.fn();
+    globalThis.fetch = jest.fn();
     (Date.now as unknown as jest.Mock | undefined)?.mockRestore?.();
   });
 
   afterAll(() => {
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
   });
 
   it('detects login status based on stored auth data', async () => {
@@ -51,13 +51,13 @@ describe('anilistService', () => {
   });
 
   it('searches AniList manga by name', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
+    (globalThis.fetch as jest.Mock).mockResolvedValue({
       json: () => Promise.resolve({ data: { Media: { id: 1 } } }),
       ok: true,
     });
 
     const result = await searchAnilistMangaByName('Test');
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://graphql.anilist.co',
       expect.any(Object)
     );
@@ -80,13 +80,13 @@ describe('anilistService', () => {
       expiresAt: Date.now() + 1000,
     });
 
-    (global.fetch as jest.Mock).mockResolvedValue({
+    (globalThis.fetch as jest.Mock).mockResolvedValue({
       json: () => Promise.resolve({ data: { result: true } }),
       ok: true,
     });
 
     await updateMangaStatus(1, 'CURRENT', 10);
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://graphql.anilist.co',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer abc' }),
@@ -97,7 +97,7 @@ describe('anilistService', () => {
   it('skips updates when not authenticated', async () => {
     (getAuthData as jest.Mock).mockResolvedValue(null);
     await updateMangaStatus(1, 'CURRENT', 10);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('updates AniList status end to end', async () => {
@@ -106,10 +106,9 @@ describe('anilistService', () => {
       expiresAt: Date.now() + 1000,
     });
 
-    (global.fetch as jest.Mock)
+    (globalThis.fetch as jest.Mock)
       .mockResolvedValueOnce({
-        json: () =>
-          Promise.resolve({ data: { Media: { id: 7, title: {} } } }),
+        json: () => Promise.resolve({ data: { Media: { id: 7, title: {} } } }),
         ok: true,
       })
       .mockResolvedValueOnce({
@@ -117,16 +116,11 @@ describe('anilistService', () => {
         ok: true,
       });
 
-    const result = await updateAniListStatus(
-      'Title',
-      'Read',
-      ['1', '2'],
-      2
-    );
+    const result = await updateAniListStatus('Title', 'Read', ['1', '2'], 2);
 
     expect(result.success).toBe(true);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    const secondCall = (global.fetch as jest.Mock).mock.calls[1][1];
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    const secondCall = (globalThis.fetch as jest.Mock).mock.calls[1][1];
     expect(secondCall.body).toContain('SaveMediaListEntry');
   });
 

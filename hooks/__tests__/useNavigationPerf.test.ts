@@ -26,16 +26,16 @@ jest.mock('react-native', () => ({
 import { useNavigationPerf } from '../useNavigationPerf';
 
 describe('useNavigationPerf', () => {
-  const originalRAF = global.requestAnimationFrame;
-  const originalPerformance = global.performance;
+  const originalRAF = globalThis.requestAnimationFrame;
+  const originalPerformance = globalThis.performance;
 
   beforeEach(() => {
     mockLoggerInfo.mockClear();
-    global.requestAnimationFrame = (cb: FrameRequestCallback) => {
+    globalThis.requestAnimationFrame = (cb: FrameRequestCallback) => {
       cb(0);
       return 0;
     };
-    global.performance = {
+    globalThis.performance = {
       now: jest.fn(() => Date.now()),
       mark: jest.fn(),
       measure: jest.fn(),
@@ -48,8 +48,8 @@ describe('useNavigationPerf', () => {
   });
 
   afterEach(() => {
-    global.requestAnimationFrame = originalRAF;
-    global.performance = originalPerformance;
+    globalThis.requestAnimationFrame = originalRAF;
+    globalThis.performance = originalPerformance;
   });
 
   it('logs navigation performance metrics on route changes when debug enabled', () => {

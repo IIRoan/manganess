@@ -67,7 +67,7 @@ export default function ReadChapterScreen() {
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const controlsTimeout = useRef<NodeJS.Timeout | null>(null);
+  const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -166,7 +166,7 @@ export default function ReadChapterScreen() {
         duration: 200,
         useNativeDriver: true,
       }).start(() => setIsControlsVisible(false));
-    }, 3000) as unknown as NodeJS.Timeout;
+    }, 3000);
   }, [controlsOpacity, showGuide, guideStep]);
 
   const hideNavControls = useCallback(() => {
