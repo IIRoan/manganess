@@ -25,6 +25,7 @@ import {
   refreshMangaImages,
 } from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
 
@@ -49,6 +50,7 @@ export default function SettingsScreen() {
     theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
@@ -621,6 +623,26 @@ export default function SettingsScreen() {
                 style={styles.spinner}
               />
             )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Downloads</Text>
+          <TouchableOpacity
+            style={styles.option}
+            onPress={() => router.push('/downloads')}
+          >
+            <Ionicons name="download" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Manage Downloads</Text>
+            <Ionicons name="chevron-forward" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.option}
+            onPress={() => router.push('/download-settings')}
+          >
+            <Ionicons name="settings-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Download Settings</Text>
+            <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
 

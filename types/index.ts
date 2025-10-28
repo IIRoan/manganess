@@ -8,3 +8,5 @@ export * from './ui';
 export * from './api';
 export * from './errors';
 export * from './logging';
+export * from './download';
+export * from './downloadInterfaces';

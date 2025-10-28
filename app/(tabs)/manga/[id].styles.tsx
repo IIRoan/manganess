@@ -310,6 +310,9 @@ const getStyles = (colors: typeof Colors.light) =>
       alignItems: 'center',
       marginLeft: 12,
     },
+    downloadButton: {
+      marginRight: 4,
+    },
 
     rightAction: {
       alignItems: 'flex-end',
