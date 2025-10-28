@@ -1,4 +1,5 @@
 // Contains all manga-related types
+import { DownloadProgress } from './download';
 
 export interface MangaItem {
   id: string;
@@ -33,6 +34,12 @@ export interface Chapter {
   url: string;
 }
 
+export interface ChapterExtended extends Chapter {
+  isDownloaded: boolean;
+  downloadStatus?: DownloadProgress;
+  downloadSize?: number;
+}
+
 export interface BookmarkItem {
   id: string;
   title: string;
@@ -61,4 +68,14 @@ export interface MangaData {
   lastNotifiedChapter?: string;
   lastUpdated: number;
   totalChapters?: number;
+  // Download-related fields
+  downloadedChapters?: string[];
+  downloadStatus?: Record<string, DownloadProgress>;
+  totalDownloadSize?: number;
+}
+
+export interface MangaDataExtended extends MangaData {
+  downloadedChapters: string[];
+  downloadStatus: Record<string, DownloadProgress>;
+  totalDownloadSize: number;
 }

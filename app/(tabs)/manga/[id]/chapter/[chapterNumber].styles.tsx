@@ -1,10 +1,11 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
 
 const CHAPTER_ITEM_HEIGHT = 70;
 
 export default function getStyles(colorScheme: ColorScheme) {
   const colors = Colors[colorScheme];
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
   const bottomSheetBg = colorScheme === 'dark' ? '#1A1A1A' : '#FFFFFF';
   const chapterItemBg = colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5';
@@ -119,6 +120,11 @@ export default function getStyles(colorScheme: ColorScheme) {
       fontSize: 14,
       fontWeight: '500',
       color: colors.text + '99',
+    },
+    pageIndicator: {
+      fontSize: 12,
+      fontWeight: '400',
+      color: colors.primary,
     },
     menuIcon: {
       marginLeft: 6,
@@ -243,6 +249,55 @@ export default function getStyles(colorScheme: ColorScheme) {
     closeButtonText: {
       color: Colors[colorScheme].card,
       fontWeight: 'bold',
+    },
+    // Downloaded chapter styles - Manhwa (continuous scrolling)
+    manhwaImagesContainer: {
+      flexGrow: 1,
+      paddingVertical: 0,
+      paddingHorizontal: 0,
+    },
+    manhwaImageContainer: {
+      width: screenWidth,
+      marginBottom: 0,
+      position: 'relative',
+    },
+    manhwaImageLoader: {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: [{ translateX: -12 }, { translateY: -12 }],
+      backgroundColor: colors.background + 'CC',
+      borderRadius: 20,
+      padding: 8,
+    },
+    manhwaImage: {
+      width: screenWidth,
+      // Height will be set dynamically by the component
+    },
+
+    // Downloaded chapter styles - Manga (page-by-page)
+    mangaPageContainer: {
+      width: screenWidth,
+      height: screenHeight,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    mangaImage: {
+      width: screenWidth,
+      height: screenHeight,
+    },
+
+    // Loading text style
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: colors.text,
+      textAlign: 'center',
+    },
+
+    chapterEndSpacer: {
+      height: screenHeight * 0.1, // 10% of screen height for better UX
     },
   });
 }
