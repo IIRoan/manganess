@@ -24,8 +24,7 @@ import ExpandableText from '@/components/ExpandableText';
 import AlertComponent from '@/components/Alert';
 import SwipeableChapterItem from '@/components/SwipeChapterItem';
 import BottomPopup from '@/components/BottomPopup';
-import BatchDownloadButton from '@/components/BatchDownloadButton';
-import MangaDownloadStatus from '@/components/MangaDownloadStatus';
+
 import { FlashList } from '@shopify/flash-list';
 import type { FlashListRef } from '@shopify/flash-list';
 import { fetchMangaDetails } from '@/services/mangaFireService';
@@ -575,23 +574,6 @@ export default function MangaDetailScreen() {
           </View>
           <View style={styles.chaptersContainer}>
             <Text style={styles.sectionTitle}>Chapters</Text>
-            <MangaDownloadStatus
-              mangaId={id as string}
-              totalChapters={mangaDetails.chapters.length}
-            />
-            <BatchDownloadButton
-              mangaId={id as string}
-              mangaTitle={mangaDetails.title}
-              chapters={mangaDetails.chapters}
-              onDownloadStart={(chapterCount) => {
-                console.log(
-                  `Started batch download of ${chapterCount} chapters`
-                );
-              }}
-              onDownloadError={(error) => {
-                console.error('Batch download error:', error);
-              }}
-            />
           </View>
         </>
       ),

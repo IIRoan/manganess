@@ -130,6 +130,8 @@ const ManhwaImage = React.memo(
   }
 );
 
+ManhwaImage.displayName = 'ManhwaImage';
+
 export default function ReadChapterScreen() {
   const { id, chapterNumber } = useLocalSearchParams<{
     id: string;

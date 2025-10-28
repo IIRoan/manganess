@@ -1,173 +1,119 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
-  Pressable,
-  Alert,
-  RefreshControl,
+  ScrollView,
+  useColorScheme,
   ActivityIndicator,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
-import { useHapticFeedback } from '@/utils/haptics';
-import { downloadManagerService } from '@/services/downloadManager';
-import { downloadQueueService } from '@/services/downloadQueue';
+import { Ionicons } from '@expo/vector-icons';
 import { chapterStorageService } from '@/services/chapterStorageService';
-import {
-  DownloadItem,
-  DownloadStatus,
-  StorageStats,
-  QueueStatus,
-} from '@/types/download';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import BackButton from '@/components/BackButton';
 
-interface DownloadItemWithActions extends DownloadItem {
-  canPause: boolean;
-  canResume: boolean;
-  canCancel: boolean;
-  canRetry: boolean;
+interface MangaDownloadInfo {
+  mangaId: string;
+  chapterCount: number;
+  totalSize: number;
+  chapters: string[];
 }
 
-const DownloadsScreen: React.FC = () => {
-  const { theme, systemTheme } = useTheme();
-  const colorScheme = theme === 'system' ? systemTheme : (theme as ColorScheme);
+export default function DownloadsScreen() {
+  const { theme } = useTheme();
+  const systemColorScheme = useColorScheme() as ColorScheme;
+  const colorScheme =
+    theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
-  const haptics = useHapticFeedback();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
 
-  const [downloads, setDownloads] = useState<DownloadItemWithActions[]>([]);
-  const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
-  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [storageStats, setStorageStats] = useState<any>(null);
+  const [mangaDownloads, setMangaDownloads] = useState<MangaDownloadInfo[]>([]);
+  const [deletingManga, setDeletingManga] = useState<Set<string>>(new Set());
 
-  // Load data on mount
   useEffect(() => {
-    loadData();
+    loadDownloads();
+  }, []);
 
-    // Set up periodic refresh for active downloads
-    const interval = setInterval(() => {
-      if (queueStatus?.isProcessing) {
-        loadDownloads();
-      }
-    }, 2000);
-
-    return () => {
-      clearInterval(interval);
-      // Cleanup any pending operations
-      setDownloads([]);
-      setStorageStats(null);
-      setQueueStatus(null);
-    };
-  }, [queueStatus?.isProcessing]);
-
-  const loadData = async () => {
+  const loadDownloads = async () => {
     try {
       setIsLoading(true);
-      await Promise.all([
-        loadDownloads(),
-        loadStorageStats(),
-        loadQueueStatus(),
-      ]);
+
+      // Get storage stats
+      const stats = await chapterStorageService.getDetailedStorageStats();
+      setStorageStats(stats);
+
+      // Build manga download info
+      const mangaList: MangaDownloadInfo[] = [];
+
+      for (const [mangaId, breakdown] of Object.entries(
+        stats.storageBreakdown
+      )) {
+        const chapters =
+          await chapterStorageService.getDownloadedChapters(mangaId);
+
+        mangaList.push({
+          mangaId,
+          chapterCount: breakdown.chapters,
+          totalSize: breakdown.totalSize,
+          chapters,
+        });
+      }
+
+      // Sort by total size (largest first)
+      mangaList.sort((a, b) => b.totalSize - a.totalSize);
+
+      setMangaDownloads(mangaList);
     } catch (error) {
-      console.error('Error loading downloads data:', error);
+      console.error('Error loading downloads:', error);
+      Alert.alert('Error', 'Failed to load downloads');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadDownloads = async () => {
-    try {
-      const activeDownloads = await downloadManagerService.getActiveDownloads();
-      const downloadsWithActions = activeDownloads.map((download) => ({
-        ...download,
-        canPause: download.status === DownloadStatus.DOWNLOADING,
-        canResume: download.status === DownloadStatus.PAUSED,
-        canCancel: [
-          DownloadStatus.DOWNLOADING,
-          DownloadStatus.PAUSED,
-          DownloadStatus.QUEUED,
-        ].includes(download.status),
-        canRetry: download.status === DownloadStatus.FAILED,
-      }));
-
-      setDownloads(downloadsWithActions);
-    } catch (error) {
-      console.error('Error loading downloads:', error);
-    }
-  };
-
-  const loadStorageStats = async () => {
-    try {
-      const stats = await chapterStorageService.getStorageStats();
-      setStorageStats(stats);
-    } catch (error) {
-      console.error('Error loading storage stats:', error);
-    }
-  };
-
-  const loadQueueStatus = async () => {
-    try {
-      const status = await downloadQueueService.getQueueStatus();
-      setQueueStatus(status);
-    } catch (error) {
-      console.error('Error loading queue status:', error);
-    }
-  };
-
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await loadData();
-    setIsRefreshing(false);
-  }, []);
-
-  const handlePauseDownload = async (downloadId: string) => {
-    try {
-      haptics.onPress();
-      await downloadManagerService.pauseDownload(downloadId);
-      await loadDownloads();
-    } catch (error) {
-      console.error('Error pausing download:', error);
-      Alert.alert('Error', 'Failed to pause download');
-    }
-  };
-
-  const handleResumeDownload = async (downloadId: string) => {
-    try {
-      haptics.onPress();
-      await downloadManagerService.resumeDownload(downloadId);
-      await loadDownloads();
-    } catch (error) {
-      console.error('Error resuming download:', error);
-      Alert.alert('Error', 'Failed to resume download');
-    }
-  };
-
-  const handleCancelDownload = async (
-    downloadId: string,
-    mangaTitle: string
-  ) => {
-    haptics.onPress();
-
+  const handleDeleteManga = async (mangaId: string) => {
     Alert.alert(
-      'Cancel Download',
-      `Are you sure you want to cancel downloading "${mangaTitle}"?`,
+      'Delete All Chapters',
+      `Delete all downloaded chapters for this manga? This cannot be undone.`,
       [
-        { text: 'No', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Yes',
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
-              await downloadManagerService.cancelDownload(downloadId);
+              setDeletingManga((prev) => new Set(prev).add(mangaId));
+
+              const manga = mangaDownloads.find((m) => m.mangaId === mangaId);
+              if (manga) {
+                for (const chapterNumber of manga.chapters) {
+                  await chapterStorageService.deleteChapter(
+                    mangaId,
+                    chapterNumber
+                  );
+                }
+              }
+
+              // Reload downloads
               await loadDownloads();
             } catch (error) {
-              console.error('Error cancelling download:', error);
-              Alert.alert('Error', 'Failed to cancel download');
+              console.error('Error deleting manga:', error);
+              Alert.alert('Error', 'Failed to delete chapters');
+            } finally {
+              setDeletingManga((prev) => {
+                const next = new Set(prev);
+                next.delete(mangaId);
+                return next;
+              });
             }
           },
         },
@@ -175,61 +121,25 @@ const DownloadsScreen: React.FC = () => {
     );
   };
 
-  const handleRetryDownload = async (download: DownloadItem) => {
-    try {
-      haptics.onPress();
-      await downloadManagerService.downloadChapter(
-        download.mangaId,
-        download.chapterNumber,
-        download.chapterUrl
-      );
-      await loadDownloads();
-    } catch (error) {
-      console.error('Error retrying download:', error);
-      Alert.alert('Error', 'Failed to retry download');
-    }
-  };
-
-  const handlePauseAllDownloads = async () => {
-    try {
-      haptics.onPress();
-      await downloadQueueService.pauseQueue();
-      await loadData();
-    } catch (error) {
-      console.error('Error pausing all downloads:', error);
-      Alert.alert('Error', 'Failed to pause all downloads');
-    }
-  };
-
-  const handleResumeAllDownloads = async () => {
-    try {
-      haptics.onPress();
-      await downloadQueueService.resumeQueue();
-      await loadData();
-    } catch (error) {
-      console.error('Error resuming all downloads:', error);
-      Alert.alert('Error', 'Failed to resume all downloads');
-    }
-  };
-
-  const handleClearCompleted = async () => {
-    haptics.onPress();
-
+  const handleClearAll = async () => {
     Alert.alert(
-      'Clear Completed',
-      'Remove all completed downloads from the list?',
+      'Clear All Downloads',
+      `Delete all ${storageStats?.totalChapters || 0} downloaded chapters? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Clear',
+          text: 'Delete All',
           style: 'destructive',
           onPress: async () => {
             try {
-              await downloadQueueService.clearCompletedDownloads();
+              setIsLoading(true);
+              await chapterStorageService.clearAllDownloads();
               await loadDownloads();
             } catch (error) {
-              console.error('Error clearing completed downloads:', error);
-              Alert.alert('Error', 'Failed to clear completed downloads');
+              console.error('Error clearing all downloads:', error);
+              Alert.alert('Error', 'Failed to clear downloads');
+            } finally {
+              setIsLoading(false);
             }
           },
         },
@@ -242,449 +152,272 @@ const DownloadsScreen: React.FC = () => {
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
-
-  const formatTimeAgo = (timestamp: number): string => {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return 'Just now';
-  };
-
-  const getStatusColor = (status: DownloadStatus): string => {
-    switch (status) {
-      case DownloadStatus.DOWNLOADING:
-        return colors.primary;
-      case DownloadStatus.COMPLETED:
-        return '#4CAF50';
-      case DownloadStatus.FAILED:
-        return colors.error;
-      case DownloadStatus.PAUSED:
-        return '#FF9800';
-      default:
-        return colors.tabIconDefault;
-    }
-  };
-
-  const getStatusText = (status: DownloadStatus): string => {
-    switch (status) {
-      case DownloadStatus.QUEUED:
-        return 'Queued';
-      case DownloadStatus.DOWNLOADING:
-        return 'Downloading';
-      case DownloadStatus.COMPLETED:
-        return 'Completed';
-      case DownloadStatus.FAILED:
-        return 'Failed';
-      case DownloadStatus.PAUSED:
-        return 'Paused';
-      case DownloadStatus.CANCELLED:
-        return 'Cancelled';
-      default:
-        return 'Unknown';
-    }
-  };
-
-  const renderDownloadItem = ({ item }: { item: DownloadItemWithActions }) => (
-    <View style={styles.downloadItem}>
-      <View style={styles.downloadHeader}>
-        <View style={styles.downloadInfo}>
-          <Text style={styles.mangaTitle} numberOfLines={1}>
-            {item.mangaTitle}
-          </Text>
-          <Text style={styles.chapterNumber}>Chapter {item.chapterNumber}</Text>
-        </View>
-        <View style={styles.downloadActions}>
-          {item.canPause && (
-            <Pressable
-              style={styles.actionButton}
-              onPress={() => handlePauseDownload(item.id)}
-            >
-              <Ionicons name="pause" size={20} color={colors.text} />
-            </Pressable>
-          )}
-          {item.canResume && (
-            <Pressable
-              style={styles.actionButton}
-              onPress={() => handleResumeDownload(item.id)}
-            >
-              <Ionicons name="play" size={20} color={colors.primary} />
-            </Pressable>
-          )}
-          {item.canRetry && (
-            <Pressable
-              style={styles.actionButton}
-              onPress={() => handleRetryDownload(item)}
-            >
-              <Ionicons name="refresh" size={20} color={colors.primary} />
-            </Pressable>
-          )}
-          {item.canCancel && (
-            <Pressable
-              style={styles.actionButton}
-              onPress={() => handleCancelDownload(item.id, item.mangaTitle)}
-            >
-              <Ionicons name="close" size={20} color={colors.error} />
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.downloadProgress}>
-        <View style={styles.progressInfo}>
-          <Text
-            style={[styles.statusText, { color: getStatusColor(item.status) }]}
-          >
-            {getStatusText(item.status)}
-          </Text>
-          <Text style={styles.progressText}>
-            {item.downloadedImages}/{item.totalImages} images ({item.progress}%)
-          </Text>
-        </View>
-        <Text style={styles.timeText}>{formatTimeAgo(item.updatedAt)}</Text>
-      </View>
-
-      {(item.status === DownloadStatus.DOWNLOADING ||
-        item.status === DownloadStatus.PAUSED) && (
-        <View style={styles.progressBarContainer}>
-          <View
-            style={[
-              styles.progressBar,
-              {
-                width: `${item.progress}%`,
-                backgroundColor: getStatusColor(item.status),
-              },
-            ]}
-          />
-        </View>
-      )}
-
-      {item.error && (
-        <Text style={styles.errorText} numberOfLines={2}>
-          {item.error}
-        </Text>
-      )}
-    </View>
-  );
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerTop}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => {
-            haptics.onPress();
-            router.back();
-          }}
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Downloads</Text>
-        <View style={styles.headerActions}>
-          {queueStatus?.isPaused ? (
-            <Pressable
-              style={styles.headerActionButton}
-              onPress={handleResumeAllDownloads}
-            >
-              <Ionicons name="play" size={20} color={colors.primary} />
-            </Pressable>
-          ) : (
-            <Pressable
-              style={styles.headerActionButton}
-              onPress={handlePauseAllDownloads}
-            >
-              <Ionicons name="pause" size={20} color={colors.text} />
-            </Pressable>
-          )}
-          <Pressable
-            style={styles.headerActionButton}
-            onPress={handleClearCompleted}
-          >
-            <Ionicons name="trash-outline" size={20} color={colors.text} />
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Queue Status */}
-      {queueStatus && (
-        <View style={styles.queueStatus}>
-          <View style={styles.queueInfo}>
-            <Text style={styles.queueText}>
-              {queueStatus.activeDownloads} active • {queueStatus.queuedItems}{' '}
-              queued
-            </Text>
-            {queueStatus.isPaused && (
-              <Text style={[styles.queueText, { color: '#FF9800' }]}>
-                Queue Paused
-              </Text>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* Storage Stats */}
-      {storageStats && (
-        <View style={styles.storageStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Downloaded</Text>
-            <Text style={styles.statValue}>
-              {storageStats.totalChapters} chapters
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Storage Used</Text>
-            <Text style={styles.statValue}>
-              {formatFileSize(storageStats.totalSize)}
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Manga Series</Text>
-            <Text style={styles.statValue}>{storageStats.mangaCount}</Text>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Ionicons
-        name="download-outline"
-        size={64}
-        color={colors.tabIconDefault}
-      />
-      <Text style={styles.emptyTitle}>No Downloads</Text>
-      <Text style={styles.emptySubtitle}>
-        Downloaded chapters will appear here
-      </Text>
-    </View>
-  );
 
   if (isLoading) {
     return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
-      >
-        {renderHeader()}
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <BackButton />
+          <Text style={styles.title}>Downloads</Text>
+        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading downloads...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
-    >
-      <FlatList
-        data={downloads}
-        renderItem={renderDownloadItem}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmptyState}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        }
-        contentContainerStyle={
-          downloads.length === 0 ? styles.emptyContainer : undefined
-        }
-        showsVerticalScrollIndicator={false}
-      />
-    </SafeAreaView>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={styles.title}>Downloads</Text>
+      </View>
+
+      <ScrollView style={styles.scrollView}>
+        {/* Storage Stats */}
+        {storageStats && (
+          <View style={styles.statsCard}>
+            <Text style={styles.statsTitle}>Storage Usage</Text>
+            <View style={styles.statsRow}>
+              <Text style={styles.statsLabel}>Total Size:</Text>
+              <Text style={styles.statsValue}>
+                {formatFileSize(storageStats.totalSize)}
+              </Text>
+            </View>
+            <View style={styles.statsRow}>
+              <Text style={styles.statsLabel}>Total Chapters:</Text>
+              <Text style={styles.statsValue}>
+                {storageStats.totalChapters}
+              </Text>
+            </View>
+            <View style={styles.statsRow}>
+              <Text style={styles.statsLabel}>Manga Count:</Text>
+              <Text style={styles.statsValue}>{storageStats.mangaCount}</Text>
+            </View>
+            <View style={styles.statsRow}>
+              <Text style={styles.statsLabel}>Available Space:</Text>
+              <Text style={styles.statsValue}>
+                {formatFileSize(storageStats.availableSpace)}
+              </Text>
+            </View>
+
+            {storageStats.totalChapters > 0 && (
+              <TouchableOpacity
+                style={styles.clearAllButton}
+                onPress={handleClearAll}
+              >
+                <Ionicons name="trash-outline" size={20} color="white" />
+                <Text style={styles.clearAllText}>Clear All Downloads</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Manga List */}
+        {mangaDownloads.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="download-outline"
+              size={64}
+              color={colors.tabIconDefault}
+            />
+            <Text style={styles.emptyText}>No downloads yet</Text>
+            <Text style={styles.emptySubtext}>
+              Downloaded chapters will appear here
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.mangaList}>
+            <Text style={styles.sectionTitle}>Downloaded Manga</Text>
+            {mangaDownloads.map((manga) => (
+              <View key={manga.mangaId} style={styles.mangaCard}>
+                <TouchableOpacity
+                  style={styles.mangaInfo}
+                  onPress={() => router.push(`/manga/${manga.mangaId}`)}
+                >
+                  <View style={styles.mangaDetails}>
+                    <Text style={styles.mangaId} numberOfLines={1}>
+                      {manga.mangaId}
+                    </Text>
+                    <Text style={styles.mangaStats}>
+                      {manga.chapterCount} chapter
+                      {manga.chapterCount !== 1 ? 's' : ''} •{' '}
+                      {formatFileSize(manga.totalSize)}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteManga(manga.mangaId)}
+                  disabled={deletingManga.has(manga.mangaId)}
+                >
+                  {deletingManga.has(manga.mangaId) ? (
+                    <ActivityIndicator size="small" color={colors.error} />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color={colors.error}
+                      />
+                      <Text style={styles.deleteText}>Delete</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
-};
+}
 
 const getStyles = (colors: typeof Colors.light) =>
   StyleSheet.create({
     container: {
       flex: 1,
+      backgroundColor: colors.background,
     },
     header: {
-      paddingHorizontal: 16,
-      paddingBottom: 16,
-    },
-    headerTop: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 16,
+      paddingHorizontal: 20,
+      paddingVertical: 15,
+      backgroundColor: colors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
-    backButton: {
-      padding: 8,
-      marginLeft: -8,
-    },
-    headerTitle: {
+    title: {
       fontSize: 24,
       fontWeight: 'bold',
       color: colors.text,
+      marginLeft: 15,
+    },
+    scrollView: {
       flex: 1,
-      textAlign: 'center',
-      marginHorizontal: 16,
-    },
-    headerActions: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    headerActionButton: {
-      padding: 8,
-      borderRadius: 8,
-      backgroundColor: colors.card,
-    },
-    queueStatus: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 12,
-    },
-    queueInfo: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    queueText: {
-      fontSize: 14,
-      color: colors.text,
-      fontWeight: '500',
-    },
-    storageStats: {
-      backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 16,
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-    },
-    statItem: {
-      alignItems: 'center',
-    },
-    statLabel: {
-      fontSize: 12,
-      color: colors.tabIconDefault,
-      marginBottom: 4,
-    },
-    statValue: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    downloadItem: {
-      backgroundColor: colors.card,
-      marginHorizontal: 16,
-      marginBottom: 12,
-      borderRadius: 12,
-      padding: 16,
-    },
-    downloadHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: 12,
-    },
-    downloadInfo: {
-      flex: 1,
-      marginRight: 12,
-    },
-    mangaTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.text,
-      marginBottom: 4,
-    },
-    chapterNumber: {
-      fontSize: 14,
-      color: colors.tabIconDefault,
-    },
-    downloadActions: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    actionButton: {
-      padding: 8,
-      borderRadius: 8,
-      backgroundColor: colors.background,
-    },
-    downloadProgress: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    progressInfo: {
-      flex: 1,
-    },
-    statusText: {
-      fontSize: 14,
-      fontWeight: '600',
-      marginBottom: 2,
-    },
-    progressText: {
-      fontSize: 12,
-      color: colors.tabIconDefault,
-    },
-    timeText: {
-      fontSize: 12,
-      color: colors.tabIconDefault,
-    },
-    progressBarContainer: {
-      height: 4,
-      backgroundColor: colors.border,
-      borderRadius: 2,
-      overflow: 'hidden',
-      marginBottom: 8,
-    },
-    progressBar: {
-      height: '100%',
-      borderRadius: 2,
-    },
-    errorText: {
-      fontSize: 12,
-      color: colors.error,
-      fontStyle: 'italic',
-    },
-    emptyContainer: {
-      flex: 1,
-    },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: 32,
-    },
-    emptyTitle: {
-      fontSize: 20,
-      fontWeight: '600',
-      color: colors.text,
-      marginTop: 16,
-      marginBottom: 8,
-    },
-    emptySubtitle: {
-      fontSize: 16,
-      color: colors.tabIconDefault,
-      textAlign: 'center',
     },
     loadingContainer: {
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
     },
-    loadingText: {
+    statsCard: {
+      backgroundColor: colors.card,
+      margin: 16,
+      padding: 16,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    statsTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 12,
+    },
+    statsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    statsLabel: {
+      fontSize: 14,
+      color: colors.text,
+    },
+    statsValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    clearAllButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.error,
+      padding: 12,
+      borderRadius: 8,
+      marginTop: 16,
+      gap: 8,
+    },
+    clearAllText: {
+      color: 'white',
       fontSize: 16,
-      color: colors.tabIconDefault,
+      fontWeight: '600',
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 60,
+    },
+    emptyText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.text,
       marginTop: 16,
     },
+    emptySubtext: {
+      fontSize: 14,
+      color: colors.tabIconDefault,
+      marginTop: 8,
+    },
+    mangaList: {
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 12,
+    },
+    mangaCard: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+    },
+    mangaInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+    },
+    mangaDetails: {
+      flex: 1,
+    },
+    mangaId: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 4,
+    },
+    mangaStats: {
+      fontSize: 14,
+      color: colors.tabIconDefault,
+    },
+    deleteButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      gap: 8,
+    },
+    deleteText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.error,
+    },
   });
-
-export default DownloadsScreen;
