@@ -12,13 +12,6 @@ export class DownloadNavigation {
   }
 
   /**
-   * Navigate to download settings
-   */
-  static navigateToDownloadSettings(): void {
-    router.push('/download-settings');
-  }
-
-  /**
    * Navigate to downloads with a specific filter or state
    * @param filter Optional filter to apply (e.g., 'active', 'completed', 'failed')
    */
@@ -46,7 +39,6 @@ export class DownloadNavigation {
 export const useDownloadNavigation = () => {
   return {
     navigateToDownloads: DownloadNavigation.navigateToDownloads,
-    navigateToDownloadSettings: DownloadNavigation.navigateToDownloadSettings,
     navigateToDownloadsWithFilter:
       DownloadNavigation.navigateToDownloadsWithFilter,
     isDownloadsScreenActive: DownloadNavigation.isDownloadsScreenActive,
