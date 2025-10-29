@@ -53,13 +53,6 @@ function RootLayoutNav() {
                 title: 'Downloads',
               }}
             />
-            <Stack.Screen
-              name="download-settings"
-              options={{
-                headerShown: false,
-                title: 'Download Settings',
-              }}
-            />
           </Stack>
         </ErrorBoundary>
       </NavigationThemeProvider>

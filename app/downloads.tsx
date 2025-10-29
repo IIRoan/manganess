@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,20 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { chapterStorageService } from '@/services/chapterStorageService';
+import { imageCache } from '@/services/CacheImages';
+import {
+  clearAppData,
+  exportAppData,
+  importAppData,
+  migrateToNewStorage,
+  refreshMangaImages,
+} from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import BackButton from '@/components/BackButton';
+import { File, Paths } from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 
 interface MangaDownloadInfo {
   mangaId: string;
@@ -23,6 +34,8 @@ interface MangaDownloadInfo {
   totalSize: number;
   chapters: string[];
 }
+
+type CacheStats = Awaited<ReturnType<typeof imageCache.getCacheStats>>;
 
 export default function DownloadsScreen() {
   const { theme } = useTheme();
@@ -38,12 +51,27 @@ export default function DownloadsScreen() {
   const [storageStats, setStorageStats] = useState<any>(null);
   const [mangaDownloads, setMangaDownloads] = useState<MangaDownloadInfo[]>([]);
   const [deletingManga, setDeletingManga] = useState<Set<string>>(new Set());
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+  const [isCacheLoading, setIsCacheLoading] = useState(false);
+  const [activeCacheAction, setActiveCacheAction] = useState<
+    'search' | 'manga' | 'all' | 'refresh' | null
+  >(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isClearingData, setIsClearingData] = useState(false);
+  const [isRefreshingImages, setIsRefreshingImages] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
 
-  useEffect(() => {
-    loadDownloads();
+  const fetchCacheStats = useCallback(async () => {
+    try {
+      const stats = await imageCache.getCacheStats();
+      setCacheStats(stats);
+    } catch (error) {
+      console.error('Error loading cache stats:', error);
+    }
   }, []);
 
-  const loadDownloads = async () => {
+  const loadDownloads = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -72,13 +100,18 @@ export default function DownloadsScreen() {
       mangaList.sort((a, b) => b.totalSize - a.totalSize);
 
       setMangaDownloads(mangaList);
+      await fetchCacheStats();
     } catch (error) {
       console.error('Error loading downloads:', error);
       Alert.alert('Error', 'Failed to load downloads');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchCacheStats]);
+
+  useEffect(() => {
+    void loadDownloads();
+  }, [loadDownloads]);
 
   const handleDeleteManga = async (mangaId: string) => {
     Alert.alert(
@@ -147,12 +180,204 @@ export default function DownloadsScreen() {
     );
   };
 
+  const handleClearImageCache = (context?: 'search' | 'manga') => {
+    const contextName =
+      context === 'search'
+        ? 'search cache'
+        : context === 'manga'
+          ? 'manga cache'
+          : 'all image cache';
+
+    Alert.alert(
+      'Clear Image Cache',
+      `Are you sure you want to clear the ${contextName}? This will free up storage space but images will need to be downloaded again.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              const actionKey = context ?? 'all';
+              try {
+                setActiveCacheAction(actionKey);
+                setIsCacheLoading(true);
+                await imageCache.clearCache(context);
+                await fetchCacheStats();
+                Alert.alert(
+                  'Success',
+                  `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully.`
+                );
+              } catch (error) {
+                console.error('Error clearing cache:', error);
+                Alert.alert('Error', `Failed to clear ${contextName}.`);
+              } finally {
+                setIsCacheLoading(false);
+                setActiveCacheAction(null);
+              }
+            })();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRefreshCacheStats = async () => {
+    try {
+      setActiveCacheAction('refresh');
+      setIsCacheLoading(true);
+      await fetchCacheStats();
+    } catch (error) {
+      console.error('Error refreshing cache stats:', error);
+      Alert.alert('Error', 'Failed to refresh cache stats');
+    } finally {
+      setIsCacheLoading(false);
+      setActiveCacheAction(null);
+    }
+  };
+
+  const handleExportData = async () => {
+    try {
+      setIsExporting(true);
+      const exportedData = await exportAppData();
+
+      const jsonString = JSON.stringify(exportedData, null, 2);
+      const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
+      const file = new File(Paths.document, fileName);
+
+      try {
+        file.create();
+      } catch {}
+      file.write(jsonString, { encoding: 'utf8' });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Export App Data',
+        });
+      } else {
+        Alert.alert('Export Complete', `File saved to ${file.uri}`);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('Error', 'Failed to export data');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportData = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets?.[0];
+      if (!asset) return;
+      const file = new File(asset.uri || '');
+      const fileContent = await file.text();
+      const importedData = JSON.parse(fileContent);
+
+      Alert.alert(
+        'Import Data',
+        'This will replace all existing data. Continue?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Import',
+            onPress: () => {
+              void (async () => {
+                try {
+                  setIsImporting(true);
+                  await importAppData(importedData);
+                  Alert.alert('Success', 'Data imported! Please restart the app');
+                } catch (error) {
+                  console.error('Import error:', error);
+                  Alert.alert('Error', 'Failed to import data');
+                } finally {
+                  setIsImporting(false);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Import error:', error);
+      Alert.alert('Error', 'Failed to import data');
+    }
+  };
+
+  const handleClearAppData = () => {
+    Alert.alert(
+      'Clear App Data',
+      'Are you sure you want to clear all app data? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'OK',
+          onPress: () => {
+            void (async () => {
+              try {
+                setIsClearingData(true);
+                await clearAppData();
+                await loadDownloads();
+                Alert.alert('Success', 'All app data has been cleared.');
+              } catch (error) {
+                console.error('Error clearing app data:', error);
+                Alert.alert('Error', 'Failed to clear app data.');
+              } finally {
+                setIsClearingData(false);
+              }
+            })();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRefreshMangaImages = async () => {
+    try {
+      setIsRefreshingImages(true);
+      const result = await refreshMangaImages();
+      Alert.alert(result.success ? 'Success' : 'Error', result.message);
+    } catch (error) {
+      console.error('Error refreshing manga images:', error);
+      Alert.alert('Error', 'Failed to refresh manga images');
+    } finally {
+      setIsRefreshingImages(false);
+    }
+  };
+
+  const handleMigrateStorage = async () => {
+    try {
+      setIsMigrating(true);
+      const result = await migrateToNewStorage();
+      Alert.alert(result.success ? 'Success' : 'Error', result.message);
+      if (result.success) {
+        await loadDownloads();
+      }
+    } catch (error) {
+      console.error('Error migrating data:', error);
+      Alert.alert('Error', 'Failed to migrate data');
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (timestamp: number): string => {
+    if (!timestamp) return 'Never';
+    return new Date(timestamp).toLocaleDateString();
   };
 
   if (isLoading) {
@@ -215,6 +440,164 @@ export default function DownloadsScreen() {
             )}
           </View>
         )}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Image Cache</Text>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Total Size</Text>
+            <Text style={styles.cardValue}>
+              {cacheStats ? formatFileSize(cacheStats.totalSize) : '—'}
+            </Text>
+          </View>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Total Files</Text>
+            <Text style={styles.cardValue}>
+              {cacheStats ? cacheStats.totalFiles : '—'}
+            </Text>
+          </View>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Manga Images</Text>
+            <Text style={styles.cardValue}>
+              {cacheStats ? cacheStats.mangaCount : '—'}
+            </Text>
+          </View>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Search Cache</Text>
+            <Text style={styles.cardValue}>
+              {cacheStats ? cacheStats.searchCount : '—'}
+            </Text>
+          </View>
+          {cacheStats?.oldestEntry ? (
+            <View style={styles.cardRow}>
+              <Text style={styles.cardLabel}>Oldest Entry</Text>
+              <Text style={styles.cardValue}>
+                {formatDate(cacheStats.oldestEntry)}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.cardDivider} />
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={() => handleClearImageCache('search')}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="images-outline" size={20} color={colors.text} />
+            <Text style={styles.cardActionText}>Clear Search Cache</Text>
+            {activeCacheAction === 'search' && isCacheLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={() => handleClearImageCache('manga')}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="library-outline" size={20} color={colors.text} />
+            <Text style={styles.cardActionText}>Clear Manga Cache</Text>
+            {activeCacheAction === 'manga' && isCacheLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={() => handleClearImageCache()}
+            disabled={isCacheLoading}
+          >
+            <Ionicons
+              name="trash-outline"
+              size={20}
+              color={colors.notification}
+            />
+            <Text style={[styles.cardActionText, styles.cardActionDanger]}>
+              Clear All Image Cache
+            </Text>
+            {activeCacheAction === 'all' && isCacheLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={handleRefreshCacheStats}
+            disabled={isCacheLoading}
+          >
+            <Ionicons name="refresh-outline" size={20} color={colors.text} />
+            <Text style={styles.cardActionText}>Refresh Cache Stats</Text>
+            {activeCacheAction === 'refresh' && isCacheLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>App Data Management</Text>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={handleExportData}
+            disabled={isExporting}
+          >
+            <Ionicons name="download-outline" size={20} color={colors.text} />
+            <Text style={styles.cardActionText}>Export App Data</Text>
+            {isExporting ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={handleImportData}
+            disabled={isImporting}
+          >
+            <Ionicons name="cloud-upload" size={20} color={colors.text} />
+            <Text style={styles.cardActionText}>Import App Data</Text>
+            {isImporting ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={handleClearAppData}
+            disabled={isClearingData}
+          >
+            <Ionicons name="trash-outline" size={20} color={colors.error} />
+            <Text style={[styles.cardActionText, styles.cardActionDanger]}>
+              Clear App Data
+            </Text>
+            {isClearingData ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={handleRefreshMangaImages}
+            disabled={isRefreshingImages}
+          >
+            <Ionicons name="refresh-outline" size={20} color={colors.text} />
+            <Text style={styles.cardActionText}>Refresh Manga Images</Text>
+            {isRefreshingImages ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={handleMigrateStorage}
+            disabled={isMigrating}
+          >
+            <Ionicons name="sync-outline" size={20} color={colors.text} />
+            <Text style={styles.cardActionText}>Migrate Storage Format</Text>
+            {isMigrating ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </TouchableOpacity>
+        </View>
 
         {/* Manga List */}
         {mangaDownloads.length === 0 ? (
@@ -338,6 +721,55 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 14,
       fontWeight: '600',
       color: colors.primary,
+    },
+    card: {
+      backgroundColor: colors.card,
+      marginHorizontal: 16,
+      marginBottom: 16,
+      padding: 16,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    cardTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 12,
+    },
+    cardRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    cardLabel: {
+      fontSize: 14,
+      color: colors.text,
+    },
+    cardValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    cardDivider: {
+      height: 1,
+      backgroundColor: colors.border,
+      marginVertical: 12,
+    },
+    cardAction: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      gap: 12,
+    },
+    cardActionText: {
+      flex: 1,
+      fontSize: 16,
+      color: colors.text,
+    },
+    cardActionDanger: {
+      color: colors.error,
+      fontWeight: '600',
     },
     clearAllButton: {
       flexDirection: 'row',
