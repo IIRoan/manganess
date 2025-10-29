@@ -11,7 +11,6 @@ import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
-import { webViewRequestInterceptor } from './webViewRequestInterceptor';
 
 export class CloudflareDetectedError extends Error {
   html: string;
@@ -68,6 +67,7 @@ async function retryApiCall<T>(
   operation: () => Promise<T>,
   maxRetries: number = MAX_RETRIES
 ): Promise<T> {
+  const log = logger();
   let lastError: Error;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -81,9 +81,11 @@ async function retryApiCall<T>(
       }
 
       const delay = RETRY_DELAY * Math.pow(2, attempt - 1);
-      console.log(
-        `API call failed (attempt ${attempt}), retrying in ${delay}ms...`
-      );
+      log.warn('Network', 'API call retry scheduled', {
+        attempt,
+        delayMs: delay,
+        error: error instanceof Error ? error.message : String(error),
+      });
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -344,8 +346,9 @@ export const markChapterAsRead = async (
   chapterNumber: string,
   mangaTitle: string
 ) => {
+  const log = logger();
   if (!id || !chapterNumber || !mangaTitle) {
-    console.error('Invalid parameters for markChapterAsRead:', {
+    log.error('Storage', 'Invalid parameters for markChapterAsRead', {
       id,
       chapterNumber,
       mangaTitle,
@@ -355,7 +358,7 @@ export const markChapterAsRead = async (
 
   try {
     if (isDebugEnabled())
-      console.log('Updating last read manga in mangaFireService:', {
+      log.info('Storage', 'Updating last read manga', {
         id,
         mangaTitle,
         chapterNumber,
@@ -378,9 +381,11 @@ export const markChapterAsRead = async (
       });
 
       if (isDebugEnabled())
-        console.log(
-          `Marked chapter ${chapterNumber} as read for manga ${id} (${mangaTitle})`
-        );
+        log.info('Storage', 'Marked chapter as read', {
+          id,
+          mangaTitle,
+          chapterNumber,
+        });
     } else {
       await setMangaData({
         id,
@@ -393,16 +398,22 @@ export const markChapterAsRead = async (
       });
     }
   } catch (error) {
-    console.error('Error marking chapter as read:', error);
+    log.error('Storage', 'Error marking chapter as read', {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 };
 
 export const getBookmarkStatus = async (id: string): Promise<string | null> => {
+  const log = logger();
   try {
     const mangaData = await getMangaData(id);
     return mangaData?.bookmarkStatus || null;
   } catch (error) {
-    console.error('Error getting bookmark status:', error);
+    log.error('Storage', 'Error getting bookmark status', {
+      id,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 };
@@ -413,15 +424,21 @@ export const updateAniListProgress = async (
   progress: number,
   bookmarkStatus: string
 ) => {
+  const log = logger();
   if (!mangaTitle) {
-    console.error('Manga title is undefined for id:', id);
+    log.error('Network', 'Manga title is undefined for AniList update', {
+      id,
+    });
     return;
   }
 
   try {
     const isLoggedIn = await isLoggedInToAniList();
     if (!isLoggedIn) {
-      console.log('User is not logged in to AniList. Skipping update.');
+      log.info('Network', 'AniList update skipped: user not logged in', {
+        id,
+        mangaTitle,
+      });
       return;
     }
 
@@ -442,18 +459,29 @@ export const updateAniListProgress = async (
           status = 'CURRENT';
       }
       await updateMangaStatus(anilistManga.id, status, progress);
-      console.log(
-        `Updated AniList progress for "${mangaTitle}" (${id}) to ${progress} chapters with status ${status}`
-      );
+      log.info('Network', 'Updated AniList progress', {
+        id,
+        mangaTitle,
+        progress,
+        status,
+      });
     } else {
-      console.log(`Manga "${mangaTitle}" (${id}) not found on AniList`);
+      log.warn('Network', 'Manga not found on AniList', {
+        id,
+        mangaTitle,
+      });
     }
   } catch (error) {
-    console.error('Error updating AniList progress:', error);
+    log.error('Network', 'Error updating AniList progress', {
+      id,
+      mangaTitle,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 };
 
 export const parseNewReleases = (html: string): MangaItem[] => {
+  const log = logger();
   const homeSwiperRegex = /<section class="home-swiper">([\s\S]*?)<\/section>/g;
   const homeSwiperMatches = Array.from(html.matchAll(homeSwiperRegex));
 
@@ -476,7 +504,8 @@ export const parseNewReleases = (html: string): MangaItem[] => {
     }
   }
 
-  if (isDebugEnabled()) console.log('Could not find "New Release" section');
+  if (isDebugEnabled())
+    log.info('Service', 'Could not find "New Release" section');
   return [];
 };
 
@@ -499,13 +528,16 @@ export const parseMostViewedManga = (html: string): MangaItem[] => {
 export const getVrfTokenFromChapterPage = async (
   chapterUrl: string
 ): Promise<string | null> => {
+  const log = logger();
   try {
     const fullUrl = chapterUrl.startsWith('http')
       ? chapterUrl
       : `${MANGA_API_URL}${chapterUrl}`;
 
     if (isDebugEnabled()) {
-      console.log('Getting VRF token from chapter page:', fullUrl);
+      log.info('Service', 'Getting VRF token from chapter page', {
+        chapterUrl: fullUrl,
+      });
     }
 
     const response = await axios.get(fullUrl, {
@@ -530,10 +562,9 @@ export const getVrfTokenFromChapterPage = async (
       const vrfToken = vrfInputMatch[1];
       if (vrfToken.length > 20 && vrfToken.includes('-')) {
         if (isDebugEnabled()) {
-          console.log(
-            'VRF token found in form input:',
-            vrfToken.substring(0, 20) + '...'
-          );
+          log.info('Service', 'VRF token found in form input', {
+            preview: vrfToken.substring(0, 20),
+          });
         }
         return vrfToken;
       }
@@ -542,7 +573,10 @@ export const getVrfTokenFromChapterPage = async (
     // Fallback: extract VRF from HTML using existing method
     return extractVrfTokenFromHtml(html);
   } catch (error) {
-    console.error('Error getting VRF token from chapter page:', error);
+    log.error('Service', 'Error getting VRF token from chapter page', {
+      chapterUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 };
@@ -567,7 +601,9 @@ export const fetchChapterImagesFromUrl = async (
 
     if (!finalVrfToken) {
       if (isDebugEnabled()) {
-        console.log('No VRF token provided, extracting from chapter page...');
+        log.info('Service', 'No VRF token provided, extracting from chapter page', {
+          chapterUrl,
+        });
       }
       finalVrfToken = await getVrfTokenFromChapterPage(chapterUrl);
 
@@ -586,12 +622,10 @@ export const fetchChapterImagesFromUrl = async (
     }
 
     if (isDebugEnabled()) {
-      console.log(
-        'Successfully extracted chapter ID:',
+      log.info('Service', 'Successfully extracted chapter ID', {
         chapterId,
-        'from URL:',
-        chapterUrl
-      );
+        chapterUrl,
+      });
     }
 
     // Step 3: Now call the API with the extracted chapter ID and VRF token
@@ -647,7 +681,11 @@ export const fetchChapterImages = async (
         }
 
         if (isDebugEnabled()) {
-          console.log('Making API request to:', apiUrl);
+          log.info('Service', 'Making chapter API request', {
+            chapterId,
+            apiUrl,
+            hasVrfToken: !!tokenToUse,
+          });
         }
 
         if (!validateUrl(apiUrl)) {
@@ -676,8 +714,10 @@ export const fetchChapterImages = async (
         });
 
         if (isDebugEnabled()) {
-          console.log('API response status:', response.status);
-          console.log('API response data type:', typeof response.data);
+          log.info('Service', 'Chapter API response metadata', {
+            status: response.status,
+            dataType: typeof response.data,
+          });
         }
 
         if (!response.data) {
@@ -687,7 +727,7 @@ export const fetchChapterImages = async (
         const data = response.data;
 
         if (isDebugEnabled()) {
-          console.log('API response structure:', {
+          log.info('Service', 'Chapter API response structure', {
             hasStatus: 'status' in data,
             status: data.status,
             hasResult: 'result' in data,
@@ -783,6 +823,7 @@ export const fetchChapterImagesFromInterceptedRequest = async (
 
 // Helper function to extract chapter ID from chapter URL
 export const extractChapterIdFromUrl = (chapterUrl: string): string | null => {
+  const log = logger();
   try {
     // Extract chapter ID from URLs like: /read/manga-id/en/chapter-123
     // The chapter ID should be extracted from the actual chapter page HTML or API
@@ -798,13 +839,17 @@ export const extractChapterIdFromUrl = (chapterUrl: string): string | null => {
 
     return null;
   } catch (error) {
-    console.error('Error extracting chapter ID from URL:', error);
+    log.error('Service', 'Error extracting chapter ID from URL', {
+      chapterUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 };
 
 // Function to extract VRF token from HTML
 export const extractVrfTokenFromHtml = (html: string): string | null => {
+  const log = logger();
   try {
     // Multiple patterns to find VRF token
     const vrfPatterns = [
@@ -827,7 +872,9 @@ export const extractVrfTokenFromHtml = (html: string): string | null => {
         if (match[1] && match[1].length > 20) {
           // VRF tokens are typically long
           if (isDebugEnabled()) {
-            console.log('VRF token found:', match[1].substring(0, 20) + '...');
+            log.info('Service', 'VRF token found in HTML', {
+              preview: match[1].substring(0, 20),
+            });
           }
           return match[1];
         }
@@ -845,10 +892,9 @@ export const extractVrfTokenFromHtml = (html: string): string | null => {
       );
       if (longestMatch.length > 40) {
         if (isDebugEnabled()) {
-          console.log(
-            'Using longest base64 string as VRF token:',
-            longestMatch.substring(0, 20) + '...'
-          );
+          log.info('Service', 'Using base64 string as VRF token', {
+            preview: longestMatch.substring(0, 20),
+          });
         }
         return longestMatch;
       }
@@ -856,7 +902,9 @@ export const extractVrfTokenFromHtml = (html: string): string | null => {
 
     return null;
   } catch (error) {
-    console.error('Error extracting VRF token:', error);
+    log.error('Service', 'Error extracting VRF token', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 };
@@ -865,13 +913,16 @@ export const extractVrfTokenFromHtml = (html: string): string | null => {
 export const getChapterIdFromPage = async (
   chapterUrl: string
 ): Promise<string | null> => {
+  const log = logger();
   try {
     const fullUrl = chapterUrl.startsWith('http')
       ? chapterUrl
       : `${MANGA_API_URL}${chapterUrl}`;
 
     if (isDebugEnabled()) {
-      console.log('Fetching chapter page:', fullUrl);
+      log.info('Service', 'Fetching chapter page', {
+        chapterUrl: fullUrl,
+      });
     }
 
     const response = await axios.get(fullUrl, {
@@ -901,16 +952,18 @@ export const getChapterIdFromPage = async (
     const html = response.data as string;
 
     if (isDebugEnabled()) {
-      console.log('Received HTML length:', html.length);
+      log.info('Service', 'Received chapter HTML', {
+        length: html.length,
+      });
     }
 
     // Extract and store VRF token for later use
     const vrfToken = extractVrfTokenFromHtml(html);
     if (vrfToken) {
       setVrfToken(vrfToken);
-      if (isDebugEnabled()) {
-        console.log('VRF token extracted and stored');
-      }
+        if (isDebugEnabled()) {
+          log.info('Service', 'VRF token extracted and stored');
+        }
     }
 
     // Enhanced patterns to look for chapter ID in various formats
@@ -952,14 +1005,11 @@ export const getChapterIdFromPage = async (
         if (match[1] && match[1].length >= 4) {
           // Ensure it's a reasonable ID length
           if (isDebugEnabled()) {
-            console.log(
-              'Extracted chapter ID:',
-              match[1],
-              'using pattern:',
-              pattern.source,
-              'from URL:',
-              chapterUrl
-            );
+            log.info('Service', 'Extracted chapter ID from HTML pattern', {
+              chapterId: match[1],
+              pattern: pattern.source,
+              chapterUrl,
+            });
           }
           return match[1];
         }
@@ -979,12 +1029,10 @@ export const getChapterIdFromPage = async (
             if (numId > 1000000 && numId < 99999999) {
               // Reasonable range for chapter IDs
               if (isDebugEnabled()) {
-                console.log(
-                  'Using fallback chapter ID from script:',
-                  id,
-                  'from URL:',
-                  chapterUrl
-                );
+                log.info('Service', 'Using fallback chapter ID from script', {
+                  chapterId: id,
+                  chapterUrl,
+                });
               }
               return id;
             }
@@ -1009,31 +1057,38 @@ export const getChapterIdFromPage = async (
 
       if (filteredIds.length > 0) {
         if (isDebugEnabled()) {
-          console.log(
-            'Using heuristic chapter ID:',
-            filteredIds[0],
-            'from URL:',
-            chapterUrl
-          );
+          log.info('Service', 'Using heuristic chapter ID', {
+            chapterId: filteredIds[0],
+            chapterUrl,
+          });
         }
         return filteredIds[0] || null;
       }
     }
 
-    console.warn('Could not extract chapter ID from page:', chapterUrl);
+    log.warn('Service', 'Could not extract chapter ID from page', {
+      chapterUrl,
+    });
     if (isDebugEnabled()) {
       // Log a sample of the HTML for debugging
-      console.log('HTML sample (first 1000 chars):', html.substring(0, 1000));
+      log.info('Service', 'Chapter page HTML sample', {
+        chapterUrl,
+        sample: html.substring(0, 1000),
+      });
     }
     return null;
   } catch (error) {
-    console.error('Error getting chapter ID from page:', error);
+    log.error('Service', 'Error getting chapter ID from page', {
+      chapterUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 };
 
 // Utility function to test if the API endpoint is accessible
 export const testApiEndpoint = async (): Promise<boolean> => {
+  const log = logger();
   try {
     // Test with a simple request to the base API
     const response = await axios.get(`${MANGA_API_URL}`, {
@@ -1045,7 +1100,9 @@ export const testApiEndpoint = async (): Promise<boolean> => {
 
     return response.status === 200;
   } catch (error) {
-    console.error('API endpoint test failed:', error);
+    log.error('Network', 'API endpoint test failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 };
@@ -1054,6 +1111,7 @@ export const testApiEndpoint = async (): Promise<boolean> => {
 export const parseChapterUrl = (
   chapterUrl: string
 ): { mangaId?: string; chapterNumber?: string } => {
+  const log = logger();
   try {
     // Parse URLs like: /read/manga-id/en/chapter-123
     const urlParts = chapterUrl.split('/').filter((part) => part.length > 0);
@@ -1070,7 +1128,10 @@ export const parseChapterUrl = (
 
     return {};
   } catch (error) {
-    console.error('Error parsing chapter URL:', error);
+    log.error('Service', 'Error parsing chapter URL', {
+      chapterUrl,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return {};
   }
 };
@@ -1085,6 +1146,7 @@ export const batchFetchChapterImages = async (
     onError?: (error: Error, url: string) => void;
   } = {}
 ): Promise<Array<{ url: string; images?: string[][]; error?: string }>> => {
+  const log = logger();
   const {
     maxConcurrent = 2, // Limit concurrent requests to avoid overwhelming the server
     delayBetweenRequests = 1000, // 1 second delay between batches
@@ -1097,9 +1159,11 @@ export const batchFetchChapterImages = async (
   let completed = 0;
 
   if (isDebugEnabled()) {
-    console.log(
-      `Starting batch fetch for ${chapterUrls.length} chapters with max ${maxConcurrent} concurrent requests`
-    );
+    log.info('Service', 'Starting batch fetch for chapters', {
+      totalChapters: chapterUrls.length,
+      maxConcurrent,
+      delayBetweenRequests,
+    });
   }
 
   // Process chapters in batches
@@ -1141,9 +1205,10 @@ export const batchFetchChapterImages = async (
   if (isDebugEnabled()) {
     const successful = results.filter((r) => !r.error).length;
     const failed = results.filter((r) => r.error).length;
-    console.log(
-      `Batch fetch completed: ${successful} successful, ${failed} failed`
-    );
+    log.info('Service', 'Batch fetch completed', {
+      successful,
+      failed,
+    });
   }
 
   return results;
@@ -1158,7 +1223,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
             const elements = document.querySelectorAll(selector);
             elements.forEach(el => el.remove());
           } catch (e) {
-            console.warn('Error removing element:', selector, e);
+            /* ignore */
           }
         });
       }`,
@@ -1175,7 +1240,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
               el.style.pointerEvents = 'none';
             });
           } catch (e) {
-            console.warn('Error hiding element:', selector, e);
+            /* ignore */
           }
         });
       }`,
@@ -1191,7 +1256,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
           document.body.style.backgroundImage = 'none';
           document.body.style.backgroundColor = '${backgroundColor}';
         } catch (e) {
-          console.warn('Error adjusting background:', e);
+          /* ignore */
         }
       }`,
 
@@ -1209,7 +1274,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
           };
           document.createElement = new Proxy(document.createElement, scriptBlocker);
         } catch (e) {
-          console.warn('Error setting up script blocker:', e);
+          /* ignore */
         }
       }`,
 
@@ -1221,7 +1286,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
           window.confirm = function() { return null; };
           window.prompt = function() { return null; };
         } catch (e) {
-          console.warn('Error disabling popups:', e);
+          /* ignore */
         }
       }`,
   };
@@ -1262,7 +1327,7 @@ export const getInjectedJavaScript = (backgroundColor: string) => {
         });
         observer.observe(document.body, { childList: true, subtree: true });
       } catch (e) {
-        console.warn('Error setting up mutation observer:', e);
+        /* ignore */
       }
 
       return true;

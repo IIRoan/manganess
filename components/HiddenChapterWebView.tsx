@@ -39,7 +39,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
   useEffect(() => {
     if (isDebugEnabled()) {
-      log.info('Service', '🌐 HiddenChapterWebView mounted', {
+      log.info('Service', 'HiddenChapterWebView mounted', {
         chapterUrl,
         fullUrl,
         timeout,
@@ -52,7 +52,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
         if (isDebugEnabled()) {
           log.warn(
             'Service',
-            '⏱️ WebView timeout - no AJAX request intercepted',
+            'WebView timeout - no AJAX request intercepted',
             {
               chapterUrl,
               timeout,
@@ -70,7 +70,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
           interceptedRef.current = true;
 
           if (isDebugEnabled()) {
-            log.info('Service', '✅ AJAX request intercepted!', {
+            log.info('Service', 'AJAX request intercepted', {
               chapterId: request.chapterId,
               vrfTokenPreview: request.vrfToken.substring(0, 30) + '...',
             });
@@ -95,7 +95,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
       unsubscribe();
 
       if (isDebugEnabled()) {
-        log.info('Service', '🌐 HiddenChapterWebView unmounted', {
+        log.info('Service', 'HiddenChapterWebView unmounted', {
           chapterUrl,
         });
       }
@@ -104,7 +104,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
   const handleShouldStartLoadWithRequest = (request: any): boolean => {
     if (isDebugEnabled()) {
-      log.info('Service', '🔍 WebView request', {
+      log.info('Service', 'WebView request', {
         url: request.url.substring(0, 100) + '...',
       });
     }
@@ -114,7 +114,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
     if (intercepted) {
       if (isDebugEnabled()) {
-        log.info('Service', '🎯 Intercepted AJAX request!', {
+        log.info('Service', 'Intercepted AJAX request', {
           chapterId: intercepted.chapterId,
         });
       }
@@ -127,7 +127,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
   const handleError = (syntheticEvent: any) => {
     const { nativeEvent } = syntheticEvent;
     if (isDebugEnabled()) {
-      log.error('Service', '❌ WebView error', {
+      log.error('Service', 'WebView error', {
         error: nativeEvent,
       });
     }
@@ -136,7 +136,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
   const handleLoadEnd = () => {
     if (isDebugEnabled()) {
-      log.info('Service', '✅ WebView load complete', {
+      log.info('Service', 'WebView load complete', {
         chapterUrl,
       });
     }
@@ -151,7 +151,6 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
         window.fetch = function(...args) {
           const url = args[0];
           if (typeof url === 'string' && url.includes('/ajax/read/chapter/')) {
-            console.log('🎯 Fetch intercepted:', url);
             window.ReactNativeWebView?.postMessage(JSON.stringify({
               type: 'AJAX_REQUEST',
               url: url
@@ -163,7 +162,6 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
         // Intercept XMLHttpRequest
         XMLHttpRequest.prototype.open = function(method, url, ...rest) {
           if (typeof url === 'string' && url.includes('/ajax/read/chapter/')) {
-            console.log('🎯 XHR intercepted:', url);
             window.ReactNativeWebView?.postMessage(JSON.stringify({
               type: 'AJAX_REQUEST',
               url: url
@@ -171,8 +169,6 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
           }
           return originalXHROpen.apply(this, [method, url, ...rest]);
         };
-        
-        console.log('✅ AJAX interception installed');
       })();
       true;
     `;
@@ -186,7 +182,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
       if (data.type === 'AJAX_REQUEST') {
         if (isDebugEnabled()) {
-          log.info('Service', '📨 Received message from WebView', {
+          log.info('Service', 'Received message from WebView', {
             url: data.url.substring(0, 100) + '...',
           });
         }
@@ -198,7 +194,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
         if (intercepted) {
           if (isDebugEnabled()) {
-            log.info('Service', '🎯 Intercepted AJAX request from message!', {
+            log.info('Service', 'Intercepted AJAX request from message', {
               chapterId: intercepted.chapterId,
             });
           }
@@ -206,7 +202,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
       }
     } catch (error) {
       if (isDebugEnabled()) {
-        log.warn('Service', '⚠️ Failed to parse WebView message', {
+        log.warn('Service', 'Failed to parse WebView message', {
           error,
         });
       }
@@ -215,7 +211,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
   const handleLoadStart = () => {
     if (isDebugEnabled()) {
-      log.info('Service', '🌐 WebView load started', {
+      log.info('Service', 'WebView load started', {
         fullUrl,
       });
     }
@@ -223,7 +219,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
     if (isDebugEnabled()) {
-      log.info('Service', '🔍 Navigation state change', {
+      log.info('Service', 'Navigation state change', {
         url: navState.url.substring(0, 100) + '...',
         loading: navState.loading,
       });
@@ -234,9 +230,9 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
       navState.url
     );
 
-    if (intercepted) {
-      if (isDebugEnabled()) {
-        log.info('Service', '🎯 Intercepted AJAX request from navigation!', {
+      if (intercepted) {
+        if (isDebugEnabled()) {
+          log.info('Service', 'Intercepted AJAX request from navigation', {
           chapterId: intercepted.chapterId,
         });
       }

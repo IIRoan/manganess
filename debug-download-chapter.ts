@@ -34,16 +34,26 @@ class ChapterDownloader {
       const match = url.match(/\/ajax\/read\/chapter\/(\d+)\?vrf=([^&]+)/);
 
       if (match) {
-        const chapterId = match[1];
-        const vrfToken = decodeURIComponent(match[2]);
+        const [, rawChapterId, rawVrfToken] = match;
+        if (!rawChapterId || !rawVrfToken) {
+          return null;
+        }
 
-        console.log('   ↳ Chapter ID:', chapterId);
-        console.log('   ↳ VRF Token:', vrfToken.substring(0, 30) + '...');
+        let decodedToken: string;
+        try {
+          decodedToken = decodeURIComponent(rawVrfToken);
+        } catch (decodeError) {
+          console.error('Failed to decode VRF token:', decodeError);
+          return null;
+        }
+
+        console.log('   ↳ Chapter ID:', rawChapterId);
+        console.log('   ↳ VRF Token:', decodedToken.substring(0, 30) + '...');
 
         return {
           url,
-          chapterId,
-          vrfToken,
+          chapterId: rawChapterId,
+          vrfToken: decodedToken,
         };
       }
     }
@@ -189,10 +199,12 @@ async function testWithManualUrl() {
   console.log('');
 
   // PASTE THE CAPTURED URL HERE:
-  const capturedAjaxUrl =
+  const defaultAjaxUrl =
+    process.env.DEBUG_CAPTURED_AJAX_URL ??
     'https://mangafire.to/ajax/read/chapter/5438730?vrf=ZBYeRCjYBk0tkZnKW4kTuWBYw5Y1e-csvu6vYLUY4zeiviixfq7VJ6djZFHAZyMAbiWlOFhCoA';
+  const capturedAjaxUrl: string = defaultAjaxUrl.trim();
 
-  if (!capturedAjaxUrl || capturedAjaxUrl === '') {
+  if (!capturedAjaxUrl) {
     console.log(
       '⚠️  No URL provided. Please capture the AJAX URL from browser DevTools.'
     );
@@ -262,9 +274,13 @@ async function main() {
   console.log('='.repeat(80));
   console.log('');
 
-  // Choose which test to run:
-  // await testWithManualUrl();
-  await simulateWebViewFlow();
+  const mode = (process.env.DEBUG_DOWNLOAD_MODE ?? 'simulate').toLowerCase();
+
+  if (mode === 'manual') {
+    await testWithManualUrl();
+  } else {
+    await simulateWebViewFlow();
+  }
 
   console.log('');
   console.log('='.repeat(80));

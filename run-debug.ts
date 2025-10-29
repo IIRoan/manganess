@@ -1,5 +1,13 @@
 // Simple runner for the MangaFire API debug script
-import { debugMangaFireAPI } from './debug-mangafire-api';
+
+interface DebugStepResult {
+  success: boolean;
+  description: string;
+}
+
+async function debugMangaFireAPI(): Promise<DebugStepResult[]> {
+  return [];
+}
 
 async function runDebug() {
   try {

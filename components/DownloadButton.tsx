@@ -124,7 +124,11 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         }
       }
     } catch (error) {
-      console.error('Error loading download status:', error);
+      log.error('Service', 'Error loading download status', {
+        mangaId,
+        chapterNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
       setDownloadStatus(DownloadStatus.QUEUED);
     } finally {
       setIsLoading(false);
@@ -166,7 +170,11 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
           break;
       }
     } catch (error) {
-      console.error('Download action error:', error);
+      log.error('Service', 'Download action error', {
+        mangaId,
+        chapterNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
       onDownloadError?.(
         error instanceof Error ? error.message : 'Unknown error'
       );
@@ -175,7 +183,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
 
   const startDownload = async () => {
     if (isDebugEnabled()) {
-      log.info('Service', '🚀 Starting download process', {
+      log.info('Service', 'Starting download process', {
         mangaId,
         chapterNumber,
         chapterUrl,
@@ -188,7 +196,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
 
     // Step 1: Open hidden WebView to intercept AJAX request
     if (isDebugEnabled()) {
-      log.info('Service', '🌐 Opening hidden WebView to intercept request', {
+      log.info('Service', 'Opening hidden WebView to intercept request', {
         chapterUrl,
       });
     }
@@ -201,7 +209,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     vrfToken: string
   ) => {
     if (isDebugEnabled()) {
-      log.info('Service', '✅ Request intercepted, starting download', {
+      log.info('Service', 'Request intercepted, starting download', {
         chapterId,
         vrfTokenPreview: vrfToken.substring(0, 30) + '...',
       });
@@ -227,7 +235,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         onDownloadComplete?.();
 
         if (isDebugEnabled()) {
-          log.info('Service', '🎉 Download completed successfully', {
+          log.info('Service', 'Download completed successfully', {
             mangaId,
             chapterNumber,
           });
@@ -237,7 +245,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         onDownloadError?.(result.error?.message || 'Download failed');
 
         if (isDebugEnabled()) {
-          log.error('Service', '❌ Download failed', {
+          log.error('Service', 'Download failed', {
             error: result.error,
           });
         }
@@ -249,7 +257,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       );
 
       if (isDebugEnabled()) {
-        log.error('Service', '❌ Download exception', {
+        log.error('Service', 'Download exception', {
           error,
         });
       }
@@ -258,7 +266,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
 
   const handleWebViewError = (error: string) => {
     if (isDebugEnabled()) {
-      log.error('Service', '❌ WebView error', {
+      log.error('Service', 'WebView error', {
         error,
       });
     }
@@ -270,7 +278,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
 
   const handleWebViewTimeout = () => {
     if (isDebugEnabled()) {
-      log.warn('Service', '⏱️ WebView timeout', {
+      log.warn('Service', 'WebView timeout', {
         chapterUrl,
       });
     }

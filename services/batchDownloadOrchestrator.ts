@@ -483,7 +483,11 @@ class BatchDownloadOrchestrator {
       try {
         session.onChapterDownloaded(completedChapter);
       } catch (error) {
-        console.error('Batch download onChapterDownloaded error:', error);
+        this.log.error('Service', 'Batch download onChapterDownloaded error', {
+          mangaId: session.mangaId,
+          chapter: completedChapter.number,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
@@ -578,7 +582,11 @@ class BatchDownloadOrchestrator {
           failedChapters: snapshot.failedChapters,
         });
       } catch (error) {
-        console.error('Batch download onBatchFinished error:', error);
+        this.log.error('Service', 'Batch download onBatchFinished error', {
+          mangaId: session.mangaId,
+          status,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   }
@@ -597,7 +605,10 @@ class BatchDownloadOrchestrator {
       try {
         listener(session.state);
       } catch (error) {
-        console.error('Batch download state listener error:', error);
+        this.log.error('Service', 'Batch download state listener error', {
+          mangaId: session.mangaId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     });
   }
@@ -608,7 +619,10 @@ class BatchDownloadOrchestrator {
       try {
         listener(request);
       } catch (error) {
-        console.error('Batch download webview listener error:', error);
+        this.log.error('Service', 'Batch download webview listener error', {
+          request,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     });
   }
