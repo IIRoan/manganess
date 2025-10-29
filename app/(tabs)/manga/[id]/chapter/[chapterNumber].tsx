@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 import {
   View,
   Text,
@@ -33,6 +39,7 @@ import {
   getInjectedJavaScript,
   fetchMangaDetails,
   MangaDetails,
+  normalizeChapterNumber,
 } from '@/services/mangaFireService';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { ChapterImage } from '@/types/download';
@@ -162,6 +169,8 @@ export default function ReadChapterScreen() {
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mangaFlatListRef = useRef<FlatList>(null);
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
+  const navigationTimestampRef = useRef<number>(0);
+  const lastNavigatedChapterRef = useRef<string>('');
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -170,24 +179,38 @@ export default function ReadChapterScreen() {
   const styles = getStyles(colorScheme);
   const insets = useSafeAreaInsets();
 
-  const chapterUrl = getChapterUrl(id, chapterNumber);
+  const normalizedChapterParam = useMemo(
+    () => normalizeChapterNumber(chapterNumber),
+    [chapterNumber]
+  );
+
+  const chapterIdentifier = normalizedChapterParam || chapterNumber || '';
+  const chapterUrl = getChapterUrl(id, chapterIdentifier);
   const webLoadStartRef = useRef<number>(
     (globalThis as any).performance?.now?.() ?? Date.now()
   );
   const log = logger();
   const supportsWorklets =
     typeof (Reanimated as any).useWorkletCallback === 'function';
-  const currentChapterIndex = mangaDetails?.chapters?.findIndex(
-    (chapter) => chapter.number === chapterNumber
-  );
+  const currentChapterIndex = useMemo(() => {
+    if (!mangaDetails?.chapters) {
+      return -1;
+    }
+
+    return mangaDetails.chapters.findIndex(
+      (chapter) =>
+        normalizeChapterNumber(chapter.number) === normalizedChapterParam
+    );
+  }, [mangaDetails?.chapters, normalizedChapterParam]);
+
   const hasNextChapter =
-    currentChapterIndex !== undefined &&
     currentChapterIndex > 0 &&
-    mangaDetails?.chapters?.[currentChapterIndex - 1];
+    !!mangaDetails?.chapters?.[currentChapterIndex - 1];
+
   const hasPreviousChapter =
-    currentChapterIndex !== undefined &&
+    currentChapterIndex > -1 &&
     currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
-    mangaDetails?.chapters?.[currentChapterIndex + 1];
+    !!mangaDetails?.chapters?.[currentChapterIndex + 1];
 
   // Status bar management
   useFocusEffect(
@@ -370,12 +393,16 @@ export default function ReadChapterScreen() {
         const details = await fetchMangaDetails(id);
         title = details.title;
       }
-      await markChapterAsRead(id, chapterNumber, title);
+      await markChapterAsRead(
+        id,
+        normalizedChapterParam || chapterNumber,
+        title
+      );
       setMangaTitle(title);
     } catch (error) {
       console.error('Error marking chapter as read:', error);
     }
-  }, [id, chapterNumber]);
+  }, [id, chapterNumber, normalizedChapterParam]);
 
   const fetchDetails = useCallback(async () => {
     try {
@@ -446,6 +473,12 @@ export default function ReadChapterScreen() {
     }
   }, [currentPage, contentType, downloadedImages]);
 
+  // Initialize navigation tracking when chapter changes
+  useEffect(() => {
+    navigationTimestampRef.current = Date.now();
+    lastNavigatedChapterRef.current = normalizedChapterParam;
+  }, [normalizedChapterParam]);
+
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
@@ -484,54 +517,109 @@ export default function ReadChapterScreen() {
   const handleNavigationStateChange = useCallback(
     async (navState: WebViewNavigation) => {
       if (navState.url !== chapterUrl) {
-        const newChapterMatch = navState.url.match(/\/chapter-(\d+)/);
-        if (newChapterMatch) {
-          const newChapterNumber = newChapterMatch[1];
-          if (mangaTitle && id && newChapterNumber) {
-            await markChapterAsRead(id, newChapterNumber, mangaTitle);
+        const newChapterMatch = navState.url.match(/\/chapter-([\w.\-]+)/i);
+        const matchedSegment = newChapterMatch?.[1];
+        const normalizedTarget = normalizeChapterNumber(matchedSegment);
+        
+        if (normalizedTarget) {
+          // Add cooldown to prevent rapid redirects from the website
+          // (MangaFire redirects to chapter 1.1 about 1 second after page load)
+          const now = Date.now();
+          const timeSinceLastNav = now - navigationTimestampRef.current;
+          const cooldownPeriod = 3000; // 3 seconds
+          
+          if (isDebugEnabled()) {
+            log.debug('UI', 'NavigationStateChange detected', {
+              target: normalizedTarget,
+              lastNavChapter: lastNavigatedChapterRef.current,
+              timeSinceLastNav,
+              cooldownActive: timeSinceLastNav < cooldownPeriod,
+            });
           }
-          router.replace(`/manga/${id}/chapter/${newChapterNumber}`);
+          
+          // If we're within cooldown and trying to navigate to a DIFFERENT chapter, ignore it
+          if (timeSinceLastNav < cooldownPeriod && 
+              lastNavigatedChapterRef.current && 
+              normalizedTarget !== lastNavigatedChapterRef.current) {
+            log.warn('UI', 'Blocking rapid redirect (likely from website)', {
+              from: lastNavigatedChapterRef.current,
+              to: normalizedTarget,
+              timeSinceLastNav,
+            });
+            return; // Ignore this redirect
+          }
+          
+          // Update navigation tracking
+          navigationTimestampRef.current = now;
+          lastNavigatedChapterRef.current = normalizedTarget;
+          
+          if (mangaTitle && id) {
+            await markChapterAsRead(id, normalizedTarget, mangaTitle);
+          }
+          router.replace(`/manga/${id}/chapter/${normalizedTarget}`);
         }
       }
     },
-    [chapterUrl, id, mangaTitle, router]
+    [chapterUrl, id, mangaTitle, router, log]
   );
 
   const handleChapterPress = (chapterNum: string) => {
+    const targetChapter = normalizeChapterNumber(chapterNum);
+    if (!targetChapter) {
+      return;
+    }
+    // Update navigation tracking for this intentional navigation
+    navigationTimestampRef.current = Date.now();
+    lastNavigatedChapterRef.current = targetChapter;
     closeChapterList();
-    router.navigate(`/manga/${id}/chapter/${chapterNum}`);
+    router.navigate(`/manga/${id}/chapter/${targetChapter}`);
   };
 
   const renderChapterList = () => {
     if (!mangaDetails?.chapters) return null;
-    return mangaDetails.chapters.map((chapter) => (
-      <TouchableOpacity
-        key={chapter.number}
-        style={[
-          styles.chapterItem,
-          chapter.number === chapterNumber && styles.currentChapter,
-        ]}
-        onPress={() => handleChapterPress(chapter.number)}
-      >
-        <View style={styles.chapterItemLeft}>
-          <Text style={styles.chapterNumber}>Chapter {chapter.number}</Text>
-          <Text style={styles.chapterDate}>{chapter.date || 'No date'}</Text>
-        </View>
-        {chapter.number === chapterNumber ? (
-          <View style={styles.readIndicator} />
-        ) : (
-          <View style={styles.unreadIndicator} />
-        )}
-      </TouchableOpacity>
-    ));
+    return mangaDetails.chapters.map((chapter) => {
+      const normalizedChapterId = normalizeChapterNumber(chapter.number);
+      const isCurrentChapter =
+        normalizedChapterId === normalizedChapterParam;
+
+      return (
+        <TouchableOpacity
+          key={`${normalizedChapterId || chapter.number}-${chapter.url}`}
+          style={[
+            styles.chapterItem,
+            isCurrentChapter && styles.currentChapter,
+          ]}
+          onPress={() => handleChapterPress(chapter.number)}
+        >
+          <View style={styles.chapterItemLeft}>
+            <Text style={styles.chapterNumber}>
+              Chapter {chapter.number}
+            </Text>
+            <Text style={styles.chapterDate}>{chapter.date || 'No date'}</Text>
+          </View>
+          {isCurrentChapter ? (
+            <View style={styles.readIndicator} />
+          ) : (
+            <View style={styles.unreadIndicator} />
+          )}
+        </TouchableOpacity>
+      );
+    });
   };
 
   const navigateChapter = (chapterOffset: number) => {
-    if (!mangaDetails?.chapters || currentChapterIndex === undefined) return;
+    if (!mangaDetails?.chapters || currentChapterIndex < 0) return;
     const newChapter =
       mangaDetails.chapters[currentChapterIndex + chapterOffset];
-    if (newChapter) {
-      router.navigate(`/manga/${id}/chapter/${newChapter.number}`);
+    if (newChapter?.number) {
+      const targetChapter = normalizeChapterNumber(newChapter.number);
+      if (!targetChapter) {
+        return;
+      }
+      // Update navigation tracking for this intentional navigation
+      navigationTimestampRef.current = Date.now();
+      lastNavigatedChapterRef.current = targetChapter;
+      router.navigate(`/manga/${id}/chapter/${targetChapter}`);
     }
   };
 

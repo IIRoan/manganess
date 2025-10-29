@@ -62,6 +62,32 @@ const USER_AGENT =
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
 
+export const normalizeChapterNumber = (
+  value: string | null | undefined
+): string => {
+  if (!value) {
+    return '';
+  }
+
+  let normalized = String(value).trim();
+  if (!normalized) {
+    return '';
+  }
+
+  normalized = normalized
+    .replace(/^chapter/i, '')
+    .replace(/\s+/g, '')
+    .replace(/_/g, '.')
+    .replace(/(\d)-(?=\d)/g, '$1.')
+    .replace(/-+/g, '-')
+    .replace(/\.{2,}/g, '.')
+    .replace(/[^0-9a-zA-Z.\-]/g, '');
+
+  normalized = normalized.replace(/^[.-]+/, '').replace(/[.-]+$/, '');
+
+  return normalized;
+};
+
 // Utility function for retrying API calls with exponential backoff
 async function retryApiCall<T>(
   operation: () => Promise<T>,
@@ -310,16 +336,75 @@ const parseMangaDetails = (html: string): MangaDetails => {
   );
   const bannerImage = bannerImageMatch ? bannerImageMatch[1] : '';
 
-  const chaptersRegex =
-    /<li class="item".*?<a href="(.*?)".*?<span>Chapter (\d+):.*?<\/span>.*?<span>(.*?)<\/span>/g;
-  const chapters = [];
+  const chapters: {
+    url: string;
+    number: string;
+    title: string;
+    date: string;
+  }[] = [];
+
+  const chapterItemRegex = /<li class="item"[^>]*>([\s\S]*?)<\/li>/g;
   let match;
-  while ((match = chaptersRegex.exec(html)) !== null) {
+  while ((match = chapterItemRegex.exec(html)) !== null) {
+    const itemHtml = match[1];
+    if (!itemHtml) continue;
+
+    const urlMatch = itemHtml.match(/<a[^>]*href="([^"]+)"/i);
+    const rawUrl = urlMatch?.[1] ?? '';
+
+    const spanMatches = [...itemHtml.matchAll(/<span[^>]*>(.*?)<\/span>/gi)];
+    if (spanMatches.length === 0) continue;
+
+    const rawHeading = decode(spanMatches[0]?.[1] ?? '').trim();
+    const rawDate = decode(
+      spanMatches[spanMatches.length - 1]?.[1]?.trim() ?? ''
+    );
+
+    const extractChapterNumber = (
+      heading: string
+    ): { number: string; extraTitle: string } => {
+      const normalizedHeading = heading.replace(/\s+/g, ' ').trim();
+      const chapterPrefixMatch = normalizedHeading.match(/^Chapter\s+(.*)$/i);
+      if (!chapterPrefixMatch) {
+        return {
+          number: normalizeChapterNumber(normalizedHeading),
+          extraTitle: '',
+        };
+      }
+
+      const remainder = chapterPrefixMatch[1]?.trim() ?? '';
+      const [numberPartRaw, ...titleParts] = remainder.split(':');
+      const numberPart = normalizeChapterNumber(numberPartRaw ?? '');
+      const fallbackNumber = normalizeChapterNumber(remainder);
+      return {
+        number: numberPart || fallbackNumber,
+        extraTitle: titleParts.join(':').trim(),
+      };
+    };
+
+    const { number: extractedNumber, extraTitle } = extractChapterNumber(rawHeading);
+
+    let chapterNumber = extractedNumber;
+    if (!chapterNumber) {
+      const urlNumberMatch = rawUrl.match(/chapter-([^/?#]+)/i);
+      if (urlNumberMatch?.[1]) {
+        chapterNumber = normalizeChapterNumber(urlNumberMatch[1]);
+      }
+    }
+
+    if (!chapterNumber) {
+      continue;
+    }
+
+    const chapterTitle = extraTitle
+      ? `Chapter ${chapterNumber}: ${extraTitle}`
+      : `Chapter ${chapterNumber}`;
+
     chapters.push({
-      url: match[1] || '',
-      number: match[2] || '',
-      title: `Chapter ${match[2] || ''}`,
-      date: match[3] || '',
+      url: rawUrl,
+      number: chapterNumber,
+      title: chapterTitle,
+      date: rawDate,
     });
   }
 
@@ -339,7 +424,10 @@ const parseMangaDetails = (html: string): MangaDetails => {
 };
 
 export const getChapterUrl = (id: string, chapterNumber: string): string => {
-  return `${MANGA_API_URL}/read/${id}/en/chapter-${chapterNumber}`;
+  const rawChapter = String(chapterNumber ?? '').trim();
+  const normalizedNumber = normalizeChapterNumber(rawChapter) || rawChapter;
+  // Website expects chapter URLs with dots preserved (e.g., chapter-1.1, chapter-20.2)
+  return `${MANGA_API_URL}/read/${id}/en/chapter-${normalizedNumber}`;
 };
 export const markChapterAsRead = async (
   id: string,
