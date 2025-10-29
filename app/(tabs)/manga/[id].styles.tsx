@@ -310,12 +310,30 @@ const getStyles = (colors: typeof Colors.light) =>
       alignItems: 'center',
       marginLeft: 12,
     },
-    downloadButton: {
-      marginRight: 4,
+    downloadingWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginRight: 6,
+    },
+    downloadingIndicator: {
+      marginRight: 6,
+    },
+    downloadingText: {
+      fontSize: 12,
+      color: colors.tabIconDefault,
+    },
+    downloadedIndicator: {
+      marginRight: 6,
+    },
+    readIndicator: {
+      marginLeft: 0,
+    },
+    readIndicatorOffset: {
+      marginLeft: 8,
     },
 
     rightAction: {
-      alignItems: 'flex-end',
+      alignItems: 'stretch',
       justifyContent: 'center',
       paddingRight: 0,
       height: '100%',
@@ -323,15 +341,26 @@ const getStyles = (colors: typeof Colors.light) =>
     actionContainer: {
       flex: 1,
       justifyContent: 'center',
-      alignItems: 'center',
+      alignItems: 'stretch',
       height: '100%',
     },
     actionButton: {
+      flex: 1,
+      height: '100%',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      minWidth: 80,
+      paddingHorizontal: 12,
+      paddingVertical: 0,
+    },
+    swipeDownloadWrapper: {
+      flex: 1,
+      height: '100%',
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+    },
+    swipeDownloadButton: {
+      width: '100%',
+      height: '100%',
     },
     actionText: {
       color: 'white',

@@ -42,6 +42,7 @@ import {
   getReadChapters,
   markChapterAsUnread,
 } from '@/services/readChapterService';
+import { chapterStorageService } from '@/services/chapterStorageService';
 import { useFocusEffect } from '@react-navigation/native';
 import LastReadChapterBar from '@/components/LastReadChapterBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -57,6 +58,9 @@ import type {
   BookmarkStatus,
   Chapter,
 } from '@/types';
+import BatchDownloadBar from '@/components/BatchDownloadBar';
+import { downloadManagerService } from '@/services/downloadManager';
+import { DownloadStatus } from '@/types/download';
 
 /* Type Definitions */
 type BookmarkPopupConfig = {
@@ -117,6 +121,9 @@ export default function MangaDetailScreen() {
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
   const [currentlyOpenSwipeable, setCurrentlyOpenSwipeable] =
     useState<Swipeable | null>(null);
+  const [downloadedChapters, setDownloadedChapters] = useState<string[]>([]);
+  const [downloadingChapters, setDownloadingChapters] = useState<string[]>([]);
+  const downloadedChaptersRef = useRef<string[]>([]);
 
   // State for the general alert (e.g., marking chapters as unread)
   const [isAlertVisible, setIsAlertVisible] = useState(false);
@@ -155,6 +162,59 @@ export default function MangaDetailScreen() {
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
+
+  const refreshDownloadedChapters = useCallback(async () => {
+    if (typeof id !== 'string') {
+      return;
+    }
+
+    try {
+      const chapters = await chapterStorageService.getDownloadedChapters(
+        id as string
+      );
+      setDownloadedChapters(chapters);
+      downloadedChaptersRef.current = chapters;
+      setDownloadingChapters((prev) =>
+        prev.filter((chapter) => !chapters.includes(chapter))
+      );
+    } catch (refreshError) {
+      console.error('Error loading downloaded chapters:', refreshError);
+    }
+  }, [id]);
+
+  const refreshDownloadingChapters = useCallback(async () => {
+    if (typeof id !== 'string') {
+      return;
+    }
+
+    try {
+      const activeDownloads = await downloadManagerService.getActiveDownloads();
+      const activeChapterNumbers = activeDownloads
+        .filter(
+          (download) =>
+            download.mangaId === id &&
+            [
+              DownloadStatus.DOWNLOADING,
+              DownloadStatus.QUEUED,
+              DownloadStatus.PAUSED,
+            ].includes(download.status)
+        )
+        .map((download) => download.chapterNumber);
+
+      setDownloadingChapters((previous) => {
+        const downloadedSet = new Set(downloadedChaptersRef.current);
+        const carryOver = previous.filter((chapter) => !downloadedSet.has(chapter));
+        const combined = new Set([...carryOver, ...activeChapterNumbers]);
+        return Array.from(combined);
+      });
+    } catch (refreshError) {
+      console.error('Error loading active downloads:', refreshError);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    downloadedChaptersRef.current = downloadedChapters;
+  }, [downloadedChapters]);
 
   useFocusEffect(
     useCallback(() => {
@@ -206,6 +266,8 @@ export default function MangaDetailScreen() {
                 ]);
               }
             );
+            await refreshDownloadedChapters();
+            await refreshDownloadingChapters();
           } catch (error) {
             console.error('Error fetching data:', error);
             setError('Failed to load manga details. Please try again.');
@@ -218,7 +280,7 @@ export default function MangaDetailScreen() {
       fetchData();
 
       return () => {};
-    }, [id])
+    }, [id, refreshDownloadedChapters, refreshDownloadingChapters])
   );
 
   const handleSaveBookmark = useCallback(
@@ -324,6 +386,22 @@ export default function MangaDetailScreen() {
     [id, readChapters, currentlyOpenSwipeable]
   );
 
+  const handleDeleteDownload = useCallback(
+    async (chapterNumber: string) => {
+      if (typeof id !== 'string') {
+        return;
+      }
+
+      try {
+        await chapterStorageService.deleteChapter(id as string, chapterNumber);
+        await refreshDownloadedChapters();
+      } catch (deleteError) {
+        console.error('Error deleting downloaded chapter:', deleteError);
+      }
+    },
+    [id, refreshDownloadedChapters]
+  );
+
   const handleChapterPress = useCallback(
     (chapterNumber: string | number) => {
       haptics.onSelection();
@@ -418,6 +496,14 @@ export default function MangaDetailScreen() {
 
   const readingProgress = calculateReadingProgress();
   const remainingReadingTime = estimateRemainingReadingTime();
+  const downloadedChaptersSet = useMemo(
+    () => new Set(downloadedChapters),
+    [downloadedChapters]
+  );
+  const downloadingChaptersSet = useMemo(
+    () => new Set(downloadingChapters),
+    [downloadingChapters]
+  );
 
   const ListHeader = useMemo(
     () =>
@@ -574,6 +660,13 @@ export default function MangaDetailScreen() {
           </View>
           <View style={styles.chaptersContainer}>
             <Text style={styles.sectionTitle}>Chapters</Text>
+            <BatchDownloadBar
+              mangaId={id as string}
+              mangaTitle={mangaDetails.title}
+              chapters={mangaDetails.chapters}
+              downloadedChapters={downloadedChapters}
+              onDownloadsChanged={refreshDownloadedChapters}
+            />
           </View>
         </>
       ),
@@ -585,6 +678,8 @@ export default function MangaDetailScreen() {
       lastReadChapter,
       readingProgress,
       remainingReadingTime,
+      downloadedChapters,
+      refreshDownloadedChapters,
       colors,
       styles,
       handleBookmark,
@@ -639,7 +734,12 @@ export default function MangaDetailScreen() {
               drawDistance={100}
               ListHeaderComponent={ListHeader}
               data={mangaDetails.chapters}
-              extraData={[readChapters, lastReadChapter]}
+              extraData={[
+                readChapters,
+                lastReadChapter,
+                downloadedChapters,
+                downloadingChapters,
+              ]}
               keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
               renderItem={({ item: chapter, index }) => {
                 const isRead = readChapters.includes(chapter.number);
@@ -663,23 +763,32 @@ export default function MangaDetailScreen() {
                     mangaId={id as string}
                     showDownloadButton={true}
                     onDownloadStart={() => {
-                      // Optional: Show download started notification
-                      console.log(
-                        `Started downloading chapter ${chapter.number}`
+                      setDownloadingChapters((prev) =>
+                        prev.includes(chapter.number)
+                          ? prev
+                          : [...prev, chapter.number]
                       );
+                      refreshDownloadingChapters().catch(() => {});
                     }}
                     onDownloadComplete={() => {
-                      // Optional: Show download completed notification
-                      console.log(
-                        `Completed downloading chapter ${chapter.number}`
+                      setDownloadingChapters((prev) =>
+                        prev.filter((item) => item !== chapter.number)
                       );
+                      refreshDownloadedChapters().catch(() => {});
+                      refreshDownloadingChapters().catch(() => {});
                     }}
-                    onDownloadError={(error) => {
-                      // Optional: Show download error notification
-                      console.error(
-                        `Download error for chapter ${chapter.number}:`,
-                        error
+                    onDownloadError={() => {
+                      setDownloadingChapters((prev) =>
+                        prev.filter((item) => item !== chapter.number)
                       );
+                      refreshDownloadingChapters().catch(() => {});
+                    }}
+                    isDownloaded={downloadedChaptersSet.has(chapter.number)}
+                    isDownloading={
+                      downloadingChaptersSet.has(chapter.number)
+                    }
+                    onDeleteDownload={() => {
+                      handleDeleteDownload(chapter.number).catch(() => {});
                     }}
                   />
                 );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ interface DownloadButtonProps {
   chapterUrl: string;
   size?: 'small' | 'medium' | 'large';
   variant?: 'icon' | 'text' | 'full';
+  appearance?: 'default' | 'swipe';
   onDownloadStart?: () => void;
   onDownloadComplete?: () => void;
   onDownloadError?: (error: string) => void;
@@ -36,6 +37,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   chapterUrl,
   size = 'medium',
   variant = 'icon',
+  appearance = 'default',
   onDownloadStart,
   onDownloadComplete,
   onDownloadError,
@@ -45,7 +47,10 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   const { theme, systemTheme } = useTheme();
   const colorScheme = theme === 'system' ? systemTheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
-  const styles = getStyles(colors, size);
+  const styles = useMemo(
+    () => getStyles(colors, size, appearance),
+    [colors, size, appearance]
+  );
   const haptics = useHapticFeedback();
 
   const log = logger();
@@ -324,6 +329,14 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   };
 
   const getIconColor = () => {
+    if (appearance === 'swipe') {
+      if (disabled) return 'rgba(255, 255, 255, 0.6)';
+      if (downloadStatus === DownloadStatus.FAILED) {
+        return '#ffe3e3';
+      }
+      return '#ffffff';
+    }
+
     if (disabled) return colors.tabIconDefault;
 
     switch (downloadStatus) {
@@ -495,54 +508,65 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
 
 const getStyles = (
   colors: typeof Colors.light,
-  size: 'small' | 'medium' | 'large'
+  size: 'small' | 'medium' | 'large',
+  appearance: 'default' | 'swipe'
 ) => {
   const baseSize = size === 'small' ? 32 : size === 'large' ? 48 : 40;
   const padding = size === 'small' ? 6 : size === 'large' ? 12 : 8;
+  const isSwipe = appearance === 'swipe';
 
   return StyleSheet.create({
     container: {
-      borderRadius: 8,
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
-      overflow: 'hidden',
+      borderRadius: isSwipe ? 0 : 8,
+      backgroundColor: isSwipe ? 'transparent' : colors.card,
+      borderWidth: isSwipe ? 0 : 1,
+      borderColor: isSwipe ? 'transparent' : colors.border,
+      overflow: isSwipe ? 'visible' : 'hidden',
+      width: isSwipe ? '100%' : undefined,
+      height: isSwipe ? '100%' : undefined,
+      flex: isSwipe ? 1 : undefined,
+      alignItems: isSwipe ? 'center' : undefined,
+      justifyContent: isSwipe ? 'center' : undefined,
     },
     iconContainer: {
-      width: baseSize,
-      height: baseSize,
+      width: isSwipe ? 'auto' : baseSize,
+      height: isSwipe ? 'auto' : baseSize,
       justifyContent: 'center',
       alignItems: 'center',
       position: 'relative',
     },
     textContainer: {
-      paddingHorizontal: padding * 2,
-      paddingVertical: padding,
-      minWidth: 80,
+      paddingHorizontal: isSwipe ? 0 : padding * 2,
+      paddingVertical: isSwipe ? 0 : padding,
+      minWidth: isSwipe ? undefined : 80,
       alignItems: 'center',
       position: 'relative',
     },
     fullContainer: {
-      flexDirection: 'row',
+      flexDirection: isSwipe ? 'column' : 'row',
       alignItems: 'center',
-      paddingHorizontal: padding,
-      paddingVertical: padding,
-      minWidth: 120,
+      justifyContent: 'center',
+      paddingHorizontal: isSwipe ? 0 : padding,
+      paddingVertical: isSwipe ? 0 : padding,
+      minWidth: isSwipe ? undefined : 120,
       position: 'relative',
+      height: isSwipe ? '100%' : undefined,
     },
     textSection: {
-      marginLeft: 8,
-      flex: 1,
+      marginLeft: isSwipe ? 0 : 8,
+      marginTop: isSwipe ? 6 : 0,
+      flex: isSwipe ? undefined : 1,
+      alignItems: isSwipe ? 'center' : undefined,
     },
     statusText: {
       fontSize: size === 'small' ? 12 : size === 'large' ? 16 : 14,
       fontWeight: '600',
-      color: colors.text,
+      color: isSwipe ? '#ffffff' : colors.text,
       textAlign: 'center',
     },
     estimatedTimeText: {
       fontSize: size === 'small' ? 10 : size === 'large' ? 12 : 11,
-      color: colors.tabIconDefault,
+      color: isSwipe ? 'rgba(255, 255, 255, 0.8)' : colors.tabIconDefault,
       textAlign: 'center',
       marginTop: 2,
     },
@@ -555,11 +579,11 @@ const getStyles = (
     },
     progressBackground: {
       flex: 1,
-      backgroundColor: colors.border,
+      backgroundColor: isSwipe ? 'rgba(255, 255, 255, 0.3)' : colors.border,
     },
     progressFill: {
       height: '100%',
-      backgroundColor: colors.primary,
+      backgroundColor: isSwipe ? '#ffffff' : colors.primary,
     },
   });
 };
