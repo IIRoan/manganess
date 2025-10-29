@@ -8,7 +8,6 @@ import {
   fetchChapterImagesFromUrl,
   fetchChapterImagesFromInterceptedRequest,
 } from './mangaFireService';
-import { webViewRequestInterceptor } from './webViewRequestInterceptor';
 
 /**
  * Service for extracting image URLs from manga chapter pages
@@ -43,7 +42,9 @@ export class ImageExtractorService implements ImageExtractor {
     if (chapterUrl) {
       try {
         if (isDebugEnabled()) {
-          console.log('Attempting API extraction for:', chapterUrl);
+          this.log.info('Service', 'Attempting API extraction', {
+            chapterUrl,
+          });
         }
 
         apiImages = await this.extractImagesFromApi(chapterUrl);
@@ -55,10 +56,13 @@ export class ImageExtractorService implements ImageExtractor {
             });
           }
           return apiImages;
-        } else {
-          if (isDebugEnabled()) {
-            console.log('API returned no images, falling back to HTML parsing');
-          }
+        }
+
+        if (isDebugEnabled()) {
+          this.log.info(
+            'Service',
+            'API returned no images, falling back to HTML parsing'
+          );
         }
       } catch (error) {
         apiError = error instanceof Error ? error : new Error(String(error));
@@ -152,12 +156,18 @@ export class ImageExtractorService implements ImageExtractor {
           } else if (typeof imageData === 'string') {
             imageUrl = imageData;
           } else {
-            console.warn('Unexpected image data format:', imageData);
+            this.log.warn('Service', 'Unexpected image data format', {
+              index,
+              imageData,
+            });
             imageUrl = '';
           }
 
           if (!imageUrl) {
-            console.warn(`Empty image URL at index ${index}:`, imageData);
+            this.log.warn('Service', 'Empty image URL in API response', {
+              index,
+              imageData,
+            });
           }
 
           return {
@@ -228,12 +238,18 @@ export class ImageExtractorService implements ImageExtractor {
           } else if (typeof imageData === 'string') {
             imageUrl = imageData;
           } else {
-            console.warn('Unexpected image data format:', imageData);
+            this.log.warn('Service', 'Unexpected image data format', {
+              index,
+              imageData,
+            });
             imageUrl = '';
           }
 
           if (!imageUrl) {
-            console.warn(`Empty image URL at index ${index}:`, imageData);
+            this.log.warn('Service', 'Empty image URL in API response', {
+              index,
+              imageData,
+            });
           }
 
           return {

@@ -14,7 +14,6 @@ import { chapterStorageService } from './chapterStorageService';
 import { downloadQueueService } from './downloadQueue';
 import {
   downloadErrorHandler,
-  NetworkErrorContext,
   StorageErrorContext,
 } from './downloadErrorHandler';
 import { downloadValidationService } from './downloadValidationService';
@@ -93,7 +92,7 @@ class DownloadManagerService implements DownloadManager {
     if (isDebugEnabled()) {
       this.log.info(
         'Service',
-        '📥 Starting chapter download from intercepted request',
+        'Starting chapter download from intercepted request',
         {
           mangaId,
           mangaTitle,
@@ -152,7 +151,7 @@ class DownloadManagerService implements DownloadManager {
       this.activeDownloads.set(downloadId, progress);
 
       if (isDebugEnabled()) {
-        this.log.info('Service', '📊 Initialized download progress tracking', {
+        this.log.info('Service', 'Initialized download progress tracking', {
           downloadId,
           mangaTitle: progress.mangaTitle,
         });
@@ -162,12 +161,15 @@ class DownloadManagerService implements DownloadManager {
       downloadQueueService
         .updateDownloadProgress(downloadId, 0, 0, 0)
         .catch((error) => {
-          console.error('Failed to update download progress:', error);
+          this.log.error('Service', 'Failed to update download progress', {
+            downloadId,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
 
       // Perform download using intercepted data
       if (isDebugEnabled()) {
-        this.log.info('Service', '🔄 Starting download with retry logic', {
+        this.log.info('Service', 'Starting download with retry logic', {
           downloadId,
           maxAttempts: MAX_RETRY_ATTEMPTS,
         });
@@ -247,7 +249,7 @@ class DownloadManagerService implements DownloadManager {
     const downloadId = this.generateDownloadId(mangaId, chapterNumber);
 
     if (isDebugEnabled()) {
-      this.log.info('Service', '🚀 Starting chapter download', {
+      this.log.info('Service', 'Starting chapter download', {
         mangaId,
         chapterNumber,
         chapterUrl,
@@ -262,7 +264,7 @@ class DownloadManagerService implements DownloadManager {
 
       if (isAlreadyDownloaded) {
         if (isDebugEnabled()) {
-          this.log.info('Service', '✅ Chapter already downloaded', {
+          this.log.info('Service', 'Chapter already downloaded', {
             downloadId,
           });
         }
@@ -308,7 +310,7 @@ class DownloadManagerService implements DownloadManager {
       if (isDebugEnabled()) {
         this.log.info(
           'Service',
-          '✅ Got intercepted WebView data, starting download',
+          'Got intercepted WebView data, starting download',
           {
             downloadId,
             chapterId: interceptedData.chapterId,
@@ -344,7 +346,7 @@ class DownloadManagerService implements DownloadManager {
         downloadError.message
       );
 
-      this.log.error('Service', '❌ Download failed with exception', {
+      this.log.error('Service', 'Download failed with exception', {
         downloadId,
         error,
       });
@@ -381,7 +383,7 @@ class DownloadManagerService implements DownloadManager {
 
         if (interceptedData) {
           if (isDebugEnabled()) {
-            this.log.info('Service', '✅ Found intercepted request', {
+            this.log.info('Service', 'Found intercepted request', {
               chapterId: interceptedData.chapterId,
               waitedMs: Date.now() - startTime,
             });
@@ -429,7 +431,7 @@ class DownloadManagerService implements DownloadManager {
       if (isDebugEnabled()) {
         this.log.info(
           'Service',
-          `🔄 Download attempt ${retryConfig.attempt}/${retryConfig.maxAttempts}`,
+          `Download attempt ${retryConfig.attempt}/${retryConfig.maxAttempts}`,
           {
             downloadId,
             chapterId,
@@ -441,7 +443,7 @@ class DownloadManagerService implements DownloadManager {
 
       // Step 1: Check storage space
       if (isDebugEnabled()) {
-        this.log.info('Service', '💾 Step 1: Checking storage space', {
+        this.log.info('Service', 'Step 1: Checking storage space', {
           downloadId,
         });
       }
@@ -484,7 +486,7 @@ class DownloadManagerService implements DownloadManager {
       }
 
       if (isDebugEnabled()) {
-        this.log.info('Service', '✅ Storage check passed', {
+        this.log.info('Service', 'Storage check passed', {
           downloadId,
           availableSpace: storageStats.availableSpace,
         });
@@ -492,7 +494,7 @@ class DownloadManagerService implements DownloadManager {
 
       // Step 2: Extract images using intercepted data (no HTML fetching needed!)
       if (isDebugEnabled()) {
-        this.log.info('Service', '🖼️ Step 2: Extracting images from AJAX API', {
+        this.log.info('Service', 'Step 2: Extracting images from AJAX API', {
           downloadId,
           chapterId,
           vrfTokenPreview: vrfToken.substring(0, 30) + '...',
@@ -511,7 +513,7 @@ class DownloadManagerService implements DownloadManager {
       }
 
       if (isDebugEnabled()) {
-        this.log.info('Service', `✅ Found ${images.length} images`, {
+        this.log.info('Service', `Found ${images.length} images`, {
           downloadId,
           imageCount: images.length,
           sampleUrls: images.slice(0, 3).map((img) => img.originalUrl),
@@ -536,7 +538,7 @@ class DownloadManagerService implements DownloadManager {
 
       // Step 3: Download images
       if (isDebugEnabled()) {
-        this.log.info('Service', '📥 Step 3: Downloading images', {
+        this.log.info('Service', 'Step 3: Downloading images', {
           downloadId,
           totalImages: images.length,
           concurrentDownloads: CONCURRENT_IMAGE_DOWNLOADS,
@@ -556,7 +558,7 @@ class DownloadManagerService implements DownloadManager {
       }
 
       if (isDebugEnabled()) {
-        this.log.info('Service', '✅ All images downloaded', {
+        this.log.info('Service', 'All images downloaded', {
           downloadId,
           successCount: downloadedImages.filter(
             (img) => img.downloadStatus === ImageDownloadStatus.COMPLETED
@@ -569,7 +571,7 @@ class DownloadManagerService implements DownloadManager {
 
       // Step 4: Save to storage
       if (isDebugEnabled()) {
-        this.log.info('Service', '💾 Step 4: Saving to storage', {
+        this.log.info('Service', 'Step 4: Saving to storage', {
           downloadId,
         });
       }
@@ -582,7 +584,7 @@ class DownloadManagerService implements DownloadManager {
         );
 
         if (isDebugEnabled()) {
-          this.log.info('Service', '✅ Saved to storage', {
+          this.log.info('Service', 'Saved to storage', {
             downloadId,
           });
         }
@@ -600,7 +602,7 @@ class DownloadManagerService implements DownloadManager {
           if (isDebugEnabled()) {
             this.log.info(
               'Service',
-              '✅ Files already exist in storage (previous download)',
+              'Files already exist in storage (previous download)',
               {
                 downloadId,
               }
@@ -615,7 +617,7 @@ class DownloadManagerService implements DownloadManager {
 
       // Step 5: Validate chapter integrity
       if (isDebugEnabled()) {
-        this.log.info('Service', '🔍 Step 5: Validating chapter integrity', {
+        this.log.info('Service', 'Step 5: Validating chapter integrity', {
           downloadId,
         });
       }
@@ -635,7 +637,7 @@ class DownloadManagerService implements DownloadManager {
         );
 
       if (isDebugEnabled()) {
-        this.log.info('Service', '✅ Validation complete', {
+        this.log.info('Service', 'Validation complete', {
           downloadId,
           isValid: validationResult.isValid,
           integrityScore: validationResult.integrityScore,
@@ -648,7 +650,7 @@ class DownloadManagerService implements DownloadManager {
           validationResult.recommendedAction === 'redownload_corrupted' &&
           retryConfig.attempt < retryConfig.maxAttempts
         ) {
-          this.log.warn('Service', '⚠️ Chapter validation failed, retrying', {
+          this.log.warn('Service', 'Chapter validation failed, retrying', {
             downloadId,
             integrityScore: validationResult.integrityScore,
             attempt: retryConfig.attempt,
@@ -672,7 +674,7 @@ class DownloadManagerService implements DownloadManager {
         if (validationResult.integrityScore >= 50) {
           this.log.warn(
             'Service',
-            '⚠️ Chapter partially corrupted but keeping',
+            'Chapter partially corrupted but keeping',
             {
               downloadId,
               integrityScore: validationResult.integrityScore,
@@ -683,7 +685,7 @@ class DownloadManagerService implements DownloadManager {
           if (downloadedImages.length > 0) {
             this.log.warn(
               'Service',
-              '⚠️ Validation failed but images were downloaded successfully, continuing',
+              'Validation failed but images were downloaded successfully, continuing',
               {
                 downloadId,
                 integrityScore: validationResult.integrityScore,
@@ -701,7 +703,7 @@ class DownloadManagerService implements DownloadManager {
       if (isDebugEnabled()) {
         this.log.info(
           'Service',
-          '🎉 Chapter download completed successfully!',
+          'Chapter download completed successfully',
           {
             downloadId,
             totalImages: downloadedImages.length,
@@ -755,7 +757,7 @@ class DownloadManagerService implements DownloadManager {
           if (isDebugEnabled()) {
             this.log.info(
               'Service',
-              '✅ Chapter completed during error handling, not retrying',
+              'Chapter completed during error handling, not retrying',
               {
                 downloadId,
                 attempt: retryConfig.attempt,
@@ -814,342 +816,6 @@ class DownloadManagerService implements DownloadManager {
   }
 
   /**
-   * Perform download with comprehensive error handling and validation
-   */
-  private async performDownloadWithRetry(
-    mangaId: string,
-    chapterNumber: string,
-    chapterUrl: string,
-    downloadId: string,
-    signal: AbortSignal,
-    retryConfig: RetryConfig
-  ): Promise<DownloadResult> {
-    try {
-      if (signal.aborted) {
-        throw new Error('Download cancelled');
-      }
-
-      if (isDebugEnabled()) {
-        this.log.info('Service', 'Download attempt', {
-          downloadId,
-          attempt: retryConfig.attempt,
-          maxAttempts: retryConfig.maxAttempts,
-        });
-      }
-
-      // Step 1: Check storage space before starting
-      const storageStats = await chapterStorageService.getStorageStats();
-      const estimatedSize = 10 * 1024 * 1024; // Estimate 10MB per chapter
-
-      if (storageStats.availableSpace < estimatedSize) {
-        const storageContext: StorageErrorContext = {
-          availableSpace: storageStats.availableSpace,
-          requiredSpace: estimatedSize,
-          totalUsage: storageStats.totalSize,
-          maxStorage: storageStats.totalSize + storageStats.availableSpace,
-          canCleanup: storageStats.totalChapters > 0,
-        };
-
-        const recoveryResult = await downloadErrorHandler.handleStorageError(
-          new Error('Insufficient storage space'),
-          downloadId,
-          storageContext,
-          { mangaId, chapterNumber }
-        );
-
-        if (!recoveryResult.shouldRetry) {
-          return {
-            success: false,
-            error: {
-              type: DownloadErrorType.STORAGE_FULL,
-              message: recoveryResult.message,
-              retryable: false,
-              chapter: chapterNumber,
-              mangaId,
-            },
-          };
-        }
-
-        // Wait for cleanup if needed
-        if (recoveryResult.delay) {
-          await this.delay(recoveryResult.delay);
-        }
-      }
-
-      // Step 2: Fetch chapter HTML with network error handling
-      let chapterHtml: string;
-      try {
-        chapterHtml = await this.fetchChapterHtml(chapterUrl, signal);
-      } catch (fetchError) {
-        const networkContext: NetworkErrorContext = {
-          url: chapterUrl,
-          timeout:
-            fetchError instanceof Error &&
-            fetchError.message.includes('timeout'),
-          connectionError:
-            fetchError instanceof Error &&
-            fetchError.message.includes('connection'),
-        };
-
-        const recoveryResult = await downloadErrorHandler.handleNetworkError(
-          fetchError instanceof Error ? fetchError : new Error('Network error'),
-          downloadId,
-          networkContext,
-          retryConfig.attempt
-        );
-
-        if (
-          recoveryResult.shouldRetry &&
-          retryConfig.attempt < retryConfig.maxAttempts
-        ) {
-          if (recoveryResult.delay) {
-            await this.delay(recoveryResult.delay);
-          }
-
-          return this.performDownloadWithRetry(
-            mangaId,
-            chapterNumber,
-            chapterUrl,
-            downloadId,
-            signal,
-            { ...retryConfig, attempt: retryConfig.attempt + 1 }
-          );
-        }
-
-        throw fetchError;
-      }
-
-      if (signal.aborted) {
-        throw new Error('Download cancelled');
-      }
-
-      // Step 3: Extract image URLs
-      const images = await imageExtractorService.extractImagesFromHtml(
-        chapterHtml,
-        chapterUrl
-      );
-
-      if (!images || images.length === 0) {
-        throw new Error('No images found in chapter');
-      }
-
-      // Update progress with total image count
-      const progress = this.activeDownloads.get(downloadId);
-      if (progress) {
-        progress.totalImages = images.length;
-        await downloadQueueService.updateDownloadProgress(
-          downloadId,
-          0,
-          0,
-          images.length
-        );
-      }
-
-      if (isDebugEnabled()) {
-        this.log.info('Service', 'Extracted images', {
-          downloadId,
-          imageCount: images.length,
-        });
-      }
-
-      // Step 4: Download images with enhanced error handling
-      const downloadedImages = await this.downloadImagesWithValidation(
-        images,
-        downloadId,
-        signal,
-        mangaId,
-        chapterNumber
-      );
-
-      if (signal.aborted) {
-        throw new Error('Download cancelled');
-      }
-
-      // Step 5: Save to storage with validation
-      await chapterStorageService.saveChapterImages(
-        mangaId,
-        chapterNumber,
-        downloadedImages
-      );
-
-      // Step 6: Validate downloaded chapter integrity
-      const validationResult =
-        await downloadValidationService.validateChapterIntegrity(
-          mangaId,
-          chapterNumber,
-          {
-            validateFileSize: true,
-            validateFormat: true,
-            validateContent: false, // Skip content validation for performance
-            checkDimensions: false,
-            deepScan: false,
-            repairCorrupted: false,
-          }
-        );
-
-      // If validation fails, attempt repair or retry
-      if (!validationResult.isValid && validationResult.integrityScore < 80) {
-        if (
-          validationResult.recommendedAction === 'redownload_corrupted' &&
-          retryConfig.attempt < retryConfig.maxAttempts
-        ) {
-          this.log.warn('Service', 'Chapter validation failed, retrying', {
-            downloadId,
-            integrityScore: validationResult.integrityScore,
-            corruptedImages: validationResult.corruptedImages,
-          });
-
-          // Clean up corrupted download
-          await chapterStorageService.deleteChapter(mangaId, chapterNumber);
-
-          // Retry download
-          await this.delay(2000); // Wait 2 seconds before retry
-          return this.performDownloadWithRetry(
-            mangaId,
-            chapterNumber,
-            chapterUrl,
-            downloadId,
-            signal,
-            { ...retryConfig, attempt: retryConfig.attempt + 1 }
-          );
-        }
-
-        // If we can't retry or repair, still consider it a success if we have some valid images
-        if (validationResult.integrityScore >= 50) {
-          this.log.warn('Service', 'Chapter partially corrupted but keeping', {
-            downloadId,
-            integrityScore: validationResult.integrityScore,
-          });
-        } else {
-          throw new Error(
-            `Chapter validation failed: integrity score ${validationResult.integrityScore}%`
-          );
-        }
-      }
-
-      if (isDebugEnabled()) {
-        this.log.info('Service', 'Chapter download completed', {
-          downloadId,
-          totalImages: downloadedImages.length,
-          integrityScore: validationResult.integrityScore,
-        });
-      }
-
-      return {
-        success: true,
-        downloadId,
-        chapterImages: downloadedImages,
-      };
-    } catch (error) {
-      if (signal.aborted) {
-        return {
-          success: false,
-          error: {
-            type: DownloadErrorType.CANCELLED,
-            message: 'Download was cancelled',
-            retryable: false,
-            chapter: chapterNumber,
-            mangaId,
-          },
-        };
-      }
-
-      // Use error handler for comprehensive error recovery
-      const recoveryResult = await downloadErrorHandler.handleDownloadError(
-        error instanceof Error ? error : new Error('Unknown error'),
-        downloadId,
-        {
-          mangaId,
-          chapterNumber,
-          attemptNumber: retryConfig.attempt,
-        }
-      );
-
-      if (
-        recoveryResult.shouldRetry &&
-        retryConfig.attempt < retryConfig.maxAttempts
-      ) {
-        if (recoveryResult.delay) {
-          await this.delay(recoveryResult.delay);
-        }
-
-        return this.performDownloadWithRetry(
-          mangaId,
-          chapterNumber,
-          chapterUrl,
-          downloadId,
-          signal,
-          { ...retryConfig, attempt: retryConfig.attempt + 1 }
-        );
-      }
-
-      // Create final error result
-      const downloadError: DownloadError = {
-        type: this.categorizeError(error),
-        message: recoveryResult.message,
-        retryable: recoveryResult.shouldRetry,
-        chapter: chapterNumber,
-        mangaId,
-      };
-
-      this.log.error('Service', 'Download failed permanently', {
-        downloadId,
-        attempts: retryConfig.attempt,
-        error: downloadError,
-        recoveryStrategy: recoveryResult.strategy,
-      });
-
-      return {
-        success: false,
-        error: downloadError,
-      };
-    }
-  }
-
-  /**
-   * Fetch chapter HTML with timeout and error handling
-   */
-  private async fetchChapterHtml(
-    url: string,
-    signal: AbortSignal
-  ): Promise<string> {
-    const timeoutController = new AbortController();
-    const timeoutId = setTimeout(
-      () => timeoutController.abort(),
-      DOWNLOAD_TIMEOUT
-    );
-
-    try {
-      const combinedSignal = this.combineAbortSignals([
-        signal,
-        timeoutController.signal,
-      ]);
-
-      const response = await fetch(url, {
-        signal: combinedSignal,
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const html = await response.text();
-
-      if (!html || html.trim().length === 0) {
-        throw new Error('Empty response received');
-      }
-
-      return html;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  /**
    * Download images with validation and enhanced error handling
    */
   private async downloadImagesWithValidation(
@@ -1178,7 +844,7 @@ class DownloadManagerService implements DownloadManager {
     }
 
     if (isDebugEnabled()) {
-      this.log.info('Service', '📥 Starting batch image downloads', {
+      this.log.info('Service', 'Starting batch image downloads', {
         downloadId,
         totalImages: images.length,
         batchSize: CONCURRENT_IMAGE_DOWNLOADS,
@@ -1201,7 +867,7 @@ class DownloadManagerService implements DownloadManager {
       if (isDebugEnabled()) {
         this.log.info(
           'Service',
-          `📦 Processing batch ${batchNumber}/${totalBatches}`,
+          `Processing batch ${batchNumber}/${totalBatches}`,
           {
             downloadId,
             batchStart: i + 1,
@@ -1232,7 +898,7 @@ class DownloadManagerService implements DownloadManager {
               if (isDebugEnabled()) {
                 this.log.info(
                   'Service',
-                  `✅ Image ${originalImage.pageNumber} downloaded`,
+                  `Image ${originalImage.pageNumber} downloaded`,
                   {
                     downloadId,
                     pageNumber: originalImage.pageNumber,
@@ -1252,7 +918,7 @@ class DownloadManagerService implements DownloadManager {
               if (isDebugEnabled()) {
                 this.log.warn(
                   'Service',
-                  `❌ Image ${originalImage.pageNumber} failed (null result)`,
+                  `Image ${originalImage.pageNumber} failed (null result)`,
                   {
                     downloadId,
                     pageNumber: originalImage.pageNumber,
@@ -1279,7 +945,7 @@ class DownloadManagerService implements DownloadManager {
             if (isDebugEnabled()) {
               this.log.warn(
                 'Service',
-                `❌ Image ${originalImage.pageNumber} failed`,
+                `Image ${originalImage.pageNumber} failed`,
                 {
                   downloadId,
                   pageNumber: originalImage.pageNumber,
@@ -1316,7 +982,7 @@ class DownloadManagerService implements DownloadManager {
         if (isDebugEnabled()) {
           this.log.info(
             'Service',
-            `📊 Batch ${batchNumber}/${totalBatches} complete`,
+            `Batch ${batchNumber}/${totalBatches} complete`,
             {
               downloadId,
               downloaded: progress.downloadedImages,
@@ -1330,7 +996,7 @@ class DownloadManagerService implements DownloadManager {
           );
         }
       } catch (error) {
-        this.log.error('Service', '❌ Batch download error', {
+        this.log.error('Service', 'Batch download error', {
           downloadId,
           batchNumber,
           batchStart: i,
@@ -1346,7 +1012,7 @@ class DownloadManagerService implements DownloadManager {
     ).length;
 
     if (isDebugEnabled()) {
-      this.log.info('Service', '📊 Download summary', {
+      this.log.info('Service', 'Download summary', {
         downloadId,
         total: images.length,
         successful: successfulDownloads,
@@ -1378,7 +1044,7 @@ class DownloadManagerService implements DownloadManager {
   ): Promise<ChapterImage | null> {
     if (!image.originalUrl) {
       if (isDebugEnabled()) {
-        this.log.warn('Service', '⚠️ Image has no URL', {
+        this.log.warn('Service', 'Image has no URL', {
           downloadId,
           pageNumber: image.pageNumber,
         });
@@ -1435,7 +1101,7 @@ class DownloadManagerService implements DownloadManager {
       }
 
       if (isDebugEnabled()) {
-        this.log.info('Service', `✅ Image ${image.pageNumber} downloaded`, {
+        this.log.info('Service', `Image ${image.pageNumber} downloaded`, {
           downloadId,
           pageNumber: image.pageNumber,
           fileSize: `${(blob.size / 1024).toFixed(2)} KB`,
@@ -1467,7 +1133,7 @@ class DownloadManagerService implements DownloadManager {
         throw error;
       }
 
-      this.log.warn('Service', `❌ Image ${image.pageNumber} download failed`, {
+      this.log.warn('Service', `Image ${image.pageNumber} download failed`, {
         downloadId,
         pageNumber: image.pageNumber,
         url: image.originalUrl.substring(0, 100) + '...',

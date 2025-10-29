@@ -13,6 +13,7 @@ import {
 } from '@/types/download';
 import { ChapterStorageService } from '@/types/downloadInterfaces';
 import { isDebugEnabled } from '@/constants/env';
+import { logger } from '@/utils/logger';
 
 // Storage configuration
 const BASE_DOWNLOAD_DIR = new FSDirectory(Paths.cache, 'downloads');
@@ -49,6 +50,7 @@ class ChapterStorage implements ChapterStorageService {
   private metadataLoaded: boolean = false;
   private settings: DownloadSettings | null = null;
   private usageStats: StorageUsageStats | null = null;
+  private log = logger();
 
   // Throttled metadata persistence
   private saveTimer: any = null;
@@ -84,19 +86,25 @@ class ChapterStorage implements ChapterStorageService {
         .then(() => {
           // Perform storage check in background
           this.performStorageCheck().catch((error) => {
-            console.error('Storage check failed:', error);
+            this.log.error('Storage', 'Storage check failed during init', {
+              error: error instanceof Error ? error.message : String(error),
+            });
           });
         })
         .catch((error) => {
-          console.error('Failed to load storage data:', error);
+          this.log.error('Storage', 'Failed to load storage data', {
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
 
       if (isDebugEnabled()) {
-        console.log('Chapter storage service initialized');
+        this.log.info('Storage', 'Chapter storage service initialized');
       }
     } catch (error) {
       this.initialized = false; // Reset on error
-      console.error('Failed to initialize chapter storage:', error);
+      this.log.error('Storage', 'Failed to initialize chapter storage', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -111,7 +119,10 @@ class ChapterStorage implements ChapterStorageService {
         await dir.create();
       }
     } catch (error) {
-      console.error('Error creating directory:', error);
+      this.log.error('Storage', 'Error creating directory', {
+        path: dir.uri,
+        error: error instanceof Error ? error.message : String(error),
+      });
       // Try creating with explicit parent creation
       try {
         if (dir.parentDirectory && !dir.parentDirectory.exists) {
@@ -119,7 +130,13 @@ class ChapterStorage implements ChapterStorageService {
         }
         await dir.create();
       } catch (retryError) {
-        console.error('Retry failed:', retryError);
+        this.log.error('Storage', 'Retry creating directory failed', {
+          path: dir.uri,
+          error:
+            retryError instanceof Error
+              ? retryError.message
+              : String(retryError),
+        });
         throw retryError;
       }
     }
@@ -135,7 +152,9 @@ class ChapterStorage implements ChapterStorageService {
       }
       this.metadataLoaded = true;
     } catch (error) {
-      console.error('Failed to load download metadata:', error);
+      this.log.error('Storage', 'Failed to load download metadata', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.metadata = {};
       this.metadataLoaded = true;
     }
@@ -145,7 +164,9 @@ class ChapterStorage implements ChapterStorageService {
     try {
       await AsyncStorage.setItem(METADATA_KEY, JSON.stringify(this.metadata));
     } catch (error) {
-      console.error('Failed to save download metadata:', error);
+      this.log.error('Storage', 'Failed to save download metadata', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -172,7 +193,9 @@ class ChapterStorage implements ChapterStorageService {
         await this.saveSettings();
       }
     } catch (error) {
-      console.error('Failed to load download settings:', error);
+      this.log.error('Storage', 'Failed to load download settings', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.settings = {
         maxConcurrentDownloads: 3,
         maxStorageSize: DEFAULT_MAX_STORAGE_SIZE,
@@ -192,7 +215,9 @@ class ChapterStorage implements ChapterStorageService {
     try {
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
     } catch (error) {
-      console.error('Failed to save download settings:', error);
+      this.log.error('Storage', 'Failed to save download settings', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -216,7 +241,9 @@ class ChapterStorage implements ChapterStorageService {
         await this.saveUsageStats();
       }
     } catch (error) {
-      console.error('Failed to load usage stats:', error);
+      this.log.error('Storage', 'Failed to load usage stats', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       this.usageStats = {
         lastAccessTimes: {},
         accessCounts: {},
@@ -236,7 +263,9 @@ class ChapterStorage implements ChapterStorageService {
         JSON.stringify(this.usageStats)
       );
     } catch (error) {
-      console.error('Failed to save usage stats:', error);
+      this.log.error('Storage', 'Failed to save usage stats', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -248,7 +277,9 @@ class ChapterStorage implements ChapterStorageService {
       try {
         await this.saveMetadata();
       } catch (error) {
-        console.error('Error in scheduled metadata save:', error);
+        this.log.error('Storage', 'Error in scheduled metadata save', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }, ChapterStorage.SAVE_DEBOUNCE_MS);
   }
@@ -261,7 +292,9 @@ class ChapterStorage implements ChapterStorageService {
       try {
         await this.saveUsageStats();
       } catch (error) {
-        console.error('Error in scheduled usage stats save:', error);
+        this.log.error('Storage', 'Error in scheduled usage stats save', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }, ChapterStorage.USAGE_STATS_DEBOUNCE_MS);
   }
@@ -274,9 +307,10 @@ class ChapterStorage implements ChapterStorageService {
       // Check if we need cleanup
       if (stats.totalSize > maxSize * CLEANUP_THRESHOLD) {
         if (isDebugEnabled()) {
-          console.log(
-            `Storage threshold exceeded (${Math.round(stats.totalSize / 1024 / 1024)}MB / ${Math.round(maxSize / 1024 / 1024)}MB), initiating cleanup`
-          );
+          this.log.info('Storage', 'Storage threshold exceeded, initiating cleanup', {
+            totalSizeMB: Math.round(stats.totalSize / 1024 / 1024),
+            maxSizeMB: Math.round(maxSize / 1024 / 1024),
+          });
         }
         await this.performIntelligentCleanup();
       }
@@ -284,14 +318,20 @@ class ChapterStorage implements ChapterStorageService {
       // Check if we're critically low on space
       if (stats.availableSpace < MIN_FREE_SPACE) {
         if (isDebugEnabled()) {
-          console.warn(
-            'Critical storage space low, performing aggressive cleanup'
+          this.log.warn(
+            'Storage',
+            'Critical storage space low, performing aggressive cleanup',
+            {
+              availableSpace: stats.availableSpace,
+            }
           );
         }
         await this.performAggressiveCleanup();
       }
     } catch (error) {
-      console.error('Failed to perform storage check:', error);
+      this.log.error('Storage', 'Failed to perform storage check', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -349,10 +389,11 @@ class ChapterStorage implements ChapterStorageService {
           freedSpace += chapterSize;
           deletedCount++;
         } catch (error) {
-          console.error(
-            `Failed to delete chapter during intelligent cleanup:`,
-            error
-          );
+          this.log.error('Storage', 'Failed to delete chapter during intelligent cleanup', {
+            mangaId: chapter.mangaId,
+            chapter: chapter.chapterNumber,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
@@ -361,12 +402,15 @@ class ChapterStorage implements ChapterStorageService {
       this.scheduleSaveUsageStats();
 
       if (isDebugEnabled() && deletedCount > 0) {
-        console.log(
-          `Intelligent cleanup completed. Deleted ${deletedCount} chapters, freed ${Math.round(freedSpace / 1024 / 1024)}MB`
-        );
+        this.log.info('Storage', 'Intelligent cleanup completed', {
+          deletedChapters: deletedCount,
+          freedSpaceMB: Math.round(freedSpace / 1024 / 1024),
+        });
       }
     } catch (error) {
-      console.error('Failed to perform intelligent cleanup:', error);
+      this.log.error('Storage', 'Failed to perform intelligent cleanup', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -398,20 +442,24 @@ class ChapterStorage implements ChapterStorageService {
           freedSpace += chapterSize;
           deletedCount++;
         } catch (error) {
-          console.error(
-            `Failed to delete chapter during aggressive cleanup:`,
-            error
-          );
+          this.log.error('Storage', 'Failed to delete chapter during aggressive cleanup', {
+            mangaId: chapter.mangaId,
+            chapter: chapter.chapterNumber,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
       if (isDebugEnabled() && deletedCount > 0) {
-        console.log(
-          `Aggressive cleanup completed. Deleted ${deletedCount} chapters, freed ${Math.round(freedSpace / 1024 / 1024)}MB`
-        );
+        this.log.info('Storage', 'Aggressive cleanup completed', {
+          deletedChapters: deletedCount,
+          freedSpaceMB: Math.round(freedSpace / 1024 / 1024),
+        });
       }
     } catch (error) {
-      console.error('Failed to perform aggressive cleanup:', error);
+      this.log.error('Storage', 'Failed to perform aggressive cleanup', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -518,9 +566,11 @@ class ChapterStorage implements ChapterStorageService {
           // Check if file already exists
           if (imageFile.exists) {
             if (isDebugEnabled()) {
-              console.log(
-                `Image ${image.pageNumber} already exists, using existing file`
-              );
+              this.log.info('Storage', 'Using existing image file', {
+                mangaId,
+                chapterNumber,
+                pageNumber: image.pageNumber,
+              });
             }
 
             // Use existing file
@@ -567,9 +617,11 @@ class ChapterStorage implements ChapterStorageService {
           savedImages.push(savedImage);
 
           if (isDebugEnabled()) {
-            console.log(
-              `Saved image ${image.pageNumber} for chapter ${chapterNumber}`
-            );
+            this.log.info('Storage', 'Saved image for chapter', {
+              mangaId,
+              chapterNumber,
+              pageNumber: image.pageNumber,
+            });
           }
         } catch (error) {
           const errorMessage =
@@ -600,21 +652,33 @@ class ChapterStorage implements ChapterStorageService {
                 savedImages.push(savedImage);
 
                 if (isDebugEnabled()) {
-                  console.log(
-                    `Using existing image ${image.pageNumber} for chapter ${chapterNumber}`
-                  );
+                  this.log.info('Storage', 'Using existing image for chapter', {
+                    mangaId,
+                    chapterNumber,
+                    pageNumber: image.pageNumber,
+                  });
                 }
                 continue;
               }
             } catch (retryError) {
-              console.error(
-                `Failed to use existing image ${image.pageNumber}:`,
-                retryError
-              );
+              this.log.error('Storage', 'Failed to reuse existing image file', {
+                mangaId,
+                chapterNumber,
+                pageNumber: image.pageNumber,
+                error:
+                  retryError instanceof Error
+                    ? retryError.message
+                    : String(retryError),
+              });
             }
           }
 
-          console.error(`Failed to save image ${image.pageNumber}:`, error);
+          this.log.error('Storage', 'Failed to save image', {
+            mangaId,
+            chapterNumber,
+            pageNumber: image.pageNumber,
+            error: error instanceof Error ? error.message : String(error),
+          });
           // Continue with other images even if one fails
         }
       }
@@ -662,15 +726,21 @@ class ChapterStorage implements ChapterStorageService {
         await metadataFile.write(JSON.stringify(chapterMetadata, null, 2));
 
         if (isDebugEnabled()) {
-          console.log(
-            `✅ Saved metadata for chapter ${chapterNumber} (${savedImages.length} images)`
-          );
+          this.log.info('Storage', 'Saved chapter metadata', {
+            mangaId,
+            chapterNumber,
+            imageCount: savedImages.length,
+          });
         }
       } catch (metadataError) {
-        console.error(
-          `Failed to save metadata for chapter ${chapterNumber}:`,
-          metadataError
-        );
+        this.log.error('Storage', 'Failed to save chapter metadata', {
+          mangaId,
+          chapterNumber,
+          error:
+            metadataError instanceof Error
+              ? metadataError.message
+              : String(metadataError),
+        });
         // Continue anyway - the images are saved even if metadata fails
       }
 
@@ -693,15 +763,19 @@ class ChapterStorage implements ChapterStorageService {
       await this.performStorageCheck();
 
       if (isDebugEnabled()) {
-        console.log(
-          `Successfully saved chapter ${chapterNumber} for manga ${mangaId} (${savedImages.length} images, ${Math.round(totalSize / 1024)}KB)`
-        );
+        this.log.info('Storage', 'Saved chapter images', {
+          mangaId,
+          chapterNumber,
+          imageCount: savedImages.length,
+          totalSizeKB: Math.round(totalSize / 1024),
+        });
       }
     } catch (error) {
-      console.error(
-        `Failed to save chapter ${chapterNumber} for manga ${mangaId}:`,
-        error
-      );
+      this.log.error('Storage', 'Failed to save chapter images', {
+        mangaId,
+        chapterNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -770,10 +844,11 @@ class ChapterStorage implements ChapterStorageService {
 
       return images.length > 0 ? images : null;
     } catch (error) {
-      console.error(
-        `Failed to get chapter images for ${mangaId}/${chapterNumber}:`,
-        error
-      );
+      this.log.error('Storage', 'Failed to get chapter images', {
+        mangaId,
+        chapterNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -789,7 +864,11 @@ class ChapterStorage implements ChapterStorageService {
         chapterDir.delete();
 
         if (isDebugEnabled()) {
-          console.log(`Deleted chapter directory: ${chapterDir.uri}`);
+          this.log.info('Storage', 'Deleted chapter directory', {
+            mangaId,
+            chapterNumber,
+            path: chapterDir.uri,
+          });
         }
       }
 
@@ -824,7 +903,10 @@ class ChapterStorage implements ChapterStorageService {
               mangaDir.delete();
             } catch (error) {
               // Ignore errors when deleting manga directory
-              console.warn(`Could not delete manga directory: ${error}`);
+              this.log.warn('Storage', 'Could not delete manga directory', {
+                mangaId,
+                error: error instanceof Error ? error.message : String(error),
+              });
             }
           }
         }
@@ -834,15 +916,17 @@ class ChapterStorage implements ChapterStorageService {
       }
 
       if (isDebugEnabled()) {
-        console.log(
-          `Successfully deleted chapter ${chapterNumber} for manga ${mangaId}`
-        );
+        this.log.info('Storage', 'Deleted chapter', {
+          mangaId,
+          chapterNumber,
+        });
       }
     } catch (error) {
-      console.error(
-        `Failed to delete chapter ${chapterNumber} for manga ${mangaId}:`,
-        error
-      );
+      this.log.error('Storage', 'Failed to delete chapter', {
+        mangaId,
+        chapterNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }

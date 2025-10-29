@@ -14,6 +14,7 @@ import BatchDownloadPlannerModal from '@/components/BatchDownloadPlannerModal';
 import type { Chapter } from '@/types';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { sortChaptersByNumber } from '@/utils/chapterOrdering';
+import { logger } from '@/utils/logger';
 
 interface BatchDownloadBarProps {
   mangaId: string;
@@ -30,6 +31,7 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   downloadedChapters,
   onDownloadsChanged,
 }) => {
+  const log = logger();
   const { theme, systemTheme } = useTheme();
   const colorScheme = theme === 'system' ? systemTheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
@@ -135,7 +137,11 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
       );
       handleDownloadsChanged();
     } catch (error) {
-      console.error('Failed to delete offline chapters:', error);
+      log.error('Service', 'Failed to delete offline chapters', {
+        mangaId,
+        chapterNumbers: selection.map((chapter) => chapter.number),
+        error: error instanceof Error ? error.message : String(error),
+      });
       setPlanSummary('Failed to remove downloads');
     } finally {
       setIsManagingDownloads(false);
