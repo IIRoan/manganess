@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -37,6 +38,9 @@ interface SwipeableChapterItemProps {
   onDownloadStart?: () => void;
   onDownloadComplete?: () => void;
   onDownloadError?: (error: string) => void;
+  isDownloaded?: boolean;
+  onDeleteDownload?: () => void;
+  isDownloading?: boolean;
 }
 
 const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
@@ -56,6 +60,9 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   onDownloadStart,
   onDownloadComplete,
   onDownloadError,
+  isDownloaded = false,
+  onDeleteDownload,
+  isDownloading = false,
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
   const isSwipingRef = useRef(false);
@@ -64,10 +71,19 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     _progress: Animated.AnimatedAddition<number>,
     dragX: Animated.AnimatedAddition<number>
   ) => {
-    const actionWidth =
-      showDownloadButton && mangaId
-        ? SWIPE_ACTION_WIDTH * 1.5
-        : SWIPE_ACTION_WIDTH;
+    const showDownloadAction = showDownloadButton && mangaId && !isDownloaded;
+    const showDeleteAction = isDownloaded && typeof onDeleteDownload === 'function';
+
+    const actionCount =
+      (showDownloadAction ? 1 : 0) +
+      (showDeleteAction ? 1 : 0) +
+      (isRead ? 1 : 0);
+
+    if (actionCount === 0) {
+      return null;
+    }
+
+    const actionWidth = Math.max(actionCount * SWIPE_ACTION_WIDTH, SWIPE_ACTION_WIDTH);
 
     const trans = dragX.interpolate({
       inputRange: [-actionWidth, 0],
@@ -87,23 +103,57 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             },
           ]}
         >
-          {/* Download Action */}
-          {showDownloadButton && mangaId && (
+          {showDownloadAction ? (
+            <View
+              style={[
+                styles.actionButton,
+                styles.swipeDownloadWrapper,
+                { backgroundColor: colors.primary },
+              ]}
+            >
+              <DownloadButton
+                mangaId={mangaId}
+                chapterNumber={chapter.number}
+                chapterUrl={chapter.url}
+                size="medium"
+                variant="full"
+                appearance="swipe"
+                disabled={isDownloaded || isDownloading}
+                onDownloadStart={() => {
+                  onDownloadStart?.();
+                  swipeableRef.current?.close();
+                }}
+                onDownloadComplete={() => {
+                  onDownloadComplete?.();
+                  swipeableRef.current?.close();
+                }}
+                onDownloadError={(error) => {
+                  onDownloadError?.(error);
+                  swipeableRef.current?.close();
+                }}
+                style={styles.swipeDownloadButton}
+              />
+            </View>
+          ) : null}
+
+          {showDeleteAction ? (
             <TouchableOpacity
               style={[
                 styles.actionButton,
-                { backgroundColor: colors.primary, flex: 1 },
+                {
+                  backgroundColor: colors.error,
+                },
               ]}
               onPress={() => {
-                // Download action will be handled by the DownloadButton component
+                onDeleteDownload?.();
                 swipeableRef.current?.close();
               }}
               activeOpacity={0.7}
             >
-              <Ionicons name="download-outline" size={18} color="white" />
-              <Text style={styles.actionText}>Download</Text>
+              <Ionicons name="trash-outline" size={18} color="white" />
+              <Text style={styles.actionText}>Delete</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           {/* Unread Action */}
           {isRead && (
@@ -112,7 +162,6 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 styles.actionButton,
                 {
                   backgroundColor: colors.notification,
-                  flex: showDownloadButton && mangaId ? 1 : undefined,
                 },
               ]}
               onPress={() => {
@@ -197,27 +246,33 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             <Text style={styles.chapterDate}>{chapter.date}</Text>
           </View>
           <View style={styles.chapterActions}>
-            {showDownloadButton && mangaId && (
-              <DownloadButton
-                mangaId={mangaId}
-                chapterNumber={chapter.number}
-                chapterUrl={chapter.url}
-                size="small"
-                variant="icon"
-                onDownloadStart={onDownloadStart || (() => {})}
-                onDownloadComplete={onDownloadComplete || (() => {})}
-                onDownloadError={onDownloadError || (() => {})}
-                style={styles.downloadButton}
+            {isDownloading ? (
+              <View style={styles.downloadingWrapper}>
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primary}
+                  style={styles.downloadingIndicator}
+                />
+                <Text style={styles.downloadingText}>Downloading…</Text>
+              </View>
+            ) : null}
+            {isDownloaded ? (
+              <Ionicons
+                name="cloud-done-outline"
+                size={18}
+                color={colors.primary}
+                style={styles.downloadedIndicator}
               />
-            )}
+            ) : null}
             {isRead && (
               <Ionicons
                 name="checkmark-circle"
                 size={20}
                 color={colors.primary}
-                style={
-                  showDownloadButton && mangaId ? { marginLeft: 8 } : undefined
-                }
+                style={[
+                  styles.readIndicator,
+                  isDownloaded ? styles.readIndicatorOffset : undefined,
+                ]}
               />
             )}
           </View>

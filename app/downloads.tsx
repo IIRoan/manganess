@@ -479,57 +479,129 @@ export default function DownloadsScreen() {
           <View style={styles.cardDivider} />
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isCacheLoading ? styles.cardActionDisabled : null,
+            ]}
             onPress={() => handleClearImageCache('search')}
             disabled={isCacheLoading}
           >
-            <Ionicons name="images-outline" size={20} color={colors.text} />
-            <Text style={styles.cardActionText}>Clear Search Cache</Text>
-            {activeCacheAction === 'search' && isCacheLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={styles.cardActionIcon}>
+                <Ionicons
+                  name="images-outline"
+                  size={20}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.cardActionText}>Clear Search Cache</Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {activeCacheAction === 'search' && isCacheLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isCacheLoading ? styles.cardActionDisabled : null,
+            ]}
             onPress={() => handleClearImageCache('manga')}
             disabled={isCacheLoading}
           >
-            <Ionicons name="library-outline" size={20} color={colors.text} />
-            <Text style={styles.cardActionText}>Clear Manga Cache</Text>
-            {activeCacheAction === 'manga' && isCacheLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={styles.cardActionIcon}>
+                <Ionicons
+                  name="library-outline"
+                  size={20}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.cardActionText}>Clear Manga Cache</Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {activeCacheAction === 'manga' && isCacheLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isCacheLoading ? styles.cardActionDisabled : null,
+            ]}
             onPress={() => handleClearImageCache()}
             disabled={isCacheLoading}
           >
-            <Ionicons
-              name="trash-outline"
-              size={20}
-              color={colors.notification}
-            />
-            <Text style={[styles.cardActionText, styles.cardActionDanger]}>
-              Clear All Image Cache
-            </Text>
-            {activeCacheAction === 'all' && isCacheLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={[styles.cardActionIcon, styles.cardActionIconWarning]}>
+                <Ionicons
+                  name="trash-outline"
+                  size={20}
+                  color={colors.notification}
+                />
+              </View>
+              <Text style={[styles.cardActionText, styles.cardActionDanger]}>
+                Clear All Image Cache
+              </Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {activeCacheAction === 'all' && isCacheLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isCacheLoading ? styles.cardActionDisabled : null,
+            ]}
             onPress={handleRefreshCacheStats}
             disabled={isCacheLoading}
           >
-            <Ionicons name="refresh-outline" size={20} color={colors.text} />
-            <Text style={styles.cardActionText}>Refresh Cache Stats</Text>
-            {activeCacheAction === 'refresh' && isCacheLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={styles.cardActionIcon}>
+                <Ionicons
+                  name="refresh-outline"
+                  size={20}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.cardActionText}>Refresh Cache Stats</Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {activeCacheAction === 'refresh' && isCacheLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -537,65 +609,160 @@ export default function DownloadsScreen() {
           <Text style={styles.cardTitle}>App Data Management</Text>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isExporting ? styles.cardActionDisabled : null,
+            ]}
             onPress={handleExportData}
             disabled={isExporting}
           >
-            <Ionicons name="download-outline" size={20} color={colors.text} />
-            <Text style={styles.cardActionText}>Export App Data</Text>
-            {isExporting ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={styles.cardActionIcon}>
+                <Ionicons
+                  name="download-outline"
+                  size={20}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.cardActionText}>Export App Data</Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {isExporting ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isImporting ? styles.cardActionDisabled : null,
+            ]}
             onPress={handleImportData}
             disabled={isImporting}
           >
-            <Ionicons name="cloud-upload" size={20} color={colors.text} />
-            <Text style={styles.cardActionText}>Import App Data</Text>
-            {isImporting ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={styles.cardActionIcon}>
+                <Ionicons
+                  name="cloud-upload"
+                  size={20}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.cardActionText}>Import App Data</Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {isImporting ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isClearingData ? styles.cardActionDisabled : null,
+            ]}
             onPress={handleClearAppData}
             disabled={isClearingData}
           >
-            <Ionicons name="trash-outline" size={20} color={colors.error} />
-            <Text style={[styles.cardActionText, styles.cardActionDanger]}>
-              Clear App Data
-            </Text>
-            {isClearingData ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={[styles.cardActionIcon, styles.cardActionIconDanger]}>
+                <Ionicons
+                  name="trash-outline"
+                  size={20}
+                  color={colors.error}
+                />
+              </View>
+              <Text style={[styles.cardActionText, styles.cardActionDanger]}>
+                Clear App Data
+              </Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {isClearingData ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isRefreshingImages ? styles.cardActionDisabled : null,
+            ]}
             onPress={handleRefreshMangaImages}
             disabled={isRefreshingImages}
           >
-            <Ionicons name="refresh-outline" size={20} color={colors.text} />
-            <Text style={styles.cardActionText}>Refresh Manga Images</Text>
-            {isRefreshingImages ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={styles.cardActionIcon}>
+                <Ionicons
+                  name="refresh-outline"
+                  size={20}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.cardActionText}>Refresh Manga Images</Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {isRefreshingImages ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cardAction}
+            style={[
+              styles.cardAction,
+              isMigrating ? styles.cardActionDisabled : null,
+            ]}
             onPress={handleMigrateStorage}
             disabled={isMigrating}
           >
-            <Ionicons name="sync-outline" size={20} color={colors.text} />
-            <Text style={styles.cardActionText}>Migrate Storage Format</Text>
-            {isMigrating ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : null}
+            <View style={styles.cardActionContent}>
+              <View style={styles.cardActionIcon}>
+                <Ionicons
+                  name="sync-outline"
+                  size={20}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.cardActionText}>Migrate Storage Format</Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              {isMigrating ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.tabIconDefault}
+                />
+              )}
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -639,7 +806,12 @@ export default function DownloadsScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.deleteButton}
+                  style={[
+                    styles.deleteButton,
+                    deletingManga.has(manga.mangaId)
+                      ? styles.deleteButtonDisabled
+                      : null,
+                  ]}
                   onPress={() => handleDeleteManga(manga.mangaId)}
                   disabled={deletingManga.has(manga.mangaId)}
                 >
@@ -726,8 +898,8 @@ const getStyles = (colors: typeof Colors.light) =>
       backgroundColor: colors.card,
       marginHorizontal: 16,
       marginBottom: 16,
-      padding: 16,
-      borderRadius: 12,
+      padding: 18,
+      borderRadius: 14,
       borderWidth: 1,
       borderColor: colors.border,
     },
@@ -759,27 +931,68 @@ const getStyles = (colors: typeof Colors.light) =>
     cardAction: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 12,
-      gap: 12,
+      justifyContent: 'space-between',
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: 12,
+    },
+    cardActionDisabled: {
+      opacity: 0.6,
+    },
+    cardActionContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      marginRight: 12,
+    },
+    cardActionIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    cardActionIconDanger: {
+      backgroundColor: colors.error + '10',
+      borderColor: colors.error + '40',
+    },
+    cardActionIconWarning: {
+      backgroundColor: colors.notification + '10',
+      borderColor: colors.notification + '40',
     },
     cardActionText: {
       flex: 1,
       fontSize: 16,
       color: colors.text,
+      fontWeight: '500',
     },
     cardActionDanger: {
       color: colors.error,
       fontWeight: '600',
+    },
+    cardActionTrailing: {
+      width: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     clearAllButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.error,
-      padding: 12,
-      borderRadius: 8,
-      marginTop: 16,
-      gap: 8,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      marginTop: 20,
+      gap: 10,
     },
     clearAllText: {
       color: 'white',
@@ -842,10 +1055,15 @@ const getStyles = (colors: typeof Colors.light) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
       borderTopWidth: 1,
       borderTopColor: colors.border,
-      gap: 8,
+      gap: 10,
+      backgroundColor: colors.error + '12',
+    },
+    deleteButtonDisabled: {
+      opacity: 0.6,
     },
     deleteText: {
       fontSize: 14,

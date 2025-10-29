@@ -12,6 +12,7 @@ import React, { useEffect } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
+import BatchDownloadHost from '@/components/BatchDownloadHost';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
@@ -55,6 +56,7 @@ function RootLayoutNav() {
             />
           </Stack>
         </ErrorBoundary>
+        <BatchDownloadHost />
       </NavigationThemeProvider>
     </>
   );
