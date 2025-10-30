@@ -11,23 +11,22 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   BackHandler,
-  Platform,
   useColorScheme,
   Animated,
   StatusBar,
   Modal,
   TouchableWithoutFeedback,
-  ScrollView,
   Image,
   Dimensions,
   GestureResponderEvent,
-  FlatList,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import * as Reanimated from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 
-import { WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 
@@ -36,22 +35,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getChapterUrl,
   markChapterAsRead,
-  getInjectedJavaScript,
   fetchMangaDetails,
   MangaDetails,
   normalizeChapterNumber,
 } from '@/services/mangaFireService';
 import { chapterStorageService } from '@/services/chapterStorageService';
-import { ChapterImage } from '@/types/download';
+import { temporaryImageCacheService } from '@/services/temporaryImageCacheService';
+import { ChapterImage, ImageDownloadStatus } from '@/types/download';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import CustomWebView from '@/components/CustomWebView';
 import {
   ChapterGuideOverlay,
   hasSeenChapterGuide,
 } from '@/components/ChapterGuideOverlay';
+import HiddenChapterWebView from '@/components/HiddenChapterWebView';
 import getStyles from './[chapterNumber].styles';
-import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 
 // Minimum touch target size (in dp)
@@ -68,13 +66,18 @@ const ManhwaImage = React.memo(
     image,
     onPress,
     colorScheme,
+    onError,
   }: {
     image: ChapterImage;
     onPress: (event: GestureResponderEvent) => void;
     colorScheme: ColorScheme;
+    onError: (pageNumber: number) => void;
   }) => {
     const [imageHeight, setImageHeight] = useState<number>(400); // Default height
     const [isImageLoaded, setIsImageLoaded] = useState(false);
+
+    const isPlaceholder = !image.localPath;
+    const styles = useMemo(() => getStyles(colorScheme), [colorScheme]);
 
     useEffect(() => {
       if (image.localPath) {
@@ -92,39 +95,63 @@ const ManhwaImage = React.memo(
             setImageHeight(400); // Fallback height
           }
         );
+      } else {
+        setIsImageLoaded(false);
       }
     }, [image.localPath]);
 
     return (
       <TouchableWithoutFeedback onPress={onPress}>
-        <View style={getStyles(colorScheme).manhwaImageContainer}>
-          <Image
-            source={{ uri: image.localPath }}
-            style={[
-              getStyles(colorScheme).manhwaImage,
-              {
-                height: imageHeight,
-                width: Dimensions.get('window').width,
-              },
-            ]}
-            resizeMode="contain"
-            onError={(error) => {
-              console.error(`Failed to load image ${image.pageNumber}:`, error);
-              setIsImageLoaded(true); // Stop loading state on error
-            }}
-            onLoad={(event) => {
-              setIsImageLoaded(true);
-              if (isDebugEnabled()) {
-                const { width, height } = event.nativeEvent.source;
-                console.log(
-                  `Manhwa Image ${image.pageNumber}: ${width}x${height}, calculated height: ${imageHeight}`
+        <View style={styles.manhwaImageContainer}>
+          {isPlaceholder ? (
+            <View
+              style={[
+                styles.manhwaImage,
+                styles.pagePlaceholder,
+                {
+                  height: imageHeight,
+                  width: Dimensions.get('window').width,
+                },
+              ]}
+            >
+              <ActivityIndicator
+                size="small"
+                color={Colors[colorScheme].primary}
+              />
+            </View>
+          ) : (
+            <Image
+              source={{ uri: image.localPath }}
+              style={[
+                styles.manhwaImage,
+                {
+                  height: imageHeight,
+                  width: Dimensions.get('window').width,
+                },
+              ]}
+              resizeMode="contain"
+              onError={(error) => {
+                console.error(
+                  `Failed to load image ${image.pageNumber}:`,
+                  error
                 );
-              }
-            }}
-            onLoadStart={() => setIsImageLoaded(false)}
-          />
-          {!isImageLoaded && (
-            <View style={getStyles(colorScheme).manhwaImageLoader}>
+                setIsImageLoaded(false);
+                onError(image.pageNumber);
+              }}
+              onLoad={(event) => {
+                setIsImageLoaded(true);
+                if (isDebugEnabled()) {
+                  const { width, height } = event.nativeEvent.source;
+                  console.log(
+                    `Manhwa Image ${image.pageNumber}: ${width}x${height}, calculated height: ${imageHeight}`
+                  );
+                }
+              }}
+              onLoadStart={() => setIsImageLoaded(false)}
+            />
+          )}
+          {!isPlaceholder && !isImageLoaded && (
+            <View style={styles.manhwaImageLoader}>
               <ActivityIndicator
                 size="small"
                 color={Colors[colorScheme].primary}
@@ -163,14 +190,110 @@ export default function ReadChapterScreen() {
     null
   );
   const [currentPage, setCurrentPage] = useState(0);
+  const [isLoadingOnline, setIsLoadingOnline] = useState(false);
+  const [showHiddenWebView, setShowHiddenWebView] = useState(false);
+  const [interceptData, setInterceptData] = useState<{
+    chapterId: string;
+    vrfToken: string;
+  } | null>(null);
+  const [shouldAttemptOnlineLoad, setShouldAttemptOnlineLoad] = useState(false);
+  const [isOnlineLoadInFlight, setIsOnlineLoadInFlight] = useState(false);
+  const [totalImageCount, setTotalImageCount] = useState<number | null>(null);
+
+  const sortedImages = useMemo(() => {
+    if (!downloadedImages) {
+      return [] as ChapterImage[];
+    }
+
+    return [...downloadedImages].sort((a, b) => a.pageNumber - b.pageNumber);
+  }, [downloadedImages]);
+
+  const totalImages = useMemo(() => {
+    if (typeof totalImageCount === 'number') {
+      return totalImageCount;
+    }
+    return downloadedImages?.length ?? 0;
+  }, [totalImageCount, downloadedImages]);
+
+  const totalPages = useMemo(() => {
+    if (totalImages > 0) {
+      return totalImages;
+    }
+    return sortedImages.length;
+  }, [sortedImages.length, totalImages]);
+
+  const displayPages = useMemo(() => {
+    if (!totalPages) {
+      return sortedImages;
+    }
+
+    const imagesByPage = new Map<number, ChapterImage>();
+    for (const image of sortedImages) {
+      imagesByPage.set(image.pageNumber, image);
+    }
+
+    const startPage = sortedImages.length
+      ? Math.min(...sortedImages.map((img) => img.pageNumber))
+      : 1;
+
+    const pages: ChapterImage[] = [];
+
+    for (let i = 0; i < totalPages; i += 1) {
+      const pageNumber = startPage + i;
+      const image = imagesByPage.get(pageNumber);
+
+      if (image) {
+        pages.push(image);
+      } else {
+        pages.push({
+          pageNumber,
+          originalUrl: '',
+          downloadStatus: ImageDownloadStatus.PENDING,
+        });
+      }
+    }
+
+    return pages;
+  }, [sortedImages, totalPages]);
+
+  const completedImages = useMemo(() => {
+    if (!downloadedImages) {
+      return 0;
+    }
+    return downloadedImages.filter(
+      (img) => img.downloadStatus === ImageDownloadStatus.COMPLETED
+    ).length;
+  }, [downloadedImages]);
+
+  const failedImages = useMemo(() => {
+    if (!downloadedImages) {
+      return 0;
+    }
+    return downloadedImages.filter(
+      (img) => img.downloadStatus === ImageDownloadStatus.FAILED
+    ).length;
+  }, [downloadedImages]);
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mangaFlatListRef = useRef<FlatList>(null);
+  const mangaListRef = useRef<FlashListRef<ChapterImage>>(null);
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
+  const currentPageRef = useRef(0);
   const navigationTimestampRef = useRef<number>(0);
   const lastNavigatedChapterRef = useRef<string>('');
+  const retryingPagesRef = useRef<Set<number>>(new Set());
+  const forceReloadRef = useRef(false);
+  const interceptDataRef = useRef<{
+    chapterId: string;
+    vrfToken: string;
+  } | null>(null);
+  const isOnlineLoadInFlightRef = useRef(false);
+  const onlineLoadChapterRef = useRef<string | null>(null);
+  const activeLoadRequestIdRef = useRef<number | null>(null);
+  const loadRequestSequenceRef = useRef(0);
+  const latestLoadRequestRef = useRef(0);
+  const activeChapterIdentifierRef = useRef('');
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -185,11 +308,37 @@ export default function ReadChapterScreen() {
   );
 
   const chapterIdentifier = normalizedChapterParam || chapterNumber || '';
+  useEffect(() => {
+    currentPageRef.current = 0;
+    setCurrentPage(0);
+  }, [chapterIdentifier]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setIsLoadingOnline(false);
+    setError(null);
+    setDownloadedImages(null);
+    downloadedImagesRef.current = null;
+    setContentType(null);
+    setIsDownloaded(false);
+    setTotalImageCount(null);
+    setShouldAttemptOnlineLoad(false);
+    setShowHiddenWebView(false);
+    setInterceptData(null);
+    interceptDataRef.current = null;
+    setIsOnlineLoadInFlight(false);
+    isOnlineLoadInFlightRef.current = false;
+    activeLoadRequestIdRef.current = null;
+    onlineLoadChapterRef.current = null;
+    retryingPagesRef.current.clear();
+    forceReloadRef.current = false;
+  }, [chapterIdentifier]);
+
+  useEffect(() => {
+    activeChapterIdentifierRef.current = chapterIdentifier;
+  }, [chapterIdentifier]);
+
   const chapterUrl = getChapterUrl(id, chapterIdentifier);
-  const webLoadStartRef = useRef<number>(
-    (globalThis as any).performance?.now?.() ?? Date.now()
-  );
-  const log = logger();
   const supportsWorklets =
     typeof (Reanimated as any).useWorkletCallback === 'function';
   const currentChapterIndex = useMemo(() => {
@@ -211,6 +360,34 @@ export default function ReadChapterScreen() {
     currentChapterIndex > -1 &&
     currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
     !!mangaDetails?.chapters?.[currentChapterIndex + 1];
+
+  const displayChapterNumber = useMemo(() => {
+    if (
+      currentChapterIndex >= 0 &&
+      mangaDetails?.chapters &&
+      mangaDetails.chapters[currentChapterIndex]
+    ) {
+      return mangaDetails.chapters[currentChapterIndex].number;
+    }
+
+    return chapterIdentifier;
+  }, [chapterIdentifier, currentChapterIndex, mangaDetails?.chapters]);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  useEffect(() => {
+    downloadedImagesRef.current = sortedImages.length ? sortedImages : null;
+  }, [sortedImages]);
+
+  useEffect(() => {
+    interceptDataRef.current = interceptData;
+  }, [interceptData]);
+
+  useEffect(() => {
+    isOnlineLoadInFlightRef.current = isOnlineLoadInFlight;
+  }, [isOnlineLoadInFlight]);
 
   // Status bar management
   useFocusEffect(
@@ -425,29 +602,42 @@ export default function ReadChapterScreen() {
         setDownloadedImages(images);
         downloadedImagesRef.current = images;
 
-        // Detect content type
-        if (images && images.length > 0) {
-          try {
-            const type = await detectContentType(images);
-            setContentType(type);
-
-            if (isDebugEnabled()) {
-              console.log(
-                `📱 Using downloaded chapter ${chapterNumber} with ${images.length} images (${type} style)`
-              );
-            }
-          } catch (error) {
-            console.error('Error detecting content type:', error);
-            // Fallback to manga mode
-            setContentType('manga');
-          }
-        }
+        setTotalImageCount(images ? images.length : null);
 
         // For downloaded chapters, we can set loading to false immediately
         setIsLoading(false);
+        setIsLoadingOnline(false);
+        setShouldAttemptOnlineLoad(false);
+        setShowHiddenWebView(false);
+        setInterceptData(null);
+        setIsOnlineLoadInFlight(false);
+        isOnlineLoadInFlightRef.current = false;
+        activeLoadRequestIdRef.current = null;
+        onlineLoadChapterRef.current = null;
+      } else {
+        setError(null);
+        setDownloadedImages(null);
+        downloadedImagesRef.current = null;
+        setContentType(null);
+        setShouldAttemptOnlineLoad(true);
+        setShowHiddenWebView(true);
+        setInterceptData(null);
+        setIsOnlineLoadInFlight(false);
+        isOnlineLoadInFlightRef.current = false;
+        activeLoadRequestIdRef.current = null;
+        onlineLoadChapterRef.current = null;
+        setIsLoading(true);
+        setIsLoadingOnline(true);
+        setCurrentPage(0);
+        setTotalImageCount(null);
       }
     } catch (error) {
       console.error('Error fetching manga details:', error);
+      setIsLoading(false);
+      setIsLoadingOnline(false);
+      setShowHiddenWebView(false);
+      setShouldAttemptOnlineLoad(false);
+      setTotalImageCount(null);
     }
   }, [id, chapterNumber]);
 
@@ -459,19 +649,296 @@ export default function ReadChapterScreen() {
     fetchDetails();
   }, [fetchDetails]);
 
-  // Handle programmatic page changes for manga mode
+  const loadOnlineChapter = useCallback(
+    async (
+      intercept: { chapterId: string; vrfToken: string },
+      forceRefresh = false
+    ) => {
+      const requestChapterIdentifier = chapterIdentifier;
+
+      if (
+        isOnlineLoadInFlightRef.current &&
+        onlineLoadChapterRef.current === requestChapterIdentifier
+      ) {
+        return;
+      }
+
+      const requestId = loadRequestSequenceRef.current + 1;
+      loadRequestSequenceRef.current = requestId;
+      latestLoadRequestRef.current = requestId;
+      activeLoadRequestIdRef.current = requestId;
+      isOnlineLoadInFlightRef.current = true;
+      onlineLoadChapterRef.current = requestChapterIdentifier;
+
+      if (!forceRefresh) {
+        setIsLoading(true);
+      }
+
+      setIsOnlineLoadInFlight(true);
+      setIsLoadingOnline(true);
+      setError(null);
+
+      const isRequestActive = () =>
+        activeChapterIdentifierRef.current === requestChapterIdentifier &&
+        latestLoadRequestRef.current === requestId;
+
+      try {
+        const images = await temporaryImageCacheService.getOrFetchChapterImages(
+          id,
+          chapterNumber,
+          chapterUrl,
+          (partialImages, total) => {
+            if (!isRequestActive()) {
+              return;
+            }
+
+            const snapshot = [...partialImages];
+            setDownloadedImages(snapshot);
+            downloadedImagesRef.current = snapshot;
+            if (!forceRefresh && snapshot.length > 0) {
+              setIsLoading(false);
+            }
+            if (typeof total === 'number') {
+              setTotalImageCount(total);
+            }
+
+            if (isDebugEnabled()) {
+              console.log(
+                `Downloaded ${snapshot.length}/${total} images for chapter ${chapterNumber} (${forceRefresh ? 'refresh' : 'initial'})`
+              );
+            }
+          },
+          {
+            chapterId: intercept.chapterId,
+            vrfToken: intercept.vrfToken,
+          },
+          forceRefresh
+        );
+
+        if (!isRequestActive()) {
+          return;
+        }
+
+        setDownloadedImages(images);
+        downloadedImagesRef.current = images;
+        setIsLoading(false);
+        setIsLoadingOnline(false);
+        setShouldAttemptOnlineLoad(false);
+        setTotalImageCount(images.length);
+        setCurrentPage((prev) => {
+          if (!forceRefresh) {
+            currentPageRef.current = 0;
+            return 0;
+          }
+          const clamped = Math.min(prev, Math.max(images.length - 1, 0));
+          currentPageRef.current = clamped;
+          return clamped;
+        });
+        retryingPagesRef.current.clear();
+        forceReloadRef.current = false;
+      } catch (error) {
+        console.error('Error fetching temporary images:', error);
+
+        if (!isRequestActive()) {
+          return;
+        }
+
+        setError(
+          forceRefresh
+            ? 'Failed to refresh chapter images. Please try again.'
+            : 'Failed to load chapter images. Please try again.'
+        );
+        setIsLoading(false);
+        setIsLoadingOnline(false);
+        setShouldAttemptOnlineLoad(false);
+        if (!forceRefresh) {
+          setTotalImageCount(null);
+        }
+        retryingPagesRef.current.clear();
+        forceReloadRef.current = false;
+      } finally {
+        if (activeLoadRequestIdRef.current === requestId) {
+          activeLoadRequestIdRef.current = null;
+          setIsOnlineLoadInFlight(false);
+          isOnlineLoadInFlightRef.current = false;
+        }
+        if (
+          onlineLoadChapterRef.current === requestChapterIdentifier &&
+          latestLoadRequestRef.current === requestId
+        ) {
+          onlineLoadChapterRef.current = null;
+        }
+      }
+    },
+    [chapterIdentifier, chapterNumber, chapterUrl, id]
+  );
+
   useEffect(() => {
     if (
-      contentType === 'manga' &&
-      mangaFlatListRef.current &&
-      downloadedImages
+      !isDownloaded &&
+      shouldAttemptOnlineLoad &&
+      interceptData &&
+      !isOnlineLoadInFlight
     ) {
-      mangaFlatListRef.current.scrollToIndex({
-        index: currentPage,
-        animated: true,
-      });
+      loadOnlineChapter(interceptData, forceReloadRef.current);
     }
-  }, [currentPage, contentType, downloadedImages]);
+  }, [
+    interceptData,
+    isDownloaded,
+    isOnlineLoadInFlight,
+    loadOnlineChapter,
+    shouldAttemptOnlineLoad,
+  ]);
+
+  const handleWebViewIntercepted = useCallback(
+    (chapterId: string, vrfToken: string) => {
+      if (!shouldAttemptOnlineLoad && !forceReloadRef.current) {
+        return;
+      }
+      setInterceptData({ chapterId, vrfToken });
+      setShowHiddenWebView(false);
+    },
+    [shouldAttemptOnlineLoad]
+  );
+
+  const handleWebViewError = useCallback((message: string) => {
+    console.error('Hidden WebView error:', message);
+    setShowHiddenWebView(false);
+    setError('Failed to prepare chapter images. Please try again.');
+    setIsLoading(false);
+    setIsLoadingOnline(false);
+    setIsOnlineLoadInFlight(false);
+    setShouldAttemptOnlineLoad(false);
+    setTotalImageCount(null);
+    isOnlineLoadInFlightRef.current = false;
+    activeLoadRequestIdRef.current = null;
+    onlineLoadChapterRef.current = null;
+  }, []);
+
+  const handleWebViewTimeout = useCallback(() => {
+    console.warn('Hidden WebView timeout for chapter');
+    setShowHiddenWebView(false);
+    setError('Chapter page timed out. Please try again.');
+    setIsLoading(false);
+    setIsLoadingOnline(false);
+    setIsOnlineLoadInFlight(false);
+    setShouldAttemptOnlineLoad(false);
+    setTotalImageCount(null);
+    isOnlineLoadInFlightRef.current = false;
+    activeLoadRequestIdRef.current = null;
+    onlineLoadChapterRef.current = null;
+  }, []);
+
+  // Detect content type based on image dimensions
+  const detectAndSetContentType = useCallback(
+    async (images: ChapterImage[]) => {
+      if (!images || images.length === 0) {
+        setContentType('manga');
+        return;
+      }
+
+      // Sample first few images to determine content type
+      const sampleSize = Math.min(3, images.length);
+      let tallImageCount = 0;
+      let loadedCount = 0;
+
+      return new Promise<'manhwa' | 'manga'>((resolve) => {
+        images.slice(0, sampleSize).forEach((image) => {
+          Image.getSize(
+            image.localPath || '',
+            (width, height) => {
+              const aspectRatio = height / width;
+              // If aspect ratio > 1.5, consider it a tall manhwa-style image
+              if (aspectRatio > 1.5) {
+                tallImageCount++;
+              }
+
+              loadedCount++;
+              if (loadedCount === sampleSize) {
+                // If majority of sampled images are tall, it's manhwa
+                const isManhwa = tallImageCount >= sampleSize / 2;
+                resolve(isManhwa ? 'manhwa' : 'manga');
+              }
+            },
+            (error) => {
+              console.error('Error getting image size:', error);
+              loadedCount++;
+              if (loadedCount === sampleSize) {
+                // Default to manga if we can't determine
+                resolve('manga');
+              }
+            }
+          );
+        });
+      });
+    },
+    []
+  );
+
+  // Detect content type when images are loaded
+  useEffect(() => {
+    if (downloadedImages && downloadedImages.length > 0 && !contentType) {
+      detectAndSetContentType(downloadedImages)
+        .then((type: 'manhwa' | 'manga' | undefined) => {
+          if (type) {
+            setContentType(type);
+          }
+          if (isDebugEnabled()) {
+            const mode = isDownloaded ? '📱 Downloaded' : '🌐 Online';
+            console.log(
+              `${mode} chapter ${chapterNumber} with ${downloadedImages.length} images (${type} style)`
+            );
+          }
+        })
+        .catch((error: any) => {
+          console.error('Error detecting content type:', error);
+          // Fallback to manga mode
+          setContentType('manga');
+        });
+    }
+  }, [
+    downloadedImages,
+    contentType,
+    chapterNumber,
+    isDownloaded,
+    detectAndSetContentType,
+  ]);
+
+  // Handle programmatic page changes for manga mode
+  useEffect(() => {
+    if (contentType !== 'manga') {
+      return;
+    }
+
+    if (totalPages <= 0) {
+      return;
+    }
+
+    if (currentPage >= totalPages) {
+      const clampedPage = Math.max(totalPages - 1, 0);
+      currentPageRef.current = clampedPage;
+      setCurrentPage(clampedPage);
+    }
+  }, [contentType, currentPage, totalPages]);
+
+  useEffect(() => {
+    if (contentType !== 'manga') {
+      return;
+    }
+
+    if (totalPages <= 0) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      if (mangaListRef.current) {
+        mangaListRef.current.scrollToOffset({
+          offset: currentPageRef.current * Dimensions.get('window').width,
+          animated: false,
+        });
+      }
+    });
+  }, [chapterIdentifier, contentType, totalPages]);
 
   // Initialize navigation tracking when chapter changes
   useEffect(() => {
@@ -493,75 +960,21 @@ export default function ReadChapterScreen() {
     }, [navigateBack])
   );
 
-  const handleLoadEnd = () => {
-    setIsLoading(false);
-    if (isDebugEnabled()) {
-      const dur =
-        ((globalThis as any).performance?.now?.() ?? Date.now()) -
-        (webLoadStartRef.current ??
-          (globalThis as any).performance?.now?.() ??
-          Date.now());
-      log.info('UI', 'ChapterWebView load complete', {
-        id,
-        chapterNumber,
-        durationMs: Math.round(dur),
-      });
-    }
-  };
-  const handleBackPress = () => navigateBack();
-  const handleError = () => {
-    setError('Failed to load chapter. Please try again.');
-    setIsLoading(false);
-  };
-
-  const handleNavigationStateChange = useCallback(
-    async (navState: WebViewNavigation) => {
-      if (navState.url !== chapterUrl) {
-        const newChapterMatch = navState.url.match(/\/chapter-([\w.\-]+)/i);
-        const matchedSegment = newChapterMatch?.[1];
-        const normalizedTarget = normalizeChapterNumber(matchedSegment);
-        
-        if (normalizedTarget) {
-          // Add cooldown to prevent rapid redirects from the website
-          // (MangaFire redirects to chapter 1.1 about 1 second after page load)
-          const now = Date.now();
-          const timeSinceLastNav = now - navigationTimestampRef.current;
-          const cooldownPeriod = 3000; // 3 seconds
-          
-          if (isDebugEnabled()) {
-            log.debug('UI', 'NavigationStateChange detected', {
-              target: normalizedTarget,
-              lastNavChapter: lastNavigatedChapterRef.current,
-              timeSinceLastNav,
-              cooldownActive: timeSinceLastNav < cooldownPeriod,
-            });
-          }
-          
-          // If we're within cooldown and trying to navigate to a DIFFERENT chapter, ignore it
-          if (timeSinceLastNav < cooldownPeriod && 
-              lastNavigatedChapterRef.current && 
-              normalizedTarget !== lastNavigatedChapterRef.current) {
-            log.warn('UI', 'Blocking rapid redirect (likely from website)', {
-              from: lastNavigatedChapterRef.current,
-              to: normalizedTarget,
-              timeSinceLastNav,
-            });
-            return; // Ignore this redirect
-          }
-          
-          // Update navigation tracking
-          navigationTimestampRef.current = now;
-          lastNavigatedChapterRef.current = normalizedTarget;
-          
-          if (mangaTitle && id) {
-            await markChapterAsRead(id, normalizedTarget, mangaTitle);
-          }
-          router.replace(`/manga/${id}/chapter/${normalizedTarget}`);
-        }
+  // Cleanup temporary cache when leaving chapter
+  useEffect(() => {
+    return () => {
+      // Clear the temporary cache for this chapter when unmounting
+      if (!isDownloaded && id && chapterNumber) {
+        temporaryImageCacheService
+          .clearChapterCache(id, chapterNumber)
+          .catch((error: any) => {
+            console.warn('Failed to clear temporary cache:', error);
+          });
       }
-    },
-    [chapterUrl, id, mangaTitle, router, log]
-  );
+    };
+  }, [id, chapterNumber, isDownloaded]);
+
+  const handleBackPress = () => navigateBack();
 
   const handleChapterPress = (chapterNum: string) => {
     const targetChapter = normalizeChapterNumber(chapterNum);
@@ -572,15 +985,14 @@ export default function ReadChapterScreen() {
     navigationTimestampRef.current = Date.now();
     lastNavigatedChapterRef.current = targetChapter;
     closeChapterList();
-    router.navigate(`/manga/${id}/chapter/${targetChapter}`);
+    router.replace(`/manga/${id}/chapter/${targetChapter}`);
   };
 
   const renderChapterList = () => {
     if (!mangaDetails?.chapters) return null;
     return mangaDetails.chapters.map((chapter) => {
       const normalizedChapterId = normalizeChapterNumber(chapter.number);
-      const isCurrentChapter =
-        normalizedChapterId === normalizedChapterParam;
+      const isCurrentChapter = normalizedChapterId === normalizedChapterParam;
 
       return (
         <TouchableOpacity
@@ -592,9 +1004,7 @@ export default function ReadChapterScreen() {
           onPress={() => handleChapterPress(chapter.number)}
         >
           <View style={styles.chapterItemLeft}>
-            <Text style={styles.chapterNumber}>
-              Chapter {chapter.number}
-            </Text>
+            <Text style={styles.chapterNumber}>Chapter {chapter.number}</Text>
             <Text style={styles.chapterDate}>{chapter.date || 'No date'}</Text>
           </View>
           {isCurrentChapter ? (
@@ -607,30 +1017,107 @@ export default function ReadChapterScreen() {
     });
   };
 
-  const navigateChapter = (chapterOffset: number) => {
-    if (!mangaDetails?.chapters || currentChapterIndex < 0) return;
-    const newChapter =
-      mangaDetails.chapters[currentChapterIndex + chapterOffset];
-    if (newChapter?.number) {
-      const targetChapter = normalizeChapterNumber(newChapter.number);
-      if (!targetChapter) {
+  const navigateChapter = useCallback(
+    (chapterOffset: number) => {
+      if (!mangaDetails?.chapters || currentChapterIndex < 0) return;
+      const newChapter =
+        mangaDetails.chapters[currentChapterIndex + chapterOffset];
+      if (newChapter?.number) {
+        const targetChapter = normalizeChapterNumber(newChapter.number);
+        if (!targetChapter) {
+          return;
+        }
+        // Update navigation tracking for this intentional navigation
+        navigationTimestampRef.current = Date.now();
+        lastNavigatedChapterRef.current = targetChapter;
+        router.replace(`/manga/${id}/chapter/${targetChapter}`);
+      }
+    },
+    [currentChapterIndex, id, mangaDetails, router]
+  );
+
+  const handleNextChapter = useCallback(
+    () => navigateChapter(-1),
+    [navigateChapter]
+  );
+  const handlePreviousChapter = useCallback(
+    () => navigateChapter(1),
+    [navigateChapter]
+  );
+
+  const handleImageLoadError = useCallback(
+    (pageNumber: number) => {
+      console.warn(`Image load error on page ${pageNumber}, attempting reload`);
+
+      if (isDownloaded) {
+        chapterStorageService
+          .getChapterImages(id, chapterNumber)
+          .then((images) => {
+            if (images) {
+              setDownloadedImages(images);
+              downloadedImagesRef.current = images;
+              setTotalImageCount(images.length);
+              console.log(
+                `Successfully reloaded chapter images after error on page ${pageNumber}`
+              );
+            }
+          })
+          .catch((storageError) => {
+            console.error(
+              `Failed to reload downloaded chapter images for page ${pageNumber}:`,
+              storageError
+            );
+          })
+          .finally(() => {
+            retryingPagesRef.current.delete(pageNumber);
+          });
         return;
       }
-      // Update navigation tracking for this intentional navigation
-      navigationTimestampRef.current = Date.now();
-      lastNavigatedChapterRef.current = targetChapter;
-      router.navigate(`/manga/${id}/chapter/${targetChapter}`);
-    }
-  };
 
-  const handleNextChapter = () => navigateChapter(-1);
-  const handlePreviousChapter = () => navigateChapter(1);
+      // For online chapters, trigger full reload
+      if (retryingPagesRef.current.has(pageNumber)) {
+        console.debug(
+          `Already retrying page ${pageNumber}, skipping duplicate request`
+        );
+        return;
+      }
 
-  const handleWebViewMessage = (event: any) => {
-    if (event.nativeEvent.data === 'toggleControls') {
-      toggleControls();
-    }
-  };
+      retryingPagesRef.current.add(pageNumber);
+      setError(null);
+
+      if (isOnlineLoadInFlightRef.current) {
+        forceReloadRef.current = true;
+        setShouldAttemptOnlineLoad(true);
+        if (!interceptDataRef.current) {
+          setShowHiddenWebView(true);
+        }
+        setIsLoadingOnline(true);
+        return;
+      }
+
+      if (!interceptDataRef.current) {
+        forceReloadRef.current = true;
+        setShouldAttemptOnlineLoad(true);
+        setShowHiddenWebView(true);
+        setIsLoadingOnline(true);
+        return;
+      }
+
+      setIsLoadingOnline(true);
+
+      loadOnlineChapter(interceptDataRef.current, true)
+        .catch((reloadError) => {
+          console.error(
+            `Failed to refresh chapter images after load error on page ${pageNumber}:`,
+            reloadError
+          );
+        })
+        .finally(() => {
+          retryingPagesRef.current.delete(pageNumber);
+        });
+    },
+    [chapterNumber, id, isDownloaded, loadOnlineChapter]
+  );
 
   const handleDismissGuide = () => {
     setShowGuide(false);
@@ -638,78 +1125,142 @@ export default function ReadChapterScreen() {
     showControls();
   };
 
-  const injectedJS = `
-  ${getInjectedJavaScript(Colors[colorScheme].card)}
-  (function() {
-    var tapThreshold = 60;
-    var windowWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
-    var windowHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
-    var topControlThreshold = windowHeight * 0.4; // 40% of the screen height
-
-    document.addEventListener('click', function(e) {
-      var tapX = e.clientX || e.pageX;
-      var tapY = e.clientY || e.pageY;
-      var isRightEdgeTap = tapX > windowWidth - tapThreshold;
-      var isLeftEdgeTap = tapX < tapThreshold;
-      var isTopControlArea = tapY < topControlThreshold;
-
-      // Check if the click target is a navigation element (e.g., a link or button)
-      var isNavigationElement = e.target.tagName === 'A' || e.target.tagName === 'BUTTON';
-
-      if (isTopControlArea) {
-        window.ReactNativeWebView.postMessage('toggleControls');
-      } else if (!isLeftEdgeTap && !isNavigationElement && isRightEdgeTap) {
-        //Right edge tap on bottom 60% - No action needed here anymore
-      } else if (!isLeftEdgeTap && !isNavigationElement && !isRightEdgeTap) {
-        window.ReactNativeWebView.postMessage('toggleControls');
-      }
-    });
-  })();
-`;
-
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
+  const downloadedImageCount = downloadedImages?.length ?? 0;
 
-  // Detect content type based on image dimensions
-  const detectContentType = useCallback((images: ChapterImage[]) => {
-    if (!images || images.length === 0) return 'manga';
+  const progressLabel = useMemo(() => {
+    if (!isDownloaded && totalPages > 0) {
+      const base = isLoadingOnline
+        ? `Downloading ${completedImages}/${totalPages} images`
+        : `Loaded ${completedImages}/${totalPages} images`;
+      const failedSuffix = failedImages > 0 ? ` • ${failedImages} failed` : '';
+      return `${base}${failedSuffix}`;
+    }
+    return undefined;
+  }, [
+    completedImages,
+    failedImages,
+    isDownloaded,
+    isLoadingOnline,
+    totalPages,
+  ]);
 
-    // Sample first few images to determine content type
-    const sampleSize = Math.min(3, images.length);
-    let tallImageCount = 0;
+  const renderPlaceholder = useCallback(
+    (
+      message: string,
+      options?: { subMessage?: string; showSpinner?: boolean }
+    ) => {
+      const { subMessage, showSpinner = true } = options ?? {};
 
-    return new Promise<'manhwa' | 'manga'>((resolve) => {
-      let loadedCount = 0;
+      return (
+        <View style={styles.listEmptyContainer}>
+          {showSpinner ? (
+            <ActivityIndicator
+              testID="flashlist-loading-indicator"
+              size="large"
+              color={Colors[colorScheme].primary}
+            />
+          ) : (
+            <Ionicons
+              name="image-outline"
+              size={32}
+              color={Colors[colorScheme].text + '60'}
+            />
+          )}
+          <Text style={styles.listEmptyPrimary}>{message}</Text>
+          {subMessage ? (
+            <Text style={styles.listEmptySecondary}>{subMessage}</Text>
+          ) : null}
+        </View>
+      );
+    },
+    [colorScheme, styles]
+  );
 
-      images.slice(0, sampleSize).forEach((image) => {
-        Image.getSize(
-          image.localPath || '',
-          (width, height) => {
-            const aspectRatio = height / width;
-            // If aspect ratio > 1.5, consider it a tall manhwa-style image
-            if (aspectRatio > 1.5) {
-              tallImageCount++;
-            }
+  const renderListEmptyComponent = useCallback(() => {
+    if (!contentType && downloadedImageCount > 0) {
+      return renderPlaceholder(
+        'Loading your content...',
+        progressLabel ? { subMessage: progressLabel } : undefined
+      );
+    }
 
-            loadedCount++;
-            if (loadedCount === sampleSize) {
-              // If majority of sampled images are tall, it's manhwa
-              const isManhwa = tallImageCount >= sampleSize / 2;
-              resolve(isManhwa ? 'manhwa' : 'manga');
-            }
-          },
-          (error) => {
-            console.error('Error getting image size:', error);
-            loadedCount++;
-            if (loadedCount === sampleSize) {
-              // Default to manga if we can't determine
-              resolve('manga');
-            }
-          }
-        );
+    if (isLoadingOnline) {
+      return renderPlaceholder(
+        'Downloading chapter images...',
+        progressLabel ? { subMessage: progressLabel } : undefined
+      );
+    }
+
+    if (isLoading) {
+      return renderPlaceholder(
+        'Preparing chapter images...',
+        progressLabel ? { subMessage: progressLabel } : undefined
+      );
+    }
+
+    if (isDownloaded) {
+      return renderPlaceholder('Downloaded chapter has no images', {
+        subMessage: 'Try refreshing or re-downloading this chapter.',
+        showSpinner: false,
       });
+    }
+
+    return renderPlaceholder('Chapter images are not available yet.', {
+      ...(progressLabel ? { subMessage: progressLabel } : {}),
+      showSpinner: false,
     });
-  }, []);
+  }, [
+    contentType,
+    downloadedImageCount,
+    isDownloaded,
+    isLoading,
+    isLoadingOnline,
+    progressLabel,
+    renderPlaceholder,
+  ]);
+
+  const shouldShowProgressFooter = useMemo(
+    () =>
+      !isDownloaded &&
+      totalPages > 0 &&
+      (isLoadingOnline || completedImages < totalPages),
+    [completedImages, isDownloaded, isLoadingOnline, totalPages]
+  );
+
+  const renderManhwaFooter = useMemo(
+    () => (
+      <View style={styles.listFooterWrapper}>
+        {shouldShowProgressFooter ? (
+          <View style={styles.listFooterContent}>
+            <ActivityIndicator
+              size="small"
+              color={Colors[colorScheme].primary}
+            />
+            <Text style={styles.listFooterText}>
+              {progressLabel ?? 'Loading chapter images...'}
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.chapterEndSpacer} />
+      </View>
+    ),
+    [shouldShowProgressFooter, colorScheme, progressLabel, styles]
+  );
+
+  const renderMangaFooter = useMemo(() => {
+    if (!shouldShowProgressFooter || !progressLabel) {
+      return null;
+    }
+
+    return (
+      <View style={styles.mangaFooter}>
+        <ActivityIndicator size="small" color={Colors[colorScheme].primary} />
+        <Text style={styles.listFooterText}>{progressLabel}</Text>
+      </View>
+    );
+  }, [shouldShowProgressFooter, progressLabel, colorScheme, styles]);
 
   // Touch handler for downloaded chapters (replicates WebView behavior)
   const handleDownloadedChapterTouch = useCallback(
@@ -736,161 +1287,166 @@ export default function ReadChapterScreen() {
           isLeftEdge: isLeftEdgeTap,
           isRightEdge: isRightEdgeTap,
           contentType,
+          currentPage: currentPageRef.current,
         });
       }
 
       // Different behavior for manga vs manhwa
       if (contentType === 'manga') {
-        // Manga mode: left/right edges navigate pages
         if (isTopControlArea) {
           toggleControls();
-        } else if (isLeftEdgeTap && currentPage > 0) {
-          // Previous page (left edge)
-          const newPage = currentPage - 1;
+          return;
+        }
+
+        const totalPagesCount = totalPages;
+        const current = currentPageRef.current;
+
+        if (isLeftEdgeTap && current > 0) {
+          const newPage = current - 1;
+          currentPageRef.current = newPage;
           setCurrentPage(newPage);
-          // Scroll to previous page - this will be handled by FlatList ref if needed
-        } else if (
+          mangaListRef.current?.scrollToOffset({
+            offset: newPage * windowWidth,
+            animated: true,
+          });
+          return;
+        }
+
+        if (
           isRightEdgeTap &&
-          downloadedImagesRef.current &&
-          currentPage < downloadedImagesRef.current.length - 1
+          totalPagesCount &&
+          current < totalPagesCount - 1
         ) {
-          // Next page (right edge)
-          const newPage = currentPage + 1;
+          const newPage = current + 1;
+          currentPageRef.current = newPage;
           setCurrentPage(newPage);
-          // Scroll to next page - this will be handled by FlatList ref if needed
-        } else if (!isLeftEdgeTap && !isRightEdgeTap) {
-          // Center area toggles controls
-          toggleControls();
+          mangaListRef.current?.scrollToOffset({
+            offset: newPage * windowWidth,
+            animated: true,
+          });
+          return;
         }
-      } else {
-        // Manhwa mode: original behavior (no edge navigation)
-        if (isTopControlArea) {
-          toggleControls();
-        } else if (!isLeftEdgeTap && !isRightEdgeTap) {
-          toggleControls();
-        }
+
+        toggleControls();
+        return;
+      }
+
+      // Manhwa mode: original behavior (no edge navigation)
+      if (isTopControlArea) {
+        toggleControls();
+      } else if (!isLeftEdgeTap && !isRightEdgeTap) {
+        toggleControls();
       }
     },
-    [toggleControls, contentType, currentPage]
+    [contentType, totalPages, toggleControls]
   );
 
   // Manhwa-style continuous scrolling renderer
-  const renderManhwaChapter = () => {
-    const sortedImages = downloadedImages!.sort(
-      (a, b) => a.pageNumber - b.pageNumber
-    );
+  const renderManhwaChapter = () => (
+    <FlashList
+      key={`manhwa-${chapterIdentifier}`}
+      data={displayPages}
+      renderItem={({ item }) => (
+        <ManhwaImage
+          image={item}
+          onPress={handleDownloadedChapterTouch}
+          colorScheme={colorScheme}
+          onError={handleImageLoadError}
+        />
+      )}
+      keyExtractor={(item) => `page-${item.pageNumber}`}
+      contentContainerStyle={styles.manhwaImagesContainer}
+      showsVerticalScrollIndicator={false}
+      ListEmptyComponent={renderListEmptyComponent}
+      ListFooterComponent={renderManhwaFooter}
+      scrollEventThrottle={16}
+      style={styles.webView}
+    />
+  );
 
-    return (
-      <ScrollView
-        style={styles.webView}
-        contentContainerStyle={styles.manhwaImagesContainer}
-        showsVerticalScrollIndicator={false}
-        decelerationRate="normal"
-      >
-        {sortedImages.map((image) => (
-          <ManhwaImage
-            key={`page-${image.pageNumber}`}
-            image={image}
-            onPress={handleDownloadedChapterTouch}
-            colorScheme={colorScheme}
-          />
-        ))}
-        <View style={styles.chapterEndSpacer} />
-      </ScrollView>
-    );
-  };
+  const handleMangaMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const page = Math.round(
+        event.nativeEvent.contentOffset.x / Dimensions.get('window').width
+      );
+      currentPageRef.current = page;
+      setCurrentPage((prev) => (prev === page ? prev : page));
+    },
+    []
+  );
 
   // Manga-style page-by-page renderer
-  const renderMangaChapter = () => {
-    const sortedImages = downloadedImages!.sort(
-      (a, b) => a.pageNumber - b.pageNumber
-    );
-
-    const renderPage = ({ item }: { item: ChapterImage; index: number }) => (
-      <TouchableWithoutFeedback onPress={handleDownloadedChapterTouch}>
-        <View style={styles.mangaPageContainer}>
-          <Image
-            source={{ uri: item.localPath }}
-            style={styles.mangaImage}
-            resizeMode="contain"
-            onError={(error) => {
-              console.error(`Failed to load image ${item.pageNumber}:`, error);
-            }}
-            onLoad={(event) => {
-              if (isDebugEnabled()) {
-                const { width, height } = event.nativeEvent.source;
-                console.log(
-                  `Manga Image ${item.pageNumber}: ${width}x${height}`
-                );
-              }
-            }}
-          />
-        </View>
-      </TouchableWithoutFeedback>
-    );
-
-    return (
-      <FlatList
-        ref={mangaFlatListRef}
-        data={sortedImages}
-        renderItem={renderPage}
-        keyExtractor={(item) => `page-${item.pageNumber}`}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
-        onMomentumScrollEnd={(event) => {
-          const page = Math.round(
-            event.nativeEvent.contentOffset.x / Dimensions.get('window').width
-          );
-          setCurrentPage(page);
-        }}
-        getItemLayout={(_, index) => ({
-          length: Dimensions.get('window').width,
-          offset: Dimensions.get('window').width * index,
-          index,
-        })}
-        style={styles.webView}
-      />
-    );
-  };
+  const renderMangaChapter = () => (
+    <FlashList
+      key={`manga-${chapterIdentifier}`}
+      ref={mangaListRef}
+      data={displayPages}
+      renderItem={({ item }) => (
+        <TouchableWithoutFeedback onPress={handleDownloadedChapterTouch}>
+          <View style={styles.mangaPageContainer}>
+            {item.localPath ? (
+              <Image
+                source={{ uri: item.localPath }}
+                style={styles.mangaImage}
+                resizeMode="contain"
+                onError={(error) => {
+                  console.error(
+                    `Failed to load image ${item.pageNumber}:`,
+                    error
+                  );
+                  handleImageLoadError(item.pageNumber);
+                }}
+                onLoad={(event) => {
+                  if (isDebugEnabled()) {
+                    const { width, height } = event.nativeEvent.source;
+                    console.log(
+                      `📖 Manga Page ${item.pageNumber}/${totalPages} [${id}/${chapterNumber}]: ${width}x${height}`
+                    );
+                  }
+                }}
+              />
+            ) : (
+              <View style={[styles.mangaImage, styles.pagePlaceholder]}>
+                <ActivityIndicator
+                  size="small"
+                  color={Colors[colorScheme].primary}
+                />
+              </View>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+      )}
+      keyExtractor={(item) => `page-${item.pageNumber}`}
+      horizontal
+      pagingEnabled
+      showsHorizontalScrollIndicator={false}
+      decelerationRate="fast"
+      scrollEventThrottle={16}
+      onMomentumScrollEnd={handleMangaMomentumEnd}
+      ListEmptyComponent={renderListEmptyComponent}
+      ListFooterComponent={renderMangaFooter}
+      style={styles.webView}
+    />
+  );
 
   // Local image viewer for downloaded chapters
   const renderDownloadedChapter = () => {
-    if (!downloadedImages || downloadedImages.length === 0) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Downloaded chapter has no images</Text>
-        </View>
-      );
-    }
-
     if (!contentType) {
-      // Still detecting content type, show loading
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].primary} />
-          <Text style={styles.loadingText}>Analyzing content...</Text>
-        </View>
+      return renderPlaceholder(
+        'Loading your content...',
+        progressLabel ? { subMessage: progressLabel } : undefined
       );
     }
 
-    return contentType === 'manhwa'
-      ? renderManhwaChapter()
-      : renderMangaChapter();
+    if (contentType === 'manga') {
+      return renderMangaChapter();
+    }
+
+    return renderManhwaChapter();
   };
 
   return (
     <View style={styles.container}>
-      {isLoading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            testID="loading-indicator"
-            size="large"
-            color={Colors[colorScheme].primary}
-          />
-        </View>
-      )}
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -898,26 +1454,7 @@ export default function ReadChapterScreen() {
       ) : (
         <>
           <View style={styles.webViewContainer}>
-            {isDownloaded && downloadedImages ? (
-              renderDownloadedChapter()
-            ) : (
-              <CustomWebView
-                source={{ uri: chapterUrl }}
-                currentUrl={chapterUrl}
-                style={styles.webView}
-                onLoadEnd={handleLoadEnd}
-                onError={handleError}
-                testID="chapter-webview"
-                injectedJavaScript={injectedJS}
-                onNavigationStateChange={handleNavigationStateChange}
-                onMessage={handleWebViewMessage}
-                allowedHosts={['mangafire.to']}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.9}
-                nestedScrollEnabled={true}
-              />
-            )}
+            {renderDownloadedChapter()}
           </View>
 
           {/* Always render controls but control visibility with opacity and pointerEvents */}
@@ -978,15 +1515,14 @@ export default function ReadChapterScreen() {
                   >
                     <View style={styles.chapterRow}>
                       <Text style={styles.chapterText}>
-                        Chapter {chapterNumber}
-                        {isDownloaded &&
-                          contentType === 'manga' &&
-                          downloadedImages && (
-                            <Text style={styles.pageIndicator}>
-                              {' '}
-                              • {currentPage + 1}/{downloadedImages.length}
-                            </Text>
-                          )}
+                        Chapter {displayChapterNumber}
+                        {contentType === 'manga' && totalPages > 0 && (
+                          <Text style={styles.pageIndicator}>
+                            {' '}
+                            • {Math.min(currentPage + 1, totalPages)}/
+                            {totalPages}
+                          </Text>
+                        )}
                       </Text>
                       <Ionicons
                         name="menu"
@@ -998,6 +1534,21 @@ export default function ReadChapterScreen() {
                     <Text style={styles.titleText} numberOfLines={1}>
                       {mangaTitle || 'Loading...'}
                     </Text>
+                    {!isDownloaded && (isLoadingOnline || totalPages > 0) && (
+                      <Text
+                        style={styles.downloadProgressText}
+                        numberOfLines={1}
+                      >
+                        {totalPages > 0
+                          ? isLoadingOnline
+                            ? `Downloading ${completedImages}/${totalPages} images`
+                            : `Loaded ${completedImages}/${totalPages} images`
+                          : 'Preparing chapter images...'}
+                        {totalPages > 0 && failedImages > 0
+                          ? ` • ${failedImages} failed`
+                          : ''}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 </View>
 
@@ -1092,7 +1643,7 @@ export default function ReadChapterScreen() {
                 >
                   <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
                   <Text style={styles.currentChapterTitle}>
-                    Current: Chapter {chapterNumber}
+                    Current: Chapter {displayChapterNumber}
                   </Text>
                   {renderChapterList()}
                 </BottomSheetScrollView>
@@ -1112,7 +1663,7 @@ export default function ReadChapterScreen() {
                 <View style={styles.fallbackSheetHandle} />
                 <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
                 <Text style={styles.currentChapterTitle}>
-                  Current: Chapter {chapterNumber}
+                  Current: Chapter {displayChapterNumber}
                 </Text>
                 <View
                   style={[styles.bottomSheetContent, { paddingBottom: 24 }]}
@@ -1123,6 +1674,17 @@ export default function ReadChapterScreen() {
             </Modal>
           )}
         </>
+      )}
+
+      {showHiddenWebView && !isDownloaded && (
+        <HiddenChapterWebView
+          key={`${id}-${chapterIdentifier}`}
+          chapterUrl={chapterUrl}
+          onRequestIntercepted={handleWebViewIntercepted}
+          onError={handleWebViewError}
+          onTimeout={handleWebViewTimeout}
+          timeout={30000}
+        />
       )}
     </View>
   );

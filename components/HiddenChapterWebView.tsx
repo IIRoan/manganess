@@ -4,7 +4,7 @@
  * This captures the VRF token and chapter ID needed for downloading
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import WebView from 'react-native-webview';
 import { webViewRequestInterceptor } from '@/services/webViewRequestInterceptor';
@@ -27,7 +27,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
   onTimeout,
   timeout = 30000, // 30 seconds default
 }) => {
-  const log = logger();
+  const log = useMemo(() => logger(), []);
   const webViewRef = useRef<WebView>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interceptedRef = useRef(false);
@@ -38,6 +38,8 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
     : `https://mangafire.to${chapterUrl}`;
 
   useEffect(() => {
+    interceptedRef.current = false;
+
     if (isDebugEnabled()) {
       log.info('Service', 'HiddenChapterWebView mounted', {
         chapterUrl,
@@ -100,7 +102,7 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
         });
       }
     };
-  }, [chapterUrl, timeout]);
+  }, [chapterUrl, fullUrl, log, onRequestIntercepted, onTimeout, timeout]);
 
   const handleShouldStartLoadWithRequest = (request: any): boolean => {
     if (isDebugEnabled()) {
@@ -230,9 +232,9 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
       navState.url
     );
 
-      if (intercepted) {
-        if (isDebugEnabled()) {
-          log.info('Service', 'Intercepted AJAX request from navigation', {
+    if (intercepted) {
+      if (isDebugEnabled()) {
+        log.info('Service', 'Intercepted AJAX request from navigation', {
           chapterId: intercepted.chapterId,
         });
       }

@@ -53,15 +53,6 @@ export default function getStyles(colorScheme: ColorScheme) {
     webView: {
       flex: 1,
     },
-    loadingContainer: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      top: 0,
-      bottom: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
     errorContainer: {
       flex: 1,
       justifyContent: 'center',
@@ -114,6 +105,11 @@ export default function getStyles(colorScheme: ColorScheme) {
       fontSize: 16,
       fontWeight: '600',
       color: colors.text,
+      marginTop: 2,
+    },
+    downloadProgressText: {
+      fontSize: 12,
+      color: colors.text + '80',
       marginTop: 2,
     },
     chapterText: {
@@ -250,6 +246,49 @@ export default function getStyles(colorScheme: ColorScheme) {
       color: Colors[colorScheme].card,
       fontWeight: 'bold',
     },
+    listEmptyContainer: {
+      flexGrow: 1,
+      paddingVertical: 32,
+      paddingHorizontal: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    listEmptyPrimary: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      textAlign: 'center',
+      marginTop: 12,
+    },
+    listEmptySecondary: {
+      fontSize: 13,
+      color: colors.text + '80',
+      textAlign: 'center',
+      marginTop: 6,
+    },
+    listFooterWrapper: {
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+    },
+    listFooterContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+    },
+    listFooterText: {
+      fontSize: 13,
+      color: colors.text + '99',
+      marginLeft: 8,
+    },
+    mangaFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+    },
+
     // Downloaded chapter styles - Manhwa (continuous scrolling)
     manhwaImagesContainer: {
       flexGrow: 1,
@@ -274,6 +313,11 @@ export default function getStyles(colorScheme: ColorScheme) {
       width: screenWidth,
       // Height will be set dynamically by the component
     },
+    pagePlaceholder: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.text + '10',
+    },
 
     // Downloaded chapter styles - Manga (page-by-page)
     mangaPageContainer: {
@@ -286,14 +330,6 @@ export default function getStyles(colorScheme: ColorScheme) {
     mangaImage: {
       width: screenWidth,
       height: screenHeight,
-    },
-
-    // Loading text style
-    loadingText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: colors.text,
-      textAlign: 'center',
     },
 
     chapterEndSpacer: {
