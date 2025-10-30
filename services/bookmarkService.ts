@@ -2,7 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { updateAniListStatus } from './anilistService';
-import { BookmarkStatus, MangaData, IconName } from '@/types';
+import {
+  BookmarkStatus,
+  MangaData,
+  IconName,
+  DownloadProgress,
+  DownloadStatus,
+} from '@/types';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
 
@@ -310,4 +316,168 @@ export const getChapterLongPressAlertConfig = (
     };
   }
   return null;
+};
+
+// Download-related functions for MangaData management
+
+export const updateDownloadStatus = async (
+  mangaId: string,
+  chapterNumber: string,
+  downloadProgress: DownloadProgress
+): Promise<void> => {
+  try {
+    const mangaData = await getMangaData(mangaId);
+    if (!mangaData) {
+      console.warn(`No manga data found for ID: ${mangaId}`);
+      return;
+    }
+
+    const updatedData: MangaData = {
+      ...mangaData,
+      downloadStatus: {
+        ...mangaData.downloadStatus,
+        [chapterNumber]: downloadProgress,
+      },
+      lastUpdated: Date.now(),
+    };
+
+    // If download is completed, add to downloadedChapters
+    if (downloadProgress.status === DownloadStatus.COMPLETED) {
+      const downloadedChapters = mangaData.downloadedChapters || [];
+      if (!downloadedChapters.includes(chapterNumber)) {
+        updatedData.downloadedChapters = [...downloadedChapters, chapterNumber];
+      }
+    }
+
+    await setMangaData(updatedData);
+  } catch (error) {
+    console.error('Error updating download status:', error);
+  }
+};
+
+export const removeDownloadStatus = async (
+  mangaId: string,
+  chapterNumber: string
+): Promise<void> => {
+  try {
+    const mangaData = await getMangaData(mangaId);
+    if (!mangaData) return;
+
+    const updatedDownloadStatus = { ...mangaData.downloadStatus };
+    delete updatedDownloadStatus[chapterNumber];
+
+    const downloadedChapters = (mangaData.downloadedChapters || []).filter(
+      (ch) => ch !== chapterNumber
+    );
+
+    const updatedData: MangaData = {
+      ...mangaData,
+      downloadStatus: updatedDownloadStatus,
+      downloadedChapters,
+      lastUpdated: Date.now(),
+    };
+
+    await setMangaData(updatedData);
+  } catch (error) {
+    console.error('Error removing download status:', error);
+  }
+};
+
+export const updateTotalDownloadSize = async (
+  mangaId: string,
+  sizeChange: number
+): Promise<void> => {
+  try {
+    const mangaData = await getMangaData(mangaId);
+    if (!mangaData) return;
+
+    const currentSize = mangaData.totalDownloadSize || 0;
+    const updatedData: MangaData = {
+      ...mangaData,
+      totalDownloadSize: Math.max(0, currentSize + sizeChange),
+      lastUpdated: Date.now(),
+    };
+
+    await setMangaData(updatedData);
+  } catch (error) {
+    console.error('Error updating total download size:', error);
+  }
+};
+
+export const getDownloadedChapters = async (
+  mangaId: string
+): Promise<string[]> => {
+  try {
+    const mangaData = await getMangaData(mangaId);
+    return mangaData?.downloadedChapters || [];
+  } catch (error) {
+    console.error('Error getting downloaded chapters:', error);
+    return [];
+  }
+};
+
+export const getChapterDownloadStatus = async (
+  mangaId: string,
+  chapterNumber: string
+): Promise<DownloadProgress | null> => {
+  try {
+    const mangaData = await getMangaData(mangaId);
+    return mangaData?.downloadStatus?.[chapterNumber] || null;
+  } catch (error) {
+    console.error('Error getting chapter download status:', error);
+    return null;
+  }
+};
+
+export const isChapterDownloaded = async (
+  mangaId: string,
+  chapterNumber: string
+): Promise<boolean> => {
+  try {
+    const downloadedChapters = await getDownloadedChapters(mangaId);
+    return downloadedChapters.includes(chapterNumber);
+  } catch (error) {
+    console.error('Error checking if chapter is downloaded:', error);
+    return false;
+  }
+};
+
+export const getAllDownloadedManga = async (): Promise<MangaData[]> => {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const mangaKeys = keys.filter((key) =>
+      key.startsWith(MANGA_STORAGE_PREFIX)
+    );
+
+    const mangaDataPromises = mangaKeys.map(async (key) => {
+      const value = await AsyncStorage.getItem(key);
+      return value ? (JSON.parse(value) as MangaData) : null;
+    });
+
+    const allMangaData = await Promise.all(mangaDataPromises);
+
+    // Filter to only include manga with downloaded chapters
+    return allMangaData.filter(
+      (data): data is MangaData =>
+        data !== null &&
+        data.downloadedChapters !== undefined &&
+        data.downloadedChapters.length > 0
+    );
+  } catch (error) {
+    console.error('Error getting all downloaded manga:', error);
+    return [];
+  }
+};
+
+export const getTotalDownloadSize = async (): Promise<number> => {
+  try {
+    const downloadedManga = await getAllDownloadedManga();
+    return downloadedManga.reduce(
+      (total, manga) => total + (manga.totalDownloadSize || 0),
+      0
+    );
+  } catch (error) {
+    console.error('Error calculating total download size:', error);
+    return 0;
+  }
 };
