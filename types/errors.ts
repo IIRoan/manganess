@@ -10,6 +10,8 @@ export enum ErrorType {
   NOT_FOUND = 'NOT_FOUND',
   RATE_LIMIT = 'RATE_LIMIT',
   SERVER = 'SERVER',
+  DOWNLOAD = 'DOWNLOAD',
+  STORAGE = 'STORAGE',
   UNKNOWN = 'UNKNOWN',
 }
 
@@ -97,6 +99,37 @@ export class MangaNotFoundError extends Error {
   }
 }
 
+export class MangaDownloadError extends Error {
+  public readonly type = ErrorType.DOWNLOAD;
+  public readonly retryable = true;
+  public readonly timestamp = Date.now();
+
+  constructor(
+    message: string,
+    public readonly mangaId?: string,
+    public readonly chapterNumber?: string,
+    public readonly details?: any
+  ) {
+    super(message);
+    this.name = 'MangaDownloadError';
+  }
+}
+
+export class MangaStorageError extends Error {
+  public readonly type = ErrorType.STORAGE;
+  public readonly retryable = false;
+  public readonly timestamp = Date.now();
+
+  constructor(
+    message: string,
+    public readonly operation?: string,
+    public readonly details?: any
+  ) {
+    super(message);
+    this.name = 'MangaStorageError';
+  }
+}
+
 export function createAppError(
   type: ErrorType,
   message: string,
@@ -163,6 +196,18 @@ export function getErrorType(error: Error): ErrorType {
 
   if (message.includes('cache')) {
     return ErrorType.CACHE;
+  }
+
+  if (message.includes('download')) {
+    return ErrorType.DOWNLOAD;
+  }
+
+  if (
+    message.includes('storage') ||
+    message.includes('disk') ||
+    message.includes('space')
+  ) {
+    return ErrorType.STORAGE;
   }
 
   if (message.includes('parse') || message.includes('parsing')) {
