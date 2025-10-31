@@ -15,15 +15,15 @@ import {
   useColorScheme,
   Animated,
   StatusBar,
-  Modal,
   TouchableWithoutFeedback,
   ScrollView,
   Image,
   Dimensions,
   GestureResponderEvent,
   FlatList,
+  Modal,
+  PanResponder,
 } from 'react-native';
-import * as Reanimated from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 
@@ -171,6 +171,49 @@ export default function ReadChapterScreen() {
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
   const navigationTimestampRef = useRef<number>(0);
   const lastNavigatedChapterRef = useRef<string>('');
+  const chapterListSwipeTranslateY = useRef(new Animated.Value(0)).current;
+  const chapterListOverlayOpacity = useRef(
+    new Animated.Value(1)
+  ).current;
+
+  const chapterListHeaderPanRef = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 10,
+      onPanResponderMove: (_, { dy }) => {
+        if (dy > 0) {
+          chapterListSwipeTranslateY.setValue(dy);
+          const opacity = Math.max(0, 1 - dy / 300);
+          chapterListOverlayOpacity.setValue(opacity);
+        }
+      },
+      onPanResponderRelease: (_, { dy, vy }) => {
+        if (dy > 50 || vy > 0.5) {
+          Animated.timing(chapterListSwipeTranslateY, {
+            toValue: Dimensions.get('window').height,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => closeChapterList());
+          Animated.timing(chapterListOverlayOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.spring(chapterListSwipeTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+          Animated.spring(chapterListOverlayOpacity, {
+            toValue: 1,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -191,7 +234,7 @@ export default function ReadChapterScreen() {
   );
   const log = logger();
   const supportsWorklets =
-    typeof (Reanimated as any).useWorkletCallback === 'function';
+    typeof (Animated as any).useWorkletCallback === 'function';
   const currentChapterIndex = useMemo(() => {
     if (!mangaDetails?.chapters) {
       return -1;
@@ -350,10 +393,18 @@ export default function ReadChapterScreen() {
       bottomSheetRef.current?.expand();
       handleBottomSheetChange(1);
     } else {
+      chapterListSwipeTranslateY.setValue(0);
+      chapterListOverlayOpacity.setValue(1);
       setIsBottomSheetOpen(true);
       hideControls();
     }
-  }, [supportsWorklets, hideControls, handleBottomSheetChange]);
+  }, [
+    supportsWorklets,
+    hideControls,
+    handleBottomSheetChange,
+    chapterListSwipeTranslateY,
+    chapterListOverlayOpacity,
+  ]);
 
   const closeChapterList = useCallback(() => {
     if (supportsWorklets) {
@@ -616,37 +667,7 @@ export default function ReadChapterScreen() {
     router.navigate(`/manga/${id}/chapter/${targetChapter}`);
   };
 
-  const renderChapterList = () => {
-    if (!mangaDetails?.chapters) return null;
-    return mangaDetails.chapters.map((chapter) => {
-      const normalizedChapterId = normalizeChapterNumber(chapter.number);
-      const isCurrentChapter =
-        normalizedChapterId === normalizedChapterParam;
 
-      return (
-        <TouchableOpacity
-          key={`${normalizedChapterId || chapter.number}-${chapter.url}`}
-          style={[
-            styles.chapterItem,
-            isCurrentChapter && styles.currentChapter,
-          ]}
-          onPress={() => handleChapterPress(chapter.number)}
-        >
-          <View style={styles.chapterItemLeft}>
-            <Text style={styles.chapterNumber}>
-              Chapter {chapter.number}
-            </Text>
-            <Text style={styles.chapterDate}>{chapter.date || 'No date'}</Text>
-          </View>
-          {isCurrentChapter ? (
-            <View style={styles.readIndicator} />
-          ) : (
-            <View style={styles.unreadIndicator} />
-          )}
-        </TouchableOpacity>
-      );
-    });
-  };
 
   const navigateChapter = (chapterOffset: number) => {
     if (!mangaDetails?.chapters || currentChapterIndex < 0) return;
@@ -678,6 +699,8 @@ export default function ReadChapterScreen() {
     // Ensure controls are visible after dismissing the guide
     showControls();
   };
+
+
 
   const injectedJS = `
   ${getInjectedJavaScript(Colors[colorScheme].card)}
@@ -1094,33 +1117,129 @@ export default function ReadChapterScreen() {
                   <Text style={styles.currentChapterTitle}>
                     Current: Chapter {chapterNumber}
                   </Text>
-                  {renderChapterList()}
+                  {mangaDetails?.chapters?.map((chapter) => {
+                    const normalizedChapterId = normalizeChapterNumber(
+                      chapter.number
+                    );
+                    const isCurrentChapter =
+                      normalizedChapterId === normalizedChapterParam;
+                    return (
+                      <TouchableOpacity
+                        key={`${normalizedChapterId || chapter.number}-${chapter.url}`}
+                        style={[
+                          styles.chapterItem,
+                          isCurrentChapter && styles.currentChapter,
+                        ]}
+                        onPress={() => handleChapterPress(chapter.number)}
+                      >
+                        <View style={styles.chapterItemLeft}>
+                          <Text style={styles.chapterNumber}>
+                            Chapter {chapter.number}
+                          </Text>
+                          <Text style={styles.chapterDate}>
+                            {chapter.date || 'No date'}
+                          </Text>
+                        </View>
+                        {isCurrentChapter ? (
+                          <View style={styles.readIndicator} />
+                        ) : (
+                          <View style={styles.unreadIndicator} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </BottomSheetScrollView>
               </View>
             </BottomSheet>
           ) : (
-            <Modal
-              visible={isBottomSheetOpen}
-              transparent
-              animationType="slide"
-              onRequestClose={closeChapterList}
-            >
-              <TouchableWithoutFeedback onPress={closeChapterList}>
-                <View style={styles.modalOverlay} />
-              </TouchableWithoutFeedback>
-              <View style={styles.fallbackSheetContainer}>
-                <View style={styles.fallbackSheetHandle} />
-                <Text style={styles.bottomSheetTitle}>{mangaTitle}</Text>
-                <Text style={styles.currentChapterTitle}>
-                  Current: Chapter {chapterNumber}
-                </Text>
-                <View
-                  style={[styles.bottomSheetContent, { paddingBottom: 24 }]}
+            !supportsWorklets &&
+            isBottomSheetOpen && (
+              <Modal
+                visible={isBottomSheetOpen}
+                transparent
+                animationType="slide"
+                onRequestClose={closeChapterList}
+              >
+                <Animated.View
+                  style={[
+                    styles.chapterListModalOverlay,
+                    { opacity: chapterListOverlayOpacity },
+                  ]}
+                  pointerEvents="none"
+                />
+                <TouchableWithoutFeedback onPress={closeChapterList}>
+                  <View style={styles.chapterListModalTouchLayer} />
+                </TouchableWithoutFeedback>
+                <Animated.View
+                  style={[
+                    styles.chapterListContainer,
+                    {
+                      transform: [{ translateY: chapterListSwipeTranslateY }],
+                    },
+                  ]}
                 >
-                  {renderChapterList()}
-                </View>
-              </View>
-            </Modal>
+                  <View
+                    style={styles.chapterListHeader}
+                    {...chapterListHeaderPanRef.panHandlers}
+                  >
+                    <View style={styles.chapterListHandle} />
+                    <Text style={styles.chapterListTitle}>{mangaTitle}</Text>
+                    <Text style={styles.chapterListCurrent}>
+                      Current: Chapter {chapterNumber}
+                    </Text>
+                  </View>
+                  <FlatList
+                    data={mangaDetails?.chapters || []}
+                    scrollEnabled={true}
+                    nestedScrollEnabled={true}
+                    showsVerticalScrollIndicator={true}
+                    contentContainerStyle={styles.chapterListContent}
+                    keyExtractor={(chapter) =>
+                      `${normalizeChapterNumber(chapter.number) || chapter.number}-${chapter.url}`
+                    }
+                    renderItem={({ item: chapter }) => {
+                      const normalizedChapterId = normalizeChapterNumber(
+                        chapter.number
+                      );
+                      const isCurrentChapter =
+                        normalizedChapterId === normalizedChapterParam;
+                      return (
+                        <TouchableOpacity
+                          style={[
+                            styles.chapterListItemButton,
+                            isCurrentChapter &&
+                              styles.chapterListItemCurrent,
+                          ]}
+                          onPress={() =>
+                            handleChapterPress(chapter.number)
+                          }
+                        >
+                          <View style={styles.chapterListItemContent}>
+                            <Text style={styles.chapterListItemNumber}>
+                              Chapter {chapter.number}
+                            </Text>
+                            <Text style={styles.chapterListItemDate}>
+                              {chapter.date || 'No date'}
+                            </Text>
+                          </View>
+                          {isCurrentChapter ? (
+                            <View style={styles.chapterListItemIndicator} />
+                          ) : (
+                            <View style={styles.chapterListItemUnread} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.chapterListCloseButton}
+                    onPress={closeChapterList}
+                  >
+                    <Text style={styles.chapterListCloseButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              </Modal>
+            )
           )}
         </>
       )}
