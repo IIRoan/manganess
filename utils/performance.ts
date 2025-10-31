@@ -1,4 +1,5 @@
 // Performance monitoring utilities
+import { logger } from './logger';
 
 interface PerformanceMetric {
   name: string;
@@ -46,7 +47,7 @@ class PerformanceMonitor {
 
     const metric = this.metrics.get(name);
     if (!metric) {
-      console.warn(`Performance metric "${name}" was not started`);
+      logger().warn('UI', 'Performance metric was not started', { name });
       return null;
     }
 
@@ -58,7 +59,10 @@ class PerformanceMonitor {
 
     if (duration > 100) {
       // Log slow operations (>100ms)
-      console.log(`[Performance] ${name}: ${duration.toFixed(2)}ms`);
+      logger().warn('UI', 'Slow operation detected', {
+        name,
+        duration: parseFloat(duration.toFixed(2)),
+      });
     }
 
     return duration;

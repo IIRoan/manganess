@@ -88,7 +88,7 @@ const ManhwaImage = React.memo(
             setImageHeight(calculatedHeight);
           },
           (error) => {
-            console.error('Error getting image size:', error);
+            logger().error('UI', 'Error getting image size', { error });
             setImageHeight(400); // Fallback height
           }
         );
@@ -109,16 +109,22 @@ const ManhwaImage = React.memo(
             ]}
             resizeMode="contain"
             onError={(error) => {
-              console.error(`Failed to load image ${image.pageNumber}:`, error);
+              logger().error('UI', 'Failed to load image', {
+                pageNumber: image.pageNumber,
+                error,
+              });
               setIsImageLoaded(true); // Stop loading state on error
             }}
             onLoad={(event) => {
               setIsImageLoaded(true);
               if (isDebugEnabled()) {
                 const { width, height } = event.nativeEvent.source;
-                console.log(
-                  `Manhwa Image ${image.pageNumber}: ${width}x${height}, calculated height: ${imageHeight}`
-                );
+                logger().debug('UI', 'Manhwa image loaded', {
+                  pageNumber: image.pageNumber,
+                  width,
+                  height,
+                  calculatedHeight: imageHeight,
+                });
               }
             }}
             onLoadStart={() => setIsImageLoaded(false)}
@@ -172,9 +178,7 @@ export default function ReadChapterScreen() {
   const navigationTimestampRef = useRef<number>(0);
   const lastNavigatedChapterRef = useRef<string>('');
   const chapterListSwipeTranslateY = useRef(new Animated.Value(0)).current;
-  const chapterListOverlayOpacity = useRef(
-    new Animated.Value(1)
-  ).current;
+  const chapterListOverlayOpacity = useRef(new Animated.Value(1)).current;
 
   const chapterListHeaderPanRef = useRef(
     PanResponder.create({
@@ -212,8 +216,6 @@ export default function ReadChapterScreen() {
       },
     })
   ).current;
-
-
 
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;
@@ -451,7 +453,7 @@ export default function ReadChapterScreen() {
       );
       setMangaTitle(title);
     } catch (error) {
-      console.error('Error marking chapter as read:', error);
+      logger().error('Service', 'Error marking chapter as read', { error });
     }
   }, [id, chapterNumber, normalizedChapterParam]);
 
@@ -484,7 +486,11 @@ export default function ReadChapterScreen() {
             }
           },
           (error) => {
-            console.error('Error getting image size:', error);
+            logger().error(
+              'UI',
+              'Error getting image size for content detection',
+              { error }
+            );
             loadedCount++;
             if (loadedCount === sampleSize) {
               // Default to manga if we can't determine
@@ -524,12 +530,16 @@ export default function ReadChapterScreen() {
             setContentType(type);
 
             if (isDebugEnabled()) {
-              console.log(
-                `📱 Using downloaded chapter ${chapterNumber} with ${images.length} images (${type} style)`
-              );
+              logger().debug('UI', 'Using downloaded chapter', {
+                chapterNumber,
+                imageCount: images.length,
+                contentType: type,
+              });
             }
           } catch (error) {
-            console.error('Error detecting content type:', error);
+            logger().error('Service', 'Error detecting content type', {
+              error,
+            });
             // Fallback to manga mode
             setContentType('manga');
           }
@@ -539,7 +549,7 @@ export default function ReadChapterScreen() {
         setIsLoading(false);
       }
     } catch (error) {
-      console.error('Error fetching manga details:', error);
+      logger().error('Service', 'Error fetching manga details', { error });
     }
   }, [id, chapterNumber, detectContentType]);
 
@@ -612,14 +622,14 @@ export default function ReadChapterScreen() {
         const newChapterMatch = navState.url.match(/\/chapter-([\w.\-]+)/i);
         const matchedSegment = newChapterMatch?.[1];
         const normalizedTarget = normalizeChapterNumber(matchedSegment);
-        
+
         if (normalizedTarget) {
           // Add cooldown to prevent rapid redirects from the website
           // (MangaFire redirects to chapter 1.1 about 1 second after page load)
           const now = Date.now();
           const timeSinceLastNav = now - navigationTimestampRef.current;
           const cooldownPeriod = 3000; // 3 seconds
-          
+
           if (isDebugEnabled()) {
             log.debug('UI', 'NavigationStateChange detected', {
               target: normalizedTarget,
@@ -628,11 +638,13 @@ export default function ReadChapterScreen() {
               cooldownActive: timeSinceLastNav < cooldownPeriod,
             });
           }
-          
+
           // If we're within cooldown and trying to navigate to a DIFFERENT chapter, ignore it
-          if (timeSinceLastNav < cooldownPeriod && 
-              lastNavigatedChapterRef.current && 
-              normalizedTarget !== lastNavigatedChapterRef.current) {
+          if (
+            timeSinceLastNav < cooldownPeriod &&
+            lastNavigatedChapterRef.current &&
+            normalizedTarget !== lastNavigatedChapterRef.current
+          ) {
             log.warn('UI', 'Blocking rapid redirect (likely from website)', {
               from: lastNavigatedChapterRef.current,
               to: normalizedTarget,
@@ -640,11 +652,11 @@ export default function ReadChapterScreen() {
             });
             return; // Ignore this redirect
           }
-          
+
           // Update navigation tracking
           navigationTimestampRef.current = now;
           lastNavigatedChapterRef.current = normalizedTarget;
-          
+
           if (mangaTitle && id) {
             await markChapterAsRead(id, normalizedTarget, mangaTitle);
           }
@@ -666,8 +678,6 @@ export default function ReadChapterScreen() {
     closeChapterList();
     router.navigate(`/manga/${id}/chapter/${targetChapter}`);
   };
-
-
 
   const navigateChapter = (chapterOffset: number) => {
     if (!mangaDetails?.chapters || currentChapterIndex < 0) return;
@@ -699,8 +709,6 @@ export default function ReadChapterScreen() {
     // Ensure controls are visible after dismissing the guide
     showControls();
   };
-
-
 
   const injectedJS = `
   ${getInjectedJavaScript(Colors[colorScheme].card)}
@@ -750,7 +758,7 @@ export default function ReadChapterScreen() {
       const isTopControlArea = pageY < topControlThreshold;
 
       if (isDebugEnabled()) {
-        console.log('Downloaded chapter touch:', {
+        logger().debug('UI', 'Downloaded chapter touch', {
           x: pageX,
           y: pageY,
           windowHeight,
@@ -837,14 +845,19 @@ export default function ReadChapterScreen() {
             style={styles.mangaImage}
             resizeMode="contain"
             onError={(error) => {
-              console.error(`Failed to load image ${item.pageNumber}:`, error);
+              logger().error('UI', 'Failed to load image', {
+                pageNumber: item.pageNumber,
+                error,
+              });
             }}
             onLoad={(event) => {
               if (isDebugEnabled()) {
                 const { width, height } = event.nativeEvent.source;
-                console.log(
-                  `Manga Image ${item.pageNumber}: ${width}x${height}`
-                );
+                logger().debug('UI', 'Manga image loaded', {
+                  pageNumber: item.pageNumber,
+                  width,
+                  height,
+                });
               }
             }}
           />
@@ -1207,12 +1220,9 @@ export default function ReadChapterScreen() {
                         <TouchableOpacity
                           style={[
                             styles.chapterListItemButton,
-                            isCurrentChapter &&
-                              styles.chapterListItemCurrent,
+                            isCurrentChapter && styles.chapterListItemCurrent,
                           ]}
-                          onPress={() =>
-                            handleChapterPress(chapter.number)
-                          }
+                          onPress={() => handleChapterPress(chapter.number)}
                         >
                           <View style={styles.chapterListItemContent}>
                             <Text style={styles.chapterListItemNumber}>

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setMangaData, getMangaData } from './bookmarkService';
 import { fetchMangaDetails } from './mangaFireService';
 import { imageCache } from './CacheImages';
+import { logger } from '@/utils/logger';
 
 interface AppSettings {
   theme: 'light' | 'dark' | 'system';
@@ -54,7 +55,7 @@ export async function getAppSettings(): Promise<AppSettings> {
       downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
     };
   } catch (error) {
-    console.error('Error getting app settings:', error);
+    logger().error('Service', 'Error getting app settings', { error });
     return {
       theme: 'system',
       enableDebugTab: false,
@@ -69,7 +70,7 @@ export async function setAppSettings(settings: AppSettings): Promise<void> {
   try {
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (error) {
-    console.error('Error saving app settings:', error);
+    logger().error('Service', 'Error saving app settings', { error });
   }
 }
 
@@ -156,7 +157,7 @@ export async function refreshMangaImages(): Promise<{
             updatedCount++;
           }
         } catch (error) {
-          console.error(`Error updating manga ${mangaId}:`, error);
+          logger().error('Service', 'Error updating manga', { mangaId, error });
         }
       }
     }
@@ -166,7 +167,7 @@ export async function refreshMangaImages(): Promise<{
       message: `Updated images for ${updatedCount} manga out of ${mangaKeys.length} total`,
     };
   } catch (error) {
-    console.error('Error refreshing manga images:', error);
+    logger().error('Service', 'Error refreshing manga images', { error });
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Unknown error',
@@ -237,7 +238,7 @@ export async function migrateToNewStorage(): Promise<{
       message: `Successfully migrated ${bookmarkKeys.length} manga to new storage format`,
     };
   } catch (error) {
-    console.error('Error during migration:', error);
+    logger().error('Service', 'Error during migration', { error });
     return {
       success: false,
       message: `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -252,7 +253,7 @@ export async function getDownloadSettings(): Promise<DownloadSettings> {
     const appSettings = await getAppSettings();
     return appSettings.downloadSettings || DEFAULT_DOWNLOAD_SETTINGS;
   } catch (error) {
-    console.error('Error getting download settings:', error);
+    logger().error('Service', 'Error getting download settings', { error });
     return DEFAULT_DOWNLOAD_SETTINGS;
   }
 }
@@ -272,7 +273,7 @@ export async function updateDownloadSettings(
 
     await setAppSettings(appSettings);
   } catch (error) {
-    console.error('Error updating download settings:', error);
+    logger().error('Service', 'Error updating download settings', { error });
     throw error;
   }
 }
@@ -283,7 +284,7 @@ export async function resetDownloadSettings(): Promise<void> {
     appSettings.downloadSettings = DEFAULT_DOWNLOAD_SETTINGS;
     await setAppSettings(appSettings);
   } catch (error) {
-    console.error('Error resetting download settings:', error);
+    logger().error('Service', 'Error resetting download settings', { error });
     throw error;
   }
 }

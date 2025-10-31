@@ -5,6 +5,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MANGA_API_URL } from './constants/Config';
+import { logger } from './utils/logger';
 
 interface ChapterImage {
   url: string;
@@ -23,11 +24,11 @@ class ChapterDownloader {
    * In your actual app, this will be called from WebView's onShouldStartLoadWithRequest
    */
   captureAjaxRequest(url: string): CapturedRequest | null {
-    console.log('🔍 Checking URL:', url);
+    logger().debug('Network', 'Checking URL', { url });
 
     // Check if this is the AJAX request we're looking for
     if (url.includes('/ajax/read/chapter/')) {
-      console.log('✅ Found AJAX request!');
+      logger().info('Network', 'Found AJAX request');
 
       // Extract chapter ID and VRF token from URL
       // Example: https://mangafire.to/ajax/read/chapter/5438730?vrf=ZBYeRCjYBk0tkZnKW4kTuWBYw5Y1e-csvu6vYLUY4zeiviixfq7VJ6djZFHAZyMAbiWlOFhCoA
@@ -43,12 +44,16 @@ class ChapterDownloader {
         try {
           decodedToken = decodeURIComponent(rawVrfToken);
         } catch (decodeError) {
-          console.error('Failed to decode VRF token:', decodeError);
+          logger().error('Network', 'Failed to decode VRF token', {
+            error: decodeError,
+          });
           return null;
         }
 
-        console.log('   ↳ Chapter ID:', rawChapterId);
-        console.log('   ↳ VRF Token:', decodedToken.substring(0, 30) + '...');
+        logger().debug('Network', 'Extracted chapter details', {
+          chapterId: rawChapterId,
+          vrfTokenPreview: decodedToken.substring(0, 30) + '...',
+        });
 
         return {
           url,
@@ -67,22 +72,25 @@ class ChapterDownloader {
   async downloadChapterFromRequest(
     capturedRequest: CapturedRequest
   ): Promise<void> {
-    console.log('\n📥 Step 1: Fetching image panels from AJAX request...');
-    console.log('URL:', capturedRequest.url);
+    logger().info(
+      'Network',
+      'Step 1: Fetching image panels from AJAX request',
+      { url: capturedRequest.url }
+    );
 
     const images = await this.getImagePanels(capturedRequest.url);
 
     if (!images || images.length === 0) {
-      console.log('❌ No images found in response');
+      logger().warn('Network', 'No images found in response');
       return;
     }
 
-    console.log(`✅ Found ${images.length} images`);
+    logger().info('Network', 'Found images', { count: images.length });
 
-    console.log('\n💾 Step 2: Downloading images...');
+    logger().info('Storage', 'Step 2: Downloading images');
     await this.downloadImages(images);
 
-    console.log('\n🎉 Chapter download complete!');
+    logger().info('Storage', 'Chapter download complete');
   }
 
   private async getImagePanels(ajaxUrl: string): Promise<ChapterImage[]> {
@@ -99,8 +107,8 @@ class ChapterDownloader {
         timeout: 20000,
       });
 
-      console.log('✅ AJAX request successful');
-      console.log('Response:', JSON.stringify(response.data, null, 2));
+      logger().info('Network', 'AJAX request successful');
+      logger().debug('Network', 'Response data', response.data);
 
       if (response.data?.result?.images) {
         const images: ChapterImage[] = response.data.result.images.map(
@@ -115,11 +123,12 @@ class ChapterDownloader {
       return [];
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        console.error('❌ AJAX request failed');
-        console.error('Status:', error.response?.status);
-        console.error('Data:', error.response?.data);
+        logger().error('Network', 'AJAX request failed', {
+          status: error.response?.status,
+          data: error.response?.data,
+        });
       } else {
-        console.error('❌ Error:', error);
+        logger().error('Network', 'Request error', { error });
       }
       return [];
     }
@@ -131,15 +140,20 @@ class ChapterDownloader {
       fs.mkdirSync(downloadDir, { recursive: true });
     }
 
-    console.log(`Downloading to: ${downloadDir}`);
-    console.log('');
+    logger().info('Storage', 'Starting image downloads', {
+      downloadDir,
+      imageCount: images.length,
+    });
 
     let successCount = 0;
     let failCount = 0;
 
     for (const image of images) {
       try {
-        console.log(`📥 Downloading image ${image.index}/${images.length}...`);
+        logger().debug('Storage', 'Downloading image', {
+          current: image.index,
+          total: images.length,
+        });
 
         const response = await axios.get(image.url, {
           responseType: 'arraybuffer',
@@ -160,43 +174,40 @@ class ChapterDownloader {
         fs.writeFileSync(filepath, response.data);
 
         const sizeKB = (response.data.length / 1024).toFixed(2);
-        console.log(`   ✅ Saved: ${filename} (${sizeKB} KB)`);
+        logger().debug('Storage', 'Image saved', { filename, sizeKB });
         successCount++;
       } catch (error) {
-        console.error(
-          `   ❌ Failed to download image ${image.index}:`,
-          error instanceof Error ? error.message : error
-        );
+        logger().error('Storage', 'Failed to download image', {
+          imageIndex: image.index,
+          error: error instanceof Error ? error.message : error,
+        });
         failCount++;
       }
     }
 
-    console.log('');
-    console.log('📊 Download Summary:');
-    console.log(`   ✅ Success: ${successCount}`);
-    console.log(`   ❌ Failed: ${failCount}`);
-    console.log(`   📁 Location: ${downloadDir}`);
+    logger().info('Storage', 'Download Summary', {
+      success: successCount,
+      failed: failCount,
+      location: downloadDir,
+    });
   }
 }
 
 // Test with a known AJAX URL (you need to get this from browser DevTools)
 async function testWithManualUrl() {
-  console.log('🧪 Testing with manually captured AJAX URL');
-  console.log('='.repeat(80));
-  console.log('');
-  console.log('📋 INSTRUCTIONS:');
-  console.log(
+  logger().info('Service', 'Testing with manually captured AJAX URL');
+  logger().info('Service', 'INSTRUCTIONS:');
+  logger().info(
+    'Service',
     '1. Open Chrome and go to: https://mangafire.to/read/tonari-no-wakao-san-wa-miesou-de-mienai.yj820/en/chapter-17'
   );
-  console.log('2. Open DevTools (F12) and go to Network tab');
-  console.log(
+  logger().info('Service', '2. Open DevTools (F12) and go to Network tab');
+  logger().info(
+    'Service',
     '3. Look for a request like: GET /ajax/read/chapter/XXXXXXX?vrf=YYYYY'
   );
-  console.log('4. Right-click on it and "Copy > Copy URL"');
-  console.log('5. Paste the URL below and run this script again');
-  console.log('');
-  console.log('='.repeat(80));
-  console.log('');
+  logger().info('Service', '4. Right-click on it and "Copy > Copy URL"');
+  logger().info('Service', '5. Paste the URL below and run this script again');
 
   // PASTE THE CAPTURED URL HERE:
   const defaultAjaxUrl =
@@ -205,13 +216,13 @@ async function testWithManualUrl() {
   const capturedAjaxUrl: string = defaultAjaxUrl.trim();
 
   if (!capturedAjaxUrl) {
-    console.log(
-      '⚠️  No URL provided. Please capture the AJAX URL from browser DevTools.'
+    logger().warn(
+      'Service',
+      'No URL provided. Please capture the AJAX URL from browser DevTools.'
     );
-    console.log('');
-    console.log('Example URL format:');
-    console.log(
-      'https://mangafire.to/ajax/read/chapter/5438730?vrf=ZBYeRCjYBk0...'
+    logger().info(
+      'Service',
+      'Example URL format: https://mangafire.to/ajax/read/chapter/5438730?vrf=ZBYeRCjYBk0...'
     );
     return;
   }
@@ -222,27 +233,33 @@ async function testWithManualUrl() {
   if (captured) {
     await downloader.downloadChapterFromRequest(captured);
   } else {
-    console.log('❌ Invalid AJAX URL format');
+    logger().error('Service', 'Invalid AJAX URL format');
   }
 }
 
 // Simulate how it will work in the actual app
 async function simulateWebViewFlow() {
-  console.log('📱 Simulating WebView Request Interception Flow');
-  console.log('='.repeat(80));
-  console.log('');
-  console.log('This is how it will work in your React Native app:');
-  console.log('');
-  console.log('1. User opens chapter in WebView');
-  console.log('2. WebView loads the page and makes requests');
-  console.log('3. onShouldStartLoadWithRequest intercepts ALL requests');
-  console.log('4. We check each request URL for /ajax/read/chapter/');
-  console.log('5. When found, extract chapter ID and VRF token');
-  console.log('6. Make the AJAX request ourselves to get image URLs');
-  console.log('7. Download images using React Native FileSystem');
-  console.log('');
-  console.log('='.repeat(80));
-  console.log('');
+  logger().info('Service', 'Simulating WebView Request Interception Flow');
+  logger().info(
+    'Service',
+    'This is how it will work in your React Native app:'
+  );
+  logger().info('Service', '1. User opens chapter in WebView');
+  logger().info('Service', '2. WebView loads the page and makes requests');
+  logger().info(
+    'Service',
+    '3. onShouldStartLoadWithRequest intercepts ALL requests'
+  );
+  logger().info(
+    'Service',
+    '4. We check each request URL for /ajax/read/chapter/'
+  );
+  logger().info('Service', '5. When found, extract chapter ID and VRF token');
+  logger().info(
+    'Service',
+    '6. Make the AJAX request ourselves to get image URLs'
+  );
+  logger().info('Service', '7. Download images using React Native FileSystem');
 
   // Simulate intercepting various requests
   const downloader = new ChapterDownloader();
@@ -253,15 +270,15 @@ async function simulateWebViewFlow() {
     'https://mangafire.to/assets/style.css',
   ];
 
-  console.log('Simulating WebView intercepting requests...');
-  console.log('');
+  logger().info('Service', 'Simulating WebView intercepting requests');
 
   for (const url of testUrls) {
     const captured = downloader.captureAjaxRequest(url);
     if (captured) {
-      console.log('');
-      console.log('🎯 Found the AJAX request! Now downloading chapter...');
-      console.log('');
+      logger().info(
+        'Service',
+        'Found the AJAX request! Now downloading chapter'
+      );
       await downloader.downloadChapterFromRequest(captured);
       break;
     }
@@ -270,9 +287,7 @@ async function simulateWebViewFlow() {
 
 // Main execution
 async function main() {
-  console.log('🚀 Chapter Download Debug Script');
-  console.log('='.repeat(80));
-  console.log('');
+  logger().info('Service', 'Chapter Download Debug Script');
 
   const mode = (process.env.DEBUG_DOWNLOAD_MODE ?? 'simulate').toLowerCase();
 
@@ -282,36 +297,37 @@ async function main() {
     await simulateWebViewFlow();
   }
 
-  console.log('');
-  console.log('='.repeat(80));
-  console.log('📝 IMPLEMENTATION NOTES FOR YOUR APP:');
-  console.log('='.repeat(80));
-  console.log('');
-  console.log('In your React Native WebView component:');
-  console.log('');
-  console.log('<WebView');
-  console.log('  source={{ uri: chapterUrl }}');
-  console.log('  onShouldStartLoadWithRequest={(request) => {');
-  console.log('    // Check if this is the AJAX request');
-  console.log('    if (request.url.includes("/ajax/read/chapter/")) {');
-  console.log('      // Extract chapter ID and VRF token');
-  console.log(
+  logger().info('Service', 'IMPLEMENTATION NOTES FOR YOUR APP:');
+  logger().info('Service', 'In your React Native WebView component:');
+  logger().info('Service', '<WebView');
+  logger().info('Service', '  source={{ uri: chapterUrl }}');
+  logger().info('Service', '  onShouldStartLoadWithRequest={(request) => {');
+  logger().info('Service', '    // Check if this is the AJAX request');
+  logger().info(
+    'Service',
+    '    if (request.url.includes("/ajax/read/chapter/")) {'
+  );
+  logger().info('Service', '      // Extract chapter ID and VRF token');
+  logger().info(
+    'Service',
     '      const match = request.url.match(/\\/ajax\\/read\\/chapter\\/(\\d+)\\?vrf=([^&]+)/);'
   );
-  console.log('      if (match) {');
-  console.log('        const chapterId = match[1];');
-  console.log('        const vrfToken = decodeURIComponent(match[2]);');
-  console.log('        // Start download process');
-  console.log('        downloadChapter(chapterId, vrfToken);');
-  console.log('      }');
-  console.log('    }');
-  console.log('    return true; // Allow the request to continue');
-  console.log('  }}');
-  console.log('/>');
-  console.log('');
+  logger().info('Service', '      if (match) {');
+  logger().info('Service', '        const chapterId = match[1];');
+  logger().info(
+    'Service',
+    '        const vrfToken = decodeURIComponent(match[2]);'
+  );
+  logger().info('Service', '        // Start download process');
+  logger().info('Service', '        downloadChapter(chapterId, vrfToken);');
+  logger().info('Service', '      }');
+  logger().info('Service', '    }');
+  logger().info('Service', '    return true; // Allow the request to continue');
+  logger().info('Service', '  }}');
+  logger().info('Service', '/>');
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  logger().error('Service', 'Fatal error', { error });
   process.exit(1);
 });
