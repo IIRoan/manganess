@@ -54,6 +54,8 @@ import { isDebugEnabled } from '@/constants/env';
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
+const DEFAULT_MANHWA_PLACEHOLDER_HEIGHT =
+  Dimensions.get('window').height * 0.75;
 
 // Helper function to ensure touchable size
 const ensureMinimumSize = (size: number) => {
@@ -73,7 +75,9 @@ const ManhwaImage = React.memo(
     colorScheme: ColorScheme;
     onError: (pageNumber: number) => void;
   }) => {
-    const [imageHeight, setImageHeight] = useState<number>(400); // Default height
+    const [imageHeight, setImageHeight] = useState<number>(
+      DEFAULT_MANHWA_PLACEHOLDER_HEIGHT
+    );
     const [isImageLoaded, setIsImageLoaded] = useState(false);
 
     const isPlaceholder = !image.localPath;
@@ -96,6 +100,7 @@ const ManhwaImage = React.memo(
           }
         );
       } else {
+        setImageHeight(DEFAULT_MANHWA_PLACEHOLDER_HEIGHT);
         setIsImageLoaded(false);
       }
     }, [image.localPath]);
