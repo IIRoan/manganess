@@ -4,8 +4,8 @@
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
-import { MANGA_API_URL } from './constants/Config';
-import { logger } from './utils/logger';
+import { MANGA_API_URL } from '../constants/Config';
+import { logger } from '../utils/logger';
 
 interface ChapterImage {
   url: string;

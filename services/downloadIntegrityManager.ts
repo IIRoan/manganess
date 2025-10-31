@@ -37,7 +37,7 @@ export interface AutoRepairResult {
 class DownloadIntegrityManager {
   private static instance: DownloadIntegrityManager;
   private log = logger();
-  private validationScheduler: NodeJS.Timeout | null = null;
+  private validationScheduler: ReturnType<typeof setInterval> | null = null;
   private ongoingValidations: Set<string> = new Set();
   private lastFullValidation: number = 0;
 
