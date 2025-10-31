@@ -269,6 +269,10 @@ class TemporaryImageCacheService {
 
     await this.ensureTempDirectory(chapterDir, preserveExistingFiles);
 
+    if (progressCallback) {
+      progressCallback([], totalImages);
+    }
+
     for (const image of images) {
       const fileName = `page_${image.pageNumber
         .toString()

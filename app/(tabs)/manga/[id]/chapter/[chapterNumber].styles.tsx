@@ -317,6 +317,9 @@ export default function getStyles(colorScheme: ColorScheme) {
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: colors.text + '10',
+      borderWidth: 1,
+      borderColor: colors.border + '40',
+      borderRadius: 12,
     },
 
     // Downloaded chapter styles - Manga (page-by-page)
