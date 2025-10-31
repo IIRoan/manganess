@@ -46,6 +46,16 @@ describe('settingsService', () => {
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
+      downloadSettings: {
+        maxConcurrentDownloads: 3,
+        maxStorageSize: 2147483648,
+        autoDownloadBookmarked: false,
+        downloadQuality: 'original',
+        enableBackgroundDownloads: true,
+        storageWarningThreshold: 85,
+        autoCleanupEnabled: false,
+        autoCleanupDays: 30,
+      },
     });
   });
 
@@ -58,7 +68,19 @@ describe('settingsService', () => {
     };
     await setAppSettings(nextSettings);
     const result = await getAppSettings();
-    expect(result).toEqual(nextSettings);
+    expect(result).toEqual({
+      ...nextSettings,
+      downloadSettings: {
+        maxConcurrentDownloads: 3,
+        maxStorageSize: 2147483648,
+        autoDownloadBookmarked: false,
+        downloadQuality: 'original',
+        enableBackgroundDownloads: true,
+        storageWarningThreshold: 85,
+        autoCleanupEnabled: false,
+        autoCleanupDays: 30,
+      },
+    });
   });
 
   it('updates individual toggles via helpers', async () => {

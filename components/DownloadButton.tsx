@@ -65,46 +65,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Load initial download status with throttling
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      loadDownloadStatus();
-    }, 100); // Small delay to prevent blocking
-
-    return () => clearTimeout(timeoutId);
-  }, [mangaId, chapterNumber]);
-
-  // Set up progress listener when downloading
-  useEffect(() => {
-    if (downloadStatus === DownloadStatus.DOWNLOADING) {
-      const downloadId = generateDownloadId(mangaId, chapterNumber);
-      const unsubscribe = downloadManagerService.addProgressListener(
-        downloadId,
-        handleProgressUpdate
-      );
-
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-        // Cleanup state
-        setProgress(0);
-        setEstimatedTime(undefined);
-      };
-    }
-    return undefined;
-  }, [downloadStatus, mangaId, chapterNumber]);
-
-  // Animate progress changes
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: progress / 100,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [progress]);
-
-  const loadDownloadStatus = async () => {
+  const loadDownloadStatus = React.useCallback(async () => {
     try {
       setIsLoading(true);
       const status = await downloadManagerService.getDownloadStatus(
@@ -133,20 +94,63 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [mangaId, chapterNumber, log]);
 
-  const handleProgressUpdate = (progressUpdate: DownloadProgress) => {
-    setProgress(progressUpdate.progress);
-    setEstimatedTime(progressUpdate.estimatedTimeRemaining);
+  const handleProgressUpdate = React.useCallback(
+    (progressUpdate: DownloadProgress) => {
+      setProgress(progressUpdate.progress);
+      setEstimatedTime(progressUpdate.estimatedTimeRemaining);
 
-    if (progressUpdate.status === DownloadStatus.COMPLETED) {
-      setDownloadStatus(DownloadStatus.COMPLETED);
-      onDownloadComplete?.();
-    } else if (progressUpdate.status === DownloadStatus.FAILED) {
-      setDownloadStatus(DownloadStatus.FAILED);
-      onDownloadError?.('Download failed');
+      if (progressUpdate.status === DownloadStatus.COMPLETED) {
+        setDownloadStatus(DownloadStatus.COMPLETED);
+        onDownloadComplete?.();
+      } else if (progressUpdate.status === DownloadStatus.FAILED) {
+        setDownloadStatus(DownloadStatus.FAILED);
+        onDownloadError?.('Download failed');
+      }
+    },
+    [onDownloadComplete, onDownloadError]
+  );
+
+  // Load initial download status with throttling
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadDownloadStatus();
+    }, 100); // Small delay to prevent blocking
+
+    return () => clearTimeout(timeoutId);
+  }, [loadDownloadStatus]);
+
+  // Set up progress listener when downloading
+  useEffect(() => {
+    if (downloadStatus === DownloadStatus.DOWNLOADING) {
+      const downloadId = generateDownloadId(mangaId, chapterNumber);
+      const unsubscribe = downloadManagerService.addProgressListener(
+        downloadId,
+        handleProgressUpdate
+      );
+
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+        // Cleanup state
+        setProgress(0);
+        setEstimatedTime(undefined);
+      };
     }
-  };
+    return undefined;
+  }, [downloadStatus, mangaId, chapterNumber, handleProgressUpdate]);
+
+  // Animate progress changes
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progress / 100,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress]);
 
   const handlePress = async () => {
     if (disabled || isLoading) return;

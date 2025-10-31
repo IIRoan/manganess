@@ -404,6 +404,47 @@ export default function ReadChapterScreen() {
     }
   }, [id, chapterNumber, normalizedChapterParam]);
 
+  // Detect content type based on image dimensions
+  const detectContentType = useCallback((images: ChapterImage[]) => {
+    if (!images || images.length === 0) return 'manga';
+
+    // Sample first few images to determine content type
+    const sampleSize = Math.min(3, images.length);
+    let tallImageCount = 0;
+
+    return new Promise<'manhwa' | 'manga'>((resolve) => {
+      let loadedCount = 0;
+
+      images.slice(0, sampleSize).forEach((image) => {
+        Image.getSize(
+          image.localPath || '',
+          (width, height) => {
+            const aspectRatio = height / width;
+            // If aspect ratio > 1.5, consider it a tall manhwa-style image
+            if (aspectRatio > 1.5) {
+              tallImageCount++;
+            }
+
+            loadedCount++;
+            if (loadedCount === sampleSize) {
+              // If majority of sampled images are tall, it's manhwa
+              const isManhwa = tallImageCount >= sampleSize / 2;
+              resolve(isManhwa ? 'manhwa' : 'manga');
+            }
+          },
+          (error) => {
+            console.error('Error getting image size:', error);
+            loadedCount++;
+            if (loadedCount === sampleSize) {
+              // Default to manga if we can't determine
+              resolve('manga');
+            }
+          }
+        );
+      });
+    });
+  }, []);
+
   const fetchDetails = useCallback(async () => {
     try {
       const details = await fetchMangaDetails(id);
@@ -449,7 +490,7 @@ export default function ReadChapterScreen() {
     } catch (error) {
       console.error('Error fetching manga details:', error);
     }
-  }, [id, chapterNumber]);
+  }, [id, chapterNumber, detectContentType]);
 
   useEffect(() => {
     markChapterAsReadWithFallback();
@@ -669,47 +710,6 @@ export default function ReadChapterScreen() {
 
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
-
-  // Detect content type based on image dimensions
-  const detectContentType = useCallback((images: ChapterImage[]) => {
-    if (!images || images.length === 0) return 'manga';
-
-    // Sample first few images to determine content type
-    const sampleSize = Math.min(3, images.length);
-    let tallImageCount = 0;
-
-    return new Promise<'manhwa' | 'manga'>((resolve) => {
-      let loadedCount = 0;
-
-      images.slice(0, sampleSize).forEach((image) => {
-        Image.getSize(
-          image.localPath || '',
-          (width, height) => {
-            const aspectRatio = height / width;
-            // If aspect ratio > 1.5, consider it a tall manhwa-style image
-            if (aspectRatio > 1.5) {
-              tallImageCount++;
-            }
-
-            loadedCount++;
-            if (loadedCount === sampleSize) {
-              // If majority of sampled images are tall, it's manhwa
-              const isManhwa = tallImageCount >= sampleSize / 2;
-              resolve(isManhwa ? 'manhwa' : 'manga');
-            }
-          },
-          (error) => {
-            console.error('Error getting image size:', error);
-            loadedCount++;
-            if (loadedCount === sampleSize) {
-              // Default to manga if we can't determine
-              resolve('manga');
-            }
-          }
-        );
-      });
-    });
-  }, []);
 
   // Touch handler for downloaded chapters (replicates WebView behavior)
   const handleDownloadedChapterTouch = useCallback(
