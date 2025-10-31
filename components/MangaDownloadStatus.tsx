@@ -42,21 +42,7 @@ const MangaDownloadStatus: React.FC<MangaDownloadStatusProps> = ({
   const [stats, setStats] = useState<MangaDownloadStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadDownloadStats();
-
-    // Set up periodic refresh for active downloads
-    const interval = setInterval(() => {
-      // Use a ref or callback to avoid dependency on stats
-      loadDownloadStats();
-    }, 5000); // Increased interval to reduce load
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [mangaId]); // Removed stats dependency to prevent infinite loop
-
-  const loadDownloadStats = async () => {
+  const loadDownloadStats = React.useCallback(async () => {
     try {
       setLoading(true);
 
@@ -106,7 +92,20 @@ const MangaDownloadStatus: React.FC<MangaDownloadStatusProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [mangaId]);
+
+  useEffect(() => {
+    loadDownloadStats();
+
+    // Set up periodic refresh for active downloads
+    const interval = setInterval(() => {
+      loadDownloadStats();
+    }, 5000); // Increased interval to reduce load
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [loadDownloadStats]);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';

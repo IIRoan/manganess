@@ -18,6 +18,7 @@ jest.mock('@/utils/performance', () => ({
 jest.mock('@/utils/logger', () => ({
   logger: () => ({
     info: jest.fn(),
+    warn: jest.fn(),
     error: jest.fn(),
   }),
 }));
@@ -91,8 +92,15 @@ describe('mangaFireService', () => {
       data: '<html>cf-browser-verification</html>',
     });
 
-    await expect(searchManga('test')).rejects.toBeInstanceOf(
-      CloudflareDetectedError
-    );
+    try {
+      await searchManga('test');
+      fail('Should have thrown CloudflareDetectedError');
+    } catch (error) {
+      // The error should be CloudflareDetectedError with proper message
+      expect(error).toBeInstanceOf(CloudflareDetectedError);
+      expect((error as CloudflareDetectedError).message).toContain(
+        'Cloudflare verification detected'
+      );
+    }
   });
 });

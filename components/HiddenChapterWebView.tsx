@@ -33,9 +33,13 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
   const interceptedRef = useRef(false);
 
   // Ensure we have a full URL
-  const fullUrl = chapterUrl.startsWith('http')
-    ? chapterUrl
-    : `https://mangafire.to${chapterUrl}`;
+  const fullUrl = React.useMemo(
+    () =>
+      chapterUrl.startsWith('http')
+        ? chapterUrl
+        : `https://mangafire.to${chapterUrl}`,
+    [chapterUrl]
+  );
 
   useEffect(() => {
     if (isDebugEnabled()) {
@@ -100,7 +104,8 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
         });
       }
     };
-  }, [chapterUrl, timeout]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterUrl, timeout, onRequestIntercepted, onTimeout]);
 
   const handleShouldStartLoadWithRequest = (request: any): boolean => {
     if (isDebugEnabled()) {
