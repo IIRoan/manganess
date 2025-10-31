@@ -1,4 +1,5 @@
 // Simple runner for the MangaFire API debug script
+import { logger } from './utils/logger';
 
 interface DebugStepResult {
   success: boolean;
@@ -11,27 +12,29 @@ async function debugMangaFireAPI(): Promise<DebugStepResult[]> {
 
 async function runDebug() {
   try {
-    console.log('🔧 MangaFire API Debug Runner');
-    console.log('Starting debug process...\n');
+    logger().info('Service', 'MangaFire API Debug Runner');
+    logger().info('Service', 'Starting debug process');
 
     const results = await debugMangaFireAPI();
 
-    console.log('\n' + '='.repeat(50));
-    console.log('🏁 Debug process completed!');
+    logger().info('Service', 'Debug process completed');
 
     const successful = results.filter((r) => r.success).length;
     const total = results.length;
 
-    console.log(`📊 Success rate: ${successful}/${total} steps`);
+    logger().info('Service', 'Success rate', { successful, total });
 
     if (successful === total) {
-      console.log('🎉 All steps completed successfully!');
-      console.log('The MangaFire API integration should now work.');
+      logger().info('Service', 'All steps completed successfully');
+      logger().info('Service', 'The MangaFire API integration should now work');
     } else {
-      console.log('⚠️  Some steps failed. Check the logs above for details.');
+      logger().warn(
+        'Service',
+        'Some steps failed. Check the logs above for details'
+      );
     }
   } catch (error) {
-    console.error('💥 Fatal error:', error);
+    logger().error('Service', 'Fatal error', { error });
   }
 }
 

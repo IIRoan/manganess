@@ -28,6 +28,7 @@ import {
   parseMostViewedManga,
   parseNewReleases,
 } from '@/services/mangaFireService';
+import { logger } from '@/utils/logger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
@@ -104,7 +105,7 @@ export default function HomeScreen() {
         setFeaturedManga(parsedMostViewed[0] || null);
       }
     } catch (error) {
-      console.error('Error fetching manga data:', error);
+      logger().error('Service', 'Error fetching manga data', { error });
       setError(
         'An error occurred while fetching manga data. Please try again.'
       );
@@ -126,7 +127,9 @@ export default function HomeScreen() {
 
       setRecentlyReadManga(processedManga);
     } catch (error) {
-      console.error('Error fetching recently read manga:', error);
+      logger().error('Service', 'Error fetching recently read manga', {
+        error,
+      });
     } finally {
       setIsRecentMangaLoading(false);
     }

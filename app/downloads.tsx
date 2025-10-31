@@ -27,6 +27,7 @@ import BackButton from '@/components/BackButton';
 import { File, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
+import { logger } from '@/utils/logger';
 
 interface MangaDownloadInfo {
   mangaId: string;
@@ -67,7 +68,7 @@ export default function DownloadsScreen() {
       const stats = await imageCache.getCacheStats();
       setCacheStats(stats);
     } catch (error) {
-      console.error('Error loading cache stats:', error);
+      logger().error('Storage', 'Error loading cache stats', { error });
     }
   }, []);
 
@@ -102,7 +103,7 @@ export default function DownloadsScreen() {
       setMangaDownloads(mangaList);
       await fetchCacheStats();
     } catch (error) {
-      console.error('Error loading downloads:', error);
+      logger().error('Storage', 'Error loading downloads', { error });
       Alert.alert('Error', 'Failed to load downloads');
     } finally {
       setIsLoading(false);
@@ -139,7 +140,7 @@ export default function DownloadsScreen() {
               // Reload downloads
               await loadDownloads();
             } catch (error) {
-              console.error('Error deleting manga:', error);
+              logger().error('Storage', 'Error deleting manga', { error });
               Alert.alert('Error', 'Failed to delete chapters');
             } finally {
               setDeletingManga((prev) => {
@@ -169,7 +170,9 @@ export default function DownloadsScreen() {
               await chapterStorageService.clearAllDownloads();
               await loadDownloads();
             } catch (error) {
-              console.error('Error clearing all downloads:', error);
+              logger().error('Storage', 'Error clearing all downloads', {
+                error,
+              });
               Alert.alert('Error', 'Failed to clear downloads');
             } finally {
               setIsLoading(false);
@@ -209,7 +212,10 @@ export default function DownloadsScreen() {
                   `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully.`
                 );
               } catch (error) {
-                console.error('Error clearing cache:', error);
+                logger().error('Storage', 'Error clearing cache', {
+                  error,
+                  contextName,
+                });
                 Alert.alert('Error', `Failed to clear ${contextName}.`);
               } finally {
                 setIsCacheLoading(false);
@@ -228,7 +234,7 @@ export default function DownloadsScreen() {
       setIsCacheLoading(true);
       await fetchCacheStats();
     } catch (error) {
-      console.error('Error refreshing cache stats:', error);
+      logger().error('Storage', 'Error refreshing cache stats', { error });
       Alert.alert('Error', 'Failed to refresh cache stats');
     } finally {
       setIsCacheLoading(false);
@@ -259,7 +265,7 @@ export default function DownloadsScreen() {
         Alert.alert('Export Complete', `File saved to ${file.uri}`);
       }
     } catch (error) {
-      console.error('Export error:', error);
+      logger().error('Service', 'Export error', { error });
       Alert.alert('Error', 'Failed to export data');
     } finally {
       setIsExporting(false);
@@ -292,9 +298,12 @@ export default function DownloadsScreen() {
                 try {
                   setIsImporting(true);
                   await importAppData(importedData);
-                  Alert.alert('Success', 'Data imported! Please restart the app');
+                  Alert.alert(
+                    'Success',
+                    'Data imported! Please restart the app'
+                  );
                 } catch (error) {
-                  console.error('Import error:', error);
+                  logger().error('Service', 'Import error', { error });
                   Alert.alert('Error', 'Failed to import data');
                 } finally {
                   setIsImporting(false);
@@ -305,7 +314,7 @@ export default function DownloadsScreen() {
         ]
       );
     } catch (error) {
-      console.error('Import error:', error);
+      logger().error('Service', 'Import error', { error });
       Alert.alert('Error', 'Failed to import data');
     }
   };
@@ -326,7 +335,7 @@ export default function DownloadsScreen() {
                 await loadDownloads();
                 Alert.alert('Success', 'All app data has been cleared.');
               } catch (error) {
-                console.error('Error clearing app data:', error);
+                logger().error('Service', 'Error clearing app data', { error });
                 Alert.alert('Error', 'Failed to clear app data.');
               } finally {
                 setIsClearingData(false);
@@ -344,7 +353,7 @@ export default function DownloadsScreen() {
       const result = await refreshMangaImages();
       Alert.alert(result.success ? 'Success' : 'Error', result.message);
     } catch (error) {
-      console.error('Error refreshing manga images:', error);
+      logger().error('Service', 'Error refreshing manga images', { error });
       Alert.alert('Error', 'Failed to refresh manga images');
     } finally {
       setIsRefreshingImages(false);
@@ -360,7 +369,7 @@ export default function DownloadsScreen() {
         await loadDownloads();
       }
     } catch (error) {
-      console.error('Error migrating data:', error);
+      logger().error('Service', 'Error migrating data', { error });
       Alert.alert('Error', 'Failed to migrate data');
     } finally {
       setIsMigrating(false);
@@ -488,11 +497,7 @@ export default function DownloadsScreen() {
           >
             <View style={styles.cardActionContent}>
               <View style={styles.cardActionIcon}>
-                <Ionicons
-                  name="images-outline"
-                  size={20}
-                  color={colors.text}
-                />
+                <Ionicons name="images-outline" size={20} color={colors.text} />
               </View>
               <Text style={styles.cardActionText}>Clear Search Cache</Text>
             </View>
@@ -549,7 +554,9 @@ export default function DownloadsScreen() {
             disabled={isCacheLoading}
           >
             <View style={styles.cardActionContent}>
-              <View style={[styles.cardActionIcon, styles.cardActionIconWarning]}>
+              <View
+                style={[styles.cardActionIcon, styles.cardActionIconWarning]}
+              >
                 <Ionicons
                   name="trash-outline"
                   size={20}
@@ -649,11 +656,7 @@ export default function DownloadsScreen() {
           >
             <View style={styles.cardActionContent}>
               <View style={styles.cardActionIcon}>
-                <Ionicons
-                  name="cloud-upload"
-                  size={20}
-                  color={colors.text}
-                />
+                <Ionicons name="cloud-upload" size={20} color={colors.text} />
               </View>
               <Text style={styles.cardActionText}>Import App Data</Text>
             </View>
@@ -679,12 +682,10 @@ export default function DownloadsScreen() {
             disabled={isClearingData}
           >
             <View style={styles.cardActionContent}>
-              <View style={[styles.cardActionIcon, styles.cardActionIconDanger]}>
-                <Ionicons
-                  name="trash-outline"
-                  size={20}
-                  color={colors.error}
-                />
+              <View
+                style={[styles.cardActionIcon, styles.cardActionIconDanger]}
+              >
+                <Ionicons name="trash-outline" size={20} color={colors.error} />
               </View>
               <Text style={[styles.cardActionText, styles.cardActionDanger]}>
                 Clear App Data
@@ -744,11 +745,7 @@ export default function DownloadsScreen() {
           >
             <View style={styles.cardActionContent}>
               <View style={styles.cardActionIcon}>
-                <Ionicons
-                  name="sync-outline"
-                  size={20}
-                  color={colors.text}
-                />
+                <Ionicons name="sync-outline" size={20} color={colors.text} />
               </View>
               <Text style={styles.cardActionText}>Migrate Storage Format</Text>
             </View>

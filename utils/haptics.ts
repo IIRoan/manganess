@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
+import { logger } from './logger';
 
 export enum HapticType {
   Light = 'light',
@@ -66,7 +67,7 @@ class HapticFeedbackService {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch (error) {
-      console.warn('Haptic feedback failed:', error);
+      logger().warn('UI', 'Haptic feedback failed', { error });
     }
   }
 

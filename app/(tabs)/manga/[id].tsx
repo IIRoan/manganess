@@ -48,8 +48,8 @@ import LastReadChapterBar from '@/components/LastReadChapterBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '@/utils/haptics';
 import getStyles from './[id].styles';
-import { useMangaImageCache } from '@/services/CacheImages';
 import { logger } from '@/utils/logger';
+import { useMangaImageCache } from '@/services/CacheImages';
 import { isDebugEnabled } from '@/constants/env';
 import type {
   AlertConfig,
@@ -82,7 +82,9 @@ const MangaBannerImage: React.FC<{
     <Image
       source={{ uri: cachedBannerPath }}
       style={style}
-      onError={(error) => console.error('Error loading banner image:', error)}
+      onError={(error) =>
+        logger().error('UI', 'Error loading banner image', { error })
+      }
       onLoadStart={() => {
         if (isDebugEnabled()) {
           imgStartRef.current =
@@ -178,7 +180,9 @@ export default function MangaDetailScreen() {
         prev.filter((chapter) => !chapters.includes(chapter))
       );
     } catch (refreshError) {
-      console.error('Error loading downloaded chapters:', refreshError);
+      logger().error('Storage', 'Error loading downloaded chapters', {
+        error: refreshError,
+      });
     }
   }, [id]);
 
@@ -203,12 +207,16 @@ export default function MangaDetailScreen() {
 
       setDownloadingChapters((previous) => {
         const downloadedSet = new Set(downloadedChaptersRef.current);
-        const carryOver = previous.filter((chapter) => !downloadedSet.has(chapter));
+        const carryOver = previous.filter(
+          (chapter) => !downloadedSet.has(chapter)
+        );
         const combined = new Set([...carryOver, ...activeChapterNumbers]);
         return Array.from(combined);
       });
     } catch (refreshError) {
-      console.error('Error loading active downloads:', refreshError);
+      logger().error('Storage', 'Error loading active downloads', {
+        error: refreshError,
+      });
     }
   }, [id]);
 
@@ -269,7 +277,7 @@ export default function MangaDetailScreen() {
             await refreshDownloadedChapters();
             await refreshDownloadingChapters();
           } catch (error) {
-            console.error('Error fetching data:', error);
+            logger().error('Service', 'Error fetching data', { error });
             setError('Failed to load manga details. Please try again.');
           } finally {
             setIsLoading(false);
@@ -784,9 +792,7 @@ export default function MangaDetailScreen() {
                       refreshDownloadingChapters().catch(() => {});
                     }}
                     isDownloaded={downloadedChaptersSet.has(chapter.number)}
-                    isDownloading={
-                      downloadingChaptersSet.has(chapter.number)
-                    }
+                    isDownloading={downloadingChaptersSet.has(chapter.number)}
                     onDeleteDownload={() => {
                       handleDeleteDownload(chapter.number).catch(() => {});
                     }}

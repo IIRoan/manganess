@@ -1,5 +1,6 @@
 // Placeholder notification service for download operations
 // This can be expanded later with actual notification functionality
+import { logger } from '@/utils/logger';
 
 export interface DownloadNotification {
   id: string;
@@ -26,7 +27,7 @@ class DownloadNotificationService {
     chapterNumber: string
   ): Promise<void> {
     // Placeholder - implement actual notification logic
-    console.log(`Download started: ${mangaTitle} - Chapter ${chapterNumber}`);
+    logger().info('Service', 'Download started', { mangaTitle, chapterNumber });
   }
 
   async showDownloadCompleted(
@@ -34,7 +35,10 @@ class DownloadNotificationService {
     chapterNumber: string
   ): Promise<void> {
     // Placeholder - implement actual notification logic
-    console.log(`Download completed: ${mangaTitle} - Chapter ${chapterNumber}`);
+    logger().info('Service', 'Download completed', {
+      mangaTitle,
+      chapterNumber,
+    });
   }
 
   async showDownloadFailed(downloadItem: any, error: string): Promise<void>;

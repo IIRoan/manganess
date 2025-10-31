@@ -26,6 +26,7 @@ import { syncAllMangaWithAniList } from '@/services/anilistService';
 
 import Svg, { Path } from 'react-native-svg';
 import CustomColorPicker from '@/components/CustomColorPicker';
+import { logger } from '@/utils/logger';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -70,20 +71,24 @@ export default function SettingsScreen() {
   const loadEnableDebugTabSetting = async () => {
     try {
       const enabled = await getDebugTabEnabled();
-      console.log('Loaded enableDebugTab:', enabled);
+      logger().debug('Service', 'Loaded enableDebugTab', { enabled });
       setEnableDebugTab(enabled);
     } catch (error) {
-      console.error('Error loading enable debug tab setting:', error);
+      logger().error('Service', 'Error loading enable debug tab setting', {
+        error,
+      });
     }
   };
 
   const toggleEnableDebugTab = async (value: boolean) => {
     try {
       await setDebugTabEnabled(value);
-      console.log('Saved enableDebugTab:', value);
+      logger().debug('Service', 'Saved enableDebugTab', { value });
       setEnableDebugTab(value);
     } catch (error) {
-      console.error('Error toggling enable debug tab setting:', error);
+      logger().error('Service', 'Error toggling enable debug tab setting', {
+        error,
+      });
     }
   };
 
@@ -95,7 +100,7 @@ export default function SettingsScreen() {
         const userData = await AniListOAuth.getCurrentUser();
         setUser(userData.data.Viewer);
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        logger().error('Service', 'Error fetching user data', { error });
       }
     }
   };
@@ -109,7 +114,7 @@ export default function SettingsScreen() {
         Alert.alert('Success', 'Successfully logged in to AniList!');
       }
     } catch (error: unknown) {
-      console.error('AniList login error:', error);
+      logger().error('Service', 'AniList login error', { error });
       if (error instanceof Error) {
         if (error.message.includes('cancelled')) {
           Alert.alert('Cancelled', 'Login was cancelled by user');
@@ -128,7 +133,7 @@ export default function SettingsScreen() {
       await AniListOAuth.logout();
       setUser(null);
     } catch (error: unknown) {
-      console.error('AniList logout error:', error);
+      logger().error('Service', 'AniList logout error', { error });
       Alert.alert('Error', 'Failed to logout');
     }
   };
@@ -139,7 +144,7 @@ export default function SettingsScreen() {
       const results = await syncAllMangaWithAniList();
       Alert.alert('Sync Results', results.join('\n'));
     } catch (error) {
-      console.error('Error syncing manga:', error);
+      logger().error('Service', 'Error syncing manga', { error });
       Alert.alert(
         'Error',
         `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`

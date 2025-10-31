@@ -28,6 +28,7 @@ import {
 } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
 import { useDebounce } from '@/hooks/useDebounce';
+import { logger } from '@/utils/logger';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
@@ -133,7 +134,7 @@ export default function MangaSearchScreen() {
           }
           if (inFlightSeqRef.current !== seq) return; // ignore stale
           setError('Failed to fetch manga. Please try again.');
-          console.error(err);
+          logger().error('Service', 'Failed to fetch manga', { error: err });
         } finally {
           if (inFlightSeqRef.current === seq) setIsLoading(false);
         }

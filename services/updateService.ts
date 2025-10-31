@@ -1,5 +1,6 @@
 import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
+import { logger } from '@/utils/logger';
 
 export interface UpdateStatus {
   isChecking: boolean;
@@ -31,7 +32,7 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
       };
     }
 
-    console.log('Checking for updates...');
+    logger().info('Service', 'Checking for updates');
     const update = await Updates.checkForUpdateAsync();
 
     if (update.isAvailable) {
@@ -46,7 +47,7 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
       };
     }
   } catch (error) {
-    console.error('Error checking for update:', error);
+    logger().error('Service', 'Error checking for update', { error });
     return {
       success: false,
       message: `Error checking for updates: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -66,14 +67,14 @@ export const downloadUpdate = async (): Promise<UpdateResult> => {
       };
     }
 
-    console.log('Downloading update...');
+    logger().info('Service', 'Downloading update');
     await Updates.fetchUpdateAsync();
     return {
       success: true,
       message: 'Update downloaded successfully',
     };
   } catch (error) {
-    console.error('Error downloading update:', error);
+    logger().error('Service', 'Error downloading update', { error });
     return {
       success: false,
       message: `Error downloading update: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -93,7 +94,7 @@ export const applyUpdate = async (): Promise<UpdateResult> => {
       };
     }
 
-    console.log('Reloading app with update...');
+    logger().info('Service', 'Reloading app with update');
     await Updates.reloadAsync();
 
     return {
@@ -101,7 +102,7 @@ export const applyUpdate = async (): Promise<UpdateResult> => {
       message: 'Update applied successfully',
     };
   } catch (error) {
-    console.error('Error applying update:', error);
+    logger().error('Service', 'Error applying update', { error });
     return {
       success: false,
       message: `Error applying update: ${error instanceof Error ? error.message : 'Unknown error'}`,
