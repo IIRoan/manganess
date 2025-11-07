@@ -51,6 +51,8 @@ import getStyles from './[id].styles';
 import { logger } from '@/utils/logger';
 import { useMangaImageCache } from '@/services/CacheImages';
 import { isDebugEnabled } from '@/constants/env';
+import { useOffline } from '@/contexts/OfflineContext';
+import { offlineCacheService } from '@/services/offlineCacheService';
 import type {
   AlertConfig,
   Option,
@@ -73,14 +75,33 @@ const MangaBannerImage: React.FC<{
   mangaId: string;
   bannerUrl: string;
   style: any;
-}> = ({ mangaId, bannerUrl, style }) => {
+  isOffline: boolean;
+}> = ({ mangaId, bannerUrl, style, isOffline }) => {
   const log = logger();
   const imgStartRef = useRef<number | null>(null);
-  const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl);
+  const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl, {
+    enabled: !isOffline,
+  });
+
+  const hasLocalAsset = React.useMemo(() => {
+    if (typeof cachedBannerPath !== 'string') {
+      return false;
+    }
+    return (
+      cachedBannerPath.startsWith('file://') ||
+      cachedBannerPath.startsWith('content://')
+    );
+  }, [cachedBannerPath]);
+
+  const displayUri = cachedBannerPath || bannerUrl;
+
+  if (!displayUri || (isOffline && !hasLocalAsset)) {
+    return <View style={style} />;
+  }
 
   return (
     <Image
-      source={{ uri: cachedBannerPath }}
+      source={{ uri: displayUri }}
       style={style}
       onError={(error) =>
         logger().error('UI', 'Error loading banner image', { error })
@@ -165,6 +186,9 @@ export default function MangaDetailScreen() {
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
 
+  // Offline state
+  const { isOffline } = useOffline();
+
   const refreshDownloadedChapters = useCallback(async () => {
     if (typeof id !== 'string') {
       return;
@@ -241,8 +265,89 @@ export default function MangaDetailScreen() {
                     `Service:fetchMangaDetails:${id as string}`,
                     'Service',
                     async () => {
-                      const details = await fetchMangaDetails(id as string);
-                      setMangaDetails({ ...details, id: id as string });
+                      // If offline, try to load cached manga details
+                      if (isOffline) {
+                        const cachedDetails =
+                          await offlineCacheService.getCachedMangaDetails(
+                            id as string
+                          );
+                        if (cachedDetails) {
+                          // Filter chapters to only show downloaded ones when offline
+                          const downloadedChapters =
+                            await chapterStorageService.getDownloadedChapters(
+                              id as string
+                            );
+                          const filteredChapters =
+                            cachedDetails.chapters?.filter((chapter) =>
+                              downloadedChapters.includes(chapter.number)
+                            ) || [];
+
+                          setMangaDetails({
+                            ...cachedDetails,
+                            id: id as string,
+                            chapters: filteredChapters,
+                          });
+                          log.info(
+                            'Service',
+                            'Loaded cached manga details for offline mode',
+                            {
+                              mangaId: id,
+                              availableChapters: filteredChapters.length,
+                            }
+                          );
+                          return;
+                        } else {
+                          throw new Error(
+                            'No cached manga details available for offline viewing'
+                          );
+                        }
+                      }
+
+                      // Try to get cached details first for faster loading
+                      const cachedDetails =
+                        await offlineCacheService.getCachedMangaDetails(
+                          id as string
+                        );
+                      if (cachedDetails) {
+                        setMangaDetails({
+                          ...cachedDetails,
+                          id: id as string,
+                        });
+                        log.info('Service', 'Loaded cached manga details', {
+                          mangaId: id,
+                        });
+
+                        // Still fetch fresh data in background and update cache
+                        try {
+                          const freshDetails = await fetchMangaDetails(
+                            id as string
+                          );
+                          setMangaDetails({
+                            ...freshDetails,
+                            id: id as string,
+                          });
+                          await offlineCacheService.cacheMangaDetails(
+                            id as string,
+                            { ...freshDetails, id: id as string },
+                            cachedDetails.isBookmarked
+                          );
+                        } catch (backgroundError) {
+                          log.warn(
+                            'Service',
+                            'Failed to fetch fresh manga details, using cached',
+                            { error: backgroundError }
+                          );
+                        }
+                      } else {
+                        const details = await fetchMangaDetails(id as string);
+                        setMangaDetails({ ...details, id: id as string });
+
+                        // Cache the details for offline use
+                        await offlineCacheService.cacheMangaDetails(
+                          id as string,
+                          { ...details, id: id as string }
+                        );
+                      }
                     }
                   ),
                   log.measureAsync(
@@ -288,7 +393,7 @@ export default function MangaDetailScreen() {
       fetchData();
 
       return () => {};
-    }, [id, refreshDownloadedChapters, refreshDownloadingChapters])
+    }, [id, refreshDownloadedChapters, refreshDownloadingChapters, isOffline])
   );
 
   const handleSaveBookmark = useCallback(
@@ -522,6 +627,7 @@ export default function MangaDetailScreen() {
               mangaId={id as string}
               bannerUrl={mangaDetails.bannerImage}
               style={styles.bannerImage}
+              isOffline={isOffline}
             />
             <View style={styles.overlay} />
             <View style={styles.headerContent}>
@@ -692,6 +798,7 @@ export default function MangaDetailScreen() {
       styles,
       handleBookmark,
       handleLastReadChapterPress,
+      isOffline,
     ]
   );
 

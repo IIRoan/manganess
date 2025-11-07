@@ -558,6 +558,39 @@ class ImageCache {
     }
   }
 
+  async getCachedMangaImagePath(
+    mangaId: string,
+    currentUrl?: string
+  ): Promise<string | null> {
+    await this.initializeCache();
+
+    const existingEntry = Array.from(this.metadata.values()).find(
+      (entry) => entry.mangaId === mangaId && entry.context === 'manga'
+    );
+
+    if (!existingEntry) {
+      return null;
+    }
+
+    const file = new FSFile(existingEntry.cachedPath);
+    if (file.exists) {
+      existingEntry.lastAccessed = Date.now();
+      this.scheduleSaveMetadata();
+      return normalizeUri(file.uri);
+    }
+
+    // Remove stale metadata when the file no longer exists
+    const entryKey = Array.from(this.metadata.entries()).find(
+      ([_, entry]) => entry === existingEntry
+    )?.[0];
+    if (entryKey) {
+      this.metadata.delete(entryKey);
+      this.scheduleSaveMetadata();
+    }
+
+    return currentUrl ?? existingEntry.originalUrl ?? null;
+  }
+
   // Download-specific cache methods
   async cacheChapterImage(
     url: string,
@@ -938,16 +971,35 @@ export function useImageCache(
 }
 
 // Hook for manga-specific caching with validation
-export function useMangaImageCache(mangaId: string, url: string): string {
+interface MangaImageCacheOptions {
+  enabled?: boolean;
+}
+
+export function useMangaImageCache(
+  mangaId: string,
+  url: string,
+  options?: MangaImageCacheOptions
+): string {
   const [cachedPath, setCachedPath] = useState<string>(url);
+  const shouldValidate = options?.enabled ?? true;
 
   useEffect(() => {
     let isMounted = true;
 
     const validateAndCache = async () => {
-      if (!url || !mangaId) return;
+      if (!url || !mangaId) {
+        return;
+      }
 
       try {
+        if (!shouldValidate) {
+          const path = await imageCache.getCachedMangaImagePath(mangaId, url);
+          if (isMounted) {
+            setCachedPath(path ?? url);
+          }
+          return;
+        }
+
         const path = await imageCache.validateAndUpdateCache(mangaId, url);
         if (isMounted) {
           setCachedPath(path);
@@ -965,7 +1017,7 @@ export function useMangaImageCache(mangaId: string, url: string): string {
     return () => {
       isMounted = false;
     };
-  }, [url, mangaId]);
+  }, [url, mangaId, shouldValidate]);
 
   return cachedPath;
 }

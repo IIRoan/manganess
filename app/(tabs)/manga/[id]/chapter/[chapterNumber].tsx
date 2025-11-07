@@ -38,13 +38,15 @@ import {
   markChapterAsRead,
   getInjectedJavaScript,
   fetchMangaDetails,
-  MangaDetails,
   normalizeChapterNumber,
 } from '@/services/mangaFireService';
+import type { MangaDetails as MangaDetailsType } from '@/types';
 import { chapterStorageService } from '@/services/chapterStorageService';
+import { offlineCacheService } from '@/services/offlineCacheService';
 import { ChapterImage } from '@/types/download';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
+import { useOffline } from '@/contexts/OfflineContext';
 import CustomWebView from '@/components/CustomWebView';
 import {
   ChapterGuideOverlay,
@@ -152,11 +154,14 @@ export default function ReadChapterScreen() {
   }>();
   const router = useRouter();
   const { handleBackPress: navigateBack } = useNavigationHistory();
+  const { isOffline } = useOffline();
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
-  const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
+  const [mangaDetails, setMangaDetails] = useState<MangaDetailsType | null>(
+    null
+  );
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -175,6 +180,8 @@ export default function ReadChapterScreen() {
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mangaFlatListRef = useRef<FlatList>(null);
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
+
+  
   const navigationTimestampRef = useRef<number>(0);
   const lastNavigatedChapterRef = useRef<string>('');
   const chapterListSwipeTranslateY = useRef(new Animated.Value(0)).current;
@@ -224,13 +231,16 @@ export default function ReadChapterScreen() {
   const styles = getStyles(colorScheme);
   const insets = useSafeAreaInsets();
 
+  
+
   const normalizedChapterParam = useMemo(
     () => normalizeChapterNumber(chapterNumber),
     [chapterNumber]
   );
 
+  // Only create network-related variables when online
   const chapterIdentifier = normalizedChapterParam || chapterNumber || '';
-  const chapterUrl = getChapterUrl(id, chapterIdentifier);
+  const chapterUrl = !isOffline ? getChapterUrl(id, chapterIdentifier) : '';
   const webLoadStartRef = useRef<number>(
     (globalThis as any).performance?.now?.() ?? Date.now()
   );
@@ -437,25 +447,42 @@ export default function ReadChapterScreen() {
   ]);
 
   const markChapterAsReadWithFallback = useCallback(async () => {
+    if (!id) {
+      return;
+    }
+
     try {
-      let mangaData = await getMangaData(id);
-      let title;
-      if (mangaData?.title) {
-        title = mangaData.title;
-      } else {
-        const details = await fetchMangaDetails(id);
-        title = details.title;
+      const mangaId = id as string;
+      const mangaData = await getMangaData(mangaId);
+      let resolvedTitle = mangaData?.title;
+
+      if (!resolvedTitle) {
+        const cachedDetails = await offlineCacheService.getCachedMangaDetails(
+          mangaId
+        );
+        if (cachedDetails?.title) {
+          resolvedTitle = cachedDetails.title;
+        }
       }
+
+      if (!resolvedTitle && !isOffline) {
+        const details = await fetchMangaDetails(mangaId);
+        resolvedTitle = details.title;
+      }
+
+      const titleToUse = resolvedTitle || 'Chapter';
+
       await markChapterAsRead(
-        id,
+        mangaId,
         normalizedChapterParam || chapterNumber,
-        title
+        titleToUse
       );
-      setMangaTitle(title);
+
+      setMangaTitle((current) => current ?? titleToUse);
     } catch (error) {
       logger().error('Service', 'Error marking chapter as read', { error });
     }
-  }, [id, chapterNumber, normalizedChapterParam]);
+  }, [id, chapterNumber, normalizedChapterParam, isOffline]);
 
   // Detect content type based on image dimensions
   const detectContentType = useCallback((images: ChapterImage[]) => {
@@ -502,56 +529,223 @@ export default function ReadChapterScreen() {
     });
   }, []);
 
-  const fetchDetails = useCallback(async () => {
-    try {
-      const details = await fetchMangaDetails(id);
-      setMangaDetails(details);
+  useEffect(() => {
+    let isActive = true;
 
-      // Check if this chapter is downloaded
-      const downloaded = await chapterStorageService.isChapterDownloaded(
-        id,
-        chapterNumber
-      );
-      setIsDownloaded(downloaded);
+    const loadChapter = async () => {
+      if (!id || !chapterNumber) {
+        if (isActive) {
+          setError('Invalid chapter parameters');
+          setIsLoading(false);
+        }
+        return;
+      }
 
-      if (downloaded) {
-        // Load downloaded images
-        const images = await chapterStorageService.getChapterImages(
-          id,
-          chapterNumber
-        );
-        setDownloadedImages(images);
-        downloadedImagesRef.current = images;
+      if (isActive) {
+        setIsLoading(true);
+        setError(null);
+      }
 
-        // Detect content type
-        if (images && images.length > 0) {
-          try {
-            const type = await detectContentType(images);
-            setContentType(type);
+      try {
+        const mangaId = id as string;
+        const requestedChapter = chapterNumber as string;
+        const downloadedChapters =
+          await chapterStorageService.getDownloadedChapters(mangaId);
 
-            if (isDebugEnabled()) {
-              logger().debug('UI', 'Using downloaded chapter', {
-                chapterNumber,
-                imageCount: images.length,
-                contentType: type,
-              });
-            }
-          } catch (error) {
-            logger().error('Service', 'Error detecting content type', {
-              error,
-            });
-            // Fallback to manga mode
-            setContentType('manga');
+        if (!isActive) return;
+
+        let matchedChapter: string | null = null;
+        if (downloadedChapters.includes(requestedChapter)) {
+          matchedChapter = requestedChapter;
+        } else {
+          const normalizedRequested = normalizeChapterNumber(requestedChapter);
+          const matchingChapter = downloadedChapters.find(
+            (ch) => normalizeChapterNumber(ch) === normalizedRequested
+          );
+          if (matchingChapter) {
+            matchedChapter = matchingChapter;
           }
         }
 
-        // For downloaded chapters, we can set loading to false immediately
-        setIsLoading(false);
+        let images: ChapterImage[] | null = null;
+
+        if (matchedChapter) {
+          images = await chapterStorageService.getChapterImages(
+            mangaId,
+            matchedChapter
+          );
+        }
+
+        if (!isActive) return;
+
+        if (images && images.length > 0) {
+          setIsDownloaded(true);
+          setDownloadedImages(images);
+          downloadedImagesRef.current = images;
+          setCurrentPage(0);
+
+          try {
+            const detectedType = await detectContentType(images);
+            if (isActive) {
+              setContentType(detectedType);
+            }
+          } catch (detectError) {
+            logger().error('Service', 'Error detecting content type', {
+              error: detectError,
+            });
+            if (isActive) {
+              setContentType('manga');
+            }
+          }
+
+          const mangaData = await getMangaData(mangaId);
+          if (!isActive) return;
+
+          let resolvedTitle = mangaData?.title;
+          if (!resolvedTitle) {
+            const cachedDetails =
+              await offlineCacheService.getCachedMangaDetails(mangaId);
+            if (!isActive) return;
+            resolvedTitle = cachedDetails?.title;
+          }
+
+          if (!resolvedTitle) {
+            resolvedTitle = isOffline
+              ? 'Offline Chapter'
+              : `Chapter ${chapterNumber}`;
+          }
+
+          if (isActive) {
+            setMangaTitle(resolvedTitle);
+            setError(null);
+          }
+        } else {
+          if (isActive) {
+            setDownloadedImages(null);
+            downloadedImagesRef.current = null;
+            setContentType(null);
+            setIsDownloaded(false);
+            setCurrentPage(0);
+
+            if (isOffline) {
+              setError(
+                'This chapter is not downloaded. Please connect to internet or download it first.'
+              );
+            }
+          }
+        }
+      } catch (error) {
+        if (isActive) {
+          logger().error('UI', 'Error loading chapter content', {
+            error,
+            mangaId: id,
+            chapterNumber,
+          });
+          setError('Failed to load chapter.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadChapter();
+
+    return () => {
+      isActive = false;
+    };
+  }, [id, chapterNumber, isOffline, detectContentType]);
+
+  const fetchDetails = useCallback(async () => {
+    if (!id) {
+      return;
+    }
+
+    const mangaId = id as string;
+
+    try {
+      if (isOffline) {
+        const cachedDetails = await offlineCacheService.getCachedMangaDetails(
+          mangaId
+        );
+
+        if (cachedDetails) {
+          setMangaDetails(cachedDetails);
+          setMangaTitle((current) => current ?? cachedDetails.title);
+          return;
+        }
+
+        const [mangaData, downloadedChapters] = await Promise.all([
+          getMangaData(mangaId),
+          chapterStorageService.getDownloadedChapters(mangaId),
+        ]);
+
+        if (mangaData || downloadedChapters.length > 0) {
+          const fallbackDetails: MangaDetailsType = {
+            id: mangaId,
+            title: mangaData?.title || 'Offline Chapter',
+            alternativeTitle: mangaData?.title || '',
+            status: '',
+            description: '',
+            author: [],
+            published: '',
+            genres: [],
+            rating: '',
+            reviewCount: '',
+            bannerImage: mangaData?.bannerImage || '',
+            chapters: downloadedChapters.map((chapter) => ({
+              number: chapter,
+              title: `Chapter ${chapter}`,
+              date: '',
+              url: '',
+            })),
+            ...(mangaData?.totalChapters != null
+              ? { totalChapters: mangaData.totalChapters }
+              : {}),
+          };
+
+          setMangaDetails(fallbackDetails);
+          setMangaTitle((current) => current ?? fallbackDetails.title);
+        }
+
+        return;
+      }
+
+      const details = await fetchMangaDetails(mangaId);
+      const typedDetails: MangaDetailsType = {
+        id: mangaId,
+        ...details,
+      };
+      setMangaDetails(typedDetails);
+      setMangaTitle((current) => current ?? typedDetails.title);
+
+      try {
+        const mangaData = await getMangaData(mangaId);
+        const isBookmarked = !!mangaData?.bookmarkStatus;
+        await offlineCacheService.cacheMangaDetails(
+          mangaId,
+          typedDetails,
+          isBookmarked
+        );
+      } catch (cacheError) {
+        logger().warn('Storage', 'Failed to cache manga details', {
+          error: cacheError,
+          mangaId,
+        });
       }
     } catch (error) {
       logger().error('Service', 'Error fetching manga details', { error });
+
+      const cachedDetails = await offlineCacheService.getCachedMangaDetails(
+        mangaId
+      );
+      if (cachedDetails) {
+        setMangaDetails(cachedDetails);
+        setMangaTitle((current) => current ?? cachedDetails.title);
+      }
     }
-  }, [id, chapterNumber, detectContentType]);
+  }, [id, isOffline]);
 
   useEffect(() => {
     markChapterAsReadWithFallback();
@@ -936,6 +1130,13 @@ export default function ReadChapterScreen() {
           <View style={styles.webViewContainer}>
             {isDownloaded && downloadedImages ? (
               renderDownloadedChapter()
+            ) : isOffline ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>
+                  Chapter not available offline. Please download this chapter
+                  first.
+                </Text>
+              </View>
             ) : (
               <CustomWebView
                 source={{ uri: chapterUrl }}

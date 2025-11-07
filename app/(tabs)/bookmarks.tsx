@@ -28,6 +28,8 @@ import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useOffline } from '@/contexts/OfflineContext';
+import { chapterStorageService } from '@/services/chapterStorageService';
 import { BookmarkItem, BookmarkStatus } from '@/types';
 import Animated, {
   useSharedValue,
@@ -74,6 +76,9 @@ const ImagePreloader = ({ urls }: { urls: string[] }) => {
 };
 
 export default function BookmarksScreen() {
+  // Offline context
+  const { isOffline } = useOffline();
+
   // State
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [sectionData, setSectionData] = useState<
@@ -203,6 +208,20 @@ export default function BookmarksScreen() {
           if (!id) return null;
           const d = await getMangaData(id);
           if (!d) return null;
+
+          // If offline, only show manga that have downloaded chapters
+          if (isOffline) {
+            try {
+              const downloadedChapters =
+                await chapterStorageService.getDownloadedChapters(id);
+              if (downloadedChapters.length === 0) {
+                return null; // Skip manga with no downloaded chapters when offline
+              }
+            } catch {
+              return null; // Skip if we can't check downloaded chapters
+            }
+          }
+
           return {
             id: d.id,
             title: d.title,
@@ -221,12 +240,12 @@ export default function BookmarksScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isOffline]);
 
-  // Initial fetch
-  useEffect(() => {
+  // Refresh bookmarks when offline status changes
+  React.useEffect(() => {
     fetchBookmarks();
-  }, [fetchBookmarks]);
+  }, [isOffline, fetchBookmarks]);
 
   // Process bookmarks when data, search or sort changes
   useEffect(() => {
@@ -544,7 +563,23 @@ export default function BookmarksScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Bookmarks</Text>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>
+              {isOffline ? 'Saved Manga (Offline)' : 'My Bookmarks'}
+            </Text>
+            {isOffline && (
+              <View style={styles.offlineIndicator}>
+                <Ionicons
+                  name="cloud-offline"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={[styles.offlineText, { color: colors.primary }]}>
+                  Offline
+                </Text>
+              </View>
+            )}
+          </View>
           <View style={styles.headerButtons}>
             <TouchableOpacity
               testID="bookmarks-toggle-sort"
@@ -1002,5 +1037,18 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.card,
       fontWeight: '600',
       fontSize: 15,
+    },
+    headerTitleContainer: {
+      flex: 1,
+    },
+    offlineIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 4,
+    },
+    offlineText: {
+      fontSize: 12,
+      fontWeight: '600',
     },
   });
