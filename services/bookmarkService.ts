@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { updateAniListStatus } from './anilistService';
+import { offlineCacheService } from './offlineCacheService';
 import {
   BookmarkStatus,
   MangaData,
@@ -113,6 +114,16 @@ export const saveBookmark = async (
     }
 
     await setMangaData(mangaData);
+
+    // Cache manga details for offline access when bookmarked
+    if (mangaDetails) {
+      await offlineCacheService.cacheMangaDetails(
+        id,
+        { ...mangaDetails, id },
+        true
+      );
+    }
+
     setBookmarkStatus(status);
     setIsAlertVisible(false);
 
@@ -188,6 +199,9 @@ export const removeBookmark = async (
       );
       await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(updatedKeys));
     }
+
+    // Update offline cache to mark as not bookmarked
+    await offlineCacheService.updateMangaBookmarkStatus(id, false);
 
     setBookmarkStatus(null);
     setIsAlertVisible(false);

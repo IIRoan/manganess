@@ -34,6 +34,8 @@ import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
 import { MangaItem, RecentMangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
+import { useOffline } from '@/contexts/OfflineContext';
+import { offlineCacheService } from '@/services/offlineCacheService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -56,6 +58,7 @@ export default function HomeScreen() {
   const { checkForCloudflare, resetCloudflareDetection } =
     useCloudflareDetection();
   const insets = useSafeAreaInsets();
+  const { isOffline } = useOffline();
 
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [newReleases, setNewReleases] = useState<MangaItem[]>([]);
@@ -75,6 +78,23 @@ export default function HomeScreen() {
       setError(null);
       if (!isRefreshing) {
         setIsLoading(true);
+      }
+
+      // If offline, don't make any network requests
+      if (isOffline) {
+        setError(
+          'You are offline. Please connect to internet or view your saved manga.'
+        );
+        return;
+      }
+
+      // Try to load cached data first for faster loading
+      const cachedData = await offlineCacheService.getCachedHomeData();
+      if (cachedData) {
+        setMostViewedManga(cachedData.mostViewed);
+        setNewReleases(cachedData.newReleases);
+        setFeaturedManga(cachedData.featuredManga);
+        logger().info('Service', 'Loaded cached home data');
       }
 
       const response = await axios.get(`${MANGA_API_URL}/home`, {
@@ -104,8 +124,35 @@ export default function HomeScreen() {
       if (parsedMostViewed.length > 0) {
         setFeaturedManga(parsedMostViewed[0] || null);
       }
+
+      // Cache the data for offline use
+      await offlineCacheService.cacheHomeData(
+        parsedMostViewed,
+        parsedNewReleases,
+        parsedMostViewed.length > 0 ? parsedMostViewed[0] || null : null
+      );
     } catch (error) {
       logger().error('Service', 'Error fetching manga data', { error });
+
+      // If online but failed, try to load cached data as fallback
+      if (!isOffline) {
+        try {
+          const cachedData = await offlineCacheService.getCachedHomeData();
+          if (cachedData) {
+            setMostViewedManga(cachedData.mostViewed);
+            setNewReleases(cachedData.newReleases);
+            setFeaturedManga(cachedData.featuredManga);
+            setError('Using cached data due to network error.');
+            logger().info('Service', 'Loaded cached home data as fallback');
+            return;
+          }
+        } catch (cacheError) {
+          logger().error('Service', 'Failed to load cached data as fallback', {
+            error: cacheError,
+          });
+        }
+      }
+
       setError(
         'An error occurred while fetching manga data. Please try again.'
       );
@@ -113,7 +160,7 @@ export default function HomeScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isRefreshing, checkForCloudflare]);
+  }, [isRefreshing, checkForCloudflare, isOffline]);
 
   const fetchRecentlyReadManga = useCallback(async () => {
     try {
@@ -422,6 +469,55 @@ export default function HomeScreen() {
             <NewReleasesSkeleton />
           </View>
         </ScrollView>
+      </View>
+    );
+  }
+
+  // Show offline warning when offline - redirect to saved content
+  if (isOffline) {
+    return (
+      <View
+        style={[styles.container, { backgroundColor: themeColors.background }]}
+      >
+        <View
+          style={[
+            styles.offlineHeader,
+            {
+              paddingTop: insets.top + 16,
+              backgroundColor: themeColors.card,
+              borderBottomColor: themeColors.border,
+            },
+          ]}
+        >
+          <View style={styles.offlineHeaderContent}>
+            <Ionicons
+              name="cloud-offline"
+              size={48}
+              color={themeColors.primary}
+            />
+            <Text style={[styles.offlineTitle, { color: themeColors.text }]}>
+              You&apos;re Offline
+            </Text>
+            <Text
+              style={[
+                styles.offlineSubtitle,
+                { color: themeColors.text + '80' },
+              ]}
+            >
+              Connect to internet or view your saved manga
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.offlineButton,
+                { backgroundColor: themeColors.primary },
+              ]}
+              onPress={() => router.navigate('/bookmarks')}
+            >
+              <Ionicons name="bookmark" size={20} color="#FFFFFF" />
+              <Text style={styles.offlineButtonText}>View Saved Manga</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   }
@@ -855,5 +951,37 @@ const styles = StyleSheet.create({
   genresSubtitle: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  offlineHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+  },
+  offlineHeaderContent: {
+    alignItems: 'center',
+  },
+  offlineTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 12,
+  },
+  offlineSubtitle: {
+    fontSize: 16,
+    marginTop: 4,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  offlineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    gap: 8,
+  },
+  offlineButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

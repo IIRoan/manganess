@@ -28,6 +28,7 @@ import { File, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { logger } from '@/utils/logger';
+import { offlineCacheService } from '@/services/offlineCacheService';
 
 interface MangaDownloadInfo {
   mangaId: string;
@@ -62,6 +63,7 @@ export default function DownloadsScreen() {
   const [isClearingData, setIsClearingData] = useState(false);
   const [isRefreshingImages, setIsRefreshingImages] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [offlineCacheStats, setOfflineCacheStats] = useState<any>(null);
 
   const fetchCacheStats = useCallback(async () => {
     try {
@@ -102,6 +104,10 @@ export default function DownloadsScreen() {
 
       setMangaDownloads(mangaList);
       await fetchCacheStats();
+
+      // Get offline cache stats
+      const offlineStats = await offlineCacheService.getCacheStats();
+      setOfflineCacheStats(offlineStats);
     } catch (error) {
       logger().error('Storage', 'Error loading downloads', { error });
       Alert.alert('Error', 'Failed to load downloads');
@@ -608,6 +614,92 @@ export default function DownloadsScreen() {
                   color={colors.tabIconDefault}
                 />
               )}
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Offline Cache</Text>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Cached Manga</Text>
+            <Text style={styles.cardValue}>
+              {offlineCacheStats ? offlineCacheStats.mangaCount : '—'}
+            </Text>
+          </View>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Bookmarked</Text>
+            <Text style={styles.cardValue}>
+              {offlineCacheStats ? offlineCacheStats.bookmarkedCount : '—'}
+            </Text>
+          </View>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Search Queries</Text>
+            <Text style={styles.cardValue}>
+              {offlineCacheStats ? offlineCacheStats.searchQueriesCount : '—'}
+            </Text>
+          </View>
+          <View style={styles.cardRow}>
+            <Text style={styles.cardLabel}>Cache Size</Text>
+            <Text style={styles.cardValue}>
+              {offlineCacheStats ? offlineCacheStats.totalSizeEstimate : '—'}
+            </Text>
+          </View>
+
+          <View style={styles.cardDivider} />
+
+          <TouchableOpacity
+            style={styles.cardAction}
+            onPress={async () => {
+              Alert.alert(
+                'Clear Offline Cache',
+                'This will remove all cached manga details, search results, and home data. Downloaded chapters will not be affected.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Clear',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await offlineCacheService.clearAllCache();
+                        await loadDownloads();
+                        Alert.alert(
+                          'Success',
+                          'Offline cache cleared successfully.'
+                        );
+                      } catch (error) {
+                        logger().error(
+                          'Storage',
+                          'Error clearing offline cache',
+                          { error }
+                        );
+                        Alert.alert('Error', 'Failed to clear offline cache.');
+                      }
+                    },
+                  },
+                ]
+              );
+            }}
+          >
+            <View style={styles.cardActionContent}>
+              <View
+                style={[styles.cardActionIcon, styles.cardActionIconWarning]}
+              >
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={20}
+                  color={colors.notification}
+                />
+              </View>
+              <Text style={[styles.cardActionText, styles.cardActionDanger]}>
+                Clear Offline Cache
+              </Text>
+            </View>
+            <View style={styles.cardActionTrailing}>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.tabIconDefault}
+              />
             </View>
           </TouchableOpacity>
         </View>
