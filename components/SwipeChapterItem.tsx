@@ -5,9 +5,11 @@ import {
   TouchableOpacity,
   Dimensions,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
+import DownloadButton from './DownloadButton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_ACTION_WIDTH = SCREEN_WIDTH * 0.3; // 30% of screen width
@@ -31,6 +33,14 @@ interface SwipeableChapterItemProps {
   styles: any;
   currentlyOpenSwipeable: Swipeable | null;
   setCurrentlyOpenSwipeable: (swipeable: Swipeable | null) => void;
+  mangaId?: string;
+  showDownloadButton?: boolean;
+  onDownloadStart?: () => void;
+  onDownloadComplete?: () => void;
+  onDownloadError?: (error: string) => void;
+  isDownloaded?: boolean;
+  onDeleteDownload?: () => void;
+  isDownloading?: boolean;
 }
 
 const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
@@ -45,6 +55,14 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   styles,
   currentlyOpenSwipeable,
   setCurrentlyOpenSwipeable,
+  mangaId,
+  showDownloadButton = false,
+  onDownloadStart,
+  onDownloadComplete,
+  onDownloadError,
+  isDownloaded = false,
+  onDeleteDownload,
+  isDownloading = false,
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
   const isSwipingRef = useRef(false);
@@ -53,37 +71,109 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     _progress: Animated.AnimatedAddition<number>,
     dragX: Animated.AnimatedAddition<number>
   ) => {
-    if (!isRead) return null;
+    const showDownloadAction = showDownloadButton && mangaId && !isDownloaded;
+    const showDeleteAction = isDownloaded && typeof onDeleteDownload === 'function';
+
+    const actionCount =
+      (showDownloadAction ? 1 : 0) +
+      (showDeleteAction ? 1 : 0) +
+      (isRead ? 1 : 0);
+
+    if (actionCount === 0) {
+      return null;
+    }
+
+    const actionWidth = Math.max(actionCount * SWIPE_ACTION_WIDTH, SWIPE_ACTION_WIDTH);
 
     const trans = dragX.interpolate({
-      inputRange: [-SWIPE_ACTION_WIDTH, 0],
-      outputRange: [0, SWIPE_ACTION_WIDTH],
+      inputRange: [-actionWidth, 0],
+      outputRange: [0, actionWidth],
       extrapolate: 'clamp',
     });
 
     return (
-      <View style={[styles.rightAction, { width: SWIPE_ACTION_WIDTH }]}>
+      <View style={[styles.rightAction, { width: actionWidth }]}>
         <Animated.View
           style={[
             styles.actionContainer,
             {
-              backgroundColor: colors.notification,
               transform: [{ translateX: trans }],
-              width: SWIPE_ACTION_WIDTH,
+              width: actionWidth,
+              flexDirection: 'row',
             },
           ]}
         >
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => {
-              onUnread();
-              swipeableRef.current?.close();
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="refresh" size={18} color="white" />
-            <Text style={styles.actionText}>Unread</Text>
-          </TouchableOpacity>
+          {showDownloadAction ? (
+            <View
+              style={[
+                styles.actionButton,
+                styles.swipeDownloadWrapper,
+                { backgroundColor: colors.primary },
+              ]}
+            >
+              <DownloadButton
+                mangaId={mangaId}
+                chapterNumber={chapter.number}
+                chapterUrl={chapter.url}
+                size="medium"
+                variant="full"
+                appearance="swipe"
+                disabled={isDownloaded || isDownloading}
+                onDownloadStart={() => {
+                  onDownloadStart?.();
+                  swipeableRef.current?.close();
+                }}
+                onDownloadComplete={() => {
+                  onDownloadComplete?.();
+                  swipeableRef.current?.close();
+                }}
+                onDownloadError={(error) => {
+                  onDownloadError?.(error);
+                  swipeableRef.current?.close();
+                }}
+                style={styles.swipeDownloadButton}
+              />
+            </View>
+          ) : null}
+
+          {showDeleteAction ? (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                {
+                  backgroundColor: colors.error,
+                },
+              ]}
+              onPress={() => {
+                onDeleteDownload?.();
+                swipeableRef.current?.close();
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash-outline" size={18} color="white" />
+              <Text style={styles.actionText}>Delete</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* Unread Action */}
+          {isRead && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                {
+                  backgroundColor: colors.notification,
+                },
+              ]}
+              onPress={() => {
+                onUnread();
+                swipeableRef.current?.close();
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="refresh" size={18} color="white" />
+              <Text style={styles.actionText}>Unread</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </View>
     );
@@ -92,7 +182,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   return (
     <Swipeable
       renderRightActions={renderRightActions}
-      rightThreshold={40}
+      rightThreshold={showDownloadButton && mangaId ? 60 : 40}
       friction={2}
       onSwipeableWillOpen={() => {
         isSwipingRef.current = true;
@@ -156,11 +246,33 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             <Text style={styles.chapterDate}>{chapter.date}</Text>
           </View>
           <View style={styles.chapterActions}>
+            {isDownloading ? (
+              <View style={styles.downloadingWrapper}>
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primary}
+                  style={styles.downloadingIndicator}
+                />
+                <Text style={styles.downloadingText}>Downloading…</Text>
+              </View>
+            ) : null}
+            {isDownloaded ? (
+              <Ionicons
+                name="cloud-done-outline"
+                size={18}
+                color={colors.primary}
+                style={styles.downloadedIndicator}
+              />
+            ) : null}
             {isRead && (
               <Ionicons
                 name="checkmark-circle"
                 size={20}
                 color={colors.primary}
+                style={[
+                  styles.readIndicator,
+                  isDownloaded ? styles.readIndicatorOffset : undefined,
+                ]}
               />
             )}
           </View>

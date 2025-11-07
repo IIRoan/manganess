@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '@/utils/logger';
 
 interface MangaMapping {
   internalId: string;
@@ -28,7 +29,7 @@ export async function getMangaMappings(): Promise<
       {} as Record<string, MangaMapping>
     );
   } catch (error) {
-    console.error('Error getting manga mappings:', error);
+    logger().error('Service', 'Error getting manga mappings', { error });
     return {};
   }
 }
@@ -50,7 +51,7 @@ export async function saveMangaMapping(
       JSON.stringify(mapping)
     );
   } catch (error) {
-    console.error('Error saving manga mapping:', error);
+    logger().error('Service', 'Error saving manga mapping', { error });
   }
 }
 
@@ -63,7 +64,7 @@ export async function getMangaMapping(
     );
     return mapping ? JSON.parse(mapping) : null;
   } catch (error) {
-    console.error('Error getting manga mapping:', error);
+    logger().error('Service', 'Error getting manga mapping', { error });
     return null;
   }
 }
@@ -79,7 +80,7 @@ export async function removeMangaMapping(internalId: string): Promise<void> {
   try {
     await AsyncStorage.removeItem(`${MAPPING_PREFIX}${internalId}`);
   } catch (error) {
-    console.error('Error removing manga mapping:', error);
+    logger().error('Service', 'Error removing manga mapping', { error });
   }
 }
 
@@ -89,6 +90,6 @@ export async function clearAllMappings(): Promise<void> {
     const mappingKeys = keys.filter((key) => key.startsWith(MAPPING_PREFIX));
     await AsyncStorage.multiRemove(mappingKeys);
   } catch (error) {
-    console.error('Error clearing manga mappings:', error);
+    logger().error('Service', 'Error clearing manga mappings', { error });
   }
 }

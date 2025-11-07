@@ -1,10 +1,11 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
 
 const CHAPTER_ITEM_HEIGHT = 70;
 
 export default function getStyles(colorScheme: ColorScheme) {
   const colors = Colors[colorScheme];
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
   const bottomSheetBg = colorScheme === 'dark' ? '#1A1A1A' : '#FFFFFF';
   const chapterItemBg = colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5';
@@ -41,6 +42,126 @@ export default function getStyles(colorScheme: ColorScheme) {
       backgroundColor: colors.text + '40',
       alignSelf: 'center',
       marginBottom: 12,
+    },
+
+    // Chapter List Modal Styles
+    chapterListModalOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    chapterListModalTouchLayer: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    chapterListContainer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: bottomSheetBg,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      maxHeight: '85%',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -3 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      elevation: 8,
+      flexDirection: 'column',
+    },
+    chapterListHeader: {
+      paddingTop: 12,
+      paddingBottom: 12,
+    },
+    chapterListHandle: {
+      width: 40,
+      height: 4,
+      backgroundColor: colors.border,
+      borderRadius: 2,
+      alignSelf: 'center',
+      marginBottom: 16,
+    },
+    chapterListTitle: {
+      fontSize: 22,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 8,
+    },
+    chapterListCurrent: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.primary,
+      marginBottom: 20,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border + '40',
+    },
+    chapterListContent: {
+      paddingBottom: 8,
+    },
+    chapterListItemButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      marginBottom: 8,
+      borderRadius: 10,
+      backgroundColor: chapterItemBg,
+      borderWidth: 1,
+      borderColor: colors.border + '20',
+    },
+    chapterListItemCurrent: {
+      backgroundColor: colors.primary + '15',
+      borderColor: colors.primary + '40',
+    },
+    chapterListItemContent: {
+      flex: 1,
+    },
+    chapterListItemNumber: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 4,
+    },
+    chapterListItemDate: {
+      fontSize: 13,
+      color: colors.text + '70',
+    },
+    chapterListItemIndicator: {
+      width: 3,
+      height: 36,
+      backgroundColor: colors.primary,
+      borderRadius: 2,
+      marginLeft: 12,
+    },
+    chapterListItemUnread: {
+      width: 3,
+      height: 36,
+      backgroundColor: colors.text + '15',
+      borderRadius: 2,
+      marginLeft: 12,
+    },
+    chapterListCloseButton: {
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 8,
+      marginBottom: 24,
+      marginHorizontal: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 4,
+    },
+    chapterListCloseButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.card,
     },
     container: {
       flex: 1,
@@ -119,6 +240,11 @@ export default function getStyles(colorScheme: ColorScheme) {
       fontSize: 14,
       fontWeight: '500',
       color: colors.text + '99',
+    },
+    pageIndicator: {
+      fontSize: 12,
+      fontWeight: '400',
+      color: colors.primary,
     },
     menuIcon: {
       marginLeft: 6,
@@ -230,19 +356,55 @@ export default function getStyles(colorScheme: ColorScheme) {
     bottomSheetContainer: {
       flex: 1,
     },
-    closeButton: {
-      position: 'absolute',
-      bottom: 40,
-      left: 20,
-      right: 20,
-      padding: 10,
-      alignItems: 'center',
-      backgroundColor: Colors[colorScheme].primary,
-      borderRadius: 5,
+
+    // Downloaded chapter styles - Manhwa (continuous scrolling)
+    manhwaImagesContainer: {
+      flexGrow: 1,
+      paddingVertical: 0,
+      paddingHorizontal: 0,
     },
-    closeButtonText: {
-      color: Colors[colorScheme].card,
-      fontWeight: 'bold',
+    manhwaImageContainer: {
+      width: screenWidth,
+      marginBottom: 0,
+      position: 'relative',
+    },
+    manhwaImageLoader: {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: [{ translateX: -12 }, { translateY: -12 }],
+      backgroundColor: colors.background + 'CC',
+      borderRadius: 20,
+      padding: 8,
+    },
+    manhwaImage: {
+      width: screenWidth,
+      // Height will be set dynamically by the component
+    },
+
+    // Downloaded chapter styles - Manga (page-by-page)
+    mangaPageContainer: {
+      width: screenWidth,
+      height: screenHeight,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    mangaImage: {
+      width: screenWidth,
+      height: screenHeight,
+    },
+
+    // Loading text style
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: colors.text,
+      textAlign: 'center',
+    },
+
+    chapterEndSpacer: {
+      height: screenHeight * 0.1, // 10% of screen height for better UX
     },
   });
 }

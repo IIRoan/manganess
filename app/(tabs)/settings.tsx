@@ -18,22 +18,15 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import {
   getDebugTabEnabled,
   setDebugTabEnabled,
-  exportAppData,
-  importAppData,
-  clearAppData,
-  migrateToNewStorage,
-  refreshMangaImages,
 } from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
 
 import Svg, { Path } from 'react-native-svg';
-import { File, Paths } from 'expo-file-system';
-import * as DocumentPicker from 'expo-document-picker';
-import * as Sharing from 'expo-sharing';
 import CustomColorPicker from '@/components/CustomColorPicker';
-import { imageCache } from '@/services/CacheImages';
+import { logger } from '@/utils/logger';
 
 /* Type Definitions */
 interface ThemeOption {
@@ -49,18 +42,15 @@ export default function SettingsScreen() {
     theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isMigrating, setIsMigrating] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [selectedColor, setSelectedColor] = useState<string>(
     accentColor || colors.primary
   );
-  const [cacheStats, setCacheStats] = useState<any>(null);
-  const [isCacheLoading, setIsCacheLoading] = useState(false);
 
   const themeOptions: ThemeOption[] = [
     { label: 'Light', value: 'light', icon: 'sunny-outline' },
@@ -71,7 +61,6 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadEnableDebugTabSetting();
     checkLoginStatus();
-    loadCacheStats();
 
     // Update selected color when accentColor changes
     if (accentColor) {
@@ -79,169 +68,28 @@ export default function SettingsScreen() {
     }
   }, [accentColor]);
 
-  const loadCacheStats = async () => {
-    try {
-      const stats = await imageCache.getCacheStats();
-      setCacheStats(stats);
-    } catch (error) {
-      console.error('Error loading cache stats:', error);
-    }
-  };
-
-  const handleClearImageCache = (context?: 'search' | 'manga') => {
-    const contextName =
-      context === 'search'
-        ? 'search cache'
-        : context === 'manga'
-          ? 'manga cache'
-          : 'all image cache';
-
-    Alert.alert(
-      'Clear Image Cache',
-      `Are you sure you want to clear the ${contextName}? This will free up storage space but images will need to be downloaded again.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsCacheLoading(true);
-              await imageCache.clearCache(context);
-              // Force reload cache stats immediately
-              const newStats = await imageCache.getCacheStats();
-              setCacheStats(newStats);
-              Alert.alert(
-                'Success',
-                `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully.`
-              );
-            } catch (error) {
-              console.error('Error clearing cache:', error);
-              Alert.alert('Error', `Failed to clear ${contextName}.`);
-            } finally {
-              setIsCacheLoading(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const formatDate = (timestamp: number): string => {
-    if (!timestamp) return 'Never';
-    return new Date(timestamp).toLocaleDateString();
-  };
-
   const loadEnableDebugTabSetting = async () => {
     try {
       const enabled = await getDebugTabEnabled();
-      console.log('Loaded enableDebugTab:', enabled);
+      logger().debug('Service', 'Loaded enableDebugTab', { enabled });
       setEnableDebugTab(enabled);
     } catch (error) {
-      console.error('Error loading enable debug tab setting:', error);
+      logger().error('Service', 'Error loading enable debug tab setting', {
+        error,
+      });
     }
   };
 
   const toggleEnableDebugTab = async (value: boolean) => {
     try {
       await setDebugTabEnabled(value);
-      console.log('Saved enableDebugTab:', value);
+      logger().debug('Service', 'Saved enableDebugTab', { value });
       setEnableDebugTab(value);
     } catch (error) {
-      console.error('Error toggling enable debug tab setting:', error);
-    }
-  };
-
-  const handleExportData = async () => {
-    try {
-      const exportedData = await exportAppData();
-
-      // Create JSON file
-      const jsonString = JSON.stringify(exportedData, null, 2);
-      const fileName = `manganess_${new Date().toISOString().split('T')[0]}.json`;
-      const file = new File(Paths.document, fileName);
-
-      // Create and write file
-      try {
-        file.create();
-      } catch {}
-      file.write(jsonString, { encoding: 'utf8' });
-
-      // Share file
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(file.uri, {
-          mimeType: 'application/json',
-          dialogTitle: 'Export App Data',
-        });
-      }
-    } catch (error) {
-      console.error('Export error:', error);
-      Alert.alert('Error', 'Failed to export data');
-    }
-  };
-
-  const handleImportData = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
+      logger().error('Service', 'Error toggling enable debug tab setting', {
+        error,
       });
-
-      if (result.canceled) return;
-
-      const asset = result.assets?.[0];
-      if (!asset) return;
-      const file = new File(asset.uri || '');
-      const fileContent = await file.text();
-      const importedData = JSON.parse(fileContent);
-
-      Alert.alert(
-        'Import Data',
-        'This will replace all existing data. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Import',
-            onPress: async () => {
-              await importAppData(importedData);
-              Alert.alert('Success', 'Data imported! Please restart the app');
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('Import error:', error);
-      Alert.alert('Error', 'Failed to import data');
     }
-  };
-
-  const handleClearData = () => {
-    Alert.alert(
-      'Clear App Data',
-      'Are you sure you want to clear all app data? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'OK',
-          onPress: async () => {
-            try {
-              await clearAppData();
-              Alert.alert('Success', 'All app data has been cleared.');
-            } catch (error) {
-              console.error('Error clearing app data:', error);
-              Alert.alert('Error', 'Failed to clear app data.');
-            }
-          },
-        },
-      ]
-    );
   };
 
   //Anilist Functions
@@ -252,7 +100,7 @@ export default function SettingsScreen() {
         const userData = await AniListOAuth.getCurrentUser();
         setUser(userData.data.Viewer);
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        logger().error('Service', 'Error fetching user data', { error });
       }
     }
   };
@@ -266,7 +114,7 @@ export default function SettingsScreen() {
         Alert.alert('Success', 'Successfully logged in to AniList!');
       }
     } catch (error: unknown) {
-      console.error('AniList login error:', error);
+      logger().error('Service', 'AniList login error', { error });
       if (error instanceof Error) {
         if (error.message.includes('cancelled')) {
           Alert.alert('Cancelled', 'Login was cancelled by user');
@@ -285,7 +133,7 @@ export default function SettingsScreen() {
       await AniListOAuth.logout();
       setUser(null);
     } catch (error: unknown) {
-      console.error('AniList logout error:', error);
+      logger().error('Service', 'AniList logout error', { error });
       Alert.alert('Error', 'Failed to logout');
     }
   };
@@ -296,7 +144,7 @@ export default function SettingsScreen() {
       const results = await syncAllMangaWithAniList();
       Alert.alert('Sync Results', results.join('\n'));
     } catch (error) {
-      console.error('Error syncing manga:', error);
+      logger().error('Service', 'Error syncing manga', { error });
       Alert.alert(
         'Error',
         `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -450,177 +298,14 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Image Cache Management</Text>
-          {cacheStats && (
-            <View style={styles.cacheStatsContainer}>
-              <Text style={styles.cacheStatsTitle}>Cache Statistics</Text>
-              <View style={styles.cacheStatsRow}>
-                <Text style={styles.cacheStatsLabel}>Total Size:</Text>
-                <Text style={styles.cacheStatsValue}>
-                  {formatFileSize(cacheStats.totalSize)}
-                </Text>
-              </View>
-              <View style={styles.cacheStatsRow}>
-                <Text style={styles.cacheStatsLabel}>Total Files:</Text>
-                <Text style={styles.cacheStatsValue}>
-                  {cacheStats.totalFiles}
-                </Text>
-              </View>
-              <View style={styles.cacheStatsRow}>
-                <Text style={styles.cacheStatsLabel}>Manga Images:</Text>
-                <Text style={styles.cacheStatsValue}>
-                  {cacheStats.mangaCount}
-                </Text>
-              </View>
-              <View style={styles.cacheStatsRow}>
-                <Text style={styles.cacheStatsLabel}>Search Cache:</Text>
-                <Text style={styles.cacheStatsValue}>
-                  {cacheStats.searchCount}
-                </Text>
-              </View>
-              {cacheStats.oldestEntry > 0 && (
-                <View style={styles.cacheStatsRow}>
-                  <Text style={styles.cacheStatsLabel}>Oldest Entry:</Text>
-                  <Text style={styles.cacheStatsValue}>
-                    {formatDate(cacheStats.oldestEntry)}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
+          <Text style={styles.sectionTitle}>Storage Management</Text>
           <TouchableOpacity
             style={styles.option}
-            onPress={() => handleClearImageCache('search')}
-            disabled={isCacheLoading}
+            onPress={() => router.push('/downloads')}
           >
-            <Ionicons name="images-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Clear Search Cache</Text>
-            {isCacheLoading && (
-              <ActivityIndicator size="small" color={colors.primary} />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => handleClearImageCache('manga')}
-            disabled={isCacheLoading}
-          >
-            <Ionicons name="library-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Clear Manga Cache</Text>
-            {isCacheLoading && (
-              <ActivityIndicator size="small" color={colors.primary} />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.option}
-            onPress={() => handleClearImageCache()}
-            disabled={isCacheLoading}
-          >
-            <Ionicons
-              name="trash-outline"
-              size={24}
-              color={colors.notification}
-            />
-            <Text style={styles.optionText}>Clear All Image Cache</Text>
-            {isCacheLoading && (
-              <ActivityIndicator size="small" color={colors.primary} />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.option}
-            onPress={async () => {
-              try {
-                setIsCacheLoading(true);
-                const newStats = await imageCache.getCacheStats();
-                setCacheStats(newStats);
-              } catch (error) {
-                console.error('Error refreshing cache stats:', error);
-              } finally {
-                setIsCacheLoading(false);
-              }
-            }}
-            disabled={isCacheLoading}
-          >
-            <Ionicons name="refresh-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Refresh Cache Stats</Text>
-            {isCacheLoading && (
-              <ActivityIndicator size="small" color={colors.primary} />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data Management</Text>
-          <TouchableOpacity style={styles.option} onPress={handleExportData}>
-            <Ionicons name="download-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Export App Data</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.option} onPress={handleImportData}>
-            <Ionicons name="cloud-upload" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Import App Data</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.option} onPress={handleClearData}>
-            <Ionicons
-              name="trash-outline"
-              size={24}
-              color={colors.notification}
-            />
-            <Text style={styles.optionText}>Clear App Data</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.option}
-            disabled={isRefreshing}
-            onPress={async () => {
-              try {
-                setIsRefreshing(true);
-                const result = await refreshMangaImages();
-                Alert.alert(
-                  result.success ? 'Success' : 'Error',
-                  result.message
-                );
-              } catch {
-                Alert.alert('Error', 'Failed to refresh manga images');
-              } finally {
-                setIsRefreshing(false);
-              }
-            }}
-          >
-            <Ionicons name="refresh-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Refresh Manga Images</Text>
-            {isRefreshing && (
-              <ActivityIndicator
-                size="small"
-                color={colors.primary}
-                style={styles.spinner}
-              />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.option, { borderBottomWidth: 0 }]}
-            disabled={isMigrating}
-            onPress={async () => {
-              try {
-                setIsMigrating(true);
-                const result = await migrateToNewStorage();
-                Alert.alert(
-                  result.success ? 'Success' : 'Error',
-                  result.message
-                );
-              } catch {
-                Alert.alert('Error', 'Failed to migrate data');
-              } finally {
-                setIsMigrating(false);
-              }
-            }}
-          >
-            <Ionicons name="sync-outline" size={24} color={colors.text} />
-            <Text style={styles.optionText}>Migrate to New Storage Format</Text>
-            {isMigrating && (
-              <ActivityIndicator
-                size="small"
-                color={colors.primary}
-                style={styles.spinner}
-              />
-            )}
+            <Ionicons name="download" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Manage Stored Data</Text>
+            <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -729,20 +414,6 @@ const getStyles = (colors: typeof Colors.light) =>
       opacity: 0.8,
       transform: [{ rotate: '-15deg' }],
     },
-    clearDataButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.card,
-      padding: 15,
-      borderRadius: 10,
-      marginTop: 10,
-    },
-    clearDataText: {
-      fontSize: 16,
-      marginLeft: 15,
-      color: colors.notification,
-      fontWeight: '600',
-    },
     userInfo: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -796,47 +467,5 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     spinner: {
       marginLeft: 10,
-    },
-    dataButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.card,
-      padding: 15,
-      borderRadius: 10,
-      marginTop: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    dataButtonText: {
-      fontSize: 16,
-      marginLeft: 15,
-      color: colors.text,
-      fontWeight: '600',
-    },
-    cacheStatsContainer: {
-      backgroundColor: colors.background,
-      borderRadius: 10,
-      padding: 15,
-      marginBottom: 15,
-    },
-    cacheStatsTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.text,
-      marginBottom: 10,
-    },
-    cacheStatsRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 5,
-    },
-    cacheStatsLabel: {
-      fontSize: 14,
-      color: colors.text,
-    },
-    cacheStatsValue: {
-      fontSize: 14,
-      fontWeight: '500',
-      color: colors.primary,
     },
   });
