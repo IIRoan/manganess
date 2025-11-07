@@ -28,7 +28,10 @@ import {
 } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
 import { useDebounce } from '@/hooks/useDebounce';
+import { logger } from '@/utils/logger';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
+import { useOffline } from '@/contexts/OfflineContext';
+import { offlineCacheService } from '@/services/offlineCacheService';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
 /* Type Definitions */
@@ -43,6 +46,7 @@ export default function MangaSearchScreen() {
   const { width, height } = useWindowDimensions();
   const styles = getStyles(colors, width, height);
   const insets = useSafeAreaInsets();
+  const { isOffline } = useOffline();
 
   // Router and Input Ref
   const router = useRouter();
@@ -85,6 +89,16 @@ export default function MangaSearchScreen() {
       setIsLoading(true);
       setError(null);
       currentQueryRef.current = q;
+
+      // If offline, try to load cached search results
+      // If offline, don't allow search
+      if (isOffline) {
+        setSearchResults([]);
+        setError('You are offline. Connect to internet to search for manga.');
+        setIsLoading(false);
+        return;
+      }
+
       const key = q.toLowerCase();
       const cached = vrfCacheRef.current.get(key);
       if (cached) {
@@ -102,7 +116,7 @@ export default function MangaSearchScreen() {
       setIsLoading(false);
       currentQueryRef.current = null;
     }
-  }, [debouncedSearchQuery]);
+  }, [debouncedSearchQuery, isOffline]);
 
   useEffect(() => {
     const performSearch = async () => {
@@ -126,6 +140,12 @@ export default function MangaSearchScreen() {
           const items = await searchManga(debouncedSearchQuery, vrfToken);
           if (inFlightSeqRef.current !== seq) return; // ignore stale
           setSearchResults(items);
+
+          // Cache search results for offline use
+          await offlineCacheService.cacheSearchResults(
+            debouncedSearchQuery,
+            items
+          );
         } catch (err: any) {
           if (err instanceof CloudflareDetectedError) {
             checkForCloudflare(err.html, '/mangasearch');
@@ -133,7 +153,7 @@ export default function MangaSearchScreen() {
           }
           if (inFlightSeqRef.current !== seq) return; // ignore stale
           setError('Failed to fetch manga. Please try again.');
-          console.error(err);
+          logger().error('Service', 'Failed to fetch manga', { error: err });
         } finally {
           if (inFlightSeqRef.current === seq) setIsLoading(false);
         }
@@ -348,6 +368,31 @@ export default function MangaSearchScreen() {
       );
     }
 
+    if (isOffline) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <View style={styles.emptyStateIcon}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={48}
+              color={colors.primary}
+            />
+          </View>
+          <Text style={styles.emptyStateTitle}>You&apos;re Offline</Text>
+          <Text style={styles.emptyStateText}>
+            Connect to internet to search for manga or view your saved manga
+          </Text>
+          <TouchableOpacity
+            style={[styles.offlineButton, { backgroundColor: colors.primary }]}
+            onPress={() => router.navigate('/bookmarks')}
+          >
+            <Ionicons name="bookmark" size={20} color="#FFFFFF" />
+            <Text style={styles.offlineButtonText}>View Saved Manga</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.emptyStateContainer}>
         <View style={styles.emptyStateIcon}>
@@ -366,6 +411,8 @@ export default function MangaSearchScreen() {
     tokenError,
     searchQuery,
     isLoading,
+    isOffline,
+    router,
   ]);
 
   return (
@@ -614,6 +661,21 @@ const getStyles = (
       fontSize: 13,
       color: colors.tabIconDefault,
       alignSelf: 'flex-start',
+    },
+
+    offlineButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 25,
+      gap: 8,
+      marginTop: 20,
+    },
+    offlineButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600',
     },
   });
 };

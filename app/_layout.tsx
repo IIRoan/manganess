@@ -12,6 +12,9 @@ import React, { useEffect } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
+import BatchDownloadHost from '@/components/BatchDownloadHost';
+import { OfflineProvider } from '@/contexts/OfflineContext';
+import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
@@ -46,8 +49,16 @@ function RootLayoutNav() {
                 presentation: 'modal',
               }}
             />
+            <Stack.Screen
+              name="downloads"
+              options={{
+                headerShown: false,
+                title: 'Downloads',
+              }}
+            />
           </Stack>
         </ErrorBoundary>
+        <BatchDownloadHost />
       </NavigationThemeProvider>
     </>
   );
@@ -82,7 +93,10 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
       <ThemeProvider>
-        <RootLayoutNav />
+        <OfflineProvider>
+          <RootLayoutNav />
+          <OfflineIndicator />
+        </OfflineProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

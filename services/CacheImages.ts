@@ -28,6 +28,7 @@ function normalizeUri(u: string): string {
 const BASE_CACHE_DIR = new FSDirectory(Paths.cache, 'image_cache');
 const MANGA_CACHE_DIR = new FSDirectory(BASE_CACHE_DIR, 'manga_covers');
 const SEARCH_CACHE_DIR = new FSDirectory(BASE_CACHE_DIR, 'search_temp');
+const DOWNLOAD_CACHE_DIR = new FSDirectory(BASE_CACHE_DIR, 'downloads');
 const CACHE_METADATA_KEY = 'image_cache_metadata';
 const MAX_CACHE_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_CACHE_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -35,10 +36,12 @@ const SEARCH_CACHE_AGE = 60 * 60 * 1000; // 1 hour for search temp cache
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_BASE = 1000; // 1 second base delay
 
-export type CacheContext = 'manga' | 'search' | 'bookmark';
+export type CacheContext = 'manga' | 'search' | 'bookmark' | 'download';
 
 interface CacheMetadata {
   mangaId?: string;
+  chapterNumber?: string | undefined;
+  pageNumber?: number | undefined;
   originalUrl: string;
   cachedPath: string;
   lastAccessed: number;
@@ -53,6 +56,7 @@ interface CacheStats {
   totalFiles: number;
   mangaCount: number;
   searchCount: number;
+  downloadCount: number;
   oldestEntry: number;
   newestEntry: number;
 }
@@ -88,6 +92,7 @@ class ImageCache {
       await this.ensureDirectoryExists(BASE_CACHE_DIR);
       await this.ensureDirectoryExists(MANGA_CACHE_DIR);
       await this.ensureDirectoryExists(SEARCH_CACHE_DIR);
+      await this.ensureDirectoryExists(DOWNLOAD_CACHE_DIR);
 
       // Load metadata
       await this.loadMetadata();
@@ -170,7 +175,18 @@ class ImageCache {
   }
 
   private getCacheFile(context: CacheContext, filename: string): FSFile {
-    const dir = context === 'search' ? SEARCH_CACHE_DIR : MANGA_CACHE_DIR;
+    let dir: FSDirectory;
+    switch (context) {
+      case 'search':
+        dir = SEARCH_CACHE_DIR;
+        break;
+      case 'download':
+        dir = DOWNLOAD_CACHE_DIR;
+        break;
+      default:
+        dir = MANGA_CACHE_DIR;
+        break;
+    }
     return new FSFile(dir, `${filename}.jpg`);
   }
 
@@ -228,6 +244,11 @@ class ImageCache {
       // For search context, use temporary caching with shorter lifespan
       if (context === 'search') {
         return this.getSearchImagePath(url);
+      }
+
+      // For download context, use specialized download caching
+      if (context === 'download') {
+        return this.getDownloadImagePath(url, mangaId || 'unknown');
       }
 
       // For manga context, use persistent caching with validation
@@ -410,6 +431,78 @@ class ImageCache {
     return url;
   }
 
+  private async getDownloadImagePath(
+    url: string,
+    mangaId: string,
+    chapterNumber?: string,
+    pageNumber?: number
+  ): Promise<string> {
+    const urlHash = simpleHash(url);
+    const filename =
+      chapterNumber && pageNumber
+        ? `${mangaId}_ch${chapterNumber}_p${pageNumber.toString().padStart(3, '0')}_${urlHash.substring(0, 8)}`
+        : `${mangaId}_${urlHash.substring(0, 16)}`;
+
+    const file = this.getCacheFile('download', filename);
+
+    // Check if file already exists
+    const info = file.info();
+    if (info.exists) {
+      // Update metadata if it exists
+      const existingMeta = this.metadata.get(filename);
+      if (existingMeta) {
+        existingMeta.lastAccessed = Date.now();
+      } else {
+        // Create metadata for existing file
+        const size = typeof info.size === 'number' ? info.size : 0;
+        this.metadata.set(filename, {
+          mangaId,
+          chapterNumber: chapterNumber || undefined,
+          pageNumber: pageNumber || undefined,
+          originalUrl: url,
+          cachedPath: file.uri,
+          lastAccessed: Date.now(),
+          lastUpdated: Date.now(),
+          context: 'download',
+          fileSize: size,
+          urlHash: simpleHash(url),
+        });
+      }
+      this.scheduleSaveMetadata();
+      return normalizeUri(file.uri);
+    }
+
+    // Download new image for downloads
+    try {
+      const output = await this.downloadImageWithRetry(url, file);
+
+      const fileInfo = output.info();
+      const sz =
+        fileInfo.exists && typeof fileInfo.size === 'number'
+          ? fileInfo.size
+          : 0;
+
+      this.metadata.set(filename, {
+        mangaId,
+        chapterNumber: chapterNumber || undefined,
+        pageNumber: pageNumber || undefined,
+        originalUrl: url,
+        cachedPath: output.uri,
+        lastAccessed: Date.now(),
+        lastUpdated: Date.now(),
+        context: 'download',
+        fileSize: sz,
+        urlHash: simpleHash(url),
+      });
+      this.scheduleSaveMetadata();
+
+      return normalizeUri(output.uri);
+    } catch (error) {
+      console.error('Failed to download chapter image after retries:', error);
+      return url;
+    }
+  }
+
   async validateAndUpdateCache(
     mangaId: string,
     currentUrl: string
@@ -465,6 +558,189 @@ class ImageCache {
     }
   }
 
+  async getCachedMangaImagePath(
+    mangaId: string,
+    currentUrl?: string
+  ): Promise<string | null> {
+    await this.initializeCache();
+
+    const existingEntry = Array.from(this.metadata.values()).find(
+      (entry) => entry.mangaId === mangaId && entry.context === 'manga'
+    );
+
+    if (!existingEntry) {
+      return null;
+    }
+
+    const file = new FSFile(existingEntry.cachedPath);
+    if (file.exists) {
+      existingEntry.lastAccessed = Date.now();
+      this.scheduleSaveMetadata();
+      return normalizeUri(file.uri);
+    }
+
+    // Remove stale metadata when the file no longer exists
+    const entryKey = Array.from(this.metadata.entries()).find(
+      ([_, entry]) => entry === existingEntry
+    )?.[0];
+    if (entryKey) {
+      this.metadata.delete(entryKey);
+      this.scheduleSaveMetadata();
+    }
+
+    return currentUrl ?? existingEntry.originalUrl ?? null;
+  }
+
+  // Download-specific cache methods
+  async cacheChapterImage(
+    url: string,
+    mangaId: string,
+    chapterNumber: string,
+    pageNumber: number
+  ): Promise<string> {
+    await this.initializeCache();
+    return this.getDownloadImagePath(url, mangaId, chapterNumber, pageNumber);
+  }
+
+  async getChapterImagePath(
+    mangaId: string,
+    chapterNumber: string,
+    pageNumber: number
+  ): Promise<string | null> {
+    await this.initializeCache();
+
+    // Find cached image for this specific page
+    const entry = Array.from(this.metadata.values()).find(
+      (entry) =>
+        entry.context === 'download' &&
+        entry.mangaId === mangaId &&
+        entry.chapterNumber === chapterNumber &&
+        entry.pageNumber === pageNumber
+    );
+
+    if (entry) {
+      const file = new FSFile(entry.cachedPath);
+      if (file.exists) {
+        entry.lastAccessed = Date.now();
+        this.scheduleSaveMetadata();
+        return normalizeUri(file.uri);
+      } else {
+        // Remove stale metadata
+        const entryKey = Array.from(this.metadata.entries()).find(
+          ([_, e]) => e === entry
+        )?.[0];
+        if (entryKey) {
+          this.metadata.delete(entryKey);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  async deleteChapterCache(
+    mangaId: string,
+    chapterNumber: string
+  ): Promise<void> {
+    await this.initializeCache();
+
+    const entriesToDelete: string[] = [];
+
+    for (const [key, entry] of this.metadata.entries()) {
+      if (
+        entry.context === 'download' &&
+        entry.mangaId === mangaId &&
+        entry.chapterNumber === chapterNumber
+      ) {
+        entriesToDelete.push(key);
+
+        // Remove file
+        try {
+          const file = new FSFile(entry.cachedPath);
+          if (file.exists) {
+            file.delete();
+          }
+        } catch (error) {
+          console.error('Error removing chapter cache file:', error);
+        }
+      }
+    }
+
+    // Remove metadata for deleted entries
+    for (const key of entriesToDelete) {
+      this.metadata.delete(key);
+    }
+
+    if (entriesToDelete.length > 0) {
+      this.scheduleSaveMetadata();
+    }
+  }
+
+  async deleteMangaDownloadCache(mangaId: string): Promise<void> {
+    await this.initializeCache();
+
+    const entriesToDelete: string[] = [];
+
+    for (const [key, entry] of this.metadata.entries()) {
+      if (entry.context === 'download' && entry.mangaId === mangaId) {
+        entriesToDelete.push(key);
+
+        // Remove file
+        try {
+          const file = new FSFile(entry.cachedPath);
+          if (file.exists) {
+            file.delete();
+          }
+        } catch (error) {
+          console.error('Error removing manga download cache file:', error);
+        }
+      }
+    }
+
+    // Remove metadata for deleted entries
+    for (const key of entriesToDelete) {
+      this.metadata.delete(key);
+    }
+
+    if (entriesToDelete.length > 0) {
+      this.scheduleSaveMetadata();
+    }
+  }
+
+  async getDownloadCacheStats(mangaId?: string): Promise<{
+    totalSize: number;
+    totalFiles: number;
+    chapterCount: number;
+  }> {
+    await this.initializeCache();
+
+    let totalSize = 0;
+    let totalFiles = 0;
+    const chapters = new Set<string>();
+
+    for (const entry of this.metadata.values()) {
+      if (
+        entry.context === 'download' &&
+        (!mangaId || entry.mangaId === mangaId)
+      ) {
+        const file = new FSFile(entry.cachedPath);
+        if (file.exists) {
+          totalSize += entry.fileSize;
+          totalFiles++;
+          if (entry.chapterNumber) {
+            chapters.add(`${entry.mangaId}_${entry.chapterNumber}`);
+          }
+        }
+      }
+    }
+
+    return {
+      totalSize,
+      totalFiles,
+      chapterCount: chapters.size,
+    };
+  }
+
   async clearCache(context?: CacheContext): Promise<void> {
     try {
       await this.initializeCache();
@@ -491,12 +767,24 @@ class ImageCache {
             this.metadata.delete(key);
           }
         }
+      } else if (context === 'download') {
+        // Clear only download cache
+        DOWNLOAD_CACHE_DIR.delete();
+        await this.ensureDirectoryExists(DOWNLOAD_CACHE_DIR);
+
+        // Remove download metadata
+        for (const [key, entry] of this.metadata.entries()) {
+          if (entry.context === 'download') {
+            this.metadata.delete(key);
+          }
+        }
       } else {
         // Clear all cache
         BASE_CACHE_DIR.delete();
         await this.ensureDirectoryExists(BASE_CACHE_DIR);
         await this.ensureDirectoryExists(MANGA_CACHE_DIR);
         await this.ensureDirectoryExists(SEARCH_CACHE_DIR);
+        await this.ensureDirectoryExists(DOWNLOAD_CACHE_DIR);
 
         this.metadata.clear();
       }
@@ -508,6 +796,7 @@ class ImageCache {
       await this.ensureDirectoryExists(BASE_CACHE_DIR);
       await this.ensureDirectoryExists(MANGA_CACHE_DIR);
       await this.ensureDirectoryExists(SEARCH_CACHE_DIR);
+      await this.ensureDirectoryExists(DOWNLOAD_CACHE_DIR);
     }
   }
 
@@ -519,6 +808,7 @@ class ImageCache {
       let totalFiles = 0;
       let mangaCount = 0;
       let searchCount = 0;
+      let downloadCount = 0;
       let oldestEntry = Date.now();
       let newestEntry = 0;
 
@@ -531,6 +821,7 @@ class ImageCache {
 
           if (entry.context === 'manga') mangaCount++;
           if (entry.context === 'search') searchCount++;
+          if (entry.context === 'download') downloadCount++;
 
           if (entry.lastUpdated < oldestEntry) oldestEntry = entry.lastUpdated;
           if (entry.lastUpdated > newestEntry) newestEntry = entry.lastUpdated;
@@ -542,6 +833,7 @@ class ImageCache {
         totalFiles,
         mangaCount,
         searchCount,
+        downloadCount,
         oldestEntry: totalFiles > 0 ? oldestEntry : 0,
         newestEntry: totalFiles > 0 ? newestEntry : 0,
       };
@@ -552,6 +844,7 @@ class ImageCache {
         totalFiles: 0,
         mangaCount: 0,
         searchCount: 0,
+        downloadCount: 0,
         oldestEntry: 0,
         newestEntry: 0,
       };
@@ -604,8 +897,12 @@ class ImageCache {
         );
 
       // Get all entries sorted by last accessed (oldest first)
+      // Only clean manga and search cache, downloads are managed separately
       const sortedEntries = Array.from(this.metadata.entries())
-        .filter(([_, entry]) => entry.context === 'manga') // Only clean manga cache, keep search temp
+        .filter(
+          ([_, entry]) =>
+            entry.context === 'manga' || entry.context === 'search'
+        )
         .sort(([_, a], [__, b]) => a.lastAccessed - b.lastAccessed);
 
       let cleanedSize = 0;
@@ -674,16 +971,35 @@ export function useImageCache(
 }
 
 // Hook for manga-specific caching with validation
-export function useMangaImageCache(mangaId: string, url: string): string {
+interface MangaImageCacheOptions {
+  enabled?: boolean;
+}
+
+export function useMangaImageCache(
+  mangaId: string,
+  url: string,
+  options?: MangaImageCacheOptions
+): string {
   const [cachedPath, setCachedPath] = useState<string>(url);
+  const shouldValidate = options?.enabled ?? true;
 
   useEffect(() => {
     let isMounted = true;
 
     const validateAndCache = async () => {
-      if (!url || !mangaId) return;
+      if (!url || !mangaId) {
+        return;
+      }
 
       try {
+        if (!shouldValidate) {
+          const path = await imageCache.getCachedMangaImagePath(mangaId, url);
+          if (isMounted) {
+            setCachedPath(path ?? url);
+          }
+          return;
+        }
+
         const path = await imageCache.validateAndUpdateCache(mangaId, url);
         if (isMounted) {
           setCachedPath(path);
@@ -701,7 +1017,63 @@ export function useMangaImageCache(mangaId: string, url: string): string {
     return () => {
       isMounted = false;
     };
-  }, [url, mangaId]);
+  }, [url, mangaId, shouldValidate]);
+
+  return cachedPath;
+}
+
+// Hook for download-specific image caching
+export function useDownloadImageCache(
+  url: string,
+  mangaId: string,
+  chapterNumber: string,
+  pageNumber: number
+): string {
+  const [cachedPath, setCachedPath] = useState<string>(url);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const cacheDownloadImage = async () => {
+      if (!url || !mangaId || !chapterNumber) return;
+
+      try {
+        // First check if already cached
+        const existingPath = await imageCache.getChapterImagePath(
+          mangaId,
+          chapterNumber,
+          pageNumber
+        );
+
+        if (existingPath && isMounted) {
+          setCachedPath(existingPath);
+          return;
+        }
+
+        // If not cached, cache it
+        const path = await imageCache.cacheChapterImage(
+          url,
+          mangaId,
+          chapterNumber,
+          pageNumber
+        );
+        if (isMounted) {
+          setCachedPath(path);
+        }
+      } catch (error) {
+        console.error('Error in useDownloadImageCache:', error);
+        if (isMounted) {
+          setCachedPath(url);
+        }
+      }
+    };
+
+    cacheDownloadImage();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [url, mangaId, chapterNumber, pageNumber]);
 
   return cachedPath;
 }

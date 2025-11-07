@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { setOnboardingCompleted } from '@/services/settingsService';
 import { useRouter } from 'expo-router';
+import { logger } from '@/utils/logger';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function OnboardingScreen() {
       // Navigate to the main app screen
       router.replace('/');
     } catch (error) {
-      console.error('Error completing onboarding:', error);
+      logger().error('Service', 'Error completing onboarding', { error });
       Alert.alert('Error', 'An error occurred while completing onboarding.');
     }
   };

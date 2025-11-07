@@ -24,6 +24,7 @@ import { getLastReadManga } from '@/services/readChapterService';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
 import { useSwipeBack } from '@/hooks/useSwipeBack';
 import { SwipeGestureOverlay } from '@/components/SwipeBackIndicator';
+import { logger } from '@/utils/logger';
 
 export default function TabLayout() {
   const navigation = useNavigation();
@@ -82,7 +83,9 @@ export default function TabLayout() {
       const enabled = await getDebugTabEnabled();
       setEnableDebugTab(enabled);
     } catch (error) {
-      console.error('Error loading enable debug tab setting:', error);
+      logger().error('Service', 'Error loading enable debug tab setting', {
+        error,
+      });
     }
   }, []);
 
@@ -90,7 +93,7 @@ export default function TabLayout() {
     try {
       await getLastReadManga();
     } catch (error) {
-      console.error('Error refreshing last read manga:', error);
+      logger().error('Service', 'Error refreshing last read manga', { error });
     }
   }, []);
 
@@ -99,32 +102,35 @@ export default function TabLayout() {
       const completed = await checkOnboarding();
       setIsOnboardingCompleted(completed);
     } catch (error) {
-      console.error('Error checking onboarding status:', error);
+      logger().error('Service', 'Error checking onboarding status', { error });
       setIsOnboardingCompleted(false);
     }
   }, []);
 
   const performUpdateCheck = useCallback(async () => {
-    if (isDebugEnabled()) console.log('Performing update check...');
+    if (isDebugEnabled()) logger().debug('Service', 'Performing update check');
     try {
       // First check if update is available
       const checkResult = await checkForUpdate();
-      if (isDebugEnabled()) console.log('Update check result:', checkResult);
+      if (isDebugEnabled())
+        logger().debug('Service', 'Update check result', { checkResult });
 
       if (checkResult.success) {
         if (isDebugEnabled())
-          console.log('Update available, downloading and applying...');
+          logger().debug(
+            'Service',
+            'Update available, downloading and applying'
+          );
         // If an update is available, download and apply it
         await updateAndReload();
       } else {
         if (isDebugEnabled())
-          console.log(
-            'No update available or unable to check:',
-            checkResult.message
-          );
+          logger().debug('Service', 'No update available or unable to check', {
+            message: checkResult.message,
+          });
       }
     } catch (error) {
-      console.error('Error in update process:', error);
+      logger().error('Service', 'Error in update process', { error });
     }
   }, [checkForUpdate, updateAndReload]);
 
@@ -142,8 +148,9 @@ export default function TabLayout() {
         nextAppState === 'active'
       ) {
         if (isDebugEnabled())
-          console.log(
-            'App has come to the foreground, checking for updates...'
+          logger().debug(
+            'Service',
+            'App has come to the foreground, checking for updates'
           );
         performUpdateCheck();
       }

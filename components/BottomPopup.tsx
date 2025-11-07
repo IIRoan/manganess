@@ -22,6 +22,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { PanGestureHandler } from 'react-native-gesture-handler';
 import { BottomPopupProps } from '@/types';
 
 const BottomPopup: React.FC<BottomPopupProps> = ({
@@ -42,10 +43,12 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
 
   const translateY = useSharedValue(screenHeight);
   const overlayOpacity = useSharedValue(0);
+  const gestureTranslateY = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
       // Show the modal
+      gestureTranslateY.value = 0;
       StatusBar.setBarStyle('light-content');
       if (Platform.OS === 'android') {
         StatusBar.setBackgroundColor('rgba(0,0,0,0.05)');
@@ -75,11 +78,40 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
         easing: Easing.in(Easing.ease),
       });
     }
-  }, [visible, translateY, screenHeight, overlayOpacity]);
+  }, [visible, translateY, screenHeight, overlayOpacity, gestureTranslateY]);
+
+  const handleGestureEvent = (event: any) => {
+    'worklet';
+    if (event.nativeEvent.translationY > 0) {
+      gestureTranslateY.value = event.nativeEvent.translationY;
+    }
+  };
+
+  const handleGestureEnd = (event: any) => {
+    'worklet';
+    const threshold = 80;
+    if (event.nativeEvent.translationY > threshold || event.nativeEvent.velocityY > 500) {
+      gestureTranslateY.value = withTiming(screenHeight, {
+        duration: 200,
+        easing: Easing.in(Easing.ease),
+      });
+      overlayOpacity.value = withTiming(0, {
+        duration: 200,
+        easing: Easing.in(Easing.ease),
+      });
+      setTimeout(() => onClose(), 200);
+    } else {
+      gestureTranslateY.value = withSpring(0, {
+        damping: 25,
+        stiffness: 200,
+        mass: 0.5,
+      });
+    }
+  };
 
   const containerAnimatedStyle = useAnimatedStyle(() => {
     return {
-      transform: [{ translateY: translateY.value }],
+      transform: [{ translateY: translateY.value + gestureTranslateY.value }],
     };
   });
 
@@ -101,19 +133,13 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
         <TouchableWithoutFeedback onPress={onClose}>
           <Animated.View style={[styles.modalOverlay, overlayAnimatedStyle]} />
         </TouchableWithoutFeedback>
-        <Animated.View style={[styles.container, containerAnimatedStyle]}>
-          <View style={styles.handle} />
+        <PanGestureHandler onGestureEvent={handleGestureEvent} onEnded={handleGestureEnd}>
+          <Animated.View style={[styles.container, containerAnimatedStyle]}>
+            <View style={styles.handle} />
           <View style={styles.header}>
             <Text testID="bottom-popup-title" style={styles.title}>
               {title}
             </Text>
-            <TouchableOpacity
-              testID="close-button"
-              onPress={onClose}
-              style={styles.closeButton}
-            >
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
           </View>
           <View style={styles.optionsContainer}>
             {options?.map((option, index) => (
@@ -138,7 +164,8 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
               </TouchableOpacity>
             ))}
           </View>
-        </Animated.View>
+          </Animated.View>
+        </PanGestureHandler>
       </View>
     </Modal>
   );
@@ -186,11 +213,6 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       fontSize: 22,
       color: colors.text,
       fontWeight: 'bold',
-    },
-    closeButton: {
-      padding: 8,
-      borderRadius: 20,
-      backgroundColor: colors.background,
     },
     optionsContainer: {
       marginTop: 8,

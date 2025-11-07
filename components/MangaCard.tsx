@@ -15,6 +15,7 @@ import {
   useMangaImageCache,
   type CacheContext,
 } from '@/services/CacheImages';
+import { useOffline } from '@/contexts/OfflineContext';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
 import BottomPopup from './BottomPopup';
@@ -55,6 +56,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   );
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const haptics = useHapticFeedback();
+  const { isOffline } = useOffline();
 
   // Load bookmark status when component mounts or mangaId changes
   useEffect(() => {
@@ -74,7 +76,9 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   // Use appropriate caching strategy based on context
   const searchCachedPath = useImageCache(imageUrl, context, mangaId);
-  const mangaCachedPath = useMangaImageCache(mangaId || '', imageUrl);
+  const mangaCachedPath = useMangaImageCache(mangaId || '', imageUrl, {
+    enabled: !isOffline,
+  });
 
   // Choose the right cached path based on context
   const cachedImagePath =
