@@ -244,7 +244,11 @@ export default function BookmarksScreen() {
 
   // Refresh bookmarks when offline status changes
   React.useEffect(() => {
+  // Refresh bookmarks when offline status changes or on mount
+  React.useEffect(() => {
     fetchBookmarks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOffline]);
   }, [isOffline, fetchBookmarks]);
 
   // Process bookmarks when data, search or sort changes
