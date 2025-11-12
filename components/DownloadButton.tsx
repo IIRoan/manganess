@@ -12,6 +12,8 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { useHapticFeedback } from '@/utils/haptics';
 import { downloadManagerService } from '@/services/downloadManager';
+import { downloadStatusService } from '@/services/downloadStatusService';
+import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadStatus, DownloadProgress } from '@/types/download';
 import HiddenChapterWebView from './HiddenChapterWebView';
 import { logger } from '@/utils/logger';
@@ -68,22 +70,16 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   const loadDownloadStatus = React.useCallback(async () => {
     try {
       setIsLoading(true);
-      const status = await downloadManagerService.getDownloadStatus(
+      
+      // Use the new download status service for consistent status
+      const statusInfo = await downloadStatusService.getChapterDownloadStatus(
         mangaId,
         chapterNumber
       );
-      setDownloadStatus(status);
-
-      // If currently downloading, get current progress
-      if (status === DownloadStatus.DOWNLOADING) {
-        const downloadId = generateDownloadId(mangaId, chapterNumber);
-        const currentProgress =
-          downloadManagerService.getDownloadProgress(downloadId);
-        if (currentProgress) {
-          setProgress(currentProgress.progress);
-          setEstimatedTime(currentProgress.estimatedTimeRemaining);
-        }
-      }
+      
+      setDownloadStatus(statusInfo.status);
+      setProgress(statusInfo.progress);
+      setEstimatedTime(statusInfo.estimatedTimeRemaining);
     } catch (error) {
       log.error('Service', 'Error loading download status', {
         mangaId,
@@ -104,9 +100,20 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       if (progressUpdate.status === DownloadStatus.COMPLETED) {
         setDownloadStatus(DownloadStatus.COMPLETED);
         onDownloadComplete?.();
+
+        // Emit download completion event
+        downloadEventEmitter.emitCompleted(mangaId, chapterNumber, generateDownloadId(mangaId, chapterNumber));
       } else if (progressUpdate.status === DownloadStatus.FAILED) {
         setDownloadStatus(DownloadStatus.FAILED);
         onDownloadError?.('Download failed');
+
+        // Emit download failed event
+        downloadEventEmitter.emitFailed(
+          mangaId, 
+          chapterNumber, 
+          generateDownloadId(mangaId, chapterNumber),
+          'Download failed'
+        );
       }
     },
     [onDownloadComplete, onDownloadError]
@@ -198,6 +205,9 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     setProgress(0);
     onDownloadStart?.();
 
+    // Emit download start event
+    downloadEventEmitter.emitStarted(mangaId, chapterNumber, generateDownloadId(mangaId, chapterNumber));
+
     // Step 1: Open hidden WebView to intercept AJAX request
     if (isDebugEnabled()) {
       log.info('Service', 'Opening hidden WebView to intercept request', {
@@ -237,6 +247,9 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         setDownloadStatus(DownloadStatus.COMPLETED);
         setProgress(100);
         onDownloadComplete?.();
+
+        // Emit download completion event
+        downloadEventEmitter.emitCompleted(mangaId, chapterNumber, generateDownloadId(mangaId, chapterNumber));
 
         if (isDebugEnabled()) {
           log.info('Service', 'Download completed successfully', {
