@@ -8,6 +8,7 @@ import {
   ImageDownloadStatus,
   DownloadProgress as DownloadProgressType,
 } from '@/types/download';
+import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadManager } from '@/types/downloadInterfaces';
 import { imageExtractorService } from './imageExtractor';
 import { chapterStorageService } from './chapterStorageService';
@@ -149,6 +150,9 @@ class DownloadManagerService implements DownloadManager {
       };
 
       this.activeDownloads.set(downloadId, progress);
+
+      // Emit download started event
+      downloadEventEmitter.emitStarted(mangaId, chapterNumber, downloadId);
 
       if (isDebugEnabled()) {
         this.log.info('Service', 'Initialized download progress tracking', {
@@ -700,6 +704,9 @@ class DownloadManagerService implements DownloadManager {
         }
       }
 
+      // Emit download completion event
+      downloadEventEmitter.emitCompleted(mangaId, chapterNumber, downloadId);
+
       if (isDebugEnabled()) {
         this.log.info(
           'Service',
@@ -971,6 +978,16 @@ class DownloadManagerService implements DownloadManager {
           progress.progress,
           progress.downloadedImages,
           progress.totalImages
+        );
+
+        // Emit progress event
+        downloadEventEmitter.emitProgress(
+          progress.mangaId,
+          progress.chapterNumber,
+          downloadId,
+          progress.progress,
+          progress.estimatedTimeRemaining,
+          progress.downloadSpeed
         );
 
         // Notify progress listeners
