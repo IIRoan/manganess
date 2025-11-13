@@ -253,8 +253,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
 
   const renderModeButton = (
     label: string,
-    value: PlannerMode,
-    icon: keyof typeof Ionicons.glyphMap
+    value: PlannerMode
   ) => {
     const isActive = mode === value;
     return (
@@ -267,11 +266,6 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
         }}
         activeOpacity={0.85}
       >
-        <Ionicons
-          name={icon}
-          size={18}
-          color={isActive ? colors.background : colors.text}
-        />
         <Text
           style={[
             styles.modeButtonText,
@@ -388,9 +382,9 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
               <>
                 <View style={styles.modeSelector}>
                   {[
-                    renderModeButton('All chapters', 'all', 'layers-outline'),
-                    renderModeButton('Up to chapter', 'upto', 'trending-down-outline'),
-                    renderModeButton('Custom range', 'range', 'options-outline'),
+                    renderModeButton('All chapters', 'all'),
+                    renderModeButton('Up to chapter', 'upto'),
+                    renderModeButton('Custom range', 'range'),
                   ]}
                 </View>
 
@@ -641,7 +635,6 @@ const getStyles = (colors: typeof Colors.light) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
     },
     modeButtonActive: {
       backgroundColor: colors.primary,
