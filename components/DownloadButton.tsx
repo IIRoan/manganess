@@ -14,7 +14,7 @@ import { useHapticFeedback } from '@/utils/haptics';
 import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
 import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
-import { DownloadStatus, DownloadProgress } from '@/types/download';
+import { DownloadStatus, DownloadProgress, DownloadErrorType } from '@/types/download';
 import HiddenChapterWebView from './HiddenChapterWebView';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
@@ -149,6 +149,33 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     return undefined;
   }, [downloadStatus, mangaId, chapterNumber, handleProgressUpdate]);
 
+  useEffect(() => {
+    const unsubscribe = downloadEventEmitter.subscribe(
+      mangaId,
+      chapterNumber,
+      (event) => {
+        if (event.type === 'download_paused') {
+          setDownloadStatus(DownloadStatus.PAUSED);
+          if (typeof event.progress === 'number') {
+            setProgress(event.progress);
+          }
+        }
+
+        if (event.type === 'download_resumed') {
+          setDownloadStatus(DownloadStatus.DOWNLOADING);
+          if (typeof event.progress === 'number') {
+            setProgress(event.progress);
+          }
+          if (event.estimatedTimeRemaining !== undefined) {
+            setEstimatedTime(event.estimatedTimeRemaining);
+          }
+        }
+      }
+    );
+
+    return unsubscribe;
+  }, [mangaId, chapterNumber]);
+
   // Animate progress changes
   useEffect(() => {
     Animated.timing(progressAnim, {
@@ -205,9 +232,6 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     setProgress(0);
     onDownloadStart?.();
 
-    // Emit download start event
-    downloadEventEmitter.emitStarted(mangaId, chapterNumber, generateDownloadId(mangaId, chapterNumber));
-
     // Step 1: Open hidden WebView to intercept AJAX request
     if (isDebugEnabled()) {
       log.info('Service', 'Opening hidden WebView to intercept request', {
@@ -234,6 +258,8 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
 
     // Step 2: Start actual download using intercepted data
     try {
+      const downloadIdForChapter = generateDownloadId(mangaId, chapterNumber);
+
       const result =
         await downloadManagerService.downloadChapterFromInterceptedRequest(
           mangaId,
@@ -248,13 +274,24 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         setProgress(100);
         onDownloadComplete?.();
 
-        // Emit download completion event
-        downloadEventEmitter.emitCompleted(mangaId, chapterNumber, generateDownloadId(mangaId, chapterNumber));
-
         if (isDebugEnabled()) {
           log.info('Service', 'Download completed successfully', {
             mangaId,
             chapterNumber,
+          });
+        }
+      } else if (
+        downloadManagerService.isDownloadPaused(downloadIdForChapter) ||
+        result.error?.type === DownloadErrorType.CANCELLED ||
+        result.error?.retryable
+      ) {
+        setDownloadStatus(DownloadStatus.PAUSED);
+
+        if (isDebugEnabled()) {
+          log.info('Service', 'Download paused during processing', {
+            mangaId,
+            chapterNumber,
+            reason: result.error?.message,
           });
         }
       } else {
