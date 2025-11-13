@@ -8,6 +8,7 @@ import {
   ImageDownloadStatus,
   DownloadProgress as DownloadProgressType,
 } from '@/types/download';
+import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadManager } from '@/types/downloadInterfaces';
 import { imageExtractorService } from './imageExtractor';
 import { chapterStorageService } from './chapterStorageService';
@@ -21,6 +22,8 @@ import { downloadValidationService } from './downloadValidationService';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 import { webViewRequestInterceptor } from './webViewRequestInterceptor';
+import { AppState, AppStateStatus, NativeEventSubscription } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Download configuration
 const MAX_RETRY_ATTEMPTS = 3;
@@ -28,6 +31,7 @@ const RETRY_DELAY_BASE = 1000; // Base delay in milliseconds
 const RETRY_DELAY_MULTIPLIER = 2; // Exponential backoff multiplier
 const DOWNLOAD_TIMEOUT = 30000; // 30 seconds per image
 const CONCURRENT_IMAGE_DOWNLOADS = 3; // Max concurrent image downloads per chapter
+const PAUSED_DOWNLOAD_STORAGE_KEY = 'download_manager_paused_contexts';
 
 interface RetryConfig {
   attempt: number;
@@ -57,6 +61,32 @@ interface ProgressUpdateListener {
   (progress: DownloadProgressType): void;
 }
 
+interface DownloadContext {
+  mangaId: string;
+  mangaTitle?: string;
+  chapterNumber: string;
+  chapterId: string;
+  vrfToken: string;
+  refererUrl?: string;
+  chapterUrl?: string;
+}
+
+type PauseReason = 'user' | 'app_state' | 'error';
+
+interface PausedDownloadInfo {
+  reason: PauseReason;
+  status: 'paused' | 'resuming';
+  timestamp: number;
+}
+
+interface StoredPausedDownload {
+  downloadId: string;
+  reason: PauseReason;
+  status: 'paused' | 'resuming' | 'active';
+  timestamp: number;
+  context: DownloadContext;
+}
+
 class DownloadManagerService implements DownloadManager {
   private static instance: DownloadManagerService;
   private log = logger();
@@ -64,6 +94,10 @@ class DownloadManagerService implements DownloadManager {
   private downloadAbortControllers: Map<string, AbortController> = new Map();
   private progressListeners: Map<string, Set<ProgressUpdateListener>> =
     new Map();
+  private downloadContexts: Map<string, DownloadContext> = new Map();
+  private pausedDownloads: Map<string, PausedDownloadInfo> = new Map();
+  private appStateSubscription: NativeEventSubscription | null = null;
+  private pausedRestoreAttempted = false;
 
   private constructor() {}
 
@@ -72,6 +106,79 @@ class DownloadManagerService implements DownloadManager {
       DownloadManagerService.instance = new DownloadManagerService();
     }
     return DownloadManagerService.instance;
+  }
+
+  private ensureAppStateSubscription(): void {
+    if (this.appStateSubscription) {
+      return;
+    }
+
+    this.appStateSubscription = AppState.addEventListener(
+      'change',
+      this.handleAppStateChange
+    );
+  }
+
+  private handleAppStateChange = (nextAppState: AppStateStatus): void => {
+    if (isDebugEnabled()) {
+      this.log.info('Service', 'App state changed for downloads', {
+        nextAppState,
+      });
+    }
+
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      void this.pauseAllActiveDownloads('app_state');
+    } else if (nextAppState === 'active') {
+      void this.resumePausedDownloads('app_state');
+      void this.resumePausedDownloads('error');
+    }
+  };
+
+  private async pauseAllActiveDownloads(reason: PauseReason): Promise<void> {
+    const downloadIds = Array.from(this.activeDownloads.keys());
+
+    await Promise.all(
+      downloadIds.map(async (downloadId) => {
+        try {
+          await this.pauseDownload(downloadId, reason);
+        } catch (error) {
+          this.log.warn('Service', 'Failed to pause download during lifecycle event', {
+            downloadId,
+            error,
+          });
+        }
+      })
+    );
+  }
+
+  private async resumePausedDownloads(origin: PauseReason): Promise<void> {
+    const candidates: string[] = [];
+
+    for (const [downloadId, info] of this.pausedDownloads.entries()) {
+      if (info.status !== 'paused') continue;
+
+      if (origin === 'app_state' && info.reason !== 'app_state') {
+        continue;
+      }
+
+      if (origin === 'error' && info.reason !== 'error') {
+        continue;
+      }
+
+      candidates.push(downloadId);
+    }
+
+    for (const downloadId of candidates) {
+      try {
+        await this.resumeDownload(downloadId);
+      } catch (error) {
+        this.log.error('Service', 'Failed to resume paused download', {
+          downloadId,
+          origin,
+          error,
+        });
+      }
+    }
   }
 
   /**
@@ -128,44 +235,27 @@ class DownloadManagerService implements DownloadManager {
         };
       }
 
-      // Create abort controller
-      const abortController = new AbortController();
-      this.downloadAbortControllers.set(downloadId, abortController);
-
-      // Initialize progress tracking
-      const progress: DownloadProgress = {
-        downloadId,
+      const context: DownloadContext = {
         mangaId,
-        mangaTitle: mangaTitle || `Manga ${mangaId}`,
         chapterNumber,
-        totalImages: 0,
-        downloadedImages: 0,
-        failedImages: 0,
-        progress: 0,
-        startTime: Date.now(),
-        lastUpdateTime: Date.now(),
-        totalBytes: 0,
-        downloadedBytes: 0,
+        chapterId,
+        vrfToken,
       };
 
-      this.activeDownloads.set(downloadId, progress);
-
-      if (isDebugEnabled()) {
-        this.log.info('Service', 'Initialized download progress tracking', {
-          downloadId,
-          mangaTitle: progress.mangaTitle,
-        });
+      if (mangaTitle !== undefined) {
+        context.mangaTitle = mangaTitle;
       }
 
-      // Update queue with initial progress
-      downloadQueueService
-        .updateDownloadProgress(downloadId, 0, 0, 0)
-        .catch((error) => {
-          this.log.error('Service', 'Failed to update download progress', {
-            downloadId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
+      if (refererUrl !== undefined) {
+        context.refererUrl = refererUrl;
+        context.chapterUrl = refererUrl;
+      }
+
+      const abortController = await this.initializeActiveDownload(
+        downloadId,
+        context,
+        'initial'
+      );
 
       // Perform download using intercepted data
       if (isDebugEnabled()) {
@@ -191,24 +281,13 @@ class DownloadManagerService implements DownloadManager {
         }
       );
 
-      // Clean up
-      this.activeDownloads.delete(downloadId);
-      this.downloadAbortControllers.delete(downloadId);
-
-      if (result.success) {
-        await downloadQueueService.completeDownload(downloadId);
-      } else {
-        await downloadQueueService.failDownload(
-          downloadId,
-          result.error?.message || 'Unknown error'
-        );
-      }
-
-      return result;
+      return this.handleDownloadResult(downloadId, context, result);
     } catch (error) {
       // Clean up on error
       this.activeDownloads.delete(downloadId);
       this.downloadAbortControllers.delete(downloadId);
+      this.downloadContexts.delete(downloadId);
+      this.pausedDownloads.delete(downloadId);
 
       const downloadError: DownloadError = {
         type: DownloadErrorType.UNKNOWN,
@@ -407,6 +486,415 @@ class DownloadManagerService implements DownloadManager {
     }
 
     return null;
+  }
+
+  private async initializeActiveDownload(
+    downloadId: string,
+    context: DownloadContext,
+    lifecycle: 'initial' | 'resume'
+  ): Promise<AbortController> {
+    this.ensureAppStateSubscription();
+
+    // Persist context for potential resume
+    this.downloadContexts.set(downloadId, context);
+
+    const abortController = new AbortController();
+    this.downloadAbortControllers.set(downloadId, abortController);
+
+    const progress: DownloadProgress = {
+      downloadId,
+      mangaId: context.mangaId,
+      mangaTitle: context.mangaTitle || `Manga ${context.mangaId}`,
+      chapterNumber: context.chapterNumber,
+      totalImages: 0,
+      downloadedImages: 0,
+      failedImages: 0,
+      progress: 0,
+      startTime: Date.now(),
+      lastUpdateTime: Date.now(),
+      totalBytes: 0,
+      downloadedBytes: 0,
+    };
+
+    this.activeDownloads.set(downloadId, progress);
+
+    if (lifecycle === 'resume') {
+      const pausedInfo = this.pausedDownloads.get(downloadId);
+      if (pausedInfo) {
+        this.pausedDownloads.set(downloadId, {
+          ...pausedInfo,
+          status: 'resuming',
+          timestamp: Date.now(),
+        });
+      }
+
+      downloadEventEmitter.emitResumed(
+        context.mangaId,
+        context.chapterNumber,
+        downloadId,
+        progress.progress
+      );
+    } else {
+      // New download attempt
+      this.pausedDownloads.delete(downloadId);
+      downloadEventEmitter.emitStarted(
+        context.mangaId,
+        context.chapterNumber,
+        downloadId
+      );
+    }
+
+    try {
+      await downloadQueueService.updateDownloadProgress(downloadId, 0, 0, 0);
+    } catch (error) {
+      this.log.error('Service', 'Failed to update initial download progress', {
+        downloadId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    void this.persistPausedDownloads();
+
+    return abortController;
+  }
+
+  private async handleDownloadResult(
+    downloadId: string,
+    context: DownloadContext,
+    result: DownloadResult
+  ): Promise<DownloadResult> {
+    const pausedInfo = this.pausedDownloads.get(downloadId);
+    const isExplicitPause = pausedInfo?.status === 'paused';
+    const progressSnapshot = this.activeDownloads.get(downloadId);
+
+    // Cleanup common resources
+    this.activeDownloads.delete(downloadId);
+    this.downloadAbortControllers.delete(downloadId);
+
+    if (isExplicitPause) {
+      if (isDebugEnabled()) {
+        this.log.info('Service', 'Download paused explicitly', {
+          downloadId,
+          reason: pausedInfo?.reason,
+        });
+      }
+
+      void this.persistPausedDownloads();
+
+      return {
+        success: false,
+        error: {
+          type: DownloadErrorType.CANCELLED,
+          message: 'Download paused',
+          retryable: true,
+          chapter: context.chapterNumber,
+          mangaId: context.mangaId,
+        },
+      };
+    }
+
+    if (result.success) {
+      this.pausedDownloads.delete(downloadId);
+      this.downloadContexts.delete(downloadId);
+
+      try {
+        await downloadQueueService.completeDownload(downloadId);
+      } catch (error) {
+        this.log.error('Service', 'Failed to mark download complete', {
+          downloadId,
+          error,
+        });
+      }
+
+      void this.persistPausedDownloads();
+
+      return result;
+    }
+
+    if (this.shouldPauseOnError(result.error)) {
+      this.pausedDownloads.set(downloadId, {
+        reason: 'error',
+        status: 'paused',
+        timestamp: Date.now(),
+      });
+
+      try {
+        await downloadQueueService.pauseDownload(downloadId);
+      } catch (error) {
+        this.log.error('Service', 'Failed to pause queue item after error', {
+          downloadId,
+          error,
+        });
+      }
+
+      downloadEventEmitter.emitPaused(
+        context.mangaId,
+        context.chapterNumber,
+        downloadId,
+        progressSnapshot?.progress
+      );
+
+      if (isDebugEnabled()) {
+        this.log.warn('Service', 'Download paused due to recoverable error', {
+          downloadId,
+          errorType: result.error?.type,
+          message: result.error?.message,
+        });
+      }
+
+      void this.persistPausedDownloads();
+
+      return {
+        success: false,
+        error: {
+          type: result.error?.type ?? DownloadErrorType.UNKNOWN,
+          message:
+            result.error?.message ??
+            'Download paused due to connectivity issues',
+          retryable: true,
+          chapter: context.chapterNumber,
+          mangaId: context.mangaId,
+        },
+      };
+    }
+
+    this.downloadContexts.delete(downloadId);
+    this.pausedDownloads.delete(downloadId);
+
+    try {
+      await downloadQueueService.failDownload(
+        downloadId,
+        result.error?.message || 'Unknown error'
+      );
+    } catch (error) {
+      this.log.error('Service', 'Failed to flag download as failed', {
+        downloadId,
+        error,
+      });
+    }
+
+    void this.persistPausedDownloads();
+
+    return {
+      success: false,
+      error: {
+        type: result.error?.type ?? DownloadErrorType.UNKNOWN,
+        message: result.error?.message || 'Download failed',
+        retryable: result.error?.retryable ?? false,
+        chapter: context.chapterNumber,
+        mangaId: context.mangaId,
+      },
+    };
+  }
+
+  private shouldPauseOnError(error?: DownloadError): boolean {
+    if (!error) {
+      return false;
+    }
+
+    if (error.type === DownloadErrorType.NETWORK_ERROR) {
+      return true;
+    }
+
+    if (error.type === DownloadErrorType.UNKNOWN && error.retryable !== false) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private async persistPausedDownloads(): Promise<void> {
+    try {
+      const stored: StoredPausedDownload[] = [];
+
+      for (const [downloadId, info] of this.pausedDownloads.entries()) {
+        if (info.reason === 'user') {
+          continue;
+        }
+
+        const context = this.downloadContexts.get(downloadId);
+        if (!context) {
+          continue;
+        }
+
+        stored.push({
+          downloadId,
+          reason: info.reason,
+          status: info.status,
+          timestamp: info.timestamp,
+          context,
+        });
+      }
+
+      const now = Date.now();
+      for (const downloadId of this.activeDownloads.keys()) {
+        if (this.pausedDownloads.has(downloadId)) {
+          continue;
+        }
+
+        const context = this.downloadContexts.get(downloadId);
+        if (!context) {
+          continue;
+        }
+
+        stored.push({
+          downloadId,
+          reason: 'error',
+          status: 'active',
+          timestamp: now,
+          context,
+        });
+      }
+
+      if (stored.length === 0) {
+        await AsyncStorage.removeItem(PAUSED_DOWNLOAD_STORAGE_KEY);
+        return;
+      }
+
+      await AsyncStorage.setItem(
+        PAUSED_DOWNLOAD_STORAGE_KEY,
+        JSON.stringify(stored)
+      );
+    } catch (error) {
+      this.log.error('Service', 'Failed to persist paused downloads', {
+        error,
+      });
+    }
+  }
+
+  private async loadPausedDownloadsFromStorage(): Promise<StoredPausedDownload[]> {
+    try {
+      const raw = await AsyncStorage.getItem(PAUSED_DOWNLOAD_STORAGE_KEY);
+      if (!raw) {
+        return [];
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      const sanitized: StoredPausedDownload[] = [];
+
+      for (const entry of parsed) {
+        if (!entry || typeof entry !== 'object') {
+          continue;
+        }
+
+        const {
+          downloadId,
+          reason,
+          status,
+          timestamp,
+          context,
+        } = entry as Partial<
+          StoredPausedDownload
+        >;
+
+        if (
+          typeof downloadId !== 'string' ||
+          (reason !== 'user' && reason !== 'app_state' && reason !== 'error') ||
+          typeof timestamp !== 'number' ||
+          !context ||
+          typeof context !== 'object'
+        ) {
+          continue;
+        }
+
+        const resolvedStatus: StoredPausedDownload['status'] =
+          status === 'paused' || status === 'resuming' || status === 'active'
+            ? status
+            : 'paused';
+
+        if (
+          typeof context.mangaId !== 'string' ||
+          typeof context.chapterNumber !== 'string' ||
+          typeof context.chapterId !== 'string' ||
+          typeof context.vrfToken !== 'string'
+        ) {
+          continue;
+        }
+
+        const restoredContext: DownloadContext = {
+          mangaId: context.mangaId,
+          chapterNumber: context.chapterNumber,
+          chapterId: context.chapterId,
+          vrfToken: context.vrfToken,
+        };
+
+        if (typeof context.mangaTitle === 'string') {
+          restoredContext.mangaTitle = context.mangaTitle;
+        }
+
+        if (typeof context.refererUrl === 'string') {
+          restoredContext.refererUrl = context.refererUrl;
+        }
+
+        if (typeof context.chapterUrl === 'string') {
+          restoredContext.chapterUrl = context.chapterUrl;
+        }
+
+        sanitized.push({
+          downloadId,
+          reason,
+          status: resolvedStatus,
+          timestamp,
+          context: restoredContext,
+        });
+      }
+
+      return sanitized;
+    } catch (error) {
+      this.log.error('Service', 'Failed to load paused downloads', {
+        error,
+      });
+      return [];
+    }
+  }
+
+  async restorePausedDownloadsAutomatically(): Promise<void> {
+    if (this.pausedRestoreAttempted) {
+      return;
+    }
+
+    this.pausedRestoreAttempted = true;
+
+    const stored = await this.loadPausedDownloadsFromStorage();
+    if (stored.length === 0) {
+      return;
+    }
+
+    await downloadQueueService.initialize();
+
+    for (const item of stored) {
+      this.downloadContexts.set(item.downloadId, item.context);
+
+      const normalizedStatus: PausedDownloadInfo['status'] =
+        item.status === 'resuming' ? 'resuming' : 'paused';
+
+      this.pausedDownloads.set(item.downloadId, {
+        reason: item.reason === 'user' ? 'user' : item.reason,
+        status: normalizedStatus,
+        timestamp: item.timestamp,
+      });
+    }
+
+    void this.persistPausedDownloads();
+
+    for (const item of stored) {
+      if (item.reason === 'user') {
+        continue;
+      }
+
+      try {
+        await this.resumeDownload(item.downloadId);
+      } catch (error) {
+        this.log.error('Service', 'Failed to resume paused download on startup', {
+          downloadId: item.downloadId,
+          error,
+        });
+      }
+    }
   }
 
   /**
@@ -700,6 +1188,9 @@ class DownloadManagerService implements DownloadManager {
         }
       }
 
+      // Emit download completion event
+      downloadEventEmitter.emitCompleted(mangaId, chapterNumber, downloadId);
+
       if (isDebugEnabled()) {
         this.log.info(
           'Service',
@@ -973,6 +1464,16 @@ class DownloadManagerService implements DownloadManager {
           progress.totalImages
         );
 
+        // Emit progress event
+        downloadEventEmitter.emitProgress(
+          progress.mangaId,
+          progress.chapterNumber,
+          downloadId,
+          progress.progress,
+          progress.estimatedTimeRemaining,
+          progress.downloadSpeed
+        );
+
         // Notify progress listeners
         this.notifyProgressListeners(
           downloadId,
@@ -1179,17 +1680,50 @@ class DownloadManagerService implements DownloadManager {
   /**
    * Pause an active download
    */
-  async pauseDownload(downloadId: string): Promise<void> {
+  async pauseDownload(
+    downloadId: string,
+    reason: PauseReason = 'user'
+  ): Promise<void> {
+    const context = this.downloadContexts.get(downloadId);
+
+    this.pausedDownloads.set(downloadId, {
+      reason,
+      status: 'paused',
+      timestamp: Date.now(),
+    });
+
     const abortController = this.downloadAbortControllers.get(downloadId);
     if (abortController) {
-      abortController.abort();
       this.downloadAbortControllers.delete(downloadId);
+      abortController.abort();
     }
 
-    await downloadQueueService.pauseDownload(downloadId);
+    try {
+      await downloadQueueService.pauseDownload(downloadId);
+    } catch (error) {
+      this.log.error('Service', 'Failed to pause queue item', {
+        downloadId,
+        error,
+      });
+    }
+
+    if (context) {
+      const progress = this.activeDownloads.get(downloadId);
+      downloadEventEmitter.emitPaused(
+        context.mangaId,
+        context.chapterNumber,
+        downloadId,
+        progress?.progress
+      );
+    }
+
+    void this.persistPausedDownloads();
 
     if (isDebugEnabled()) {
-      this.log.info('Service', 'Download paused', { downloadId });
+      this.log.info('Service', 'Download paused', {
+        downloadId,
+        reason,
+      });
     }
   }
 
@@ -1197,10 +1731,65 @@ class DownloadManagerService implements DownloadManager {
    * Resume a paused download
    */
   async resumeDownload(downloadId: string): Promise<void> {
-    await downloadQueueService.resumeDownload(downloadId);
+    const pausedInfo = this.pausedDownloads.get(downloadId);
+    const context = this.downloadContexts.get(downloadId);
 
-    if (isDebugEnabled()) {
-      this.log.info('Service', 'Download resumed', { downloadId });
+    if (!pausedInfo || pausedInfo.status !== 'paused' || !context) {
+      if (isDebugEnabled()) {
+        this.log.warn('Service', 'No paused download to resume', {
+          downloadId,
+        });
+      }
+      return;
+    }
+
+    this.pausedDownloads.set(downloadId, {
+      ...pausedInfo,
+      status: 'resuming',
+      timestamp: Date.now(),
+    });
+
+    void this.persistPausedDownloads();
+
+    try {
+      await downloadQueueService.resumeDownload(downloadId);
+
+      const abortController = await this.initializeActiveDownload(
+        downloadId,
+        context,
+        'resume'
+      );
+
+      const result = await this.performDownloadFromInterceptedRequest(
+        context.mangaId,
+        context.chapterNumber,
+        context.chapterId,
+        context.vrfToken,
+        downloadId,
+        abortController.signal,
+        context.refererUrl,
+        {
+          attempt: 1,
+          maxAttempts: MAX_RETRY_ATTEMPTS,
+          baseDelay: RETRY_DELAY_BASE,
+          multiplier: RETRY_DELAY_MULTIPLIER,
+        }
+      );
+
+      await this.handleDownloadResult(downloadId, context, result);
+    } catch (error) {
+      this.pausedDownloads.set(downloadId, {
+        reason: pausedInfo.reason,
+        status: 'paused',
+        timestamp: Date.now(),
+      });
+
+      void this.persistPausedDownloads();
+
+      this.log.error('Service', 'Error while resuming download', {
+        downloadId,
+        error,
+      });
     }
   }
 
@@ -1215,7 +1804,12 @@ class DownloadManagerService implements DownloadManager {
     }
 
     this.activeDownloads.delete(downloadId);
+    this.pausedDownloads.delete(downloadId);
+    this.downloadContexts.delete(downloadId);
+
     await downloadQueueService.cancelDownload(downloadId);
+
+    void this.persistPausedDownloads();
 
     if (isDebugEnabled()) {
       this.log.info('Service', 'Download cancelled', { downloadId });
@@ -1280,6 +1874,11 @@ class DownloadManagerService implements DownloadManager {
     if (!progress) return null;
 
     return this.createProgressUpdate(progress);
+  }
+
+  isDownloadPaused(downloadId: string): boolean {
+    const pausedInfo = this.pausedDownloads.get(downloadId);
+    return pausedInfo?.status === 'paused';
   }
 
   /**
@@ -1368,7 +1967,7 @@ class DownloadManagerService implements DownloadManager {
   // Utility methods
 
   private generateDownloadId(mangaId: string, chapterNumber: string): string {
-    return `${mangaId}_${chapterNumber}_${Date.now()}`;
+    return `${mangaId}_${chapterNumber}`;
   }
 
   /*
@@ -1497,6 +2096,21 @@ class DownloadManagerService implements DownloadManager {
     this.activeDownloads.clear();
     this.downloadAbortControllers.clear();
     this.progressListeners.clear();
+    this.downloadContexts.clear();
+    this.pausedDownloads.clear();
+
+    try {
+      await AsyncStorage.removeItem(PAUSED_DOWNLOAD_STORAGE_KEY);
+    } catch (error) {
+      this.log.error('Service', 'Failed to clear paused download storage', {
+        error,
+      });
+    }
+
+    if (this.appStateSubscription) {
+      this.appStateSubscription.remove();
+      this.appStateSubscription = null;
+    }
 
     if (isDebugEnabled()) {
       this.log.info('Service', 'Cleanup completed');

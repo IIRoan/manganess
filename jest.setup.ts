@@ -83,6 +83,8 @@ jest.mock('expo-file-system', () => {
   const Paths = {
     cache: 'mock-cache',
     documentDirectory: 'mock-docs',
+    availableDiskSpace: 10 * 1024 * 1024 * 1024,
+    totalDiskSpace: 64 * 1024 * 1024 * 1024,
   };
 
   return {
@@ -91,6 +93,7 @@ jest.mock('expo-file-system', () => {
     Paths,
   };
 });
+
 
 jest.mock('@react-native-community/netinfo', () => {
   return {

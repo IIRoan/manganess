@@ -3,6 +3,7 @@ import {
   Directory as FSDirectory,
   Paths,
 } from 'expo-file-system';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ChapterImage,
@@ -14,6 +15,7 @@ import {
 import { ChapterStorageService } from '@/types/downloadInterfaces';
 import { isDebugEnabled } from '@/constants/env';
 import { logger } from '@/utils/logger';
+import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 
 // Storage configuration
 const BASE_DOWNLOAD_DIR = new FSDirectory(Paths.cache, 'downloads');
@@ -140,6 +142,32 @@ class ChapterStorage implements ChapterStorageService {
         throw retryError;
       }
     }
+  }
+
+  private async getDeviceFreeSpace(): Promise<number> {
+    try {
+      const legacyModule = requireOptionalNativeModule<{
+        getFreeDiskStorageAsync?: () => Promise<number>;
+      }>('ExponentFileSystem');
+
+      if (legacyModule?.getFreeDiskStorageAsync) {
+        const freeSpace = await legacyModule.getFreeDiskStorageAsync();
+        if (Number.isFinite(freeSpace) && freeSpace >= 0) {
+          return freeSpace;
+        }
+      }
+    } catch (error) {
+      this.log.warn('Storage', 'Failed to get free disk storage from legacy API', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const fallback = Paths.availableDiskSpace;
+    if (Number.isFinite(fallback) && fallback >= 0) {
+      return fallback;
+    }
+
+    return -1;
   }
 
   private async loadMetadata(): Promise<void> {
@@ -915,6 +943,9 @@ class ChapterStorage implements ChapterStorageService {
         this.scheduleSaveUsageStats();
       }
 
+      // Emit download deleted event
+      downloadEventEmitter.emitDeleted(mangaId, chapterNumber, `${mangaId}_${chapterNumber}`);
+
       if (isDebugEnabled()) {
         this.log.info('Storage', 'Deleted chapter', {
           mangaId,
@@ -953,25 +984,39 @@ class ChapterStorage implements ChapterStorageService {
         }
       }
 
-      // Calculate available space based on user settings
+      // Calculate available space based on storage limit and device capacity
       const maxSize = this.settings?.maxStorageSize || DEFAULT_MAX_STORAGE_SIZE;
-      const availableSpace = Math.max(0, maxSize - totalSize);
+      const limitRemaining = Math.max(0, maxSize - totalSize);
+
+      let deviceFreeSpace = await this.getDeviceFreeSpace();
+      if (!Number.isFinite(deviceFreeSpace) || deviceFreeSpace < 0) {
+        deviceFreeSpace = limitRemaining;
+      }
+
+      const availableSpace = Math.min(limitRemaining, deviceFreeSpace);
 
       return {
         totalSize,
         totalChapters,
         mangaCount,
         availableSpace,
+        deviceFreeSpace,
         oldestDownload: totalChapters > 0 ? oldestDownload : 0,
       };
     } catch (error) {
       console.error('Failed to get storage stats:', error);
       const maxSize = this.settings?.maxStorageSize || DEFAULT_MAX_STORAGE_SIZE;
+      let fallbackDeviceFree = await this.getDeviceFreeSpace();
+      if (!Number.isFinite(fallbackDeviceFree) || fallbackDeviceFree < 0) {
+        fallbackDeviceFree = maxSize;
+      }
+      const availableSpace = Math.min(maxSize, fallbackDeviceFree);
       return {
         totalSize: 0,
         totalChapters: 0,
         mangaCount: 0,
-        availableSpace: maxSize,
+        availableSpace,
+        deviceFreeSpace: fallbackDeviceFree,
         oldestDownload: 0,
       };
     }

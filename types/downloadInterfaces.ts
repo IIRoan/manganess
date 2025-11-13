@@ -26,6 +26,8 @@ export interface DownloadManager {
   resumeDownload(downloadId: string): Promise<void>;
   cancelDownload(downloadId: string): Promise<void>;
   getActiveDownloads(): Promise<DownloadItem[]>;
+  isDownloadPaused(downloadId: string): boolean;
+  restorePausedDownloadsAutomatically(): Promise<void>;
 }
 
 export interface ImageExtractor {

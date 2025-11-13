@@ -67,6 +67,7 @@ export interface StorageStats {
   totalChapters: number;
   mangaCount: number;
   availableSpace: number;
+  deviceFreeSpace: number;
   oldestDownload: number;
 }
 

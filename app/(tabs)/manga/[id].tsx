@@ -62,6 +62,8 @@ import type {
 } from '@/types';
 import BatchDownloadBar from '@/components/BatchDownloadBar';
 import { downloadManagerService } from '@/services/downloadManager';
+import { downloadStatusService } from '@/services/downloadStatusService';
+import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadStatus } from '@/types/download';
 
 /* Type Definitions */
@@ -195,7 +197,8 @@ export default function MangaDetailScreen() {
     }
 
     try {
-      const chapters = await chapterStorageService.getDownloadedChapters(
+      // Use the new download status service for consistent status
+      const chapters = await downloadStatusService.getDownloadedChapters(
         id as string
       );
       setDownloadedChapters(chapters);
@@ -216,6 +219,17 @@ export default function MangaDetailScreen() {
     }
 
     try {
+      // Use the new download status service to get active download status
+      const isDownloading = await downloadStatusService.isDownloadingChapters(
+        id as string
+      );
+
+      if (!isDownloading) {
+        setDownloadingChapters([]);
+        return;
+      }
+
+      // Get specific downloading chapters
       const activeDownloads = await downloadManagerService.getActiveDownloads();
       const activeChapterNumbers = activeDownloads
         .filter(
@@ -507,6 +521,14 @@ export default function MangaDetailScreen() {
 
       try {
         await chapterStorageService.deleteChapter(id as string, chapterNumber);
+        
+        // Emit download deleted event
+        downloadEventEmitter.emitDeleted(
+          id as string,
+          chapterNumber,
+          `${id as string}_${chapterNumber}`
+        );
+        
         await refreshDownloadedChapters();
       } catch (deleteError) {
         console.error('Error deleting downloaded chapter:', deleteError);
@@ -609,14 +631,7 @@ export default function MangaDetailScreen() {
 
   const readingProgress = calculateReadingProgress();
   const remainingReadingTime = estimateRemainingReadingTime();
-  const downloadedChaptersSet = useMemo(
-    () => new Set(downloadedChapters),
-    [downloadedChapters]
-  );
-  const downloadingChaptersSet = useMemo(
-    () => new Set(downloadingChapters),
-    [downloadingChapters]
-  );
+  
 
   const ListHeader = useMemo(
     () =>
@@ -898,8 +913,7 @@ export default function MangaDetailScreen() {
                       );
                       refreshDownloadingChapters().catch(() => {});
                     }}
-                    isDownloaded={downloadedChaptersSet.has(chapter.number)}
-                    isDownloading={downloadingChaptersSet.has(chapter.number)}
+                    
                     onDeleteDownload={() => {
                       handleDeleteDownload(chapter.number).catch(() => {});
                     }}
