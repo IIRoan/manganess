@@ -21,6 +21,7 @@ import { installNetworkMonitor } from '@/utils/networkMonitor';
 import { useNavigationPerf } from '@/hooks/useNavigationPerf';
 import { logger } from '@/utils/logger';
 import Constants from 'expo-constants';
+import { downloadManagerService } from '@/services/downloadManager';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -75,6 +76,21 @@ export default function RootLayout() {
       sdkVersion: (Constants as any)?.expoConfig?.sdkVersion,
       appVersion: (Constants as any)?.expoConfig?.version,
     });
+  }, []);
+
+  useEffect(() => {
+    downloadManagerService
+      .restorePausedDownloadsAutomatically()
+      .catch((error) => {
+        if (!isDebugEnabled()) {
+          return;
+        }
+
+        const log = logger();
+        log.error('UI', 'Failed to restore paused downloads', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
   }, []);
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),

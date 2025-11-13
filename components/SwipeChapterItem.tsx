@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import DownloadButton from './DownloadButton';
+import { useDownloadStatus } from '@/hooks/useDownloadStatus';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_ACTION_WIDTH = SCREEN_WIDTH * 0.3; // 30% of screen width
@@ -38,9 +39,7 @@ interface SwipeableChapterItemProps {
   onDownloadStart?: () => void;
   onDownloadComplete?: () => void;
   onDownloadError?: (error: string) => void;
-  isDownloaded?: boolean;
   onDeleteDownload?: () => void;
-  isDownloading?: boolean;
 }
 
 const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
@@ -60,19 +59,23 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   onDownloadStart,
   onDownloadComplete,
   onDownloadError,
-  isDownloaded = false,
   onDeleteDownload,
-  isDownloading = false,
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
   const isSwipingRef = useRef(false);
+
+  // Get unified download status
+  const downloadStatus = useDownloadStatus({
+    mangaId: mangaId || '',
+    chapterNumber: chapter.number,
+  });
 
   const renderRightActions = (
     _progress: Animated.AnimatedAddition<number>,
     dragX: Animated.AnimatedAddition<number>
   ) => {
-    const showDownloadAction = showDownloadButton && mangaId && !isDownloaded;
-    const showDeleteAction = isDownloaded && typeof onDeleteDownload === 'function';
+    const showDownloadAction = showDownloadButton && mangaId && !downloadStatus.isDownloaded;
+    const showDeleteAction = downloadStatus.isDownloaded && typeof onDeleteDownload === 'function';
 
     const actionCount =
       (showDownloadAction ? 1 : 0) +
@@ -118,7 +121,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 size="medium"
                 variant="full"
                 appearance="swipe"
-                disabled={isDownloaded || isDownloading}
+                disabled={downloadStatus.isDownloaded || downloadStatus.isDownloading}
                 onDownloadStart={() => {
                   onDownloadStart?.();
                   swipeableRef.current?.close();
@@ -246,17 +249,21 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             <Text style={styles.chapterDate}>{chapter.date}</Text>
           </View>
           <View style={styles.chapterActions}>
-            {isDownloading ? (
+            {downloadStatus.isDownloading ? (
               <View style={styles.downloadingWrapper}>
                 <ActivityIndicator
                   size="small"
                   color={colors.primary}
                   style={styles.downloadingIndicator}
                 />
-                <Text style={styles.downloadingText}>Downloading…</Text>
+                <Text style={styles.downloadingText}>
+                  {downloadStatus.progress 
+                    ? `${downloadStatus.progress}%` 
+                    : 'Downloading…'}
+                </Text>
               </View>
             ) : null}
-            {isDownloaded ? (
+            {downloadStatus.isDownloaded ? (
               <Ionicons
                 name="cloud-done-outline"
                 size={18}
@@ -271,7 +278,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 color={colors.primary}
                 style={[
                   styles.readIndicator,
-                  isDownloaded ? styles.readIndicatorOffset : undefined,
+                  downloadStatus.isDownloaded ? styles.readIndicatorOffset : undefined,
                 ]}
               />
             )}

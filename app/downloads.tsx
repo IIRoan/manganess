@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import {
 } from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import BackButton from '@/components/BackButton';
 import { File, Paths } from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
@@ -116,9 +117,12 @@ export default function DownloadsScreen() {
     }
   }, [fetchCacheStats]);
 
-  useEffect(() => {
-    void loadDownloads();
-  }, [loadDownloads]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadDownloads();
+      return () => {};
+    }, [loadDownloads])
+  );
 
   const handleDeleteManga = async (mangaId: string) => {
     Alert.alert(
@@ -438,7 +442,13 @@ export default function DownloadsScreen() {
               <Text style={styles.statsValue}>{storageStats.mangaCount}</Text>
             </View>
             <View style={styles.statsRow}>
-              <Text style={styles.statsLabel}>Available Space:</Text>
+              <Text style={styles.statsLabel}>Device Free Space:</Text>
+              <Text style={styles.statsValue}>
+                {formatFileSize(storageStats.deviceFreeSpace)}
+              </Text>
+            </View>
+            <View style={styles.statsRow}>
+              <Text style={styles.statsLabel}>Download Limit Remaining:</Text>
               <Text style={styles.statsValue}>
                 {formatFileSize(storageStats.availableSpace)}
               </Text>
