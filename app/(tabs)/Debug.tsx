@@ -22,6 +22,7 @@ import axios, { isAxiosError } from 'axios';
 import { MANGA_API_URL } from '@/constants/Config';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Sentry from '@sentry/react-native';
 
 export default function DebugScreen() {
   const { theme } = useTheme();
@@ -38,6 +39,9 @@ export default function DebugScreen() {
   });
   const [isTriggering, setIsTriggering] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [lastSentryEventId, setLastSentryEventId] = useState<string | null>(
+    null,
+  );
   const CHAPTER_GUIDE_KEY = 'chapter_guide_seen';
 
   const addLog = (message: string) => {
@@ -534,6 +538,43 @@ export default function DebugScreen() {
     });
   };
 
+  const sendSentryTestError = () => {
+    const eventId = Sentry.captureException(
+      new Error('Debug menu Sentry test error'),
+    );
+    setLastSentryEventId(eventId ?? null);
+    showAlertWithConfig({
+      title: 'Sentry Test Error',
+      message: eventId
+        ? `Sent test error (event ${eventId}).`
+        : 'Sent test error.',
+      options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+    });
+  };
+
+  const sendSentryTestMessage = () => {
+    const eventId = Sentry.captureMessage(
+      'Debug menu Sentry test message',
+      'info',
+    );
+    setLastSentryEventId(eventId ?? null);
+    showAlertWithConfig({
+      title: 'Sentry Test Message',
+      message: eventId
+        ? `Sent diagnostic message (event ${eventId}).`
+        : 'Sent diagnostic message.',
+      options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+    });
+  };
+
+  const showSentryEventId = () => {
+    showAlertWithConfig({
+      title: 'Last Sentry Event',
+      message: lastSentryEventId ?? 'No Sentry events sent yet.',
+      options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -621,6 +662,27 @@ export default function DebugScreen() {
             <Ionicons name="trash-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Clear Image Cache</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Sentry</Text>
+
+          <TouchableOpacity style={styles.option} onPress={sendSentryTestError}>
+            <Ionicons name="bug-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Send Test Error</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.option} onPress={sendSentryTestMessage}>
+            <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>Send Test Message</Text>
+          </TouchableOpacity>
+
+          {lastSentryEventId && (
+            <TouchableOpacity style={styles.option} onPress={showSentryEventId}>
+              <Ionicons name="list-outline" size={24} color={colors.text} />
+              <Text style={styles.optionText}>View Last Event ID</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 
