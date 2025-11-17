@@ -179,6 +179,7 @@ export default function ReadChapterScreen() {
   const bottomSheetRef = useRef<BottomSheet>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mangaFlatListRef = useRef<FlatList>(null);
+  const manhwaScrollViewRef = useRef<ScrollView>(null);
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
 
   
@@ -257,6 +258,11 @@ export default function ReadChapterScreen() {
         normalizeChapterNumber(chapter.number) === normalizedChapterParam
     );
   }, [mangaDetails?.chapters, normalizedChapterParam]);
+
+  const offlineChapterRenderKey = useMemo(() => {
+    const chapterId = normalizedChapterParam || chapterNumber || 'unknown';
+    return `offline-chapter-${id || 'unknown'}-${chapterId}`;
+  }, [id, normalizedChapterParam, chapterNumber]);
 
   const hasNextChapter =
     currentChapterIndex > 0 &&
@@ -769,6 +775,42 @@ export default function ReadChapterScreen() {
     }
   }, [currentPage, contentType, downloadedImages]);
 
+  // Always reset reader position when a new chapter loads offline
+  useEffect(() => {
+    if (!downloadedImages?.length || !contentType) {
+      return;
+    }
+
+    const scrollToTop = () => {
+      if (contentType === 'manhwa') {
+        manhwaScrollViewRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+      } else if (contentType === 'manga') {
+        try {
+          mangaFlatListRef.current?.scrollToIndex({
+            index: 0,
+            animated: false,
+          });
+        } catch (error) {
+          logger().warn('UI', 'Failed to reset manga reader position', {
+            error,
+          });
+          mangaFlatListRef.current?.scrollToOffset({
+            offset: 0,
+            animated: false,
+          });
+        }
+      }
+    };
+
+    const frameId = requestAnimationFrame(scrollToTop);
+    const timeoutId = setTimeout(scrollToTop, 200);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(timeoutId);
+    };
+  }, [downloadedImages, contentType, normalizedChapterParam]);
+
   // Initialize navigation tracking when chapter changes
   useEffect(() => {
     navigationTimestampRef.current = Date.now();
@@ -1007,6 +1049,8 @@ export default function ReadChapterScreen() {
 
     return (
       <ScrollView
+        key={`${offlineChapterRenderKey}-manhwa`}
+        ref={manhwaScrollViewRef}
         style={styles.webView}
         contentContainerStyle={styles.manhwaImagesContainer}
         showsVerticalScrollIndicator={false}
@@ -1061,6 +1105,7 @@ export default function ReadChapterScreen() {
 
     return (
       <FlatList
+        key={`${offlineChapterRenderKey}-manga`}
         ref={mangaFlatListRef}
         data={sortedImages}
         renderItem={renderPage}
