@@ -13,8 +13,11 @@ import {
   Image,
   useColorScheme,
   Animated,
-  type ViewToken,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
+import Svg, { Circle } from 'react-native-svg';
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -163,14 +166,14 @@ export default function MangaDetailScreen() {
     });
 
   // Handle sending user back up/down
-  const [showScrollToTopButton, setShowScrollToTopButton] = useState(false);
-  const [showScrollToBottomButton, setShowScrollToBottomButton] =
-    useState(false);
   const flashListRef = useRef<FlashListRef<Chapter> | null>(null);
+  const lastScrollY = useRef(0);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('down');
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // Animated value for the scroll button opacities
+  // Animated value for the scroll button opacity
   const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
-  const scrollBottomButtonOpacity = useRef(new Animated.Value(0)).current;
 
   // Theming Settings
   const { theme } = useTheme();
@@ -584,50 +587,44 @@ export default function MangaDetailScreen() {
     return unreadChapters * averageTimePerChapter;
   };
 
-  // Checks for showing the scroll buttons
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 50,
-  };
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const offsetY = contentOffset.y;
+      const contentHeight = contentSize.height;
+      const layoutHeight = layoutMeasurement.height;
 
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      const totalChapters = mangaDetails?.chapters?.length ?? 0;
-      if (viewableItems && viewableItems.length > 0 && totalChapters > 0) {
-        const firstVisibleItem = viewableItems[0];
-        const lastVisibleItem = viewableItems[viewableItems.length - 1];
-        const firstVisibleIndex = firstVisibleItem?.index ?? 0;
-        const lastVisibleIndex = lastVisibleItem?.index ?? totalChapters - 1;
+      // Calculate progress
+      const maxScroll = contentHeight - layoutHeight;
+      const progress = maxScroll > 0 ? Math.min(Math.max(offsetY / maxScroll, 0), 1) : 0;
+      setScrollProgress(progress);
 
-        setShowScrollToTopButton(firstVisibleIndex >= 10);
-
-        const showBottom =
-          lastVisibleIndex < totalChapters - 5 && totalChapters > 15;
-        setShowScrollToBottomButton(showBottom);
-      } else {
-        setShowScrollToTopButton(false);
-        setShowScrollToBottomButton(false);
+      // Determine scroll direction
+      const isScrollingDown = offsetY > lastScrollY.current;
+      const isScrollingUp = offsetY < lastScrollY.current;
+      
+      if (Math.abs(offsetY - lastScrollY.current) > 5) {
+         if (isScrollingDown) setScrollDirection('down');
+         if (isScrollingUp) setScrollDirection('up');
       }
+      
+      lastScrollY.current = offsetY;
+
+      // Show button if not at the very top
+      const show = offsetY > 100;
+      setShowScrollButton(show);
     },
-    [mangaDetails?.chapters?.length]
+    []
   );
 
-  // Use useEffect to animate the opacity of the scroll to top button
+  // Animate button opacity
   useEffect(() => {
     Animated.timing(scrollButtonOpacity, {
-      toValue: showScrollToTopButton ? 1 : 0,
-      duration: 300,
+      toValue: showScrollButton ? 1 : 0,
+      duration: 200,
       useNativeDriver: true,
     }).start();
-  }, [showScrollToTopButton, scrollButtonOpacity]);
-
-  // Use useEffect to animate the opacity of the scroll to bottom button
-  useEffect(() => {
-    Animated.timing(scrollBottomButtonOpacity, {
-      toValue: showScrollToBottomButton ? 1 : 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, [showScrollToBottomButton, scrollBottomButtonOpacity]);
+  }, [showScrollButton, scrollButtonOpacity]);
 
   const readingProgress = calculateReadingProgress();
   const remainingReadingTime = estimateRemainingReadingTime();
@@ -921,68 +918,85 @@ export default function MangaDetailScreen() {
                 );
               }}
               ListFooterComponent={<View style={{ height: 120 }} />}
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
             />
 
-            {/* Scroll to Bottom Button */}
+            {/* Smart Scroll FAB */}
             <Animated.View
               style={[
-                styles.scrollToBottomButton,
-                {
-                  opacity: scrollBottomButtonOpacity,
-                  bottom: insets.bottom + 100 + 60,
-                },
-              ]}
-              pointerEvents={showScrollToBottomButton ? 'auto' : 'none'}
-            >
-              <TouchableOpacity
-                onPress={() => {
-                  flashListRef.current?.scrollToEnd({ animated: true });
-                }}
-                style={styles.scrollToBottomButtonTouchable}
-                accessibilityRole="button"
-                accessibilityLabel="Scroll to bottom"
-                accessibilityHint="Scroll to the last chapter"
-              >
-                <Ionicons
-                  name="arrow-down"
-                  size={20}
-                  color="white"
-                  accessibilityElementsHidden={true}
-                />
-              </TouchableOpacity>
-            </Animated.View>
-
-            {/* Scroll to Top Button */}
-            <Animated.View
-              style={[
-                styles.scrollToTopButton,
+                styles.smartScrollButton,
                 {
                   opacity: scrollButtonOpacity,
-                  bottom: insets.bottom + 100,
+                  bottom: insets.bottom + 90,
+                  transform: [
+                    {
+                      scale: scrollButtonOpacity.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.8, 1],
+                      }),
+                    },
+                  ],
                 },
               ]}
-              pointerEvents={showScrollToTopButton ? 'auto' : 'none'}
+              pointerEvents={showScrollButton ? 'auto' : 'none'}
             >
               <TouchableOpacity
                 onPress={() => {
-                  flashListRef.current?.scrollToOffset({
-                    offset: 0,
-                    animated: true,
-                  });
+                  haptics.onSelection();
+                  if (scrollDirection === 'down' && scrollProgress < 0.95) {
+                    flashListRef.current?.scrollToEnd({ animated: true });
+                  } else {
+                    flashListRef.current?.scrollToOffset({
+                      offset: 0,
+                      animated: true,
+                    });
+                  }
                 }}
-                style={styles.scrollToTopButtonTouchable}
+                style={styles.smartScrollButtonTouchable}
                 accessibilityRole="button"
-                accessibilityLabel="Scroll to top"
-                accessibilityHint="Scroll to the manga details"
+                accessibilityLabel={scrollDirection === 'down' ? "Scroll to bottom" : "Scroll to top"}
               >
-                <Ionicons
-                  name="arrow-up"
-                  size={20}
-                  color="white"
-                  accessibilityElementsHidden={true}
-                />
+                <BlurView
+                  intensity={80}
+                  tint={colorScheme === 'dark' ? 'dark' : 'light'}
+                  style={styles.blurContainer}
+                >
+                  {/* Progress Ring */}
+                  <View style={styles.progressRingContainer}>
+                    <Svg width={44} height={44} viewBox="0 0 44 44">
+                      <Circle
+                        cx="22"
+                        cy="22"
+                        r="20"
+                        stroke={colors.text}
+                        strokeWidth="3"
+                        strokeOpacity={0.1}
+                        fill="transparent"
+                      />
+                      <Circle
+                        cx="22"
+                        cy="22"
+                        r="20"
+                        stroke={colors.primary}
+                        strokeWidth="3"
+                        fill="transparent"
+                        strokeDasharray={2 * Math.PI * 20}
+                        strokeDashoffset={2 * Math.PI * 20 * (1 - scrollProgress)}
+                        strokeLinecap="round"
+                        rotation="-90"
+                        origin="22, 22"
+                      />
+                    </Svg>
+                  </View>
+                  
+                  <Ionicons
+                    name={scrollDirection === 'down' && scrollProgress < 0.95 ? "arrow-down" : "arrow-up"}
+                    size={20}
+                    color={colors.text}
+                    style={styles.fabIcon}
+                  />
+                </BlurView>
               </TouchableOpacity>
             </Animated.View>
           </View>
