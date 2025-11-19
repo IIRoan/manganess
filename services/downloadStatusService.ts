@@ -3,6 +3,7 @@ import { chapterStorageService } from './chapterStorageService';
 import { downloadQueueService } from './downloadQueue';
 import { DownloadStatus, DownloadProgress } from '@/types/download';
 import { logger } from '@/utils/logger';
+import { downloadEventEmitter, DownloadStatusEvent } from '@/utils/downloadEventEmitter';
 
 export interface ChapterDownloadStatus {
   mangaId: string;
@@ -44,13 +45,49 @@ class DownloadStatusService {
   private cacheExpiry: Map<string, number> = new Map();
   private readonly CACHE_TTL = 1000; // 1 second cache TTL
 
-  private constructor() {}
+  private constructor() {
+    this.setupEventListeners();
+  }
 
   static getInstance(): DownloadStatusService {
     if (!DownloadStatusService.instance) {
       DownloadStatusService.instance = new DownloadStatusService();
     }
     return DownloadStatusService.instance;
+  }
+
+  private setupEventListeners() {
+    // Listen for global download events to invalidate cache
+    downloadEventEmitter.subscribeGlobal((event: DownloadStatusEvent) => {
+      const key = this.getCacheKey(event.mangaId, event.chapterNumber);
+      
+      // Invalidate cache on status changing events
+      switch (event.type) {
+        case 'download_started':
+        case 'download_completed':
+        case 'download_failed':
+        case 'download_deleted':
+        case 'download_paused':
+        case 'download_resumed':
+          this.clearCache(key);
+          break;
+        case 'download_progress':
+          // Optionally update cache directly instead of clearing
+          // For now, let's keep it simple and not clear on progress to avoid thrashing
+          // But we might want to update the cached progress if it exists
+          const cached = this.getFromCache(key);
+          if (cached) {
+             cached.progress = event.progress || cached.progress;
+             cached.status = DownloadStatus.DOWNLOADING;
+             cached.isDownloading = true;
+             if (event.estimatedTimeRemaining) cached.estimatedTimeRemaining = event.estimatedTimeRemaining;
+             if (event.downloadSpeed) cached.downloadSpeed = event.downloadSpeed;
+             // Update expiry
+             this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
+          }
+          break;
+      }
+    });
   }
 
   private getCacheKey(mangaId: string, chapterNumber: string): string {

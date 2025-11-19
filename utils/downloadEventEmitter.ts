@@ -21,6 +21,20 @@ type EventCallback = (event: DownloadStatusEvent) => void;
 
 class DownloadEventEmitter {
   private listeners: Map<string, EventCallback[]> = new Map();
+  private globalListeners: EventCallback[] = [];
+
+  // Subscribe to global events (all chapters)
+  subscribeGlobal(callback: EventCallback): () => void {
+    this.globalListeners.push(callback);
+    
+    // Return unsubscribe function
+    return () => {
+      const currentIndex = this.globalListeners.indexOf(callback);
+      if (currentIndex > -1) {
+        this.globalListeners.splice(currentIndex, 1);
+      }
+    };
+  }
 
   // Subscribe to events for a specific chapter
   subscribe(
@@ -64,6 +78,15 @@ class DownloadEventEmitter {
         }
       });
     }
+
+    // Notify global listeners
+    this.globalListeners.forEach((callback) => {
+      try {
+        callback(event);
+      } catch (error) {
+        console.error('Error in global download event callback:', error);
+      }
+    });
   }
 
   // Emit progress event

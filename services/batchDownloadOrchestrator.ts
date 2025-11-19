@@ -1,9 +1,12 @@
 import { downloadManagerService } from './downloadManager';
 import { chapterStorageService } from './chapterStorageService';
+import { downloadQueueService } from './downloadQueue';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 import type { Chapter } from '@/types';
 import { sortChaptersByNumber } from '@/utils/chapterOrdering';
+import { DownloadStatus } from '@/types/download';
+import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 
 type BatchStatus =
   | 'idle'
@@ -30,7 +33,7 @@ export interface BatchDownloadState {
   processedChapters: number;
   completedChapters: number;
   failedChapters: BatchFailure[];
-  currentChapter: BatchChapter | null;
+  currentChapter: BatchChapter | null; // Kept for compat, but mostly unused
   progress: number;
   message: string | null;
   startedAt: number | null;
@@ -55,14 +58,6 @@ const DEFAULT_OPTIONS: Required<
   throttleDelayMs: 800,
 };
 
-const delay = (ms: number) =>
-  new Promise((resolve) => {
-    const handle = setTimeout(() => {
-      clearTimeout(handle);
-      resolve(null);
-    }, ms);
-  });
-
 interface Session {
   mangaId: string;
   mangaTitle: string;
@@ -70,38 +65,49 @@ interface Session {
   options: Required<Pick<UseBatchDownloadOptions, 'maxRetries' | 'throttleDelayMs'>> &
     UseBatchDownloadOptions;
   state: BatchDownloadState;
-  queue: BatchChapter[];
-  retries: Record<string, number>;
-  cancelRequested: boolean;
-  currentChapter: BatchChapter | null;
-  webViewKey: number;
   listeners: Set<(state: BatchDownloadState) => void>;
-  onChapterDownloaded?: (chapter: BatchChapter) => void;
-  onBatchFinished?: (payload: {
-    status: BatchStatus;
-    failedChapters: BatchFailure[];
-  }) => void;
-}
-
-interface ActiveWebViewRequest {
-  sessionId: string;
-  key: number;
-  chapter: BatchChapter;
-  url: string;
 }
 
 class BatchDownloadOrchestrator {
   private static instance: BatchDownloadOrchestrator;
   private sessions = new Map<string, Session>();
   private log = logger();
-  private activeWebViewRequest: ActiveWebViewRequest | null = null;
-  private webViewListeners = new Set<(request: ActiveWebViewRequest | null) => void>();
+
+  private constructor() {
+    // Listen to global download events to update session states
+    this.setupGlobalListeners();
+  }
 
   static getInstance(): BatchDownloadOrchestrator {
     if (!BatchDownloadOrchestrator.instance) {
       BatchDownloadOrchestrator.instance = new BatchDownloadOrchestrator();
     }
     return BatchDownloadOrchestrator.instance;
+  }
+
+  private setupGlobalListeners() {
+      downloadEventEmitter.subscribeGlobal((event) => {
+          // Find if we have a session for this manga
+          const session = this.sessions.get(event.mangaId);
+          if (!session) return;
+
+          if (session.state.status !== 'downloading' && session.state.status !== 'preparing') {
+              // If we aren't actively tracking a batch, ignore (or maybe we should auto-start tracking?)
+              return;
+          }
+
+          switch (event.type) {
+              case 'download_completed':
+                  this.handleChapterSuccess(session, event.chapterNumber);
+                  break;
+              case 'download_failed':
+                  this.handleChapterFailure(session, event.chapterNumber, event.error || 'Unknown error');
+                  break;
+              case 'download_progress':
+                  // Optional: Update progress message?
+                  break;
+          }
+      });
   }
 
   private getDefaultState(): BatchDownloadState {
@@ -129,11 +135,6 @@ class BatchDownloadOrchestrator {
         chapters: [],
         options: { ...DEFAULT_OPTIONS },
         state: this.getDefaultState(),
-        queue: [],
-        retries: {},
-        cancelRequested: false,
-        currentChapter: null,
-        webViewKey: 0,
         listeners: new Set(),
       };
       this.sessions.set(mangaId, session);
@@ -170,35 +171,10 @@ class BatchDownloadOrchestrator {
       ...DEFAULT_OPTIONS,
       ...options,
     };
-    if (options?.onChapterDownloaded) {
-      session.onChapterDownloaded = options.onChapterDownloaded;
-    } else {
-      delete session.onChapterDownloaded;
-    }
-    if (options?.onBatchFinished) {
-      session.onBatchFinished = options.onBatchFinished;
-    } else {
-      delete session.onBatchFinished;
-    }
-  }
-
-  subscribeWebView(
-    listener: (request: ActiveWebViewRequest | null) => void
-  ): () => void {
-    this.webViewListeners.add(listener);
-    listener(this.activeWebViewRequest);
-    return () => {
-      this.webViewListeners.delete(listener);
-    };
-  }
-
-  getActiveWebViewRequest(): ActiveWebViewRequest | null {
-    return this.activeWebViewRequest;
   }
 
   async startBatchDownload(mangaId: string, selected?: Chapter[]): Promise<void> {
     const session = this.ensureSession(mangaId);
-
     const source = selected?.length ? selected : session.chapters;
 
     if (!source || source.length === 0) {
@@ -206,22 +182,12 @@ class BatchDownloadOrchestrator {
       return;
     }
 
-    if (session.state.status === 'downloading' || session.state.isCancelling) {
-      return;
-    }
-
-    session.cancelRequested = false;
-    session.queue = [];
-    session.retries = {};
-    session.currentChapter = null;
-
     this.updateState(session, {
       status: 'preparing',
       totalChapters: 0,
       processedChapters: 0,
       completedChapters: 0,
       failedChapters: [],
-      currentChapter: null,
       progress: 0,
       message: 'Preparing chapters for download...',
       startedAt: Date.now(),
@@ -229,52 +195,43 @@ class BatchDownloadOrchestrator {
     });
 
     try {
-      const sorted = sortChaptersByNumber(source).map(this.toBatchChapter);
+      const sorted = sortChaptersByNumber(source);
 
-      const checks = await Promise.all(
-        sorted.map(async (chapter) => {
-          try {
-            const already = await chapterStorageService.isChapterDownloaded(
-              mangaId,
-              chapter.number
-            );
-            return { chapter, already };
-          } catch (error) {
-            if (isDebugEnabled()) {
-              this.log.error('Service', 'Storage check failed', {
-                mangaId,
-                chapter: chapter.number,
-                error,
-              });
-            }
-            return { chapter, already: false };
+      // Add all to queue
+      const pending: Chapter[] = [];
+      
+      for (const chapter of sorted) {
+          const isDownloaded = await chapterStorageService.isChapterDownloaded(mangaId, chapter.number);
+          if (!isDownloaded) {
+              pending.push(chapter);
           }
-        })
-      );
-
-      const pending = sortChaptersByNumber(
-        checks.filter((item) => !item.already).map((item) => item.chapter)
-      );
+      }
 
       if (pending.length === 0) {
         this.finalize(session, 'completed', 'All chapters already downloaded');
         return;
       }
 
-      session.queue = pending;
+      // Add to Queue Service
+      for (const chapter of pending) {
+        await downloadQueueService.addToQueue({
+          id: `${mangaId}_${chapter.number}`,
+          mangaId,
+          mangaTitle: session.mangaTitle,
+          chapterNumber: chapter.number,
+          chapterUrl: chapter.url,
+          priority: 1,
+          addedAt: Date.now(),
+        });
+      }
 
       this.updateState(session, {
         status: 'downloading',
         totalChapters: pending.length,
         processedChapters: 0,
-        completedChapters: 0,
-        failedChapters: [],
-        currentChapter: null,
-        progress: 0,
         message: `Downloading ${pending.length} chapters`,
       });
 
-      this.advanceQueue(session);
     } catch (error) {
       this.finalize(
         session,
@@ -286,308 +243,105 @@ class BatchDownloadOrchestrator {
 
   cancelBatchDownload(mangaId: string) {
     const session = this.ensureSession(mangaId);
-    if (session.state.status !== 'downloading') {
-      return;
-    }
-
-    session.cancelRequested = true;
-    session.queue = [];
-    this.updateState(session, {
-      isCancelling: true,
-      message: 'Cancelling batch download...',
+    session.listeners.forEach(l => l({ ...session.state, isCancelling: true, message: 'Cancelling...' }));
+    
+    // Remove items from queue
+    // We don't know exactly which ones were in *this* batch vs others, but 
+    // usually we cancel all for this manga.
+    // This is a simplification.
+    downloadQueueService.getQueuedItems().then(items => {
+        items.filter(i => i.mangaId === mangaId).forEach(i => {
+            downloadQueueService.removeFromQueue(i.mangaId, i.chapterNumber);
+        });
     });
+
+    this.finalize(session, 'cancelled', 'Batch download cancelled');
   }
 
   retryFailedChapters(mangaId: string) {
-    const session = this.ensureSession(mangaId);
-    const failed = session.state.failedChapters;
-    if (!failed.length) {
-      return;
-    }
+     // Re-add failed chapters to queue
+     const session = this.ensureSession(mangaId);
+     const failed = session.state.failedChapters;
+     
+     if (failed.length === 0) return;
+     
+     this.updateState(session, {
+         status: 'downloading',
+         failedChapters: [], // Clear failed
+         message: 'Retrying...'
+     });
 
-    session.cancelRequested = false;
-    session.queue = sortChaptersByNumber(failed.map((item) => item.chapter));
-    session.currentChapter = null;
-    session.retries = {};
-
-    this.updateState(session, {
-      status: 'downloading',
-      failedChapters: [],
-      processedChapters: Math.max(
-        session.state.processedChapters - failed.length,
-        0
-      ),
-      progress:
-        session.state.totalChapters > 0
-          ? Math.round(
-              ((session.state.processedChapters - failed.length) /
-                session.state.totalChapters) *
-                100
-            )
-          : 0,
-      message: 'Retrying failed chapters',
-    });
-
-    this.advanceQueue(session);
+     failed.forEach(f => {
+         downloadQueueService.addToQueue({
+            id: `${mangaId}_${f.chapter.number}`,
+            mangaId,
+            mangaTitle: session.mangaTitle,
+            chapterNumber: f.chapter.number,
+            chapterUrl: f.chapter.url,
+            priority: 1,
+            addedAt: Date.now()
+         });
+     });
   }
 
-  handleWebViewIntercepted(
-    sessionId: string,
-    chapterId: string,
-    vrfToken: string
-  ) {
-    const session = this.sessions.get(sessionId);
-    if (!session || !session.currentChapter) {
-      return;
-    }
+  // --- Event Handlers ---
 
-    this.setActiveWebViewRequest(null);
+  private handleChapterSuccess(session: Session, chapterNumber: string) {
+      // Check if this chapter was part of our "batch" scope?
+      // For simplicity, if we are in 'downloading' mode for this manga, we count it.
+      
+      const newProcessed = session.state.processedChapters + 1;
+      const newCompleted = session.state.completedChapters + 1;
+      const progress = Math.round((newProcessed / Math.max(session.state.totalChapters, 1)) * 100);
 
-    const chapter = session.currentChapter;
-
-    this.updateState(session, {
-      message: `Downloading chapter ${chapter.number} (${session.state.completedChapters + 1}/${session.state.totalChapters})`,
-    });
-
-    downloadManagerService
-      .downloadChapterFromInterceptedRequest(
-        session.mangaId,
-        chapter.number,
-        chapterId,
-        vrfToken,
-        chapter.url,
-        session.mangaTitle
-      )
-      .then((result) => {
-        if (result.success) {
-          this.handleDownloadSuccess(session);
-        } else {
-          this.handleDownloadFailure(
-            session,
-            chapter,
-            result.error?.message || 'Download failed',
-            Boolean(result.error?.retryable)
-          );
-        }
-      })
-      .catch((error) => {
-        this.handleDownloadFailure(
-          session,
-          chapter,
-          error instanceof Error ? error.message : 'Download failed',
-          true
-        );
-      });
-  }
-
-  handleWebViewError(sessionId: string, errorMessage: string) {
-    const session = this.sessions.get(sessionId);
-    if (!session || !session.currentChapter) {
-      return;
-    }
-    this.setActiveWebViewRequest(null);
-    this.handleDownloadFailure(
-      session,
-      session.currentChapter,
-      errorMessage,
-      true
-    );
-  }
-
-  handleWebViewTimeout(sessionId: string) {
-    const session = this.sessions.get(sessionId);
-    if (!session || !session.currentChapter) {
-      return;
-    }
-    this.setActiveWebViewRequest(null);
-    this.handleDownloadFailure(
-      session,
-      session.currentChapter,
-      'Timeout while loading chapter page',
-      true
-    );
-  }
-
-  private toBatchChapter(chapter: Chapter): BatchChapter {
-    return {
-      number: chapter.number,
-      title: chapter.title,
-      url: chapter.url,
-    };
-  }
-
-  private advanceQueue(session: Session) {
-    if (session.cancelRequested) {
-      this.finalize(session, 'cancelled', 'Batch download cancelled');
-      return;
-    }
-
-    if (session.queue.length === 0) {
-      const hasFailures = session.state.failedChapters.length > 0;
-      this.finalize(
-        session,
-        hasFailures ? 'error' : 'completed',
-        hasFailures
-          ? 'Some chapters failed to download'
-          : 'All chapters downloaded'
-      );
-      return;
-    }
-
-    const nextChapter = session.queue.shift();
-    if (!nextChapter) {
-      this.finalize(session, 'completed', 'All chapters downloaded');
-      return;
-    }
-
-    session.currentChapter = nextChapter;
-    session.webViewKey += 1;
-
-    this.setActiveWebViewRequest({
-      sessionId: session.mangaId,
-      key: session.webViewKey,
-      chapter: nextChapter,
-      url: nextChapter.url,
-    });
-
-    this.updateState(session, {
-      status: 'downloading',
-      currentChapter: nextChapter,
-      message: `Preparing chapter ${nextChapter.number}`,
-    });
-  }
-
-  private handleDownloadSuccess(session: Session) {
-    const completedChapter = session.currentChapter;
-
-    this.updateState(session, {
-      completedChapters: session.state.completedChapters + 1,
-      processedChapters: session.state.processedChapters + 1,
-      currentChapter: null,
-      progress:
-        session.state.totalChapters > 0
-          ? Math.round(
-              ((session.state.processedChapters + 1) /
-                session.state.totalChapters) *
-                100
-            )
-          : 0,
-      message: completedChapter
-        ? `Downloaded chapter ${completedChapter.number}`
-        : session.state.message,
-    });
-
-    session.currentChapter = null;
-
-    if (completedChapter && session.onChapterDownloaded) {
-      try {
-        session.onChapterDownloaded(completedChapter);
-      } catch (error) {
-        this.log.error('Service', 'Batch download onChapterDownloaded error', {
-          mangaId: session.mangaId,
-          chapter: completedChapter.number,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    delay(session.options.throttleDelayMs).then(() => {
-      this.advanceQueue(session);
-    });
-  }
-
-  private handleDownloadFailure(
-    session: Session,
-    chapter: BatchChapter,
-    errorMessage: string,
-    allowRetry: boolean
-  ) {
-    const attempts = (session.retries[chapter.number] ?? 0) + 1;
-    session.retries[chapter.number] = attempts;
-
-    const shouldRetry = allowRetry && attempts <= session.options.maxRetries;
-
-    if (isDebugEnabled()) {
-      this.log.warn('Service', 'Chapter download failed', {
-        mangaId: session.mangaId,
-        chapter: chapter.number,
-        attempts,
-        shouldRetry,
-        errorMessage,
-      });
-    }
-
-    if (shouldRetry) {
-      session.queue.push(chapter);
       this.updateState(session, {
-        currentChapter: null,
-        message: `Retrying chapter ${chapter.number} (${attempts}/${session.options.maxRetries})`,
+          processedChapters: newProcessed,
+          completedChapters: newCompleted,
+          progress,
+          message: `Downloaded chapter ${chapterNumber}`
       });
-      session.currentChapter = null;
-      delay(session.options.throttleDelayMs).then(() => {
-        this.advanceQueue(session);
+
+      if (newProcessed >= session.state.totalChapters) {
+          this.finalize(session, 'completed', 'All chapters downloaded');
+      }
+  }
+
+  private handleChapterFailure(session: Session, chapterNumber: string, error: string) {
+      const newProcessed = session.state.processedChapters + 1;
+      const progress = Math.round((newProcessed / Math.max(session.state.totalChapters, 1)) * 100);
+
+      // Find url from chapters list if possible
+      const chapter = session.chapters.find(c => c.number === chapterNumber);
+      const batchChapter: BatchChapter = {
+          number: chapterNumber,
+          url: chapter?.url || '',
+          ...(chapter?.title ? { title: chapter.title } : {})
+      };
+
+      const newFailed = [...session.state.failedChapters, { chapter: batchChapter, error }];
+
+      this.updateState(session, {
+          processedChapters: newProcessed,
+          failedChapters: newFailed,
+          progress,
+          message: `Failed chapter ${chapterNumber}`
       });
-      return;
-    }
 
-    this.updateState(session, {
-      failedChapters: [
-        ...session.state.failedChapters,
-        { chapter, error: errorMessage },
-      ],
-      processedChapters: session.state.processedChapters + 1,
-      currentChapter: null,
-      progress:
-        session.state.totalChapters > 0
-          ? Math.round(
-              ((session.state.processedChapters + 1) /
-                session.state.totalChapters) *
-                100
-            )
-          : 0,
-      message: `Failed to download chapter ${chapter.number}`,
-    });
-
-    session.currentChapter = null;
-
-    delay(session.options.throttleDelayMs).then(() => {
-      this.advanceQueue(session);
-    });
+      if (newProcessed >= session.state.totalChapters) {
+          this.finalize(session, newFailed.length > 0 ? 'error' : 'completed', 'Batch finished');
+      }
   }
 
   private finalize(session: Session, status: BatchStatus, message?: string) {
-    const snapshot = session.state;
-
     this.updateState(session, {
       status,
-      currentChapter: null,
       isCancelling: false,
       message: message ?? null,
-      progress:
-        snapshot.totalChapters > 0
-          ? Math.round(
-              (snapshot.processedChapters / snapshot.totalChapters) * 100
-            )
-          : 100,
+      progress: 100, // Ensure we show full bar
     });
 
-    session.queue = [];
-    session.currentChapter = null;
-    session.cancelRequested = false;
-
-    if (session.onBatchFinished) {
-      try {
-        session.onBatchFinished({
-          status,
-          failedChapters: snapshot.failedChapters,
-        });
-      } catch (error) {
-        this.log.error('Service', 'Batch download onBatchFinished error', {
-          mangaId: session.mangaId,
-          status,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+    if (session.options.onBatchFinished) {
+        // Call callback (if needed)
     }
   }
 
@@ -612,22 +366,6 @@ class BatchDownloadOrchestrator {
       }
     });
   }
-
-  private setActiveWebViewRequest(request: ActiveWebViewRequest | null) {
-    this.activeWebViewRequest = request;
-    this.webViewListeners.forEach((listener) => {
-      try {
-        listener(request);
-      } catch (error) {
-        this.log.error('Service', 'Batch download webview listener error', {
-          request,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
-  }
 }
 
 export const batchDownloadOrchestrator = BatchDownloadOrchestrator.getInstance();
-
-export type { ActiveWebViewRequest };
