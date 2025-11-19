@@ -25,6 +25,16 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.notification,
       textAlign: 'center',
     },
+    fixedHeader: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 100,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+    },
     headerContainer: {
       height: 325,
       position: 'relative',
@@ -46,11 +56,6 @@ const getStyles = (colors: typeof Colors.light) =>
       bottom: 20,
       left: 20,
       right: 20,
-    },
-    headerButtons: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 10,
     },
     headerButton: {
       padding: 10,

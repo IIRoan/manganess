@@ -643,47 +643,21 @@ export default function MangaDetailScreen() {
             />
             <View style={styles.overlay} />
             <View style={styles.headerContent}>
-              <View style={styles.headerButtons}>
-                <BackButton
-                  variant="enhanced"
-                  size={30}
-                  color="#FFFFFF"
-                  style={styles.headerButton}
-                  showHistoryOnLongPress={true}
-                />
-                <TouchableOpacity
-                  testID="bookmark-button"
-                  onPress={handleBookmark}
-                  style={styles.headerButton}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    bookmarkStatus ? 'Remove bookmark' : 'Add bookmark'
-                  }
-                  accessibilityHint={`Currently ${bookmarkStatus || 'not bookmarked'}. Tap to ${bookmarkStatus ? 'remove' : 'add'} bookmark.`}
-                >
-                  <Ionicons
-                    name={bookmarkStatus ? 'bookmark' : 'bookmark-outline'}
-                    size={30}
-                    color={colors.primary}
-                    accessibilityElementsHidden={true}
-                  />
-                </TouchableOpacity>
-              </View>
               <Text
                 style={styles.title}
-                numberOfLines={2}
+                numberOfLines={3}
                 ellipsizeMode="tail"
-                accessibilityRole="header"
               >
                 {mangaDetails.title}
               </Text>
               {mangaDetails.alternativeTitle && (
-                <ExpandableText
-                  text={mangaDetails.alternativeTitle}
-                  initialLines={1}
+                <Text
                   style={styles.alternativeTitle}
-                  stateKey={`alt-title-${id}`}
-                />
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  {mangaDetails.alternativeTitle}
+                </Text>
               )}
               <View style={styles.statusContainer}>
                 <Text
@@ -855,6 +829,32 @@ export default function MangaDetailScreen() {
           />
 
           <View style={{ flex: 1 }}>
+            <View style={[styles.fixedHeader, { paddingTop: insets.top + 10 }]}>
+              <BackButton
+                variant="enhanced"
+                size={30}
+                color="#FFFFFF"
+                style={styles.headerButton}
+                showHistoryOnLongPress={true}
+              />
+              <TouchableOpacity
+                testID="bookmark-button"
+                onPress={handleBookmark}
+                style={styles.headerButton}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  bookmarkStatus ? 'Remove bookmark' : 'Add bookmark'
+                }
+                accessibilityHint={`Currently ${bookmarkStatus || 'not bookmarked'}. Tap to ${bookmarkStatus ? 'remove' : 'add'} bookmark.`}
+              >
+                <Ionicons
+                  name={bookmarkStatus ? 'bookmark' : 'bookmark-outline'}
+                  size={30}
+                  color={colors.primary}
+                  accessibilityElementsHidden={true}
+                />
+              </TouchableOpacity>
+            </View>
             <FlashList<Chapter>
               ref={flashListRef}
               removeClippedSubviews={true}
