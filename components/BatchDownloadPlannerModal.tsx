@@ -24,6 +24,12 @@ import {
 type PlannerMode = 'all' | 'upto' | 'range';
 type PlannerTab = 'download' | 'manage';
 type SortOption = 'number-asc' | 'number-desc' | 'size-asc' | 'size-desc';
+type ModeOption = {
+  value: PlannerMode;
+  title: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
 
 interface BatchDownloadPlannerModalProps {
   visible: boolean;
@@ -283,33 +289,6 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
     closeModal();
   };
 
-  const renderModeButton = (
-    label: string,
-    value: PlannerMode
-  ) => {
-    const isActive = mode === value;
-    return (
-      <TouchableOpacity
-        key={value}
-        style={[styles.modeButton, isActive && styles.modeButtonActive]}
-        onPress={() => {
-          setMode(value);
-          setError(null);
-        }}
-        activeOpacity={0.85}
-      >
-        <Text
-          style={[
-            styles.modeButtonText,
-            isActive && { color: colors.background },
-          ]}
-        >
-          {label}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
   const renderTabButton = (
     label: string,
     value: PlannerTab,
@@ -373,30 +352,97 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
     );
   };
 
-  const headerTitle =
-    activeTab === 'manage'
-      ? 'Manage offline downloads'
-      : 'Plan offline downloads';
+  const totalChapters = sortedChapters.length;
+  const headerTitle = 'Offline downloads';
 
   const subtitleText =
     activeTab === 'manage'
       ? downloadedChaptersSorted.length
-        ? 'Select downloaded chapters to remove from this device.'
-        : 'You have no offline chapters yet. Download chapters to manage them here.'
-      : `Choose which chapters to download. Available chapters range from ${
-          sortedChapters[0]?.number ?? '—'
-        } to ${
-          sortedChapters[sortedChapters.length - 1]?.number ?? '—'
-        }`;
+        ? 'Tap chapters you no longer need offline.'
+        : 'No offline chapters yet. Download some to manage them here.'
+      : totalChapters
+        ? `Pick how many chapters to keep offline — ${
+            sortedChapters[0]?.number ?? '—'
+          } to ${
+            sortedChapters[totalChapters - 1]?.number ?? '—'
+          } available.`
+        : 'Choose chapters to download for offline reading.';
 
   const confirmLabel =
-    activeTab === 'manage' ? 'Delete selected' : 'Start download';
+    activeTab === 'manage' ? 'Remove selected' : 'Start download';
 
   const confirmDisabled =
     isProcessing ||
     (activeTab === 'manage'
       ? selectedDeletes.size === 0 || downloadedChaptersSorted.length === 0
       : false);
+
+  const modeOptions: ModeOption[] = useMemo(
+    () => [
+      {
+        value: 'all',
+        title: 'Entire series',
+        description: totalChapters
+          ? `Download all ${totalChapters} chapters`
+          : 'Download every available chapter',
+        icon: 'albums-outline',
+      },
+      {
+        value: 'upto',
+        title: 'Up to a chapter',
+        description: 'Stop at a specific chapter number',
+        icon: 'flag-outline',
+      },
+      {
+        value: 'range',
+        title: 'Custom window',
+        description: 'Pick an exact start and end range',
+        icon: 'options-outline',
+      },
+    ],
+    [totalChapters]
+  );
+
+  const renderModeOption = (option: ModeOption) => {
+    const isActive = mode === option.value;
+    return (
+      <TouchableOpacity
+        key={option.value}
+        style={[styles.modeCard, isActive && styles.modeCardActive]}
+        onPress={() => {
+          setMode(option.value);
+          setError(null);
+        }}
+        activeOpacity={0.9}
+      >
+        <View
+          style={[
+            styles.modeCardIconWrapper,
+            isActive && styles.modeCardIconWrapperActive,
+          ]}
+        >
+          <Ionicons
+            name={option.icon}
+            size={18}
+            color={isActive ? colors.background : colors.primary}
+          />
+        </View>
+        <Text
+          style={[styles.modeCardTitle, isActive && styles.modeCardTitleActive]}
+        >
+          {option.title}
+        </Text>
+        <Text
+          style={[
+            styles.modeCardDescription,
+            isActive && styles.modeCardDescriptionActive,
+          ]}
+        >
+          {option.description}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <Modal
@@ -442,12 +488,15 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
           >
             {activeTab === 'download' ? (
               <>
-                <View style={styles.modeSelector}>
-                  {[
-                    renderModeButton('All chapters', 'all'),
-                    renderModeButton('Up to chapter', 'upto'),
-                    renderModeButton('Custom range', 'range'),
-                  ]}
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionHeading}>Download plan</Text>
+                  <Text style={styles.sectionHint}>
+                    Choose the amount of chapters to fetch
+                  </Text>
+                </View>
+
+                <View style={styles.modeCardGrid}>
+                  {modeOptions.map(renderModeOption)}
                 </View>
 
                 {mode === 'upto' ? (
@@ -497,15 +546,14 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                   </View>
                 ) : null}
 
-                <View style={styles.tipBox}>
+                <View style={styles.helperRow}>
                   <Ionicons
                     name="information-circle-outline"
-                    size={18}
+                    size={16}
                     color={colors.primary}
                   />
-                  <Text style={styles.tipText}>
-                    Downloads start from the earliest chapter in your selection
-                    and proceed in order.
+                  <Text style={styles.helperText}>
+                    Chapters download sequentially from the earliest number.
                   </Text>
                 </View>
               </>
@@ -514,26 +562,33 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                 {downloadedChaptersSorted.length ? (
                   <>
                     <View style={styles.manageHeaderSection}>
-                      <View style={styles.manageActionsRow}>
-                        <Text style={styles.manageSummary}>
-                          {selectedDeletes.size > 0
-                            ? `${selectedDeletes.size} selected`
-                            : `${downloadedChaptersSorted.length} downloaded`}
-                        </Text>
+                      <View style={styles.manageSummaryRow}>
+                        <View style={styles.countPill}>
+                          <Ionicons
+                            name="download-outline"
+                            size={14}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.countPillText}>
+                            {selectedDeletes.size > 0
+                              ? `${selectedDeletes.size} selected`
+                              : `${downloadedChaptersSorted.length} stored`}
+                          </Text>
+                        </View>
                         <TouchableOpacity
                           onPress={toggleSelectAll}
                           activeOpacity={0.8}
                         >
                           <Text style={styles.manageToggle}>
                             {selectedDeletes.size === downloadedChaptersSorted.length
-                              ? 'Clear all'
+                              ? 'Clear'
                               : 'Select all'}
                           </Text>
                         </TouchableOpacity>
                       </View>
 
                       <View style={styles.sortButtonsContainer}>
-                        <Text style={styles.sortLabel}>Sort:</Text>
+                        <Text style={styles.sortLabel}>Sort by</Text>
                         <View style={styles.sortButtonsRow}>
                           {renderSortButton('Number ↑', 'number-asc', 'arrow-up')}
                           {renderSortButton('Number ↓', 'number-desc', 'arrow-down')}
@@ -591,8 +646,16 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                   </>
                 ) : (
                   <View style={styles.emptyState}>
+                    <Ionicons
+                      name="cloud-download-outline"
+                      size={24}
+                      color={colors.tabIconDefault}
+                    />
                     <Text style={styles.emptyStateText}>
-                      No downloads to manage yet.
+                      Your offline list is empty.
+                    </Text>
+                    <Text style={styles.emptyStateHint}>
+                      Use the download tab to save chapters for later.
                     </Text>
                   </View>
                 )}
@@ -695,27 +758,66 @@ const getStyles = (colors: typeof Colors.light) =>
       fontWeight: '600',
       color: colors.text,
     },
-    modeSelector: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      gap: 8,
-      marginBottom: 18,
+    sectionHeaderRow: {
+      marginBottom: 12,
+      gap: 4,
     },
-    modeButton: {
-      flex: 1,
-      backgroundColor: colors.border,
-      borderRadius: 12,
-      paddingVertical: 12,
+    sectionHeading: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    sectionHint: {
+      fontSize: 12,
+      color: colors.tabIconDefault,
+    },
+    modeCardGrid: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+      marginBottom: 20,
+    },
+    modeCard: {
+      flexBasis: '48%',
+      flexGrow: 1,
+      minWidth: 148,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      gap: 8,
+    },
+    modeCardActive: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primary + '12',
+    },
+    modeCardIconWrapper: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: colors.primary + '14',
     },
-    modeButtonActive: {
+    modeCardIconWrapperActive: {
       backgroundColor: colors.primary,
     },
-    modeButtonText: {
-      fontSize: 13,
-      fontWeight: '600',
+    modeCardTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    modeCardTitleActive: {
+      color: colors.primary,
+    },
+    modeCardDescription: {
+      fontSize: 12,
+      lineHeight: 16,
+      color: colors.tabIconDefault,
+    },
+    modeCardDescriptionActive: {
       color: colors.text,
     },
     inputGroup: {
@@ -743,19 +845,20 @@ const getStyles = (colors: typeof Colors.light) =>
     inputGroupHalf: {
       flex: 1,
     },
-    tipBox: {
+    helperRow: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 10,
-      backgroundColor: colors.primary + '12',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.primary + '10',
       borderRadius: 12,
-      padding: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
       marginBottom: 12,
     },
-    tipText: {
+    helperText: {
       flex: 1,
-      fontSize: 13,
-      color: colors.text,
+      fontSize: 12,
+      color: colors.tabIconDefault,
     },
     manageHeaderSection: {
       marginBottom: 16,
@@ -763,15 +866,25 @@ const getStyles = (colors: typeof Colors.light) =>
       borderBottomColor: colors.border,
       paddingBottom: 12,
     },
-    manageActionsRow: {
+    manageSummaryRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 12,
     },
-    manageSummary: {
-      fontSize: 13,
-      color: colors.tabIconDefault,
+    countPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primary + '10',
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    countPillText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.text,
     },
     manageToggle: {
       fontSize: 13,
@@ -851,6 +964,11 @@ const getStyles = (colors: typeof Colors.light) =>
     emptyStateText: {
       fontSize: 13,
       color: colors.tabIconDefault,
+    },
+    emptyStateHint: {
+      fontSize: 12,
+      color: colors.tabIconDefault,
+      marginTop: 6,
     },
     errorText: {
       color: colors.error,
