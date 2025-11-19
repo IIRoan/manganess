@@ -116,7 +116,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         );
       }
     },
-    [onDownloadComplete, onDownloadError]
+    [mangaId, chapterNumber, onDownloadComplete, onDownloadError]
   );
 
   // Load initial download status with throttling
@@ -170,11 +170,45 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
             setEstimatedTime(event.estimatedTimeRemaining);
           }
         }
+
+        if (event.type === 'download_started') {
+          setDownloadStatus(DownloadStatus.DOWNLOADING);
+          setProgress(0);
+        }
+
+        if (event.type === 'download_completed') {
+          setDownloadStatus(DownloadStatus.COMPLETED);
+          setProgress(100);
+          onDownloadComplete?.();
+        }
+
+        if (event.type === 'download_failed') {
+          setDownloadStatus(DownloadStatus.FAILED);
+          onDownloadError?.(event.error || 'Download failed');
+        }
+
+        if (event.type === 'download_deleted') {
+          setDownloadStatus(DownloadStatus.QUEUED);
+          setProgress(0);
+          setEstimatedTime(undefined);
+        }
+
+        if (event.type === 'download_progress') {
+           if (downloadStatus !== DownloadStatus.DOWNLOADING) {
+             setDownloadStatus(DownloadStatus.DOWNLOADING);
+           }
+           if (typeof event.progress === 'number') {
+             setProgress(event.progress);
+           }
+           if (event.estimatedTimeRemaining !== undefined) {
+             setEstimatedTime(event.estimatedTimeRemaining);
+           }
+        }
       }
     );
 
     return unsubscribe;
-  }, [mangaId, chapterNumber]);
+  }, [mangaId, chapterNumber, downloadStatus, onDownloadComplete, onDownloadError]);
 
   // Animate progress changes
   useEffect(() => {
@@ -506,7 +540,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         return (
           <View style={styles.textContainer}>
             <Text style={styles.statusText}>{getStatusText()}</Text>
-            {estimatedTime && downloadStatus === DownloadStatus.DOWNLOADING && (
+            {estimatedTime !== undefined && downloadStatus === DownloadStatus.DOWNLOADING && (
               <Text style={styles.estimatedTimeText}>
                 {formatEstimatedTime(estimatedTime)}
               </Text>
@@ -521,7 +555,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
             {renderIcon()}
             <View style={styles.textSection}>
               <Text style={styles.statusText}>{getStatusText()}</Text>
-              {estimatedTime &&
+              {estimatedTime !== undefined &&
                 downloadStatus === DownloadStatus.DOWNLOADING && (
                   <Text style={styles.estimatedTimeText}>
                     {formatEstimatedTime(estimatedTime)}

@@ -23,6 +23,7 @@ import {
 
 type PlannerMode = 'all' | 'upto' | 'range';
 type PlannerTab = 'download' | 'manage';
+type SortOption = 'number-asc' | 'number-desc' | 'size-asc' | 'size-desc';
 
 interface BatchDownloadPlannerModalProps {
   visible: boolean;
@@ -87,22 +88,33 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
   const [selectedDeletes, setSelectedDeletes] = useState<Set<string>>(
     new Set()
   );
+  const [sortOption, setSortOption] = useState<SortOption>('number-asc');
 
   useEffect(() => {
-    if (!visible) {
-      return;
+    if (visible) {
+      setActiveTab(
+        downloadedChaptersSorted.length > 0 ? initialTab : 'download'
+      );
+      setMode('all');
+      setUpperLimit('');
+      setRangeStart('');
+      setRangeEnd('');
+      setError(null);
+      setSelectedDeletes(new Set());
+      setSortOption('number-asc');
     }
+  }, [visible]);
 
-    setActiveTab(
-      downloadedChaptersSorted.length > 0 ? initialTab : 'download'
-    );
-    setMode('all');
-    setUpperLimit('');
-    setRangeStart('');
-    setRangeEnd('');
-    setError(null);
-    setSelectedDeletes(new Set());
-  }, [visible, initialTab, downloadedChaptersSorted.length]);
+  // Auto-switch to download tab if all downloads are removed while managing
+  useEffect(() => {
+    if (
+      visible &&
+      activeTab === 'manage' &&
+      downloadedChaptersSorted.length === 0
+    ) {
+      setActiveTab('download');
+    }
+  }, [visible, activeTab, downloadedChaptersSorted.length]);
 
   useEffect(() => {
     setSelectedDeletes((prev) => {
@@ -128,6 +140,26 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
   const closeModal = () => {
     onClose();
   };
+
+  const getSortedDownloadedChapters = useMemo(() => {
+    let sorted = [...downloadedChaptersSorted];
+
+    if (sortOption.startsWith('number')) {
+      sorted.sort((a, b) => {
+        const numA = parseChapterNumber(a.number);
+        const numB = parseChapterNumber(b.number);
+        return sortOption === 'number-asc' ? numA - numB : numB - numA;
+      });
+    } else if (sortOption.startsWith('size')) {
+      sorted.sort((a, b) => {
+        const sizeA = (a as any).fileSize ?? 0;
+        const sizeB = (b as any).fileSize ?? 0;
+        return sortOption === 'size-asc' ? sizeA - sizeB : sizeB - sizeA;
+      });
+    }
+
+    return sorted;
+  }, [downloadedChaptersSorted, sortOption]);
 
   const toggleDeleteSelection = (chapterNumber: string) => {
     setSelectedDeletes((prev) => {
@@ -311,6 +343,36 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
     );
   };
 
+  const renderSortButton = (
+    label: string,
+    value: SortOption,
+    icon: keyof typeof Ionicons.glyphMap
+  ) => {
+    const isActive = sortOption === value;
+    return (
+      <TouchableOpacity
+        key={value}
+        style={[styles.sortButton, isActive && styles.sortButtonActive]}
+        onPress={() => setSortOption(value)}
+        activeOpacity={0.8}
+      >
+        <Ionicons
+          name={icon}
+          size={14}
+          color={isActive ? colors.background : colors.tabIconDefault}
+        />
+        <Text
+          style={[
+            styles.sortButtonText,
+            isActive && { color: colors.background },
+          ]}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   const headerTitle =
     activeTab === 'manage'
       ? 'Manage offline downloads'
@@ -451,26 +513,38 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
               <>
                 {downloadedChaptersSorted.length ? (
                   <>
-                    <View style={styles.manageActionsRow}>
-                      <Text style={styles.manageSummary}>
-                        {selectedDeletes.size > 0
-                          ? `${selectedDeletes.size} selected`
-                          : `${downloadedChaptersSorted.length} downloaded`}
-                      </Text>
-                      <TouchableOpacity
-                        onPress={toggleSelectAll}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.manageToggle}>
-                          {selectedDeletes.size === downloadedChaptersSorted.length
-                            ? 'Clear all'
-                            : 'Select all'}
+                    <View style={styles.manageHeaderSection}>
+                      <View style={styles.manageActionsRow}>
+                        <Text style={styles.manageSummary}>
+                          {selectedDeletes.size > 0
+                            ? `${selectedDeletes.size} selected`
+                            : `${downloadedChaptersSorted.length} downloaded`}
                         </Text>
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={toggleSelectAll}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.manageToggle}>
+                            {selectedDeletes.size === downloadedChaptersSorted.length
+                              ? 'Clear all'
+                              : 'Select all'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.sortButtonsContainer}>
+                        <Text style={styles.sortLabel}>Sort:</Text>
+                        <View style={styles.sortButtonsRow}>
+                          {renderSortButton('Number ↑', 'number-asc', 'arrow-up')}
+                          {renderSortButton('Number ↓', 'number-desc', 'arrow-down')}
+                          {renderSortButton('Size ↑', 'size-asc', 'arrow-up')}
+                          {renderSortButton('Size ↓', 'size-desc', 'arrow-down')}
+                        </View>
+                      </View>
                     </View>
 
                     <View style={styles.manageList}>
-                      {downloadedChaptersSorted.map((chapter) => {
+                      {getSortedDownloadedChapters.map((chapter) => {
                         const isSelected = selectedDeletes.has(
                           chapter.number
                         );
@@ -683,6 +757,12 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 13,
       color: colors.text,
     },
+    manageHeaderSection: {
+      marginBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      paddingBottom: 12,
+    },
     manageActionsRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -697,6 +777,40 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 13,
       fontWeight: '600',
       color: colors.primary,
+    },
+    sortButtonsContainer: {
+      gap: 8,
+    },
+    sortLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.tabIconDefault,
+      marginBottom: 6,
+    },
+    sortButtonsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    sortButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
+    },
+    sortButtonActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    sortButtonText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.tabIconDefault,
     },
     manageList: {
       gap: 10,
