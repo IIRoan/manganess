@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, View, ViewStyle, DimensionValue } from 'react-native';
+import { Animated, View, ViewStyle, DimensionValue, Easing } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/constants/ThemeContext';
 // import { Colors } from '@/constants/Colors';
@@ -27,6 +27,7 @@ export const ShimmerEffect: React.FC<ShimmerEffectProps> = ({
         Animated.timing(shimmerAnimation, {
           toValue: 1,
           duration: 1500,
+          easing: Easing.linear,
           useNativeDriver: true,
         })
       ).start();
