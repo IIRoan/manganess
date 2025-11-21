@@ -45,6 +45,7 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import { imageCache } from '@/services/CacheImages';
+import { getDefaultLayout, setDefaultLayout } from '@/services/settingsService';
 
 // Constants
 const SECTIONS: BookmarkStatus[] = ['Reading', 'To Read', 'On Hold', 'Read'];
@@ -55,7 +56,7 @@ const SORT_OPTIONS = [
   { id: 'updated-asc', label: 'Last Read (Oldest)', icon: 'time' },
 ];
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const VIEW_MODE_STORAGE_KEY = 'bookmarksViewMode';
+// Removed VIEW_MODE_STORAGE_KEY as we use universal settings now
 
 // Types
 type ViewMode = 'grid' | 'list';
@@ -127,22 +128,22 @@ export default function BookmarksScreen() {
   const insets = useSafeAreaInsets();
 
   // Load view mode preference
-  useEffect(() => {
-    const loadViewMode = async () => {
-      try {
-        const saved = (await AsyncStorage.getItem(
-          VIEW_MODE_STORAGE_KEY
-        )) as ViewMode | null;
-        if (saved) setViewMode(saved);
-      } catch (e) {
-        console.error('Failed to load view mode:', e);
-      } finally {
-        setIsViewModeLoading(false);
-      }
-    };
+  useFocusEffect(
+    useCallback(() => {
+      const loadViewMode = async () => {
+        try {
+          const saved = await getDefaultLayout();
+          setViewMode(saved);
+        } catch (e) {
+          console.error('Failed to load view mode:', e);
+        } finally {
+          setIsViewModeLoading(false);
+        }
+      };
 
-    loadViewMode();
-  }, []);
+      loadViewMode();
+    }, [])
+  );
 
   // Process bookmarks: filter, sort and group by section
   const processBookmarks = useCallback(
@@ -315,7 +316,7 @@ export default function BookmarksScreen() {
     const newMode: ViewMode = viewMode === 'grid' ? 'list' : 'grid';
     setViewMode(newMode);
     try {
-      await AsyncStorage.setItem(VIEW_MODE_STORAGE_KEY, newMode);
+      await setDefaultLayout(newMode);
     } catch (e) {
       console.error('Failed to save view mode:', e);
     }

@@ -18,6 +18,8 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import {
   getDebugTabEnabled,
   setDebugTabEnabled,
+  getDefaultLayout,
+  setDefaultLayout,
 } from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -48,6 +50,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [defaultLayout, setDefaultLayoutState] = useState<'grid' | 'list'>('list');
   const [selectedColor, setSelectedColor] = useState<string>(
     accentColor || colors.primary
   );
@@ -60,6 +63,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     loadEnableDebugTabSetting();
+    loadDefaultLayoutSetting();
     checkLoginStatus();
 
     // Update selected color when accentColor changes
@@ -80,6 +84,17 @@ export default function SettingsScreen() {
     }
   };
 
+  const loadDefaultLayoutSetting = async () => {
+    try {
+      const layout = await getDefaultLayout();
+      setDefaultLayoutState(layout);
+    } catch (error) {
+      logger().error('Service', 'Error loading default layout setting', {
+        error,
+      });
+    }
+  };
+
   const toggleEnableDebugTab = async (value: boolean) => {
     try {
       await setDebugTabEnabled(value);
@@ -87,6 +102,17 @@ export default function SettingsScreen() {
       setEnableDebugTab(value);
     } catch (error) {
       logger().error('Service', 'Error toggling enable debug tab setting', {
+        error,
+      });
+    }
+  };
+
+  const handleLayoutChange = async (layout: 'grid' | 'list') => {
+    try {
+      await setDefaultLayout(layout);
+      setDefaultLayoutState(layout);
+    } catch (error) {
+      logger().error('Service', 'Error saving default layout setting', {
         error,
       });
     }
@@ -178,7 +204,77 @@ export default function SettingsScreen() {
         <Text style={styles.title}>Settings</Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Theme</Text>
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <View style={styles.subsection}>
+            <Text style={styles.subsectionTitle}>Default Layout</Text>
+            <View style={styles.segmentedControl}>
+              <TouchableOpacity
+                style={[
+                  styles.segmentButton,
+                  defaultLayout === 'list' && {
+                    backgroundColor: accentColor || colors.primary,
+                  },
+                ]}
+                onPress={() => handleLayoutChange('list')}
+              >
+                <Ionicons
+                  name="list"
+                  size={20}
+                  color={
+                    defaultLayout === 'list' ? '#FFFFFF' : colors.tabIconDefault
+                  }
+                />
+                <Text
+                  style={[
+                    styles.segmentText,
+                    defaultLayout === 'list' && styles.activeSegmentText,
+                    {
+                      color:
+                        defaultLayout === 'list'
+                          ? '#FFFFFF'
+                          : colors.tabIconDefault,
+                    },
+                  ]}
+                >
+                  List
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.segmentButton,
+                  defaultLayout === 'grid' && {
+                    backgroundColor: accentColor || colors.primary,
+                  },
+                ]}
+                onPress={() => handleLayoutChange('grid')}
+              >
+
+                <Ionicons
+                  name="grid"
+                  size={20}
+                  color={
+                    defaultLayout === 'grid' ? '#FFFFFF' : colors.tabIconDefault
+                  }
+                />
+                <Text
+                  style={[
+                    styles.segmentText,
+                    defaultLayout === 'grid' && styles.activeSegmentText,
+                    {
+                      color:
+                        defaultLayout === 'grid'
+                          ? '#FFFFFF'
+                          : colors.tabIconDefault,
+                    },
+                  ]}
+                >
+                  Grid
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Theme</Text>
           {themeOptions.map((option) => (
             <TouchableOpacity
               key={option.value}
@@ -392,6 +488,39 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     activeOptionText: {
       color: colors.primary,
+      fontWeight: '600',
+    },
+    subsection: {
+      marginBottom: 16,
+    },
+    subsectionTitle: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: colors.text,
+      marginBottom: 12,
+    },
+    segmentedControl: {
+      flexDirection: 'row',
+      backgroundColor: colors.background,
+      borderRadius: 8,
+      padding: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    segmentButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      borderRadius: 6,
+      gap: 8,
+    },
+    segmentText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    activeSegmentText: {
       fontWeight: '600',
     },
     noteText: {

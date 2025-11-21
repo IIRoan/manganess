@@ -6,13 +6,10 @@ import {
   Text,
   TouchableOpacity,
   SafeAreaView,
-  StatusBar,
   useWindowDimensions,
-  Platform,
   Animated,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { Stack, useRouter, useFocusEffect } from 'expo-router'; // Combined imports
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { Colors } from '@/constants/Colors';
@@ -32,6 +29,7 @@ import { logger } from '@/utils/logger';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import { useOffline } from '@/contexts/OfflineContext';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import { getDefaultLayout } from '@/services/settingsService'; // Import settings service
 import type { WebViewMessageEvent } from 'react-native-webview';
 
 /* Type Definitions */
@@ -70,6 +68,16 @@ export default function MangaSearchScreen() {
   const [vrfWebViewKey, setVrfWebViewKey] = useState(0);
   const currentQueryRef = useRef<string | null>(null);
   const vrfTokenQueryRef = useRef<string | null>(null);
+  
+  // Layout State
+  const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('list');
+
+  // Load layout setting on focus
+  useFocusEffect(
+    useCallback(() => {
+      getDefaultLayout().then(setLayoutMode);
+    }, [])
+  );
 
   // Focus input field on screen focus
   useFocusEffect(
@@ -215,26 +223,71 @@ export default function MangaSearchScreen() {
 
   // Render function for MangaCard component
   const renderMangaCard = useCallback(
-    ({ item }: { item: MangaItem }) => (
-      <View style={styles.cardWrapper}>
-        <MangaCard
-          key={item.id}
-          title={item.title}
-          imageUrl={item.banner}
-          onPress={() => handleMangaPress(item)}
-          lastReadChapter={lastReadChapters[item.id] || null}
-          style={styles.card}
-          context="search"
-          mangaId={item.id}
-        />
-        <View style={styles.titleContainer}>
-          <Text style={styles.mangaTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
+    ({ item }: { item: MangaItem }) => {
+      if (layoutMode === 'list') {
+        return (
+          <TouchableOpacity
+            style={styles.resultItem}
+            onPress={() => handleMangaPress(item)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.cardWrapperList}>
+              <MangaCard
+                key={item.id}
+                title={item.title}
+                imageUrl={item.banner}
+                onPress={() => handleMangaPress(item)}
+                lastReadChapter={lastReadChapters[item.id] || null}
+                style={styles.card}
+                context="search"
+                mangaId={item.id}
+              />
+            </View>
+            <View style={styles.itemInfo}>
+              <Text style={styles.itemTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+              <View style={styles.itemMetaContainer}>
+                {lastReadChapters[item.id] ? (
+                  <View style={styles.lastReadBadge}>
+                    <Ionicons name="book" size={12} color={colors.primary} />
+                    <Text style={styles.lastReadText}>
+                      Ch. {lastReadChapters[item.id]}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.actionBadge}>
+                    <Text style={styles.actionText}>View Details</Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={14}
+                      color={colors.tabIconDefault}
+                    />
+                  </View>
+                )}
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      }
+
+      // Grid view render
+      return (
+        <View style={styles.cardWrapperGrid}>
+          <MangaCard
+            key={item.id}
+            title={item.title}
+            imageUrl={item.banner}
+            onPress={() => handleMangaPress(item)}
+            lastReadChapter={lastReadChapters[item.id] || null}
+            style={styles.card}
+            context="search"
+            mangaId={item.id}
+          />
         </View>
-      </View>
-    ),
-    [handleMangaPress, lastReadChapters, styles]
+      );
+    },
+    [handleMangaPress, lastReadChapters, styles, colors, layoutMode]
   );
 
   // Key extractor for FlatList
@@ -337,16 +390,16 @@ export default function MangaSearchScreen() {
     if (tokenError) {
       return (
         <View style={styles.emptyStateContainer}>
-          <View style={styles.emptyStateIcon}>
+          <View style={[styles.emptyStateIcon, { backgroundColor: colors.error + '15' }]}>
             <Ionicons
-              name="alert-circle-outline"
+              name="cloud-offline-outline"
               size={48}
               color={colors.error}
             />
           </View>
-          <Text style={styles.emptyStateTitle}>Connection Error</Text>
+          <Text style={styles.emptyStateTitle}>Connection Issue</Text>
           <Text style={styles.emptyStateText}>
-            Unable to initialize search. Please try again.
+            We couldn't connect to the search service.
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: colors.primary }]}
@@ -362,7 +415,7 @@ export default function MangaSearchScreen() {
               }
             }}
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
       );
@@ -378,16 +431,16 @@ export default function MangaSearchScreen() {
               color={colors.primary}
             />
           </View>
-          <Text style={styles.emptyStateTitle}>You&apos;re Offline</Text>
+          <Text style={styles.emptyStateTitle}>Offline Mode</Text>
           <Text style={styles.emptyStateText}>
-            Connect to internet to search for manga or view your saved manga
+            You're currently offline. Check your bookmarks for downloaded content.
           </Text>
           <TouchableOpacity
             style={[styles.offlineButton, { backgroundColor: colors.primary }]}
             onPress={() => router.navigate('/bookmarks')}
           >
             <Ionicons name="bookmark" size={20} color="#FFFFFF" />
-            <Text style={styles.offlineButtonText}>View Saved Manga</Text>
+            <Text style={styles.offlineButtonText}>Go to Bookmarks</Text>
           </TouchableOpacity>
         </View>
       );
@@ -396,11 +449,11 @@ export default function MangaSearchScreen() {
     return (
       <View style={styles.emptyStateContainer}>
         <View style={styles.emptyStateIcon}>
-          <Ionicons name="book-outline" size={48} color={colors.primary} />
+          <Ionicons name="search-outline" size={48} color={colors.primary} />
         </View>
-        <Text style={styles.emptyStateTitle}>Discover New Stories</Text>
+        <Text style={styles.emptyStateTitle}>Discover Manga</Text>
         <Text style={styles.emptyStateText}>
-          Search for manga, manhwa, and more
+          Find your next favorite series by searching above
         </Text>
       </View>
     );
@@ -430,23 +483,22 @@ export default function MangaSearchScreen() {
             style={[
               styles.searchInputContainer,
               isFocused && {
-                borderColor: colors.primary + '60',
-                borderWidth: 1.25,
-                shadowOpacity: 0.15,
-                elevation: 3,
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.primary,
               },
             ]}
           >
             <Ionicons
               name="search"
               size={20}
-              color={colors.tabIconDefault}
+              color={isFocused ? colors.primary : colors.tabIconDefault}
               style={styles.searchIcon}
             />
             <TextInput
               ref={inputRef}
               style={styles.searchInput}
-              placeholder="Search manga or manhwa..."
+              placeholder="Search by title, author..."
               placeholderTextColor={colors.tabIconDefault}
               value={searchQuery}
               onChangeText={(query) => setSearchQuery(query)}
@@ -467,7 +519,7 @@ export default function MangaSearchScreen() {
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons
-                  name="close-circle-outline"
+                  name="close-circle"
                   size={20}
                   color={colors.tabIconDefault}
                 />
@@ -482,9 +534,12 @@ export default function MangaSearchScreen() {
           data={searchResults}
           renderItem={renderMangaCard}
           keyExtractor={keyExtractor}
-          numColumns={2}
+          key={layoutMode} // Forces remount when layout changes
+          numColumns={layoutMode === 'grid' ? 2 : 1}
           contentContainerStyle={styles.gridContainer}
-          columnWrapperStyle={styles.columnWrapper}
+          columnWrapperStyle={
+            layoutMode === 'grid' ? styles.columnWrapper : undefined
+          }
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
@@ -492,6 +547,7 @@ export default function MangaSearchScreen() {
           ListEmptyComponent={EmptyState}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
           refreshing={isLoading}
           onRefresh={() => {
             const q = (debouncedSearchQuery || '').trim();
@@ -525,20 +581,21 @@ export default function MangaSearchScreen() {
   );
 }
 
-// Styles with responsiveness adjustments
+  // Styles with responsiveness adjustments
 const getStyles = (
   colors: typeof Colors.light,
   width: number,
   height: number
 ) => {
-  const isLandscape = width > height;
-  const cardWidth = isLandscape ? (width - 60) / 4 : (width - 48) / 2;
+  const columnGap = 16;
+  const containerPadding = 16;
+  // Calculate grid card width: (Total width - 2*padding - gap) / 2
+  const gridCardWidth = (width - (containerPadding * 2) - columnGap) / 2;
 
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
     },
     headerWrapper: {
       position: 'absolute',
@@ -546,46 +603,43 @@ const getStyles = (
       left: 0,
       right: 0,
       zIndex: 10,
-      backgroundColor: colors.card,
-      borderBottomColor: colors.border,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      backgroundColor: colors.background,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 4,
     },
     contentContainer: {
       flex: 1,
-      marginTop: 46,
+      paddingTop: 10
     },
     searchContainer: {
-      paddingHorizontal: 20,
-      paddingTop: 6,
-      paddingBottom: 6,
+      paddingHorizontal: 16,
+      paddingTop: 8,
     },
     searchInputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.card,
-      borderRadius: 8,
+      borderRadius: 10,
       paddingHorizontal: 12,
-      height: 36,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 1.5,
-      elevation: 2,
+      height: 44,
       borderWidth: 1,
       borderColor: colors.border,
     },
     searchIcon: {
-      marginRight: 5,
+      marginRight: 8,
     },
     searchInput: {
       flex: 1,
-      fontSize: 15,
+      fontSize: 17, // iOS standard size
       color: colors.text,
-      paddingVertical: Platform.OS === 'ios' ? 5 : 3,
+      paddingVertical: 8,
+      height: '100%',
     },
     clearButton: {
-      padding: 3,
-      marginLeft: 3,
+      padding: 4,
     },
     loadingContainer: {
       flex: 1,
@@ -593,88 +647,135 @@ const getStyles = (
       alignItems: 'center',
     },
     gridContainer: {
-      padding: 16,
-      paddingBottom: 150,
+      paddingHorizontal: containerPadding,
+      paddingTop: 16,
+      paddingBottom: 100,
     },
     columnWrapper: {
       justifyContent: 'space-between',
-    },
-    cardWrapper: {
-      width: cardWidth,
       marginBottom: 16,
+      gap: columnGap,
+    },
+    // List View Styling
+    resultItem: {
+      flexDirection: 'row',
+      marginBottom: 16,
+      height: 110, // Fixed height for list item
+      backgroundColor: colors.card, // Optional: card background for the row
+      borderRadius: 12,
+      overflow: 'hidden',
+      // Elevation/Shadow for the row
+      shadowColor: colors.text,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    cardWrapperList: {
+      width: 80, // Fixed width for the cover image part
+      height: 110, // Matches item height
+      overflow: 'hidden', // CRITICAL: hides the text part of MangaCard
+    },
+    // Grid View Styling
+    cardWrapperGrid: {
+      width: gridCardWidth,
+      marginBottom: 0, // Handled by columnWrapper/gap
     },
     card: {
       width: '100%',
-      aspectRatio: 3 / 4,
+      // Grid: MangaCard handles aspect ratio (3/4)
+      // List: Cropped via cardWrapperList
     },
-    titleContainer: {
-      marginTop: 8,
+    itemInfo: {
+      flex: 1,
+      padding: 12,
+      justifyContent: 'space-between',
     },
-    mangaTitle: {
+    itemTitle: {
+      fontSize: 16,
+      fontWeight: '600',
       color: colors.text,
-      fontSize: 14,
-      fontWeight: 'bold',
-      textAlign: 'center',
+      lineHeight: 22,
+    },
+    itemMetaContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    lastReadBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.primary + '15',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+    },
+    lastReadText: {
+      fontSize: 12,
+      color: colors.primary,
+      fontWeight: '600',
+      marginLeft: 4,
+    },
+    actionBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    actionText: {
+      fontSize: 13,
+      color: colors.tabIconDefault,
+      marginRight: 2,
     },
     emptyStateContainer: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 16,
-      marginTop: height * 0.2,
+      padding: 24,
+      marginTop: height * 0.15,
     },
     emptyStateIcon: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: colors.primary + '20',
-      alignItems: 'center',
-      justifyContent: 'center',
       marginBottom: 16,
+      opacity: 0.8,
     },
     emptyStateTitle: {
-      fontSize: 24,
+      fontSize: 18,
       fontWeight: '600',
       color: colors.text,
       marginBottom: 8,
+      textAlign: 'center',
     },
     emptyStateText: {
-      fontSize: 16,
+      fontSize: 15,
       color: colors.tabIconDefault,
       textAlign: 'center',
-      maxWidth: 250,
+      lineHeight: 22,
+      maxWidth: 300,
     },
     retryButton: {
-      marginTop: 20,
+      marginTop: 24,
       paddingHorizontal: 24,
       paddingVertical: 12,
       borderRadius: 8,
+      backgroundColor: colors.primary,
     },
     retryButtonText: {
       color: '#ffffff',
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '600',
     },
-    resultCount: {
-      paddingHorizontal: 4,
-      paddingTop: 8,
-      fontSize: 13,
-      color: colors.tabIconDefault,
-      alignSelf: 'flex-start',
-    },
-
     offlineButton: {
+      marginTop: 24,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 20,
+      paddingHorizontal: 24,
       paddingVertical: 12,
-      borderRadius: 25,
+      borderRadius: 100,
+      backgroundColor: colors.primary,
       gap: 8,
-      marginTop: 20,
     },
     offlineButtonText: {
       color: '#FFFFFF',
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '600',
     },
   });
