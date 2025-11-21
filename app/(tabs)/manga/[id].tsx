@@ -141,9 +141,38 @@ export default function MangaDetailScreen() {
   const router = useRouter();
 
   // Bookmark/chapters handling
-  const { id } = useLocalSearchParams();
-  const [mangaDetails, setMangaDetails] = useState<MangaDetails | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { id, title, imageUrl } = useLocalSearchParams();
+  const [fetchedDetails, setFetchedDetails] = useState<MangaDetails | null>(null);
+  
+  // Derived state to ensure we always show the correct data for the current ID
+  const mangaDetails = useMemo(() => {
+    // If we have fetched details and they match the current ID, use them
+    if (fetchedDetails && fetchedDetails.id === id) {
+      return fetchedDetails;
+    }
+    
+    // Otherwise, fallback to params if available (Partial Load)
+    if (title || imageUrl) {
+      return {
+        id: id as string,
+        title: title as string,
+        bannerImage: imageUrl as string,
+        chapters: [],
+        description: '',
+        status: '',
+        author: [],
+        genres: [],
+        published: '',
+        rating: '',
+        reviewCount: '',
+        alternativeTitle: '',
+      } as MangaDetails;
+    }
+    
+    return null;
+  }, [id, title, imageUrl, fetchedDetails]);
+
+  const [isLoading, setIsLoading] = useState(!mangaDetails);
   const [error, setError] = useState<string | null>(null);
   const [readChapters, setReadChapters] = useState<string[]>([]);
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
@@ -267,6 +296,7 @@ export default function MangaDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
       const log = logger();
       const fetchData = async () => {
         if (typeof id === 'string') {
@@ -299,11 +329,13 @@ export default function MangaDetailScreen() {
                               downloadedChapters.includes(chapter.number)
                             ) || [];
 
-                          setMangaDetails({
-                            ...cachedDetails,
-                            id: id as string,
-                            chapters: filteredChapters,
-                          });
+                          if (isMounted) {
+                            setFetchedDetails({
+                              ...cachedDetails,
+                              id: id as string,
+                              chapters: filteredChapters,
+                            });
+                          }
                           log.info(
                             'Service',
                             'Loaded cached manga details for offline mode',
@@ -326,10 +358,15 @@ export default function MangaDetailScreen() {
                           id as string
                         );
                       if (cachedDetails) {
-                        setMangaDetails({
-                          ...cachedDetails,
-                          id: id as string,
-                        });
+                        if (isMounted) {
+                          setFetchedDetails({
+                            ...cachedDetails,
+                            id: id as string,
+                          });
+                          // Show content immediately if we have cached data
+                          setIsLoading(false);
+                        }
+
                         log.info('Service', 'Loaded cached manga details', {
                           mangaId: id,
                         });
@@ -339,10 +376,12 @@ export default function MangaDetailScreen() {
                           const freshDetails = await fetchMangaDetails(
                             id as string
                           );
-                          setMangaDetails({
-                            ...freshDetails,
-                            id: id as string,
-                          });
+                          if (isMounted) {
+                            setFetchedDetails({
+                              ...freshDetails,
+                              id: id as string,
+                            });
+                          }
                           await offlineCacheService.cacheMangaDetails(
                             id as string,
                             { ...freshDetails, id: id as string },
@@ -357,7 +396,9 @@ export default function MangaDetailScreen() {
                         }
                       } else {
                         const details = await fetchMangaDetails(id as string);
-                        setMangaDetails({ ...details, id: id as string });
+                        if (isMounted) {
+                          setFetchedDetails({ ...details, id: id as string });
+                        }
 
                         // Cache the details for offline use
                         await offlineCacheService.cacheMangaDetails(
@@ -372,7 +413,9 @@ export default function MangaDetailScreen() {
                     'Storage',
                     async () => {
                       const chapters = await getReadChapters(id as string);
-                      setReadChapters(chapters);
+                      if (isMounted) {
+                        setReadChapters(chapters);
+                      }
                     }
                   ),
                   log.measureAsync(
@@ -380,7 +423,9 @@ export default function MangaDetailScreen() {
                     'Service',
                     async () => {
                       const status = await fetchBookmarkStatus(id as string);
-                      setBookmarkStatus(status);
+                      if (isMounted) {
+                        setBookmarkStatus(status);
+                      }
                     }
                   ),
                   log.measureAsync(
@@ -390,26 +435,36 @@ export default function MangaDetailScreen() {
                       const lastChapter = await getLastReadChapter(
                         id as string
                       );
-                      setLastReadChapter(lastChapter);
+                      if (isMounted) {
+                        setLastReadChapter(lastChapter);
+                      }
                     }
                   ),
                 ]);
               }
             );
-            await refreshDownloadedChapters();
-            await refreshDownloadingChapters();
+            if (isMounted) {
+              await refreshDownloadedChapters();
+              await refreshDownloadingChapters();
+            }
           } catch (error) {
             logger().error('Service', 'Error fetching data', { error });
-            setError('Failed to load manga details. Please try again.');
+            if (isMounted) {
+              setError('Failed to load manga details. Please try again.');
+            }
           } finally {
-            setIsLoading(false);
+            if (isMounted) {
+              setIsLoading(false);
+            }
           }
         }
       };
 
       fetchData();
 
-      return () => {};
+      return () => {
+        isMounted = false;
+      };
     }, [id, refreshDownloadedChapters, refreshDownloadingChapters, isOffline])
   );
 
@@ -783,22 +838,35 @@ export default function MangaDetailScreen() {
       colors,
       styles,
       handleBookmark,
-      handleLastReadChapterPress,
       isOffline,
     ]
   );
 
-  return (
-    <View style={styles.container}>
-      {isLoading ? (
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Animate in when we have full details or at least partial details are rendered
+    if (mangaDetails) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [mangaDetails]);
+
+  // If we have absolutely no data (no params, no cache, no fetch yet), show a minimal loader or nothing
+  if (isLoading && !mangaDetails) {
+     return (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            testID="loading-indicator"
-            size="large"
-            color={colors.primary}
-          />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : error ? (
+     );
+  }
+
+  return (
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
@@ -1002,6 +1070,6 @@ export default function MangaDetailScreen() {
           </View>
         </>
       )}
-    </View>
+    </Animated.View>
   );
 }

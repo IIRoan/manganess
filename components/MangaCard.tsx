@@ -18,6 +18,7 @@ import {
 import { useOffline } from '@/contexts/OfflineContext';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
+import { useRouter } from 'expo-router';
 import BottomPopup from './BottomPopup';
 import {
   getBookmarkPopupConfig,
@@ -47,6 +48,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const colorScheme = theme === 'system' ? systemTheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
+  const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -218,7 +220,17 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
     <>
       <Pressable
         testID="manga-card"
-        onPress={onPress}
+        onPress={() => {
+          if (onPress) {
+            onPress();
+          } else if (mangaId) {
+            // @ts-ignore - router.push accepts params
+            router.push({
+              pathname: '/(tabs)/manga/[id]',
+              params: { id: mangaId, title, imageUrl },
+            });
+          }
+        }}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onLongPress={handleLongPress}
