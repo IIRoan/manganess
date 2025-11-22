@@ -4,11 +4,19 @@ import {
   View,
   Text,
   TouchableOpacity,
-  FlatList,
   ScrollView,
-  Image,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
+import Reanimated, {
+  FadeInRight,
+  useSharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
@@ -73,30 +81,63 @@ export default function HomeScreen() {
   const [isRecentMangaLoading, setIsRecentMangaLoading] =
     useState<boolean>(true);
 
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const animatedImageStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        {
+          translateY: interpolate(
+            scrollY.value,
+            [-FEATURED_HEIGHT, 0, FEATURED_HEIGHT],
+            [-FEATURED_HEIGHT / 2, 0, FEATURED_HEIGHT * 0.75],
+            Extrapolation.CLAMP
+          ),
+        },
+        {
+          scale: interpolate(
+            scrollY.value,
+            [-FEATURED_HEIGHT, 0, FEATURED_HEIGHT],
+            [2, 1, 1],
+            Extrapolation.CLAMP
+          ),
+        },
+      ],
+    };
+  });
+
   const fetchMangaData = useCallback(async () => {
     try {
       setError(null);
-      if (!isRefreshing) {
-        setIsLoading(true);
-      }
-
-      // If offline, don't make any network requests
-      if (isOffline) {
-        setError(
-          'You are offline. Please connect to internet or view your saved manga.'
-        );
-        return;
-      }
-
-      // Try to load cached data first for faster loading
+      
+      // 1. Load cached data immediately (Stale-while-revalidate)
       const cachedData = await offlineCacheService.getCachedHomeData();
       if (cachedData) {
         setMostViewedManga(cachedData.mostViewed);
         setNewReleases(cachedData.newReleases);
         setFeaturedManga(cachedData.featuredManga);
+        setIsLoading(false); // Show content immediately
         logger().info('Service', 'Loaded cached home data');
+      } else {
+        if (!isRefreshing) setIsLoading(true);
       }
 
+      // If offline, stop here
+      if (isOffline) {
+        if (!cachedData) {
+          setError(
+            'You are offline. Please connect to internet or view your saved manga.'
+          );
+        }
+        return;
+      }
+
+      // 2. Fetch fresh data in background
       const response = await axios.get(`${MANGA_API_URL}/home`, {
         headers: {
           'User-Agent':
@@ -117,50 +158,33 @@ export default function HomeScreen() {
 
       const parsedMostViewed = parseMostViewedManga(html);
       const parsedNewReleases = parseNewReleases(html);
+      const newFeatured = parsedMostViewed.length > 0 ? parsedMostViewed[0] || null : null;
 
+      // Update state with fresh data
       setMostViewedManga(parsedMostViewed);
       setNewReleases(parsedNewReleases);
+      setFeaturedManga(newFeatured);
 
-      if (parsedMostViewed.length > 0) {
-        setFeaturedManga(parsedMostViewed[0] || null);
-      }
-
-      // Cache the data for offline use
+      // Cache the fresh data
       await offlineCacheService.cacheHomeData(
         parsedMostViewed,
         parsedNewReleases,
-        parsedMostViewed.length > 0 ? parsedMostViewed[0] || null : null
+        newFeatured
       );
     } catch (error) {
       logger().error('Service', 'Error fetching manga data', { error });
 
-      // If online but failed, try to load cached data as fallback
-      if (!isOffline) {
-        try {
-          const cachedData = await offlineCacheService.getCachedHomeData();
-          if (cachedData) {
-            setMostViewedManga(cachedData.mostViewed);
-            setNewReleases(cachedData.newReleases);
-            setFeaturedManga(cachedData.featuredManga);
-            setError('Using cached data due to network error.');
-            logger().info('Service', 'Loaded cached home data as fallback');
-            return;
-          }
-        } catch (cacheError) {
-          logger().error('Service', 'Failed to load cached data as fallback', {
-            error: cacheError,
-          });
-        }
+      // If we haven't shown cached data yet, show error
+      if (isLoading) {
+         setError(
+          'An error occurred while fetching manga data. Please try again.'
+        );
       }
-
-      setError(
-        'An error occurred while fetching manga data. Please try again.'
-      );
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isRefreshing, checkForCloudflare, isOffline]);
+  }, [isRefreshing, checkForCloudflare, isOffline, isLoading]);
 
   const fetchRecentlyReadManga = useCallback(async () => {
     try {
@@ -225,44 +249,52 @@ export default function HomeScreen() {
 
   const renderTrendingItem = useCallback(
     ({ item, index }: { item: MangaItem; index: number }) => (
-      <TouchableOpacity
-        style={[styles.trendingItem, { marginLeft: index === 0 ? 16 : 12 }]}
-        onPress={() => router.navigate(`/manga/${item.id}`)}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel={`View ${item.title}`}
-        accessibilityHint={
-          item.rank
-            ? `Ranked #${item.rank} in trending`
-            : 'Currently trending manga'
-        }
+      <Reanimated.View 
+        entering={FadeInRight.delay(index * 100).springify()}
+        style={{ marginRight: 12, marginLeft: index === 0 ? 16 : 0 }}
       >
-        <Image
-          source={{ uri: item.imageUrl }}
-          style={styles.trendingImage}
-          accessibilityLabel={`Cover image for ${item.title}`}
-        />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.9)']}
-          style={styles.trendingGradient}
+        <TouchableOpacity
+          style={styles.trendingItem}
+          onPress={() => router.navigate(`/manga/${item.id}`)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${item.title}`}
+          accessibilityHint={
+            item.rank
+              ? `Ranked #${item.rank} in trending`
+              : 'Currently trending manga'
+          }
         >
-          <View style={styles.trendingContent}>
-            <Text style={styles.trendingTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            {item.rank && (
-              <View
-                style={[
-                  styles.rankBadge,
-                  { backgroundColor: themeColors.primary },
-                ]}
-              >
-                <Text style={styles.rankText}>#{item.rank}</Text>
-              </View>
-            )}
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
+          <Image
+            source={{ uri: item.imageUrl }}
+            style={styles.trendingImage}
+            accessibilityLabel={`Cover image for ${item.title}`}
+            contentFit="cover"
+            transition={300}
+            cachePolicy="memory-disk"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.9)']}
+            style={styles.trendingGradient}
+          >
+            <View style={styles.trendingContent}>
+              <Text style={styles.trendingTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+              {item.rank && (
+                <View
+                  style={[
+                    styles.rankBadge,
+                    { backgroundColor: themeColors.primary },
+                  ]}
+                >
+                  <Text style={styles.rankText}>#{item.rank}</Text>
+                </View>
+              )}
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Reanimated.View>
     ),
     [router, themeColors.primary]
   );
@@ -376,24 +408,18 @@ export default function HomeScreen() {
     }
 
     return (
-      <FlatList
-        data={recentlyReadManga}
-        renderItem={renderRecentlyReadItem}
-        keyExtractor={(item) => item.id}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.recentlyReadList}
-        decelerationRate="fast"
-        getItemLayout={(_data, index) => ({
-          length: RECENTLY_READ_CARD_WIDTH + 12,
-          offset: (RECENTLY_READ_CARD_WIDTH + 12) * index,
-          index,
-        })}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={3}
-        updateCellsBatchingPeriod={100}
-        windowSize={8}
-      />
+      <View style={{ height: 260 }}>
+        <FlashList<RecentMangaItem>
+          data={recentlyReadManga}
+          renderItem={renderRecentlyReadItem}
+          keyExtractor={(item) => item.id}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.recentlyReadList}
+          // @ts-ignore
+          estimatedItemSize={RECENTLY_READ_CARD_WIDTH + 12}
+        />
+      </View>
     );
   }, [
     isRecentMangaLoading,
@@ -406,16 +432,23 @@ export default function HomeScreen() {
   const renderFeaturedManga = useCallback(() => {
     if (!featuredManga) return null;
 
+
+
     return (
       <TouchableOpacity
         style={[styles.featuredContainer, { marginTop: insets.top + 16 }]}
         onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
-        activeOpacity={0.8}
+        activeOpacity={0.9}
       >
-        <Image
-          source={{ uri: featuredManga.imageUrl }}
-          style={styles.featuredImage}
-        />
+        <Reanimated.View style={[{ width: '100%', height: '100%' }, animatedImageStyle]}>
+          <Image
+            source={{ uri: featuredManga.imageUrl }}
+            style={styles.featuredImage}
+            contentFit="cover"
+            transition={500}
+            cachePolicy="memory-disk"
+          />
+        </Reanimated.View>
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.8)']}
           style={styles.featuredGradient}
@@ -441,7 +474,7 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
     );
-  }, [featuredManga, insets.top, router, themeColors.primary]);
+  }, [featuredManga, insets.top, router, themeColors.primary, animatedImageStyle]);
 
   if (isLoading) {
     return (
@@ -526,7 +559,9 @@ export default function HomeScreen() {
     <View
       style={[styles.container, { backgroundColor: themeColors.background }]}
     >
-      <ScrollView
+      <Reanimated.ScrollView
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content]}
       >
@@ -570,26 +605,18 @@ export default function HomeScreen() {
             <PageTransition transitionType="slide" duration={400} delay={200}>
               <View style={styles.section}>
                 {renderSectionTitle('Trending Now', 'trophy')}
-                <FlatList
-                  data={mostViewedManga.slice(1)}
-                  renderItem={renderTrendingItem}
-                  keyExtractor={(item) => item.id}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.trendingList}
-                  decelerationRate="fast"
-                  snapToInterval={TRENDING_CARD_WIDTH + 12}
-                  snapToAlignment="start"
-                  getItemLayout={(_data, index) => ({
-                    length: TRENDING_CARD_WIDTH + 12,
-                    offset: (TRENDING_CARD_WIDTH + 12) * index,
-                    index,
-                  })}
-                  removeClippedSubviews={true}
-                  maxToRenderPerBatch={5}
-                  updateCellsBatchingPeriod={100}
-                  windowSize={10}
-                />
+                <View style={{ height: TRENDING_CARD_HEIGHT + 20 }}>
+                  <FlashList<MangaItem>
+                    data={mostViewedManga.slice(1)}
+                    renderItem={renderTrendingItem}
+                    keyExtractor={(item) => item.id}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.trendingList}
+                    // @ts-ignore
+                    estimatedItemSize={TRENDING_CARD_WIDTH + 12}
+                  />
+                </View>
               </View>
             </PageTransition>
 
@@ -656,7 +683,7 @@ export default function HomeScreen() {
             </PageTransition>
           </>
         )}
-      </ScrollView>
+      </Reanimated.ScrollView>
     </View>
   );
 }

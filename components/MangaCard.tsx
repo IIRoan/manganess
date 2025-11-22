@@ -1,13 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   ActivityIndicator,
-  Animated,
   Pressable,
 } from 'react-native';
+import { Image } from 'expo-image';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import {
@@ -56,7 +60,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const [bookmarkStatus, setBookmarkStatus] = useState<BookmarkStatus | null>(
     null
   );
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useSharedValue(1);
   const haptics = useHapticFeedback();
   const { isOffline } = useOffline();
 
@@ -110,22 +114,24 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   const handlePressIn = () => {
     haptics.onPress();
-    Animated.spring(scaleAnim, {
-      toValue: 0.95,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 10,
-    }).start();
+    scaleAnim.value = withSpring(0.95, {
+      damping: 15,
+      stiffness: 150,
+    });
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 10,
-    }).start();
+    scaleAnim.value = withSpring(1, {
+      damping: 15,
+      stiffness: 150,
+    });
   };
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scaleAnim.value }],
+    };
+  });
 
   const handleLongPress = async () => {
     if (onLongPress) {
@@ -243,7 +249,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
             : 'Tap to view manga details'
         }
       >
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <Reanimated.View style={animatedStyle}>
           <View style={styles.imageContainer}>
             <Image
               source={getImageSource()}
@@ -251,6 +257,8 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
               onLoad={handleImageLoad}
               onError={handleImageError}
               accessibilityLabel={`Cover image for ${title}`}
+              transition={200}
+              contentFit="cover"
             />
             {isLoading && (
               <View style={styles.loadingOverlay}>
@@ -288,7 +296,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
               </Text>
             )}
           </View>
-        </Animated.View>
+        </Reanimated.View>
       </Pressable>
 
       <BottomPopup

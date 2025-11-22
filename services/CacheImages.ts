@@ -226,6 +226,14 @@ class ImageCache {
     destFile: FSFile
   ): Promise<FSFile> {
     return this.retryWithBackoff<FSFile>(async () => {
+      // Ensure destination is clear before downloading
+      if (destFile.exists) {
+        try {
+          destFile.delete();
+        } catch (e) {
+          // Ignore delete errors, might be locked or race condition
+        }
+      }
       const output = await FSFile.downloadFileAsync(url, destFile);
       return output as FSFile; // Promise rejects on non-2xx status per new API
     });
@@ -260,15 +268,16 @@ class ImageCache {
   }
 
   private async getSearchImagePath(url: string): Promise<string> {
-    const urlHash = simpleHash(url);
-    const filename = `search_${urlHash.substring(0, 16)}`;
-    const file = new FSFile(SEARCH_CACHE_DIR, `${filename}.jpg`);
-
+    const queueKey = `search:${url}`;
     // Check if we're already downloading this image
-    const existingDownload = this.downloadQueue.get(url);
+    const existingDownload = this.downloadQueue.get(queueKey);
     if (existingDownload) {
       return existingDownload;
     }
+
+    const urlHash = simpleHash(url);
+    const filename = `search_${urlHash.substring(0, 16)}`;
+    const file = new FSFile(SEARCH_CACHE_DIR, `${filename}.jpg`);
 
     const info = file.info();
 
@@ -300,13 +309,13 @@ class ImageCache {
 
     // Start download and add to queue
     const downloadPromise = this.downloadSearchImage(url, file, filename);
-    this.downloadQueue.set(url, downloadPromise);
+    this.downloadQueue.set(queueKey, downloadPromise);
 
     try {
       const result = await downloadPromise;
       return result;
     } finally {
-      this.downloadQueue.delete(url);
+      this.downloadQueue.delete(queueKey);
     }
   }
 
@@ -370,8 +379,11 @@ class ImageCache {
     url: string,
     mangaId: string
   ): Promise<string> {
-    const cacheKey = this.generateCacheKey(url, mangaId);
-    const file = this.getCacheFile('manga', cacheKey);
+    const queueKey = `manga:${mangaId}:${url}`;
+    const existingDownload = this.downloadQueue.get(queueKey);
+    if (existingDownload) {
+      return existingDownload;
+    }
 
     // Check if we have a cached version for this manga
     const existingEntry = Array.from(this.metadata.values()).find(
@@ -399,36 +411,48 @@ class ImageCache {
       }
     }
 
-    // Download new image
+    const downloadPromise = (async () => {
+      const cacheKey = this.generateCacheKey(url, mangaId);
+      const file = this.getCacheFile('manga', cacheKey);
+
+      // Download new image
+      try {
+        const output = await this.downloadImageWithRetry(url, file);
+
+        const fileInfo = output.info();
+        const sz =
+          fileInfo.exists && typeof fileInfo.size === 'number'
+            ? fileInfo.size
+            : 0;
+        this.metadata.set(cacheKey, {
+          mangaId,
+          originalUrl: url,
+          cachedPath: output.uri,
+          lastAccessed: Date.now(),
+          lastUpdated: Date.now(),
+          context: 'manga',
+          fileSize: sz,
+          urlHash: simpleHash(url),
+        });
+        this.scheduleSaveMetadata();
+
+        // Clean up if cache is getting too large
+        this.scheduleManageCacheSize();
+
+        return normalizeUri(output.uri);
+      } catch (error) {
+        console.error('Failed to download manga image after retries:', error);
+        return url;
+      }
+    })();
+
+    this.downloadQueue.set(queueKey, downloadPromise);
+
     try {
-      const output = await this.downloadImageWithRetry(url, file);
-
-      const fileInfo = output.info();
-      const sz =
-        fileInfo.exists && typeof fileInfo.size === 'number'
-          ? fileInfo.size
-          : 0;
-      this.metadata.set(cacheKey, {
-        mangaId,
-        originalUrl: url,
-        cachedPath: output.uri,
-        lastAccessed: Date.now(),
-        lastUpdated: Date.now(),
-        context: 'manga',
-        fileSize: sz,
-        urlHash: simpleHash(url),
-      });
-      this.scheduleSaveMetadata();
-
-      // Clean up if cache is getting too large
-      this.scheduleManageCacheSize();
-
-      return normalizeUri(output.uri);
-    } catch (error) {
-      console.error('Failed to download manga image after retries:', error);
+      return await downloadPromise;
+    } finally {
+      this.downloadQueue.delete(queueKey);
     }
-
-    return url;
   }
 
   private async getDownloadImagePath(
@@ -437,6 +461,12 @@ class ImageCache {
     chapterNumber?: string,
     pageNumber?: number
   ): Promise<string> {
+    const queueKey = `download:${mangaId}:${chapterNumber || 'x'}:${pageNumber || 'x'}:${url}`;
+    const existingDownload = this.downloadQueue.get(queueKey);
+    if (existingDownload) {
+      return existingDownload;
+    }
+
     const urlHash = simpleHash(url);
     const filename =
       chapterNumber && pageNumber
@@ -472,34 +502,44 @@ class ImageCache {
       return normalizeUri(file.uri);
     }
 
-    // Download new image for downloads
+    const downloadPromise = (async () => {
+      // Download new image for downloads
+      try {
+        const output = await this.downloadImageWithRetry(url, file);
+
+        const fileInfo = output.info();
+        const sz =
+          fileInfo.exists && typeof fileInfo.size === 'number'
+            ? fileInfo.size
+            : 0;
+
+        this.metadata.set(filename, {
+          mangaId,
+          chapterNumber: chapterNumber || undefined,
+          pageNumber: pageNumber || undefined,
+          originalUrl: url,
+          cachedPath: output.uri,
+          lastAccessed: Date.now(),
+          lastUpdated: Date.now(),
+          context: 'download',
+          fileSize: sz,
+          urlHash: simpleHash(url),
+        });
+        this.scheduleSaveMetadata();
+
+        return normalizeUri(output.uri);
+      } catch (error) {
+        console.error('Failed to download chapter image after retries:', error);
+        return url;
+      }
+    })();
+
+    this.downloadQueue.set(queueKey, downloadPromise);
+
     try {
-      const output = await this.downloadImageWithRetry(url, file);
-
-      const fileInfo = output.info();
-      const sz =
-        fileInfo.exists && typeof fileInfo.size === 'number'
-          ? fileInfo.size
-          : 0;
-
-      this.metadata.set(filename, {
-        mangaId,
-        chapterNumber: chapterNumber || undefined,
-        pageNumber: pageNumber || undefined,
-        originalUrl: url,
-        cachedPath: output.uri,
-        lastAccessed: Date.now(),
-        lastUpdated: Date.now(),
-        context: 'download',
-        fileSize: sz,
-        urlHash: simpleHash(url),
-      });
-      this.scheduleSaveMetadata();
-
-      return normalizeUri(output.uri);
-    } catch (error) {
-      console.error('Failed to download chapter image after retries:', error);
-      return url;
+      return await downloadPromise;
+    } finally {
+      this.downloadQueue.delete(queueKey);
     }
   }
 
