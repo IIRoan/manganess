@@ -10,14 +10,21 @@ import {
   Text,
   ActivityIndicator,
   TouchableOpacity,
-  Image,
   useColorScheme,
-  Animated,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Circle } from 'react-native-svg';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  FadeIn,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
+import { Image } from 'expo-image';
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -108,7 +115,7 @@ const MangaBannerImage: React.FC<{
     <Image
       source={{ uri: displayUri }}
       style={style}
-      onError={(error) =>
+      onError={(error: any) =>
         logger().error('UI', 'Error loading banner image', { error })
       }
       onLoadStart={() => {
@@ -118,7 +125,7 @@ const MangaBannerImage: React.FC<{
           log.debug('UI', 'Banner image load start', { mangaId });
         }
       }}
-      onLoadEnd={() => {
+      onLoad={() => {
         if (isDebugEnabled()) {
           const s =
             imgStartRef.current ??
@@ -132,6 +139,7 @@ const MangaBannerImage: React.FC<{
           });
         }
       }}
+      transition={300}
     />
   );
 };
@@ -202,7 +210,7 @@ export default function MangaDetailScreen() {
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   // Animated value for the scroll button opacity
-  const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
+  const scrollButtonOpacity = useSharedValue(0);
 
   // Theming Settings
   const { theme } = useTheme();
@@ -622,7 +630,7 @@ export default function MangaDetailScreen() {
     }
   }, [lastReadChapter, mangaDetails, handleChapterPress]);
 
-  const calculateReadingProgress = () => {
+  const readingProgress = useMemo(() => {
     if (
       !mangaDetails ||
       !mangaDetails.chapters ||
@@ -633,14 +641,14 @@ export default function MangaDetailScreen() {
     return Math.round(
       (readChapters.length / mangaDetails.chapters.length) * 100
     );
-  };
+  }, [mangaDetails, readChapters.length]);
 
-  const estimateRemainingReadingTime = () => {
+  const remainingReadingTime = useMemo(() => {
     if (!mangaDetails || !mangaDetails.chapters) return 0;
     const averageTimePerChapter = 7;
     const unreadChapters = mangaDetails.chapters.length - readChapters.length;
     return unreadChapters * averageTimePerChapter;
-  };
+  }, [mangaDetails, readChapters.length]);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -674,16 +682,100 @@ export default function MangaDetailScreen() {
 
   // Animate button opacity
   useEffect(() => {
-    Animated.timing(scrollButtonOpacity, {
-      toValue: showScrollButton ? 1 : 0,
+    scrollButtonOpacity.value = withTiming(showScrollButton ? 1 : 0, {
       duration: 200,
-      useNativeDriver: true,
-    }).start();
-  }, [showScrollButton, scrollButtonOpacity]);
+    });
+  }, [showScrollButton]);
 
-  const readingProgress = calculateReadingProgress();
-  const remainingReadingTime = estimateRemainingReadingTime();
-  
+  const scrollButtonStyle = useAnimatedStyle(() => {
+    return {
+      opacity: scrollButtonOpacity.value,
+      transform: [
+        {
+          scale: interpolate(
+            scrollButtonOpacity.value,
+            [0, 1],
+            [0.8, 1],
+            Extrapolation.CLAMP
+          ),
+        },
+      ],
+    };
+  });
+
+  const renderChapterItem = useCallback(
+    ({ item: chapter, index }: { item: Chapter; index: number }) => {
+      if (!mangaDetails) return null;
+      
+      const isRead = readChapters.includes(chapter.number);
+      const isLastItem = index === mangaDetails.chapters.length - 1;
+      const isCurrentlyLastRead =
+        lastReadChapter === `Chapter ${chapter.number}`;
+
+      return (
+        <SwipeableChapterItem
+          chapter={chapter}
+          isRead={isRead}
+          isLastItem={isLastItem}
+          isCurrentlyLastRead={isCurrentlyLastRead}
+          onPress={() => handleChapterPress(chapter.number)}
+          onLongPress={() => handleChapterLongPress(chapter.number)}
+          onUnread={() => handleMarkAsUnread(chapter.number)}
+          colors={colors}
+          styles={styles}
+          currentlyOpenSwipeable={currentlyOpenSwipeable}
+          setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeable}
+          mangaId={id as string}
+          showDownloadButton={true}
+          onDownloadStart={() => {
+            setDownloadingChapters((prev) =>
+              prev.includes(chapter.number)
+                ? prev
+                : [...prev, chapter.number]
+            );
+            refreshDownloadingChapters().catch(() => {});
+          }}
+          onDownloadComplete={() => {
+            setDownloadingChapters((prev) =>
+              prev.filter((item) => item !== chapter.number)
+            );
+            refreshDownloadedChapters().catch(() => {});
+            refreshDownloadingChapters().catch(() => {});
+          }}
+          onDownloadError={() => {
+            setDownloadingChapters((prev) =>
+              prev.filter((item) => item !== chapter.number)
+            );
+            refreshDownloadingChapters().catch(() => {});
+          }}
+          
+          onDeleteDownload={() => {
+            handleDeleteDownload(chapter.number).catch(() => {});
+          }}
+        />
+      );
+    },
+    [
+      mangaDetails,
+      readChapters,
+      lastReadChapter,
+      handleChapterPress,
+      handleChapterLongPress,
+      handleMarkAsUnread,
+      colors,
+      styles,
+      currentlyOpenSwipeable,
+      setCurrentlyOpenSwipeable,
+      id,
+      refreshDownloadingChapters,
+      refreshDownloadedChapters,
+      handleDeleteDownload,
+      downloadedChapters,
+      downloadingChapters,
+    ]
+  );
+
+
 
   const ListHeader = useMemo(
     () =>
@@ -842,18 +934,7 @@ export default function MangaDetailScreen() {
     ]
   );
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    // Animate in when we have full details or at least partial details are rendered
-    if (mangaDetails) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [mangaDetails]);
 
   // If we have absolutely no data (no params, no cache, no fetch yet), show a minimal loader or nothing
   if (isLoading && !mangaDetails) {
@@ -865,7 +946,10 @@ export default function MangaDetailScreen() {
   }
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+    <Reanimated.View 
+      entering={FadeIn.duration(300)}
+      style={styles.container}
+    >
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -936,76 +1020,20 @@ export default function MangaDetailScreen() {
                 downloadingChapters,
               ]}
               keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
-              renderItem={({ item: chapter, index }) => {
-                const isRead = readChapters.includes(chapter.number);
-                const isLastItem = index === mangaDetails.chapters.length - 1;
-                const isCurrentlyLastRead =
-                  lastReadChapter === `Chapter ${chapter.number}`;
-
-                return (
-                  <SwipeableChapterItem
-                    chapter={chapter}
-                    isRead={isRead}
-                    isLastItem={isLastItem}
-                    isCurrentlyLastRead={isCurrentlyLastRead}
-                    onPress={() => handleChapterPress(chapter.number)}
-                    onLongPress={() => handleChapterLongPress(chapter.number)}
-                    onUnread={() => handleMarkAsUnread(chapter.number)}
-                    colors={colors}
-                    styles={styles}
-                    currentlyOpenSwipeable={currentlyOpenSwipeable}
-                    setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeable}
-                    mangaId={id as string}
-                    showDownloadButton={true}
-                    onDownloadStart={() => {
-                      setDownloadingChapters((prev) =>
-                        prev.includes(chapter.number)
-                          ? prev
-                          : [...prev, chapter.number]
-                      );
-                      refreshDownloadingChapters().catch(() => {});
-                    }}
-                    onDownloadComplete={() => {
-                      setDownloadingChapters((prev) =>
-                        prev.filter((item) => item !== chapter.number)
-                      );
-                      refreshDownloadedChapters().catch(() => {});
-                      refreshDownloadingChapters().catch(() => {});
-                    }}
-                    onDownloadError={() => {
-                      setDownloadingChapters((prev) =>
-                        prev.filter((item) => item !== chapter.number)
-                      );
-                      refreshDownloadingChapters().catch(() => {});
-                    }}
-                    
-                    onDeleteDownload={() => {
-                      handleDeleteDownload(chapter.number).catch(() => {});
-                    }}
-                  />
-                );
-              }}
+              renderItem={renderChapterItem}
               ListFooterComponent={<View style={{ height: 120 }} />}
               onScroll={handleScroll}
               scrollEventThrottle={16}
             />
 
             {/* Smart Scroll FAB */}
-            <Animated.View
+            <Reanimated.View
               style={[
                 styles.smartScrollButton,
                 {
-                  opacity: scrollButtonOpacity,
                   bottom: insets.bottom + 90,
-                  transform: [
-                    {
-                      scale: scrollButtonOpacity.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.8, 1],
-                      }),
-                    },
-                  ],
                 },
+                scrollButtonStyle,
               ]}
               pointerEvents={showScrollButton ? 'auto' : 'none'}
             >
@@ -1066,10 +1094,10 @@ export default function MangaDetailScreen() {
                   />
                 </BlurView>
               </TouchableOpacity>
-            </Animated.View>
+            </Reanimated.View>
           </View>
         </>
       )}
-    </Animated.View>
+    </Reanimated.View>
   );
 }
