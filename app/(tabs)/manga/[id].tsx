@@ -11,8 +11,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   useColorScheme,
-  type NativeSyntheticEvent,
-  type NativeScrollEvent,
+  StyleSheet,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Circle } from 'react-native-svg';
@@ -23,8 +22,8 @@ import Reanimated, {
   FadeIn,
   interpolate,
   Extrapolation,
+  SharedValue,
 } from 'react-native-reanimated';
-import { Image } from 'expo-image';
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,7 +59,6 @@ import { useHapticFeedback } from '@/utils/haptics';
 import getStyles from './[id].styles';
 import { logger } from '@/utils/logger';
 import { useMangaImageCache } from '@/services/CacheImages';
-import { isDebugEnabled } from '@/constants/env';
 import { useOffline } from '@/contexts/OfflineContext';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import type {
@@ -75,8 +73,11 @@ import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
 import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadStatus } from '@/types/download';
+import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
+import { runOnJS } from 'react-native-reanimated';
 
-/* Type Definitions */
+const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList) as any;
+
 type BookmarkPopupConfig = {
   title: string;
   options: Option[];
@@ -88,9 +89,8 @@ const MangaBannerImage: React.FC<{
   bannerUrl: string;
   style: any;
   isOffline: boolean;
-}> = ({ mangaId, bannerUrl, style, isOffline }) => {
-  const log = logger();
-  const imgStartRef = useRef<number | null>(null);
+  scrollY: SharedValue<number>;
+}> = ({ mangaId, bannerUrl, style, isOffline, scrollY }) => {
   const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl, {
     enabled: !isOffline,
   });
@@ -112,34 +112,12 @@ const MangaBannerImage: React.FC<{
   }
 
   return (
-    <Image
-      source={{ uri: displayUri }}
-      style={style}
-      onError={(error: any) =>
-        logger().error('UI', 'Error loading banner image', { error })
-      }
-      onLoadStart={() => {
-        if (isDebugEnabled()) {
-          imgStartRef.current =
-            (globalThis as any).performance?.now?.() ?? Date.now();
-          log.debug('UI', 'Banner image load start', { mangaId });
-        }
-      }}
-      onLoad={() => {
-        if (isDebugEnabled()) {
-          const s =
-            imgStartRef.current ??
-            (globalThis as any).performance?.now?.() ??
-            Date.now();
-          const d =
-            ((globalThis as any).performance?.now?.() ?? Date.now()) - s;
-          log.info('UI', 'Banner image load complete', {
-            mangaId,
-            durationMs: Math.round(d),
-          });
-        }
-      }}
-      transition={300}
+    <ParallaxImage
+      scrollY={scrollY}
+      source={displayUri}
+      height={325}
+      style={{ width: '100%', height: '100%' }}
+      containerStyle={[StyleSheet.absoluteFill, { zIndex: 0 }]}
     />
   );
 };
@@ -150,15 +128,17 @@ export default function MangaDetailScreen() {
 
   // Bookmark/chapters handling
   const { id, title, imageUrl } = useLocalSearchParams();
-  const [fetchedDetails, setFetchedDetails] = useState<MangaDetails | null>(null);
-  
+  const [fetchedDetails, setFetchedDetails] = useState<MangaDetails | null>(
+    null
+  );
+
   // Derived state to ensure we always show the correct data for the current ID
   const mangaDetails = useMemo(() => {
     // If we have fetched details and they match the current ID, use them
     if (fetchedDetails && fetchedDetails.id === id) {
       return fetchedDetails;
     }
-    
+
     // Otherwise, fallback to params if available (Partial Load)
     if (title || imageUrl) {
       return {
@@ -176,7 +156,7 @@ export default function MangaDetailScreen() {
         alternativeTitle: '',
       } as MangaDetails;
     }
-    
+
     return null;
   }, [id, title, imageUrl, fetchedDetails]);
 
@@ -587,14 +567,14 @@ export default function MangaDetailScreen() {
 
       try {
         await chapterStorageService.deleteChapter(id as string, chapterNumber);
-        
+
         // Emit download deleted event
         downloadEventEmitter.emitDeleted(
           id as string,
           chapterNumber,
           `${id as string}_${chapterNumber}`
         );
-        
+
         await refreshDownloadedChapters();
       } catch (deleteError) {
         console.error('Error deleting downloaded chapter:', deleteError);
@@ -650,27 +630,23 @@ export default function MangaDetailScreen() {
     return unreadChapters * averageTimePerChapter;
   }, [mangaDetails, readChapters.length]);
 
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      const offsetY = contentOffset.y;
-      const contentHeight = contentSize.height;
-      const layoutHeight = layoutMeasurement.height;
-
+  const handleScrollJS = useCallback(
+    (offsetY: number, contentHeight: number, layoutHeight: number) => {
       // Calculate progress
       const maxScroll = contentHeight - layoutHeight;
-      const progress = maxScroll > 0 ? Math.min(Math.max(offsetY / maxScroll, 0), 1) : 0;
+      const progress =
+        maxScroll > 0 ? Math.min(Math.max(offsetY / maxScroll, 0), 1) : 0;
       setScrollProgress(progress);
 
       // Determine scroll direction
       const isScrollingDown = offsetY > lastScrollY.current;
       const isScrollingUp = offsetY < lastScrollY.current;
-      
+
       if (Math.abs(offsetY - lastScrollY.current) > 5) {
-         if (isScrollingDown) setScrollDirection('down');
-         if (isScrollingUp) setScrollDirection('up');
+        if (isScrollingDown) setScrollDirection('down');
+        if (isScrollingUp) setScrollDirection('up');
       }
-      
+
       lastScrollY.current = offsetY;
 
       // Show button if not at the very top
@@ -679,6 +655,15 @@ export default function MangaDetailScreen() {
     },
     []
   );
+
+  const { scrollY, scrollHandler } = useParallaxScroll((event) => {
+    'worklet';
+    runOnJS(handleScrollJS)(
+      event.contentOffset.y,
+      event.contentSize.height,
+      event.layoutMeasurement.height
+    );
+  });
 
   // Animate button opacity
   useEffect(() => {
@@ -706,7 +691,7 @@ export default function MangaDetailScreen() {
   const renderChapterItem = useCallback(
     ({ item: chapter, index }: { item: Chapter; index: number }) => {
       if (!mangaDetails) return null;
-      
+
       const isRead = readChapters.includes(chapter.number);
       const isLastItem = index === mangaDetails.chapters.length - 1;
       const isCurrentlyLastRead =
@@ -729,9 +714,7 @@ export default function MangaDetailScreen() {
           showDownloadButton={true}
           onDownloadStart={() => {
             setDownloadingChapters((prev) =>
-              prev.includes(chapter.number)
-                ? prev
-                : [...prev, chapter.number]
+              prev.includes(chapter.number) ? prev : [...prev, chapter.number]
             );
             refreshDownloadingChapters().catch(() => {});
           }}
@@ -748,7 +731,6 @@ export default function MangaDetailScreen() {
             );
             refreshDownloadingChapters().catch(() => {});
           }}
-          
           onDeleteDownload={() => {
             handleDeleteDownload(chapter.number).catch(() => {});
           }}
@@ -775,8 +757,6 @@ export default function MangaDetailScreen() {
     ]
   );
 
-
-
   const ListHeader = useMemo(
     () =>
       !mangaDetails ? null : (
@@ -787,14 +767,11 @@ export default function MangaDetailScreen() {
               bannerUrl={mangaDetails.bannerImage}
               style={styles.bannerImage}
               isOffline={isOffline}
+              scrollY={scrollY}
             />
             <View style={styles.overlay} />
             <View style={styles.headerContent}>
-              <Text
-                style={styles.title}
-                numberOfLines={3}
-                ellipsizeMode="tail"
-              >
+              <Text style={styles.title} numberOfLines={3} ellipsizeMode="tail">
                 {mangaDetails.title}
               </Text>
               {mangaDetails.alternativeTitle && (
@@ -934,22 +911,17 @@ export default function MangaDetailScreen() {
     ]
   );
 
-
-
   // If we have absolutely no data (no params, no cache, no fetch yet), show a minimal loader or nothing
   if (isLoading && !mangaDetails) {
-     return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-     );
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
   }
 
   return (
-    <Reanimated.View 
-      entering={FadeIn.duration(300)}
-      style={styles.container}
-    >
+    <Reanimated.View entering={FadeIn.duration(300)} style={styles.container}>
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -1007,7 +979,7 @@ export default function MangaDetailScreen() {
                 />
               </TouchableOpacity>
             </View>
-            <FlashList<Chapter>
+            <AnimatedFlashList
               ref={flashListRef}
               removeClippedSubviews={true}
               drawDistance={100}
@@ -1019,11 +991,15 @@ export default function MangaDetailScreen() {
                 downloadedChapters,
                 downloadingChapters,
               ]}
-              keyExtractor={(item, index) => `chapter-${item.number}-${index}`}
+              keyExtractor={(item: any, index: number) =>
+                `chapter-${item.number}-${index}`
+              }
               renderItem={renderChapterItem}
               ListFooterComponent={<View style={{ height: 120 }} />}
-              onScroll={handleScroll}
+              onScroll={scrollHandler}
               scrollEventThrottle={16}
+              bounces={false}
+              overScrollMode="never"
             />
 
             {/* Smart Scroll FAB */}
@@ -1051,7 +1027,11 @@ export default function MangaDetailScreen() {
                 }}
                 style={styles.smartScrollButtonTouchable}
                 accessibilityRole="button"
-                accessibilityLabel={scrollDirection === 'down' ? "Scroll to bottom" : "Scroll to top"}
+                accessibilityLabel={
+                  scrollDirection === 'down'
+                    ? 'Scroll to bottom'
+                    : 'Scroll to top'
+                }
               >
                 <BlurView
                   intensity={80}
@@ -1078,16 +1058,22 @@ export default function MangaDetailScreen() {
                         strokeWidth="3"
                         fill="transparent"
                         strokeDasharray={2 * Math.PI * 20}
-                        strokeDashoffset={2 * Math.PI * 20 * (1 - scrollProgress)}
+                        strokeDashoffset={
+                          2 * Math.PI * 20 * (1 - scrollProgress)
+                        }
                         strokeLinecap="round"
                         rotation="-90"
                         origin="22, 22"
                       />
                     </Svg>
                   </View>
-                  
+
                   <Ionicons
-                    name={scrollDirection === 'down' && scrollProgress < 0.95 ? "arrow-down" : "arrow-up"}
+                    name={
+                      scrollDirection === 'down' && scrollProgress < 0.95
+                        ? 'arrow-down'
+                        : 'arrow-up'
+                    }
                     size={20}
                     color={colors.text}
                     style={styles.fabIcon}

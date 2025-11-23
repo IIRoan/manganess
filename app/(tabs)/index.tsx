@@ -9,14 +9,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
-import Reanimated, {
-  FadeInRight,
-  useSharedValue,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  interpolate,
-  Extrapolation,
-} from 'react-native-reanimated';
+import Reanimated, { FadeInRight } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
@@ -44,6 +37,7 @@ import { MangaItem, RecentMangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
 import { useOffline } from '@/contexts/OfflineContext';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -81,40 +75,12 @@ export default function HomeScreen() {
   const [isRecentMangaLoading, setIsRecentMangaLoading] =
     useState<boolean>(true);
 
-  const scrollY = useSharedValue(0);
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      scrollY.value = event.contentOffset.y;
-    },
-  });
-
-  const animatedImageStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          translateY: interpolate(
-            scrollY.value,
-            [-FEATURED_HEIGHT, 0, FEATURED_HEIGHT],
-            [-FEATURED_HEIGHT / 2, 0, FEATURED_HEIGHT * 0.75],
-            Extrapolation.CLAMP
-          ),
-        },
-        {
-          scale: interpolate(
-            scrollY.value,
-            [-FEATURED_HEIGHT, 0, FEATURED_HEIGHT],
-            [2, 1, 1],
-            Extrapolation.CLAMP
-          ),
-        },
-      ],
-    };
-  });
+  const { scrollY, scrollHandler } = useParallaxScroll();
 
   const fetchMangaData = useCallback(async () => {
     try {
       setError(null);
-      
+
       // 1. Load cached data immediately (Stale-while-revalidate)
       const cachedData = await offlineCacheService.getCachedHomeData();
       if (cachedData) {
@@ -158,7 +124,8 @@ export default function HomeScreen() {
 
       const parsedMostViewed = parseMostViewedManga(html);
       const parsedNewReleases = parseNewReleases(html);
-      const newFeatured = parsedMostViewed.length > 0 ? parsedMostViewed[0] || null : null;
+      const newFeatured =
+        parsedMostViewed.length > 0 ? parsedMostViewed[0] || null : null;
 
       // Update state with fresh data
       setMostViewedManga(parsedMostViewed);
@@ -176,7 +143,7 @@ export default function HomeScreen() {
 
       // If we haven't shown cached data yet, show error
       if (isLoading) {
-         setError(
+        setError(
           'An error occurred while fetching manga data. Please try again.'
         );
       }
@@ -249,7 +216,7 @@ export default function HomeScreen() {
 
   const renderTrendingItem = useCallback(
     ({ item, index }: { item: MangaItem; index: number }) => (
-      <Reanimated.View 
+      <Reanimated.View
         entering={FadeInRight.delay(index * 100).springify()}
         style={{ marginRight: 12, marginLeft: index === 0 ? 16 : 0 }}
       >
@@ -432,23 +399,18 @@ export default function HomeScreen() {
   const renderFeaturedManga = useCallback(() => {
     if (!featuredManga) return null;
 
-
-
     return (
       <TouchableOpacity
         style={[styles.featuredContainer, { marginTop: insets.top + 16 }]}
         onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
         activeOpacity={0.9}
       >
-        <Reanimated.View style={[{ width: '100%', height: '100%' }, animatedImageStyle]}>
-          <Image
-            source={{ uri: featuredManga.imageUrl }}
-            style={styles.featuredImage}
-            contentFit="cover"
-            transition={500}
-            cachePolicy="memory-disk"
-          />
-        </Reanimated.View>
+        <ParallaxImage
+          scrollY={scrollY}
+          source={featuredManga.imageUrl}
+          height={FEATURED_HEIGHT}
+          style={styles.featuredImage}
+        />
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.8)']}
           style={styles.featuredGradient}
@@ -474,7 +436,7 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
     );
-  }, [featuredManga, insets.top, router, themeColors.primary, animatedImageStyle]);
+  }, [featuredManga, insets.top, router, themeColors.primary, scrollY]);
 
   if (isLoading) {
     return (
@@ -564,6 +526,8 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content]}
+        bounces={false}
+        overScrollMode="never"
       >
         {error ? (
           <View

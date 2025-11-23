@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   useColorScheme,
   Image,
   Alert,
@@ -23,6 +22,7 @@ import {
 } from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
 
@@ -50,7 +50,9 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
-  const [defaultLayout, setDefaultLayoutState] = useState<'grid' | 'list'>('list');
+  const [defaultLayout, setDefaultLayoutState] = useState<'grid' | 'list'>(
+    'list'
+  );
   const [selectedColor, setSelectedColor] = useState<string>(
     accentColor || colors.primary
   );
@@ -197,13 +199,22 @@ export default function SettingsScreen() {
         colors={colors}
       />
 
-      <ScrollView
+      <Reanimated.ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Settings</Text>
+        <Reanimated.Text
+          entering={FadeInDown.delay(100).springify()}
+          style={styles.title}
+        >
+          Settings
+        </Reanimated.Text>
 
-        <View style={styles.section}>
+        <Reanimated.View
+          entering={FadeInDown.delay(200).springify()}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>Appearance</Text>
           <View style={styles.subsection}>
             <Text style={styles.subsectionTitle}>Default Layout</Text>
@@ -248,7 +259,6 @@ export default function SettingsScreen() {
                 ]}
                 onPress={() => handleLayoutChange('grid')}
               >
-
                 <Ionicons
                   name="grid"
                   size={20}
@@ -328,9 +338,12 @@ export default function SettingsScreen() {
               <Text style={styles.optionText}>Reset to Default Color</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </Reanimated.View>
 
-        <View style={styles.section}>
+        <Reanimated.View
+          entering={FadeInDown.delay(300).springify()}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>AniList Integration</Text>
           {user ? (
             <>
@@ -391,9 +404,12 @@ export default function SettingsScreen() {
           <Text style={styles.noteText}>
             Note: AniList integration is still W.I.P
           </Text>
-        </View>
+        </Reanimated.View>
 
-        <View style={styles.section}>
+        <Reanimated.View
+          entering={FadeInDown.delay(400).springify()}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>Storage Management</Text>
           <TouchableOpacity
             style={styles.option}
@@ -403,9 +419,12 @@ export default function SettingsScreen() {
             <Text style={styles.optionText}>Manage Stored Data</Text>
             <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
-        </View>
+        </Reanimated.View>
 
-        <View style={styles.section}>
+        <Reanimated.View
+          entering={FadeInDown.delay(500).springify()}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>Developer Options</Text>
           <View style={styles.option}>
             <Ionicons name="bug-outline" size={24} color={colors.text} />
@@ -427,10 +446,10 @@ export default function SettingsScreen() {
           <Text style={styles.noteText}>
             You need to restart the app for this setting to take effect.
           </Text>
-        </View>
+        </Reanimated.View>
         {/* Add bottom padding space */}
         <View style={styles.bottomSpacing} />
-      </ScrollView>
+      </Reanimated.ScrollView>
       <Image
         source={require('@/assets/images/nessie.png')}
         style={styles.nessieImage}
