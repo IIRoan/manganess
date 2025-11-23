@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
   SafeAreaView,
   useWindowDimensions,
-  Animated,
 } from 'react-native';
+import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import { Stack, useRouter, useFocusEffect } from 'expo-router'; // Combined imports
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
@@ -49,7 +49,6 @@ export default function MangaSearchScreen() {
   // Router and Input Ref
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
-  const scrollY = useRef(new Animated.Value(0)).current;
   const [isFocused, setIsFocused] = useState(false);
 
   // State variables
@@ -68,7 +67,7 @@ export default function MangaSearchScreen() {
   const [vrfWebViewKey, setVrfWebViewKey] = useState(0);
   const currentQueryRef = useRef<string | null>(null);
   const vrfTokenQueryRef = useRef<string | null>(null);
-  
+
   // Layout State
   const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('list');
 
@@ -223,57 +222,62 @@ export default function MangaSearchScreen() {
 
   // Render function for MangaCard component
   const renderMangaCard = useCallback(
-    ({ item }: { item: MangaItem }) => {
+    ({ item, index }: { item: MangaItem; index: number }) => {
       if (layoutMode === 'list') {
         return (
-          <TouchableOpacity
-            style={styles.resultItem}
-            onPress={() => handleMangaPress(item)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardWrapperList}>
-              <MangaCard
-                key={item.id}
-                title={item.title}
-                imageUrl={item.banner}
-                onPress={() => handleMangaPress(item)}
-                lastReadChapter={lastReadChapters[item.id] || null}
-                style={styles.card}
-                context="search"
-                mangaId={item.id}
-              />
-            </View>
-            <View style={styles.itemInfo}>
-              <Text style={styles.itemTitle} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <View style={styles.itemMetaContainer}>
-                {lastReadChapters[item.id] ? (
-                  <View style={styles.lastReadBadge}>
-                    <Ionicons name="book" size={12} color={colors.primary} />
-                    <Text style={styles.lastReadText}>
-                      Ch. {lastReadChapters[item.id]}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.actionBadge}>
-                    <Text style={styles.actionText}>View Details</Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={14}
-                      color={colors.tabIconDefault}
-                    />
-                  </View>
-                )}
+          <Reanimated.View entering={FadeInDown.delay(index * 20).springify()}>
+            <TouchableOpacity
+              style={styles.resultItem}
+              onPress={() => handleMangaPress(item)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.cardWrapperList}>
+                <MangaCard
+                  key={item.id}
+                  title={item.title}
+                  imageUrl={item.banner}
+                  onPress={() => handleMangaPress(item)}
+                  lastReadChapter={lastReadChapters[item.id] || null}
+                  style={styles.card}
+                  context="search"
+                  mangaId={item.id}
+                />
               </View>
-            </View>
-          </TouchableOpacity>
+              <View style={styles.itemInfo}>
+                <Text style={styles.itemTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <View style={styles.itemMetaContainer}>
+                  {lastReadChapters[item.id] ? (
+                    <View style={styles.lastReadBadge}>
+                      <Ionicons name="book" size={12} color={colors.primary} />
+                      <Text style={styles.lastReadText}>
+                        Ch. {lastReadChapters[item.id]}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.actionBadge}>
+                      <Text style={styles.actionText}>View Details</Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={14}
+                        color={colors.tabIconDefault}
+                      />
+                    </View>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          </Reanimated.View>
         );
       }
 
       // Grid view render
       return (
-        <View style={styles.cardWrapperGrid}>
+        <Reanimated.View
+          entering={FadeInDown.delay(index * 20).springify()}
+          style={styles.cardWrapperGrid}
+        >
           <MangaCard
             key={item.id}
             title={item.title}
@@ -284,7 +288,7 @@ export default function MangaSearchScreen() {
             context="search"
             mangaId={item.id}
           />
-        </View>
+        </Reanimated.View>
       );
     },
     [handleMangaPress, lastReadChapters, styles, colors, layoutMode]
@@ -390,7 +394,12 @@ export default function MangaSearchScreen() {
     if (tokenError) {
       return (
         <View style={styles.emptyStateContainer}>
-          <View style={[styles.emptyStateIcon, { backgroundColor: colors.error + '15' }]}>
+          <View
+            style={[
+              styles.emptyStateIcon,
+              { backgroundColor: colors.error + '15' },
+            ]}
+          >
             <Ionicons
               name="cloud-offline-outline"
               size={48}
@@ -433,7 +442,8 @@ export default function MangaSearchScreen() {
           </View>
           <Text style={styles.emptyStateTitle}>Offline Mode</Text>
           <Text style={styles.emptyStateText}>
-            You're currently offline. Check your bookmarks for downloaded content.
+            You're currently offline. Check your bookmarks for downloaded
+            content.
           </Text>
           <TouchableOpacity
             style={[styles.offlineButton, { backgroundColor: colors.primary }]}
@@ -530,7 +540,7 @@ export default function MangaSearchScreen() {
       </View>
 
       <View style={[styles.contentContainer, { marginTop: insets.top }]}>
-        <Animated.FlatList
+        <Reanimated.FlatList
           data={searchResults}
           renderItem={renderMangaCard}
           keyExtractor={keyExtractor}
@@ -540,25 +550,12 @@ export default function MangaSearchScreen() {
           columnWrapperStyle={
             layoutMode === 'grid' ? styles.columnWrapper : undefined
           }
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true }
-          )}
           ListEmptyComponent={EmptyState}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
-          refreshing={isLoading}
-          onRefresh={() => {
-            const q = (debouncedSearchQuery || '').trim();
-            if (q.length > 2) {
-              setVrfToken(null);
-              vrfTokenQueryRef.current = null;
-              currentQueryRef.current = q;
-              setVrfWebViewKey((k) => k + 1);
-              setIsLoading(true);
-            }
-          }}
+          bounces={false}
+          overScrollMode="never"
         />
 
         {/* Hidden WebView for per-query VRF token acquisition */}
@@ -581,7 +578,7 @@ export default function MangaSearchScreen() {
   );
 }
 
-  // Styles with responsiveness adjustments
+// Styles with responsiveness adjustments
 const getStyles = (
   colors: typeof Colors.light,
   width: number,
@@ -590,7 +587,7 @@ const getStyles = (
   const columnGap = 16;
   const containerPadding = 16;
   // Calculate grid card width: (Total width - 2*padding - gap) / 2
-  const gridCardWidth = (width - (containerPadding * 2) - columnGap) / 2;
+  const gridCardWidth = (width - containerPadding * 2 - columnGap) / 2;
 
   return StyleSheet.create({
     container: {
@@ -612,7 +609,7 @@ const getStyles = (
     },
     contentContainer: {
       flex: 1,
-      paddingTop: 10
+      paddingTop: 10,
     },
     searchContainer: {
       paddingHorizontal: 16,

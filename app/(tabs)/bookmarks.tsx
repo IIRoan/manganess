@@ -38,6 +38,7 @@ import Animated, {
   Easing,
   runOnJS,
   useDerivedValue,
+  FadeInDown,
 } from 'react-native-reanimated';
 import {
   Gesture,
@@ -417,7 +418,10 @@ export default function BookmarksScreen() {
 
       if (viewMode === 'grid') {
         return (
-          <View style={styles.bookmarkCardWrapper}>
+          <Animated.View
+            entering={FadeInDown.delay(info.index * 30).springify()}
+            style={styles.bookmarkCardWrapper}
+          >
             <MangaCard
               title={item.title}
               imageUrl={item.imageUrl}
@@ -433,46 +437,48 @@ export default function BookmarksScreen() {
                 }
               }}
             />
-          </View>
+          </Animated.View>
         );
       }
 
       return (
-        <TouchableOpacity
-          style={styles.listItem}
-          onPress={() => handleBookmarkPress(item.id)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.listItemImageContainer}>
-            <MangaCard
-              title=""
-              imageUrl={item.imageUrl}
-              onPress={() => {}}
-              lastReadChapter={null}
-              style={styles.listItemImage}
-              context="bookmark"
-              mangaId={item.id}
-              onBookmarkChange={(_mangaId, newStatus) => {
-                if (newStatus === null) {
-                  fetchBookmarks();
-                } else {
-                  fetchBookmarks();
-                }
-              }}
+        <Animated.View entering={FadeInDown.delay(info.index * 30).springify()}>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => handleBookmarkPress(item.id)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.listItemImageContainer}>
+              <MangaCard
+                title=""
+                imageUrl={item.imageUrl}
+                onPress={() => {}}
+                lastReadChapter={null}
+                style={styles.listItemImage}
+                context="bookmark"
+                mangaId={item.id}
+                onBookmarkChange={(_mangaId, newStatus) => {
+                  if (newStatus === null) {
+                    fetchBookmarks();
+                  } else {
+                    fetchBookmarks();
+                  }
+                }}
+              />
+            </View>
+            <View style={styles.listItemContent}>
+              <Text style={styles.listItemTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+              <Text style={styles.listItemChapter}>{item.lastReadChapter}</Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={24}
+              color={colors.tabIconDefault}
             />
-          </View>
-          <View style={styles.listItemContent}>
-            <Text style={styles.listItemTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={styles.listItemChapter}>{item.lastReadChapter}</Text>
-          </View>
-          <Ionicons
-            name="chevron-forward"
-            size={24}
-            color={colors.tabIconDefault}
-          />
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </Animated.View>
       );
     },
     [
@@ -733,8 +739,8 @@ export default function BookmarksScreen() {
                       ) : null}
                     </View>
                   ) : (
-                    <FlatList
-                      ref={(r: FlatList<BookmarkItem> | null) => {
+                    <Animated.FlatList
+                      ref={(r: any) => {
                         listRefs.current[sec] = r;
                       }}
                       data={sectionData[sec]}
