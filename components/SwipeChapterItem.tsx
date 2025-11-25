@@ -74,8 +74,10 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     _progress: Animated.AnimatedAddition<number>,
     dragX: Animated.AnimatedAddition<number>
   ) => {
-    const showDownloadAction = showDownloadButton && mangaId && !downloadStatus.isDownloaded;
-    const showDeleteAction = downloadStatus.isDownloaded && typeof onDeleteDownload === 'function';
+    const showDownloadAction =
+      showDownloadButton && mangaId && !downloadStatus.isDownloaded;
+    const showDeleteAction =
+      downloadStatus.isDownloaded && typeof onDeleteDownload === 'function';
 
     const actionCount =
       (showDownloadAction ? 1 : 0) +
@@ -86,7 +88,10 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
       return null;
     }
 
-    const actionWidth = Math.max(actionCount * SWIPE_ACTION_WIDTH, SWIPE_ACTION_WIDTH);
+    const actionWidth = Math.max(
+      actionCount * SWIPE_ACTION_WIDTH,
+      SWIPE_ACTION_WIDTH
+    );
 
     const trans = dragX.interpolate({
       inputRange: [-actionWidth, 0],
@@ -121,7 +126,9 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 size="medium"
                 variant="full"
                 appearance="swipe"
-                disabled={downloadStatus.isDownloaded || downloadStatus.isDownloading}
+                disabled={
+                  downloadStatus.isDownloaded || downloadStatus.isDownloading
+                }
                 onDownloadStart={() => {
                   onDownloadStart?.();
                   swipeableRef.current?.close();
@@ -257,8 +264,8 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                   style={styles.downloadingIndicator}
                 />
                 <Text style={styles.downloadingText}>
-                  {downloadStatus.progress 
-                    ? `${downloadStatus.progress}%` 
+                  {downloadStatus.progress
+                    ? `${downloadStatus.progress}%`
                     : 'Downloading…'}
                 </Text>
               </View>
@@ -278,7 +285,9 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 color={colors.primary}
                 style={[
                   styles.readIndicator,
-                  downloadStatus.isDownloaded ? styles.readIndicatorOffset : undefined,
+                  downloadStatus.isDownloaded
+                    ? styles.readIndicatorOffset
+                    : undefined,
                 ]}
               />
             )}

@@ -6,8 +6,8 @@ import {
 } from '@/services/downloadQueue';
 
 const BatchDownloadHost: React.FC = () => {
-  const [request, setRequest] = useState<ActiveWebViewRequest | null>(
-    () => downloadQueueService.getActiveWebViewRequest()
+  const [request, setRequest] = useState<ActiveWebViewRequest | null>(() =>
+    downloadQueueService.getActiveWebViewRequest()
   );
 
   useEffect(() => {
@@ -23,18 +23,15 @@ const BatchDownloadHost: React.FC = () => {
       key={`batch-webview-${request.id}-${request.attempt}`}
       chapterUrl={request.url}
       onRequestIntercepted={(chapterId, vrfToken) => {
-        downloadQueueService.handleWebViewIntercepted(
-          chapterId,
-          vrfToken
-        );
+        downloadQueueService.handleWebViewIntercepted(chapterId, vrfToken);
       }}
       onError={(error) => {
-        downloadQueueService.handleWebViewError(
-          error
-        );
+        downloadQueueService.handleWebViewError(error);
       }}
       onTimeout={() => {
-        downloadQueueService.handleWebViewError('Timeout waiting for interception');
+        downloadQueueService.handleWebViewError(
+          'Timeout waiting for interception'
+        );
       }}
       timeout={45000}
     />

@@ -3,7 +3,10 @@ import { chapterStorageService } from './chapterStorageService';
 import { downloadQueueService } from './downloadQueue';
 import { DownloadStatus, DownloadProgress } from '@/types/download';
 import { logger } from '@/utils/logger';
-import { downloadEventEmitter, DownloadStatusEvent } from '@/utils/downloadEventEmitter';
+import {
+  downloadEventEmitter,
+  DownloadStatusEvent,
+} from '@/utils/downloadEventEmitter';
 
 export interface ChapterDownloadStatus {
   mangaId: string;
@@ -60,7 +63,7 @@ class DownloadStatusService {
     // Listen for global download events to invalidate cache
     downloadEventEmitter.subscribeGlobal((event: DownloadStatusEvent) => {
       const key = this.getCacheKey(event.mangaId, event.chapterNumber);
-      
+
       // Invalidate cache on status changing events
       switch (event.type) {
         case 'download_started':
@@ -77,13 +80,14 @@ class DownloadStatusService {
           // But we might want to update the cached progress if it exists
           const cached = this.getFromCache(key);
           if (cached) {
-             cached.progress = event.progress || cached.progress;
-             cached.status = DownloadStatus.DOWNLOADING;
-             cached.isDownloading = true;
-             if (event.estimatedTimeRemaining) cached.estimatedTimeRemaining = event.estimatedTimeRemaining;
-             if (event.downloadSpeed) cached.downloadSpeed = event.downloadSpeed;
-             // Update expiry
-             this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
+            cached.progress = event.progress || cached.progress;
+            cached.status = DownloadStatus.DOWNLOADING;
+            cached.isDownloading = true;
+            if (event.estimatedTimeRemaining)
+              cached.estimatedTimeRemaining = event.estimatedTimeRemaining;
+            if (event.downloadSpeed) cached.downloadSpeed = event.downloadSpeed;
+            // Update expiry
+            this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
           }
           break;
       }
@@ -129,7 +133,7 @@ class DownloadStatusService {
     chapterNumber: string
   ): Promise<ChapterDownloadStatus> {
     const cacheKey = this.getCacheKey(mangaId, chapterNumber);
-    
+
     // Check cache first
     const cached = this.getFromCache(cacheKey);
     if (cached) {
@@ -163,17 +167,18 @@ class DownloadStatusService {
       // Check download queue status
       const downloadId = this.getCacheKey(mangaId, chapterNumber);
       const queueItem = await downloadQueueService.getDownloadById(downloadId);
-      
+
       if (queueItem) {
         const queueStatus = queueItem.status;
-        
+
         // Get progress if downloading
         let progress: number = 0;
         let estimatedTimeRemaining: number | undefined;
         let downloadSpeed: number | undefined;
 
         if (queueStatus === DownloadStatus.DOWNLOADING) {
-          const progressData = downloadManagerService.getDownloadProgress(downloadId);
+          const progressData =
+            downloadManagerService.getDownloadProgress(downloadId);
           if (progressData) {
             progress = progressData.progress;
             estimatedTimeRemaining = progressData.estimatedTimeRemaining;
@@ -201,11 +206,14 @@ class DownloadStatusService {
 
       // Check if actively downloading (might not be in queue yet)
       const activeDownloads = await downloadManagerService.getActiveDownloads();
-      const activeDownload = activeDownloads.find(d => d.id.includes(downloadId));
-      
+      const activeDownload = activeDownloads.find((d) =>
+        d.id.includes(downloadId)
+      );
+
       if (activeDownload) {
-        const progressData = downloadManagerService.getDownloadProgress(downloadId);
-        
+        const progressData =
+          downloadManagerService.getDownloadProgress(downloadId);
+
         const status: ChapterDownloadStatus = {
           mangaId,
           chapterNumber,
@@ -225,13 +233,15 @@ class DownloadStatusService {
       }
 
       // Check for any download containing the mangaId and chapterNumber in different formats
-      const alternativeActiveDownload = activeDownloads.find(d => 
-        (d.mangaId === mangaId && d.chapterNumber === chapterNumber)
+      const alternativeActiveDownload = activeDownloads.find(
+        (d) => d.mangaId === mangaId && d.chapterNumber === chapterNumber
       );
-      
+
       if (alternativeActiveDownload) {
-        const progressData = downloadManagerService.getDownloadProgress(alternativeActiveDownload.id);
-        
+        const progressData = downloadManagerService.getDownloadProgress(
+          alternativeActiveDownload.id
+        );
+
         const status: ChapterDownloadStatus = {
           mangaId,
           chapterNumber,
@@ -265,7 +275,6 @@ class DownloadStatusService {
 
       this.setCache(cacheKey, status);
       return status;
-
     } catch (error) {
       this.log.error('Service', 'Error getting chapter download status', {
         mangaId,
@@ -330,11 +339,11 @@ class DownloadStatusService {
     // Calculate summary
     const summary = {
       total: statuses.length,
-      downloaded: statuses.filter(s => s.isDownloaded).length,
-      downloading: statuses.filter(s => s.isDownloading).length,
-      queued: statuses.filter(s => s.isQueued).length,
-      failed: statuses.filter(s => s.isFailed).length,
-      paused: statuses.filter(s => s.isPaused).length,
+      downloaded: statuses.filter((s) => s.isDownloaded).length,
+      downloading: statuses.filter((s) => s.isDownloading).length,
+      queued: statuses.filter((s) => s.isQueued).length,
+      failed: statuses.filter((s) => s.isFailed).length,
+      paused: statuses.filter((s) => s.isPaused).length,
     };
 
     return {
@@ -364,7 +373,7 @@ class DownloadStatusService {
   async isDownloadingChapters(mangaId: string): Promise<boolean> {
     try {
       const activeDownloads = await downloadManagerService.getActiveDownloads();
-      return activeDownloads.some(d => d.mangaId === mangaId);
+      return activeDownloads.some((d) => d.mangaId === mangaId);
     } catch (error) {
       this.log.error('Service', 'Error checking downloading chapters', {
         mangaId,
@@ -377,7 +386,10 @@ class DownloadStatusService {
   /**
    * Get download progress for a specific download
    */
-  getDownloadProgress(mangaId: string, chapterNumber: string): DownloadProgress | null {
+  getDownloadProgress(
+    mangaId: string,
+    chapterNumber: string
+  ): DownloadProgress | null {
     const downloadId = this.getCacheKey(mangaId, chapterNumber);
     return downloadManagerService.getDownloadProgress(downloadId);
   }
@@ -409,7 +421,10 @@ class DownloadStatusService {
   /**
    * Force refresh download status for a chapter
    */
-  async refreshStatus(mangaId: string, chapterNumber: string): Promise<ChapterDownloadStatus> {
+  async refreshStatus(
+    mangaId: string,
+    chapterNumber: string
+  ): Promise<ChapterDownloadStatus> {
     const cacheKey = this.getCacheKey(mangaId, chapterNumber);
     this.clearCache(cacheKey);
     return this.getChapterDownloadStatus(mangaId, chapterNumber);
@@ -418,7 +433,10 @@ class DownloadStatusService {
   /**
    * Get simplified download status (just the enum)
    */
-  async getSimpleStatus(mangaId: string, chapterNumber: string): Promise<DownloadStatus> {
+  async getSimpleStatus(
+    mangaId: string,
+    chapterNumber: string
+  ): Promise<DownloadStatus> {
     const status = await this.getChapterDownloadStatus(mangaId, chapterNumber);
     return status.status;
   }
@@ -426,7 +444,10 @@ class DownloadStatusService {
   /**
    * Check if chapter is downloaded (boolean check)
    */
-  async isChapterDownloaded(mangaId: string, chapterNumber: string): Promise<boolean> {
+  async isChapterDownloaded(
+    mangaId: string,
+    chapterNumber: string
+  ): Promise<boolean> {
     const status = await this.getChapterDownloadStatus(mangaId, chapterNumber);
     return status.isDownloaded;
   }
@@ -434,7 +455,10 @@ class DownloadStatusService {
   /**
    * Check if chapter is currently downloading (boolean check)
    */
-  async isChapterDownloading(mangaId: string, chapterNumber: string): Promise<boolean> {
+  async isChapterDownloading(
+    mangaId: string,
+    chapterNumber: string
+  ): Promise<boolean> {
     const status = await this.getChapterDownloadStatus(mangaId, chapterNumber);
     return status.isDownloading;
   }

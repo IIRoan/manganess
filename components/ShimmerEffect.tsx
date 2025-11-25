@@ -1,5 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, View, ViewStyle, DimensionValue, Easing } from 'react-native';
+import {
+  Animated,
+  View,
+  ViewStyle,
+  DimensionValue,
+  Easing,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/constants/ThemeContext';
 // import { Colors } from '@/constants/Colors';

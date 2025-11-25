@@ -47,8 +47,12 @@ class DownloadQueueService implements DownloadQueue {
 
   // WebView Coordination
   private activeWebViewRequest: ActiveWebViewRequest | null = null;
-  private webViewListeners: Set<(request: ActiveWebViewRequest | null) => void> = new Set();
-  private currentDownloadResolver: ((data: { chapterId: string; vrfToken: string }) => void) | null = null;
+  private webViewListeners: Set<
+    (request: ActiveWebViewRequest | null) => void
+  > = new Set();
+  private currentDownloadResolver:
+    | ((data: { chapterId: string; vrfToken: string }) => void)
+    | null = null;
   private currentDownloadRejecter: ((error: Error) => void) | null = null;
 
   // Event listeners for queue updates
@@ -89,7 +93,6 @@ class DownloadQueueService implements DownloadQueue {
           this.processQueue();
         }
       }, 500);
-
     } catch (error) {
       this.initialized = false;
       console.error('Failed to initialize download queue:', error);
@@ -109,8 +112,11 @@ class DownloadQueueService implements DownloadQueue {
     } else if (nextAppState === 'active') {
       await this.restoreFromBackground();
       // Trigger processing on resume
-      if (!this.state.isPaused && (this.state.items.length > 0 || this.state.activeDownloads.size > 0)) {
-         this.processQueue();
+      if (
+        !this.state.isPaused &&
+        (this.state.items.length > 0 || this.state.activeDownloads.size > 0)
+      ) {
+        this.processQueue();
       }
     }
   }
@@ -143,7 +149,7 @@ class DownloadQueueService implements DownloadQueue {
       // handles the main persistence. This is mostly for short-term backgrounding.
       // However, to be safe, we just clear the background flag.
       // The persistent storage is the source of truth.
-      
+
       await AsyncStorage.removeItem('queue_background_state');
     } catch (error) {
       console.error('Failed to restore from background:', error);
@@ -155,25 +161,26 @@ class DownloadQueueService implements DownloadQueue {
       const stored = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
       if (stored) {
         const data: PersistedQueueData = JSON.parse(stored);
-        
+
         // Start with stored items
         const restoredItems = data.items || [];
-        
+
         // CRITICAL: Any "active" downloads from the previous session are now technically "interrupted".
         // We must put them back into the QUEUE to be restarted.
         if (data.activeDownloads && data.activeDownloads.length > 0) {
-          const activeAsQueueItems: DownloadQueueItem[] = data.activeDownloads.map(download => ({
-            id: download.id,
-            mangaId: download.mangaId,
-            mangaTitle: download.mangaTitle,
-            chapterNumber: download.chapterNumber,
-            chapterUrl: download.chapterUrl,
-            priority: 2, // High priority for interrupted
-            addedAt: download.createdAt,
-          }));
+          const activeAsQueueItems: DownloadQueueItem[] =
+            data.activeDownloads.map((download) => ({
+              id: download.id,
+              mangaId: download.mangaId,
+              mangaTitle: download.mangaTitle,
+              chapterNumber: download.chapterNumber,
+              chapterUrl: download.chapterUrl,
+              priority: 2, // High priority for interrupted
+              addedAt: download.createdAt,
+            }));
 
           for (const item of activeAsQueueItems) {
-            if (!restoredItems.some(existing => existing.id === item.id)) {
+            if (!restoredItems.some((existing) => existing.id === item.id)) {
               restoredItems.push(item);
             }
           }
@@ -182,7 +189,7 @@ class DownloadQueueService implements DownloadQueue {
         this.state.items = restoredItems;
         this.state.activeDownloads.clear(); // Clear active, they are now in queue
         this.state.isPaused = data.isPaused || false;
-        
+
         this.sortQueueByPriority();
 
         if (isDebugEnabled()) {
@@ -253,12 +260,13 @@ class DownloadQueueService implements DownloadQueue {
     await this.initialize();
 
     // Check if item already exists
-    const exists = this.state.items.some(
-      (queueItem) => queueItem.id === item.id
-    ) || this.state.activeDownloads.has(item.id);
+    const exists =
+      this.state.items.some((queueItem) => queueItem.id === item.id) ||
+      this.state.activeDownloads.has(item.id);
 
     if (exists) {
-      if (isDebugEnabled()) console.log(`Item ${item.id} already in queue/active`);
+      if (isDebugEnabled())
+        console.log(`Item ${item.id} already in queue/active`);
       return;
     }
 
@@ -282,20 +290,24 @@ class DownloadQueueService implements DownloadQueue {
     });
   }
 
-  async removeFromQueue(mangaId: string, chapterNumber: string): Promise<boolean> {
+  async removeFromQueue(
+    mangaId: string,
+    chapterNumber: string
+  ): Promise<boolean> {
     await this.initialize();
 
     const initialLength = this.state.items.length;
     this.state.items = this.state.items.filter(
-      (item) => !(item.mangaId === mangaId && item.chapterNumber === chapterNumber)
+      (item) =>
+        !(item.mangaId === mangaId && item.chapterNumber === chapterNumber)
     );
-    
+
     // If it's active, we try to cancel it
     const targetId = `${mangaId}_${chapterNumber}`;
     if (this.state.activeDownloads.has(targetId)) {
-        await downloadManagerService.cancelDownload(targetId);
-        // The cancellation will eventually trigger cleanup, but we can force remove from our map
-        this.state.activeDownloads.delete(targetId);
+      await downloadManagerService.cancelDownload(targetId);
+      // The cancellation will eventually trigger cleanup, but we can force remove from our map
+      this.state.activeDownloads.delete(targetId);
     }
 
     this.scheduleSave();
@@ -319,7 +331,7 @@ class DownloadQueueService implements DownloadQueue {
 
     // Strict concurrency limit: 1 because we only have 1 hidden WebView
     if (this.state.activeDownloads.size >= MAX_CONCURRENT_DOWNLOADS) {
-      return; 
+      return;
     }
 
     this.state.isProcessing = true;
@@ -351,14 +363,14 @@ class DownloadQueueService implements DownloadQueue {
     try {
       await this.executeDownload(item);
     } catch (error) {
-       console.error(`Download failed for ${item.id}`, error);
-       this.state.activeDownloads.delete(item.id);
-       // Optional: Retry logic? For now, just drop it or maybe add to back with lower priority
+      console.error(`Download failed for ${item.id}`, error);
+      this.state.activeDownloads.delete(item.id);
+      // Optional: Retry logic? For now, just drop it or maybe add to back with lower priority
     } finally {
       this.state.activeDownloads.delete(item.id);
       this.scheduleSave();
       this.notifyListeners();
-      
+
       // Next!
       this.state.isProcessing = false;
       // Small delay to let UI breathe and cleanup
@@ -369,57 +381,62 @@ class DownloadQueueService implements DownloadQueue {
   private async executeDownload(item: DownloadQueueItem): Promise<void> {
     // 1. Request WebView Interception
     const tokens = await this.requestWebViewTokens(item);
-    
+
     // 2. Call DownloadManager
-    const result = await downloadManagerService.downloadChapterFromInterceptedRequest(
+    const result =
+      await downloadManagerService.downloadChapterFromInterceptedRequest(
         item.mangaId,
         item.chapterNumber,
         tokens.chapterId,
         tokens.vrfToken,
         item.chapterUrl,
         item.mangaTitle
-    );
+      );
 
     if (!result.success) {
-        throw new Error(result.error?.message || 'Download failed');
+      throw new Error(result.error?.message || 'Download failed');
     }
-    
+
     // Success!
     if (isDebugEnabled()) console.log(`Queue: Download success for ${item.id}`);
   }
 
   // --- WebView Coordination Logic ---
 
-  private requestWebViewTokens(item: DownloadQueueItem): Promise<{ chapterId: string; vrfToken: string }> {
+  private requestWebViewTokens(
+    item: DownloadQueueItem
+  ): Promise<{ chapterId: string; vrfToken: string }> {
     return new Promise((resolve, reject) => {
-        // Set timeout for the whole process
-        const timeout = setTimeout(() => {
-            this.setActiveWebViewRequest(null);
-            reject(new Error('WebView Token Interception Timeout'));
-        }, 45000);
+      // Set timeout for the whole process
+      const timeout = setTimeout(() => {
+        this.setActiveWebViewRequest(null);
+        reject(new Error('WebView Token Interception Timeout'));
+      }, 45000);
 
-        this.currentDownloadResolver = (data) => {
-            clearTimeout(timeout);
-            resolve(data);
-        };
+      this.currentDownloadResolver = (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      };
 
-        this.currentDownloadRejecter = (err) => {
-            clearTimeout(timeout);
-            reject(err);
-        };
+      this.currentDownloadRejecter = (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      };
 
-        this.setActiveWebViewRequest({
-            id: item.id,
-            mangaId: item.mangaId,
-            chapterNumber: item.chapterNumber,
-            url: item.chapterUrl,
-            attempt: 1
-        });
+      this.setActiveWebViewRequest({
+        id: item.id,
+        mangaId: item.mangaId,
+        chapterNumber: item.chapterNumber,
+        url: item.chapterUrl,
+        attempt: 1,
+      });
     });
   }
 
   // Called by Host (UI)
-  subscribeWebView(listener: (request: ActiveWebViewRequest | null) => void): () => void {
+  subscribeWebView(
+    listener: (request: ActiveWebViewRequest | null) => void
+  ): () => void {
     this.webViewListeners.add(listener);
     listener(this.activeWebViewRequest);
     return () => this.webViewListeners.delete(listener);
@@ -431,27 +448,27 @@ class DownloadQueueService implements DownloadQueue {
 
   // Called by Host (UI) when WebView succeeds
   handleWebViewIntercepted(chapterId: string, vrfToken: string) {
-     this.setActiveWebViewRequest(null); // Hide WebView
-     if (this.currentDownloadResolver) {
-         this.currentDownloadResolver({ chapterId, vrfToken });
-         this.currentDownloadResolver = null;
-         this.currentDownloadRejecter = null;
-     }
+    this.setActiveWebViewRequest(null); // Hide WebView
+    if (this.currentDownloadResolver) {
+      this.currentDownloadResolver({ chapterId, vrfToken });
+      this.currentDownloadResolver = null;
+      this.currentDownloadRejecter = null;
+    }
   }
 
   // Called by Host (UI) when WebView fails
   handleWebViewError(error: string) {
-      this.setActiveWebViewRequest(null);
-      if (this.currentDownloadRejecter) {
-          this.currentDownloadRejecter(new Error(error));
-          this.currentDownloadResolver = null;
-          this.currentDownloadRejecter = null;
-      }
+    this.setActiveWebViewRequest(null);
+    if (this.currentDownloadRejecter) {
+      this.currentDownloadRejecter(new Error(error));
+      this.currentDownloadResolver = null;
+      this.currentDownloadRejecter = null;
+    }
   }
 
   private setActiveWebViewRequest(request: ActiveWebViewRequest | null) {
-      this.activeWebViewRequest = request;
-      this.webViewListeners.forEach(l => l(request));
+    this.activeWebViewRequest = request;
+    this.webViewListeners.forEach((l) => l(request));
   }
 
   // --- Standard Public API ---
@@ -472,24 +489,24 @@ class DownloadQueueService implements DownloadQueue {
   }
 
   async pauseDownload(downloadId: string): Promise<void> {
-     // For now, "pausing" a specific download in a strict queue means 
-     // maybe cancelling it and leaving it in queue?
-     // Or just pausing the whole queue.
-     // Current implementation in Manager pauses logic, but here we just update state.
-     // Simplest:
-     await downloadManagerService.pauseDownload(downloadId);
+    // For now, "pausing" a specific download in a strict queue means
+    // maybe cancelling it and leaving it in queue?
+    // Or just pausing the whole queue.
+    // Current implementation in Manager pauses logic, but here we just update state.
+    // Simplest:
+    await downloadManagerService.pauseDownload(downloadId);
   }
 
   async resumeDownload(downloadId: string): Promise<void> {
-      await downloadManagerService.resumeDownload(downloadId);
+    await downloadManagerService.resumeDownload(downloadId);
   }
 
   async cancelDownload(downloadId: string): Promise<void> {
-      await downloadManagerService.cancelDownload(downloadId);
-      // Also remove from items if present
-      this.state.items = this.state.items.filter(i => i.id !== downloadId);
-      this.scheduleSave();
-      this.notifyListeners();
+    await downloadManagerService.cancelDownload(downloadId);
+    // Also remove from items if present
+    this.state.items = this.state.items.filter((i) => i.id !== downloadId);
+    this.scheduleSave();
+    this.notifyListeners();
   }
 
   async getQueueStatus(): Promise<QueueStatus> {
@@ -506,61 +523,71 @@ class DownloadQueueService implements DownloadQueue {
     await this.initialize();
     return [...this.state.items];
   }
-  
+
   async getDownloadById(id: string): Promise<DownloadItem | null> {
-      await this.initialize();
-      return this.state.activeDownloads.get(id) || null;
+    await this.initialize();
+    return this.state.activeDownloads.get(id) || null;
   }
 
   async clearQueue(): Promise<void> {
-      await this.initialize();
-      this.state.items = [];
-      this.scheduleSave();
-      this.notifyListeners();
+    await this.initialize();
+    this.state.items = [];
+    this.scheduleSave();
+    this.notifyListeners();
   }
 
   async clearCompleted(): Promise<void> {
-      // No-op in new architecture, active downloads are cleared automatically
+    // No-op in new architecture, active downloads are cleared automatically
   }
 
   async clearCompletedDownloads(): Promise<void> {
-      // No-op
+    // No-op
   }
 
   async isInQueue(mangaId: string, chapterNumber: string): Promise<boolean> {
-      await this.initialize();
-      return this.state.items.some(i => i.mangaId === mangaId && i.chapterNumber === chapterNumber) ||
-             Array.from(this.state.activeDownloads.values()).some(i => i.mangaId === mangaId && i.chapterNumber === chapterNumber);
+    await this.initialize();
+    return (
+      this.state.items.some(
+        (i) => i.mangaId === mangaId && i.chapterNumber === chapterNumber
+      ) ||
+      Array.from(this.state.activeDownloads.values()).some(
+        (i) => i.mangaId === mangaId && i.chapterNumber === chapterNumber
+      )
+    );
   }
 
   // Helpers for Manager to call back (Backward compat)
-  async updateDownloadProgress(id: string, progress: number, dl: number, total: number) {
-      const item = this.state.activeDownloads.get(id);
-      if (item) {
-          item.progress = progress;
-          item.downloadedImages = dl;
-          item.totalImages = total;
-          this.notifyListeners();
-      }
+  async updateDownloadProgress(
+    id: string,
+    progress: number,
+    dl: number,
+    total: number
+  ) {
+    const item = this.state.activeDownloads.get(id);
+    if (item) {
+      item.progress = progress;
+      item.downloadedImages = dl;
+      item.totalImages = total;
+      this.notifyListeners();
+    }
   }
 
   async completeDownload(id: string) {
-      // Handled in executeDownload flow
+    // Handled in executeDownload flow
   }
 
   async failDownload(id: string, error: string) {
-      // Handled in executeDownload flow
+    // Handled in executeDownload flow
   }
-  
+
   addStatusListener(listener: (status: QueueStatus) => void): () => void {
-      this.listeners.add(listener);
-      return () => this.listeners.delete(listener);
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
-  
+
   removeStatusListener(listener: (status: QueueStatus) => void): void {
-      this.listeners.delete(listener);
+    this.listeners.delete(listener);
   }
 }
 
 export const downloadQueueService = DownloadQueueService.getInstance();
-

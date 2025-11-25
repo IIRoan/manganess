@@ -189,9 +189,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
       if (prev.size === total) {
         return new Set();
       }
-      return new Set(
-        downloadedChaptersSorted.map((chapter) => chapter.number)
-      );
+      return new Set(downloadedChaptersSorted.map((chapter) => chapter.number));
     });
   };
 
@@ -239,9 +237,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
       }
 
       if (limit < minChapter) {
-        setError(
-          `Minimum available chapter is ${sortedChapters[0]!.number}`
-        );
+        setError(`Minimum available chapter is ${sortedChapters[0]!.number}`);
         return;
       }
 
@@ -311,10 +307,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
           color={isActive ? '#FFF' : colors.text}
         />
         <Text
-          style={[
-            styles.tabButtonText,
-            isActive && styles.tabButtonTextActive,
-          ]}
+          style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}
         >
           {label}
         </Text>
@@ -336,10 +329,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
         activeOpacity={0.8}
       >
         <Text
-          style={[
-            styles.sortChipText,
-            isActive && styles.sortChipTextActive,
-          ]}
+          style={[styles.sortChipText, isActive && styles.sortChipTextActive]}
         >
           {label}
         </Text>
@@ -363,9 +353,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
       : totalChapters
         ? `Pick how many chapters to keep offline — ${
             sortedChapters[0]?.number ?? '—'
-          } to ${
-            sortedChapters[totalChapters - 1]?.number ?? '—'
-          } available.`
+          } to ${sortedChapters[totalChapters - 1]?.number ?? '—'} available.`
         : 'Choose chapters to download for offline reading.';
 
   const confirmLabel =
@@ -403,8 +391,6 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
     [totalChapters]
   );
 
-
-
   return (
     <Modal
       visible={visible}
@@ -425,7 +411,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
         </View>
         <View style={styles.contentWrapper}>
           <View style={styles.handleBar} />
-          
+
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>{headerTitle}</Text>
@@ -502,8 +488,13 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                             {option.description}
                           </Text>
                         </View>
-                        <View style={[styles.radioButton, isActive && styles.radioButtonActive]}>
-                            {isActive && <View style={styles.radioButtonInner} />}
+                        <View
+                          style={[
+                            styles.radioButton,
+                            isActive && styles.radioButtonActive,
+                          ]}
+                        >
+                          {isActive && <View style={styles.radioButtonInner} />}
                         </View>
                       </View>
 
@@ -579,7 +570,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                     <View style={styles.manageHeaderSection}>
                       <View style={styles.manageToolbar}>
                         <Text style={styles.manageSectionTitle}>
-                            {downloadedChaptersSorted.length} Items
+                          {downloadedChaptersSorted.length} Items
                         </Text>
                         <TouchableOpacity
                           onPress={toggleSelectAll}
@@ -587,7 +578,8 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                           style={styles.selectAllButton}
                         >
                           <Text style={styles.selectAllText}>
-                            {selectedDeletes.size === downloadedChaptersSorted.length
+                            {selectedDeletes.size ===
+                            downloadedChaptersSorted.length
                               ? 'Deselect All'
                               : 'Select All'}
                           </Text>
@@ -595,13 +587,17 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                       </View>
 
                       <View style={styles.sortRow}>
-                        <ScrollView 
-                            horizontal 
-                            showsHorizontalScrollIndicator={false} 
-                            contentContainerStyle={styles.sortChipsContainer}
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.sortChipsContainer}
                         >
                           {renderSortButton('Number', 'number-asc', 'arrow-up')}
-                          {renderSortButton('Number', 'number-desc', 'arrow-down')}
+                          {renderSortButton(
+                            'Number',
+                            'number-desc',
+                            'arrow-down'
+                          )}
                           {renderSortButton('Size', 'size-asc', 'arrow-up')}
                           {renderSortButton('Size', 'size-desc', 'arrow-down')}
                         </ScrollView>
@@ -610,13 +606,13 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
 
                     <View style={styles.manageList}>
                       {getSortedDownloadedChapters.map((chapter) => {
-                        const isSelected = selectedDeletes.has(
-                          chapter.number
-                        );
+                        const isSelected = selectedDeletes.has(chapter.number);
                         // Mock file size if not present, or format it
-                        const fileSize = (chapter as any).fileSize 
-                            ? ((chapter as any).fileSize / 1024 / 1024).toFixed(1) + ' MB'
-                            : null;
+                        const fileSize = (chapter as any).fileSize
+                          ? ((chapter as any).fileSize / 1024 / 1024).toFixed(
+                              1
+                            ) + ' MB'
+                          : null;
 
                         return (
                           <TouchableOpacity
@@ -631,26 +627,48 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                             activeOpacity={0.7}
                           >
                             <View style={styles.manageItemContent}>
-                                <View style={styles.manageItemTopRow}>
-                                    <Text style={[styles.manageItemTitle, isSelected && styles.manageItemTitleSelected]}>
-                                        Chapter {chapter.number}
+                              <View style={styles.manageItemTopRow}>
+                                <Text
+                                  style={[
+                                    styles.manageItemTitle,
+                                    isSelected &&
+                                      styles.manageItemTitleSelected,
+                                  ]}
+                                >
+                                  Chapter {chapter.number}
+                                </Text>
+                                {fileSize && (
+                                  <View style={styles.sizeBadge}>
+                                    <Text style={styles.sizeBadgeText}>
+                                      {fileSize}
                                     </Text>
-                                    {fileSize && (
-                                        <View style={styles.sizeBadge}>
-                                            <Text style={styles.sizeBadgeText}>{fileSize}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                                
-                                {(chapter.title || !fileSize) && (
-                                    <Text style={styles.manageItemSubtitle} numberOfLines={1}>
-                                        {chapter.title || 'Downloaded'}
-                                    </Text>
+                                  </View>
                                 )}
+                              </View>
+
+                              {(chapter.title || !fileSize) && (
+                                <Text
+                                  style={styles.manageItemSubtitle}
+                                  numberOfLines={1}
+                                >
+                                  {chapter.title || 'Downloaded'}
+                                </Text>
+                              )}
                             </View>
 
-                            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                                {isSelected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                            <View
+                              style={[
+                                styles.checkbox,
+                                isSelected && styles.checkboxSelected,
+                              ]}
+                            >
+                              {isSelected && (
+                                <Ionicons
+                                  name="checkmark"
+                                  size={14}
+                                  color="#FFF"
+                                />
+                              )}
                             </View>
                           </TouchableOpacity>
                         );
@@ -660,11 +678,11 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                 ) : (
                   <View style={styles.emptyState}>
                     <View style={styles.emptyStateIcon}>
-                        <Ionicons
+                      <Ionicons
                         name="cloud-download-outline"
                         size={32}
                         color={colors.tabIconDefault}
-                        />
+                      />
                     </View>
                     <Text style={styles.emptyStateText}>
                       Your offline list is empty.
@@ -678,10 +696,10 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
             )}
 
             {error ? (
-                <View style={styles.errorBanner}>
-                    <Ionicons name="alert-circle" size={18} color={colors.error} />
-                    <Text style={styles.errorText}>{error}</Text>
-                </View>
+              <View style={styles.errorBanner}>
+                <Ionicons name="alert-circle" size={18} color={colors.error} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
             ) : null}
           </ScrollView>
 
@@ -705,7 +723,11 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
             >
               <Text style={styles.primaryButtonText}>{confirmLabel}</Text>
               {!confirmDisabled && !isProcessing && (
-                 <Ionicons name="arrow-forward" size={18} color={colors.background} />
+                <Ionicons
+                  name="arrow-forward"
+                  size={18}
+                  color={colors.background}
+                />
               )}
             </TouchableOpacity>
           </View>
@@ -862,58 +884,58 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.text,
     },
     radioButton: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        borderWidth: 2,
-        borderColor: colors.tabIconDefault,
-        alignItems: 'center',
-        justifyContent: 'center',
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: colors.tabIconDefault,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     radioButtonActive: {
-        borderColor: colors.primary,
+      borderColor: colors.primary,
     },
     radioButtonInner: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: colors.primary,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: colors.primary,
     },
     cardInputContainer: {
-        marginTop: 12,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
     },
     cardInput: {
-        backgroundColor: colors.background,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        fontSize: 15,
-        color: colors.text,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 15,
+      color: colors.text,
     },
     rangeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
     },
     rangeInputWrapper: {
-        flex: 1,
-        gap: 6,
+      flex: 1,
+      gap: 6,
     },
     rangeLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: colors.tabIconDefault,
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.tabIconDefault,
     },
     rangeDivider: {
-        width: 12,
-        height: 1,
-        backgroundColor: colors.border,
-        marginTop: 20, // Align with input center approx
+      width: 12,
+      height: 1,
+      backgroundColor: colors.border,
+      marginTop: 20, // Align with input center approx
     },
     helperRow: {
       flexDirection: 'row',
@@ -942,48 +964,48 @@ const getStyles = (colors: typeof Colors.light) =>
       marginBottom: 12,
     },
     manageSectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: colors.text,
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.text,
     },
     selectAllButton: {
-        paddingVertical: 4,
-        paddingHorizontal: 8,
+      paddingVertical: 4,
+      paddingHorizontal: 8,
     },
     selectAllText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: colors.primary,
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.primary,
     },
     sortRow: {
-        marginBottom: 8,
+      marginBottom: 8,
     },
     sortChipsContainer: {
-        gap: 8,
-        paddingRight: 16,
+      gap: 8,
+      paddingRight: 16,
     },
     sortChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: colors.background,
-        borderWidth: 1,
-        borderColor: colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     sortChipActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
     },
     sortChipText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.tabIconDefault,
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.tabIconDefault,
     },
     sortChipTextActive: {
-        color: '#FFF',
+      color: '#FFF',
     },
     manageList: {
       gap: 10,
@@ -1005,14 +1027,14 @@ const getStyles = (colors: typeof Colors.light) =>
       backgroundColor: colors.card,
     },
     manageItemContent: {
-        flex: 1,
-        marginRight: 12,
+      flex: 1,
+      marginRight: 12,
     },
     manageItemTopRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 2,
     },
     manageItemTitle: {
       fontSize: 15,
@@ -1020,49 +1042,49 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.text,
     },
     manageItemTitleSelected: {
-        color: colors.primary,
+      color: colors.primary,
     },
     sizeBadge: {
-        backgroundColor: colors.border,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
+      backgroundColor: colors.border,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
     },
     sizeBadgeText: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: colors.tabIconDefault,
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.tabIconDefault,
     },
     manageItemSubtitle: {
       fontSize: 13,
       color: colors.tabIconDefault,
     },
     checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: colors.border,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.background,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.background,
     },
     checkboxSelected: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
     },
     emptyState: {
       alignItems: 'center',
       paddingVertical: 40,
     },
     emptyStateIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: colors.background,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 16,
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
     },
     emptyStateText: {
       fontSize: 16,
@@ -1077,13 +1099,13 @@ const getStyles = (colors: typeof Colors.light) =>
       maxWidth: 200,
     },
     errorBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: colors.error + '15',
-        padding: 12,
-        borderRadius: 12,
-        marginTop: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.error + '15',
+      padding: 12,
+      borderRadius: 12,
+      marginTop: 12,
     },
     errorText: {
       color: colors.error,
@@ -1131,4 +1153,3 @@ const getStyles = (colors: typeof Colors.light) =>
   });
 
 export default BatchDownloadPlannerModal;
-

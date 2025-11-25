@@ -54,14 +54,10 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
     timeoutRef.current = setTimeout(() => {
       if (!interceptedRef.current) {
         if (isDebugEnabled()) {
-          log.warn(
-            'Service',
-            'WebView timeout - no AJAX request intercepted',
-            {
-              chapterUrl,
-              timeout,
-            }
-          );
+          log.warn('Service', 'WebView timeout - no AJAX request intercepted', {
+            chapterUrl,
+            timeout,
+          });
         }
         onTimeout?.();
       }
@@ -235,9 +231,9 @@ const HiddenChapterWebView: React.FC<HiddenChapterWebViewProps> = ({
       navState.url
     );
 
-      if (intercepted) {
-        if (isDebugEnabled()) {
-          log.info('Service', 'Intercepted AJAX request from navigation', {
+    if (intercepted) {
+      if (isDebugEnabled()) {
+        log.info('Service', 'Intercepted AJAX request from navigation', {
           chapterId: intercepted.chapterId,
         });
       }

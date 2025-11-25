@@ -40,7 +40,7 @@ export default function DebugScreen() {
   const [isTriggering, setIsTriggering] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [lastSentryEventId, setLastSentryEventId] = useState<string | null>(
-    null,
+    null
   );
   const CHAPTER_GUIDE_KEY = 'chapter_guide_seen';
 
@@ -540,7 +540,7 @@ export default function DebugScreen() {
 
   const sendSentryTestError = () => {
     const eventId = Sentry.captureException(
-      new Error('Debug menu Sentry test error'),
+      new Error('Debug menu Sentry test error')
     );
     setLastSentryEventId(eventId ?? null);
     showAlertWithConfig({
@@ -555,7 +555,7 @@ export default function DebugScreen() {
   const sendSentryTestMessage = () => {
     const eventId = Sentry.captureMessage(
       'Debug menu Sentry test message',
-      'info',
+      'info'
     );
     setLastSentryEventId(eventId ?? null);
     showAlertWithConfig({
@@ -672,8 +672,15 @@ export default function DebugScreen() {
             <Text style={styles.optionText}>Send Test Error</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.option} onPress={sendSentryTestMessage}>
-            <Ionicons name="paper-plane-outline" size={24} color={colors.text} />
+          <TouchableOpacity
+            style={styles.option}
+            onPress={sendSentryTestMessage}
+          >
+            <Ionicons
+              name="paper-plane-outline"
+              size={24}
+              color={colors.text}
+            />
             <Text style={styles.optionText}>Send Test Message</Text>
           </TouchableOpacity>
 

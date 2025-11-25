@@ -38,12 +38,7 @@ const CachedMangaImage: React.FC<{
     return <View style={style} />;
   }
 
-  return (
-    <Image
-      source={{ uri: cachedImagePath }}
-      style={style}
-    />
-  );
+  return <Image source={{ uri: cachedImagePath }} style={style} />;
 };
 
 export const OfflineBookmarksList: React.FC<OfflineBookmarksListProps> = ({

@@ -26,7 +26,7 @@ class DownloadEventEmitter {
   // Subscribe to global events (all chapters)
   subscribeGlobal(callback: EventCallback): () => void {
     this.globalListeners.push(callback);
-    
+
     // Return unsubscribe function
     return () => {
       const currentIndex = this.globalListeners.indexOf(callback);
