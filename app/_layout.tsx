@@ -125,9 +125,8 @@ export default Sentry.wrap(function RootLayout() {
       <ThemeProvider>
         <OfflineProvider>
           <RootLayoutNav />
-          
-          <OfflineIndicator />
 
+          <OfflineIndicator />
         </OfflineProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

@@ -18,10 +18,5 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    ".expo",
-    "debug/**"
-  ]
+  "exclude": ["node_modules", "dist", ".expo", "debug/**"]
 }

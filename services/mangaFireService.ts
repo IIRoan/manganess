@@ -382,7 +382,8 @@ const parseMangaDetails = (html: string): MangaDetails => {
       };
     };
 
-    const { number: extractedNumber, extraTitle } = extractChapterNumber(rawHeading);
+    const { number: extractedNumber, extraTitle } =
+      extractChapterNumber(rawHeading);
 
     let chapterNumber = extractedNumber;
     if (!chapterNumber) {
@@ -689,9 +690,13 @@ export const fetchChapterImagesFromUrl = async (
 
     if (!finalVrfToken) {
       if (isDebugEnabled()) {
-        log.info('Service', 'No VRF token provided, extracting from chapter page', {
-          chapterUrl,
-        });
+        log.info(
+          'Service',
+          'No VRF token provided, extracting from chapter page',
+          {
+            chapterUrl,
+          }
+        );
       }
       finalVrfToken = await getVrfTokenFromChapterPage(chapterUrl);
 
@@ -1049,9 +1054,9 @@ export const getChapterIdFromPage = async (
     const vrfToken = extractVrfTokenFromHtml(html);
     if (vrfToken) {
       setVrfToken(vrfToken);
-        if (isDebugEnabled()) {
-          log.info('Service', 'VRF token extracted and stored');
-        }
+      if (isDebugEnabled()) {
+        log.info('Service', 'VRF token extracted and stored');
+      }
     }
 
     // Enhanced patterns to look for chapter ID in various formats

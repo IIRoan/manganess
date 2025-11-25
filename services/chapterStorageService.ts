@@ -157,9 +157,13 @@ class ChapterStorage implements ChapterStorageService {
         }
       }
     } catch (error) {
-      this.log.warn('Storage', 'Failed to get free disk storage from legacy API', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      this.log.warn(
+        'Storage',
+        'Failed to get free disk storage from legacy API',
+        {
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
     }
 
     const fallback = Paths.availableDiskSpace;
@@ -335,10 +339,14 @@ class ChapterStorage implements ChapterStorageService {
       // Check if we need cleanup
       if (stats.totalSize > maxSize * CLEANUP_THRESHOLD) {
         if (isDebugEnabled()) {
-          this.log.info('Storage', 'Storage threshold exceeded, initiating cleanup', {
-            totalSizeMB: Math.round(stats.totalSize / 1024 / 1024),
-            maxSizeMB: Math.round(maxSize / 1024 / 1024),
-          });
+          this.log.info(
+            'Storage',
+            'Storage threshold exceeded, initiating cleanup',
+            {
+              totalSizeMB: Math.round(stats.totalSize / 1024 / 1024),
+              maxSizeMB: Math.round(maxSize / 1024 / 1024),
+            }
+          );
         }
         await this.performIntelligentCleanup();
       }
@@ -417,11 +425,15 @@ class ChapterStorage implements ChapterStorageService {
           freedSpace += chapterSize;
           deletedCount++;
         } catch (error) {
-          this.log.error('Storage', 'Failed to delete chapter during intelligent cleanup', {
-            mangaId: chapter.mangaId,
-            chapter: chapter.chapterNumber,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          this.log.error(
+            'Storage',
+            'Failed to delete chapter during intelligent cleanup',
+            {
+              mangaId: chapter.mangaId,
+              chapter: chapter.chapterNumber,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
         }
       }
 
@@ -470,11 +482,15 @@ class ChapterStorage implements ChapterStorageService {
           freedSpace += chapterSize;
           deletedCount++;
         } catch (error) {
-          this.log.error('Storage', 'Failed to delete chapter during aggressive cleanup', {
-            mangaId: chapter.mangaId,
-            chapter: chapter.chapterNumber,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          this.log.error(
+            'Storage',
+            'Failed to delete chapter during aggressive cleanup',
+            {
+              mangaId: chapter.mangaId,
+              chapter: chapter.chapterNumber,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
         }
       }
 
@@ -944,7 +960,11 @@ class ChapterStorage implements ChapterStorageService {
       }
 
       // Emit download deleted event
-      downloadEventEmitter.emitDeleted(mangaId, chapterNumber, `${mangaId}_${chapterNumber}`);
+      downloadEventEmitter.emitDeleted(
+        mangaId,
+        chapterNumber,
+        `${mangaId}_${chapterNumber}`
+      );
 
       if (isDebugEnabled()) {
         this.log.info('Storage', 'Deleted chapter', {

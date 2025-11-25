@@ -931,7 +931,11 @@ export default function DownloadsScreen() {
                     onPress={() => setSearchQuery('')}
                     style={styles.clearSearchButton}
                   >
-                    <Ionicons name="close-circle" size={16} color={colors.tabIconDefault} />
+                    <Ionicons
+                      name="close-circle"
+                      size={16}
+                      color={colors.tabIconDefault}
+                    />
                   </TouchableOpacity>
                 )}
               </View>
@@ -1003,52 +1007,52 @@ export default function DownloadsScreen() {
             ) : (
               <>
                 {filteredAndSortedManga.map((manga) => (
-              <View key={manga.mangaId} style={styles.mangaCard}>
-                <TouchableOpacity
-                  style={styles.mangaInfo}
-                  onPress={() => router.push(`/manga/${manga.mangaId}`)}
-                >
-                  <View style={styles.mangaDetails}>
-                    <Text style={styles.mangaId} numberOfLines={1}>
-                      {manga.mangaId}
-                    </Text>
-                    <Text style={styles.mangaStats}>
-                      {manga.chapterCount} chapter
-                      {manga.chapterCount !== 1 ? 's' : ''} •{' '}
-                      {formatFileSize(manga.totalSize)}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.deleteButton,
-                    deletingManga.has(manga.mangaId)
-                      ? styles.deleteButtonDisabled
-                      : null,
-                  ]}
-                  onPress={() => handleDeleteManga(manga.mangaId)}
-                  disabled={deletingManga.has(manga.mangaId)}
-                >
-                  {deletingManga.has(manga.mangaId) ? (
-                    <ActivityIndicator size="small" color={colors.error} />
-                  ) : (
-                    <>
+                  <View key={manga.mangaId} style={styles.mangaCard}>
+                    <TouchableOpacity
+                      style={styles.mangaInfo}
+                      onPress={() => router.push(`/manga/${manga.mangaId}`)}
+                    >
+                      <View style={styles.mangaDetails}>
+                        <Text style={styles.mangaId} numberOfLines={1}>
+                          {manga.mangaId}
+                        </Text>
+                        <Text style={styles.mangaStats}>
+                          {manga.chapterCount} chapter
+                          {manga.chapterCount !== 1 ? 's' : ''} •{' '}
+                          {formatFileSize(manga.totalSize)}
+                        </Text>
+                      </View>
                       <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color={colors.error}
+                        name="chevron-forward"
+                        size={20}
+                        color={colors.text}
                       />
-                      <Text style={styles.deleteText}>Delete</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.deleteButton,
+                        deletingManga.has(manga.mangaId)
+                          ? styles.deleteButtonDisabled
+                          : null,
+                      ]}
+                      onPress={() => handleDeleteManga(manga.mangaId)}
+                      disabled={deletingManga.has(manga.mangaId)}
+                    >
+                      {deletingManga.has(manga.mangaId) ? (
+                        <ActivityIndicator size="small" color={colors.error} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="trash-outline"
+                            size={18}
+                            color={colors.error}
+                          />
+                          <Text style={styles.deleteText}>Delete</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 ))}
               </>
             )}
