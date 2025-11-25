@@ -153,9 +153,11 @@ export default function HomeScreen() {
     }
   }, [isRefreshing, checkForCloudflare, isOffline, isLoading]);
 
-  const fetchRecentlyReadManga = useCallback(async () => {
+  const fetchRecentlyReadManga = useCallback(async (showLoading = true) => {
     try {
-      setIsRecentMangaLoading(true);
+      if (showLoading) {
+        setIsRecentMangaLoading(true);
+      }
       const recentManga = await getRecentlyReadManga(6);
 
       const processedManga = recentManga.map((manga) => ({
@@ -169,13 +171,15 @@ export default function HomeScreen() {
         error,
       });
     } finally {
-      setIsRecentMangaLoading(false);
+      if (showLoading) {
+        setIsRecentMangaLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     fetchMangaData();
-    fetchRecentlyReadManga();
+    fetchRecentlyReadManga(true);
     return () => {
       resetCloudflareDetection();
     };
@@ -183,7 +187,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchRecentlyReadManga();
+      fetchRecentlyReadManga(false);
     }, [fetchRecentlyReadManga])
   );
 
@@ -216,10 +220,7 @@ export default function HomeScreen() {
 
   const renderTrendingItem = useCallback(
     ({ item, index }: { item: MangaItem; index: number }) => (
-      <Reanimated.View
-        entering={FadeInRight.delay(index * 100).springify()}
-        style={{ marginRight: 12, marginLeft: index === 0 ? 16 : 0 }}
-      >
+      <View style={{ marginRight: 15 }}>
         <TouchableOpacity
           style={styles.trendingItem}
           onPress={() => router.navigate(`/manga/${item.id}`)}
@@ -261,7 +262,7 @@ export default function HomeScreen() {
             </View>
           </LinearGradient>
         </TouchableOpacity>
-      </Reanimated.View>
+      </View>
     ),
     [router, themeColors.primary]
   );
@@ -273,12 +274,7 @@ export default function HomeScreen() {
         : 'Not started';
 
       return (
-        <View
-          style={[
-            styles.recentlyReadItem,
-            { marginLeft: index === 0 ? 16 : 12 },
-          ]}
-        >
+        <View style={styles.recentlyReadItem}>
           <MangaCard
             title={item.title}
             imageUrl={item.bannerImage}
@@ -384,7 +380,7 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.recentlyReadList}
           // @ts-ignore
-          estimatedItemSize={RECENTLY_READ_CARD_WIDTH + 12}
+          estimatedItemSize={RECENTLY_READ_CARD_WIDTH + 15}
         />
       </View>
     );
@@ -578,7 +574,7 @@ export default function HomeScreen() {
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.trendingList}
                     // @ts-ignore
-                    estimatedItemSize={TRENDING_CARD_WIDTH + 12}
+                    estimatedItemSize={TRENDING_CARD_WIDTH + 15}
                   />
                 </View>
               </View>
@@ -744,7 +740,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   trendingList: {
-    paddingRight: 16,
+    paddingHorizontal: 15,
     paddingBottom: 8,
   },
   trendingItem: {
@@ -802,11 +798,11 @@ const styles = StyleSheet.create({
   newReleaseGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
+    paddingHorizontal: 7.5,
   },
   newReleaseWrapper: {
     width: '50%',
-    padding: 8,
+    padding: 7.5,
   },
   newReleaseCard: {
     borderRadius: 12,
@@ -889,12 +885,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   recentlyReadList: {
-    paddingRight: 16,
+    paddingHorizontal: 15,
     paddingBottom: 8,
   },
   recentlyReadItem: {
     width: RECENTLY_READ_CARD_WIDTH,
-    marginRight: 12,
+    marginRight: 15,
   },
   recentlyReadCard: {
     width: '100%',
