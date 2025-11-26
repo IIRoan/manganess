@@ -23,6 +23,7 @@ import Reanimated, {
   interpolate,
   Extrapolation,
   SharedValue,
+  runOnJS,
 } from 'react-native-reanimated';
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -74,7 +75,6 @@ import { downloadStatusService } from '@/services/downloadStatusService';
 import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadStatus } from '@/types/download';
 import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
-import { runOnJS } from 'react-native-reanimated';
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList) as any;
 
@@ -510,23 +510,26 @@ export default function MangaDetailScreen() {
     handleRemoveBookmark,
   ]);
 
-  const handleChapterLongPress = (chapterNumber: string) => {
-    haptics.onLongPress();
+  const handleChapterLongPress = useCallback(
+    (chapterNumber: string) => {
+      haptics.onLongPress();
 
-    const isRead = readChapters.includes(chapterNumber);
-    const config = getChapterLongPressAlertConfig(
-      isRead,
-      chapterNumber,
-      mangaDetails,
-      id as string,
-      readChapters,
-      setReadChapters
-    );
-    if (config) {
-      setAlertConfig(config);
-      setIsAlertVisible(true);
-    }
-  };
+      const isRead = readChapters.includes(chapterNumber);
+      const config = getChapterLongPressAlertConfig(
+        isRead,
+        chapterNumber,
+        mangaDetails,
+        id as string,
+        readChapters,
+        setReadChapters
+      );
+      if (config) {
+        setAlertConfig(config);
+        setIsAlertVisible(true);
+      }
+    },
+    [haptics, readChapters, mangaDetails, id]
+  );
 
   const handleMarkAsUnread = useCallback(
     async (chapterNumber: string) => {
@@ -670,7 +673,7 @@ export default function MangaDetailScreen() {
     scrollButtonOpacity.value = withTiming(showScrollButton ? 1 : 0, {
       duration: 200,
     });
-  }, [showScrollButton]);
+  }, [showScrollButton, scrollButtonOpacity]);
 
   const scrollButtonStyle = useAnimatedStyle(() => {
     return {
@@ -752,8 +755,6 @@ export default function MangaDetailScreen() {
       refreshDownloadingChapters,
       refreshDownloadedChapters,
       handleDeleteDownload,
-      downloadedChapters,
-      downloadingChapters,
     ]
   );
 
@@ -897,7 +898,6 @@ export default function MangaDetailScreen() {
     [
       id,
       mangaDetails,
-      bookmarkStatus,
       readChapters,
       lastReadChapter,
       readingProgress,
@@ -906,7 +906,8 @@ export default function MangaDetailScreen() {
       refreshDownloadedChapters,
       colors,
       styles,
-      handleBookmark,
+      handleLastReadChapterPress,
+      scrollY,
       isOffline,
     ]
   );

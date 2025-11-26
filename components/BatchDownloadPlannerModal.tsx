@@ -109,7 +109,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
       setSelectedDeletes(new Set());
       setSortOption('number-asc');
     }
-  }, [visible]);
+  }, [visible, downloadedChaptersSorted.length, initialTab]);
 
   // Auto-switch to download tab if all downloads are removed while managing
   useEffect(() => {

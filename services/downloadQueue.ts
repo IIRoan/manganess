@@ -13,7 +13,6 @@ import { downloadManagerService } from './downloadManager';
 // Queue configuration
 const QUEUE_STORAGE_KEY = 'download_queue';
 const MAX_CONCURRENT_DOWNLOADS = 1; // Enforce 1 at a time for WebView safety
-const QUEUE_PROCESSING_INTERVAL = 1000; // 1 second
 
 interface QueueState {
   items: DownloadQueueItem[];
@@ -41,7 +40,6 @@ class DownloadQueueService implements DownloadQueue {
   private static instance: DownloadQueueService;
   private state: QueueState;
   private initialized: boolean = false;
-  private processingTimer: any = null;
   private saveTimer: any = null;
   private static readonly SAVE_DEBOUNCE_MS = 2000;
 
@@ -572,12 +570,34 @@ class DownloadQueueService implements DownloadQueue {
     }
   }
 
-  async completeDownload(id: string) {
+  async completeDownload(_id: string) {
     // Handled in executeDownload flow
   }
 
-  async failDownload(id: string, error: string) {
+  async failDownload(_id: string, _error: string) {
     // Handled in executeDownload flow
+  }
+
+  async processQueueInBackground(): Promise<boolean> {
+    await this.processQueue();
+    // Return true if we have active downloads or items in queue
+    return this.state.activeDownloads.size > 0 || this.state.items.length > 0;
+  }
+
+  async recoverFromAppRestart(): Promise<void> {
+    await this.initialize();
+  }
+
+  async saveRecoveryData(): Promise<void> {
+    await this.persistQueueForBackground();
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.listeners.clear();
   }
 
   addStatusListener(listener: (status: QueueStatus) => void): () => void {

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
-import Reanimated, { FadeInRight } from 'react-native-reanimated';
+import Reanimated from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/constants/ThemeContext';
@@ -219,7 +219,7 @@ export default function HomeScreen() {
   );
 
   const renderTrendingItem = useCallback(
-    ({ item, index }: { item: MangaItem; index: number }) => (
+    ({ item }: { item: MangaItem; index: number }) => (
       <View style={{ marginRight: 15 }}>
         <TouchableOpacity
           style={styles.trendingItem}
@@ -268,7 +268,7 @@ export default function HomeScreen() {
   );
 
   const renderRecentlyReadItem = useCallback(
-    ({ item, index }: { item: RecentMangaItem; index: number }) => {
+    ({ item }: { item: RecentMangaItem; index: number }) => {
       const lastReadChapter = item.lastReadChapter
         ? `Chapter ${item.lastReadChapter}`
         : 'Not started';
