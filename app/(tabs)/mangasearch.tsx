@@ -408,7 +408,7 @@ export default function MangaSearchScreen() {
           </View>
           <Text style={styles.emptyStateTitle}>Connection Issue</Text>
           <Text style={styles.emptyStateText}>
-            We couldn't connect to the search service.
+            We couldn&apos;t connect to the search service.
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: colors.primary }]}
@@ -442,7 +442,7 @@ export default function MangaSearchScreen() {
           </View>
           <Text style={styles.emptyStateTitle}>Offline Mode</Text>
           <Text style={styles.emptyStateText}>
-            You're currently offline. Check your bookmarks for downloaded
+            You&apos;re currently offline. Check your bookmarks for downloaded
             content.
           </Text>
           <TouchableOpacity

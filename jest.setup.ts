@@ -29,6 +29,7 @@ jest.mock('expo-modules-core', () => {
       addListener: jest.fn(),
       removeListeners: jest.fn(),
     })),
+    requireOptionalNativeModule: jest.fn(() => null),
     Platform: { OS: 'test' },
   };
 });
@@ -213,3 +214,19 @@ jest.mock('@/services/chapterStorageService', () => {
     },
   };
 });
+
+jest.mock('expo-constants', () => {
+  return {
+    manifest: {
+      extra: {},
+    },
+    platform: {
+      ios: {},
+      android: {},
+    },
+  };
+});
+
+jest.mock('expo-web-browser', () => ({
+  openBrowserAsync: jest.fn(),
+}));

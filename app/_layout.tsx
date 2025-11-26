@@ -9,7 +9,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { useColorScheme, StatusBar, Button } from 'react-native';
+import { useColorScheme, StatusBar } from 'react-native';
 import { ThemeProvider, useTheme } from '../constants/ThemeContext';
 import ErrorBoundary from '../components/ErrorBoundary';
 import BatchDownloadHost from '@/components/BatchDownloadHost';

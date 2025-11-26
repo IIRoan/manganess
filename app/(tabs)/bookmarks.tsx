@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView,
   ScrollView,
   TextInput,
   Platform,
@@ -27,7 +26,10 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  useSafeAreaInsets,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 import { useOffline } from '@/contexts/OfflineContext';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { BookmarkItem, BookmarkStatus } from '@/types';

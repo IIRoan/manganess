@@ -1,11 +1,8 @@
-import { downloadManagerService } from './downloadManager';
 import { chapterStorageService } from './chapterStorageService';
 import { downloadQueueService } from './downloadQueue';
 import { logger } from '@/utils/logger';
-import { isDebugEnabled } from '@/constants/env';
 import type { Chapter } from '@/types';
 import { sortChaptersByNumber } from '@/utils/chapterOrdering';
-import { DownloadStatus } from '@/types/download';
 import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 
 type BatchStatus =
