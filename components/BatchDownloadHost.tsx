@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import HiddenChapterWebView from '@/components/HiddenChapterWebView';
 import {
-  batchDownloadOrchestrator,
+  downloadQueueService,
   type ActiveWebViewRequest,
-} from '@/services/batchDownloadOrchestrator';
+} from '@/services/downloadQueue';
 
 const BatchDownloadHost: React.FC = () => {
-  const [request, setRequest] = useState<ActiveWebViewRequest | null>(
-    () => batchDownloadOrchestrator.getActiveWebViewRequest()
+  const [request, setRequest] = useState<ActiveWebViewRequest | null>(() =>
+    downloadQueueService.getActiveWebViewRequest()
   );
 
   useEffect(() => {
-    return batchDownloadOrchestrator.subscribeWebView(setRequest);
+    return downloadQueueService.subscribeWebView(setRequest);
   }, []);
 
   if (!request) {
@@ -20,25 +20,20 @@ const BatchDownloadHost: React.FC = () => {
 
   return (
     <HiddenChapterWebView
-      key={`batch-webview-${request.sessionId}-${request.key}`}
+      key={`batch-webview-${request.id}-${request.attempt}`}
       chapterUrl={request.url}
       onRequestIntercepted={(chapterId, vrfToken) => {
-        batchDownloadOrchestrator.handleWebViewIntercepted(
-          request.sessionId,
-          chapterId,
-          vrfToken
-        );
+        downloadQueueService.handleWebViewIntercepted(chapterId, vrfToken);
       }}
       onError={(error) => {
-        batchDownloadOrchestrator.handleWebViewError(
-          request.sessionId,
-          error
-        );
+        downloadQueueService.handleWebViewError(error);
       }}
       onTimeout={() => {
-        batchDownloadOrchestrator.handleWebViewTimeout(request.sessionId);
+        downloadQueueService.handleWebViewError(
+          'Timeout waiting for interception'
+        );
       }}
-      timeout={25000}
+      timeout={45000}
     />
   );
 };

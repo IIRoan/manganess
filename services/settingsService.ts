@@ -9,6 +9,7 @@ interface AppSettings {
   enableDebugTab: boolean;
   onboardingCompleted: boolean;
   accentColor?: string | undefined;
+  defaultLayout: 'grid' | 'list';
   downloadSettings?: DownloadSettings;
 }
 
@@ -45,6 +46,11 @@ export async function getAppSettings(): Promise<AppSettings> {
       if (!settings.downloadSettings) {
         settings.downloadSettings = DEFAULT_DOWNLOAD_SETTINGS;
       }
+      // Ensure default layout exists
+      if (!settings.defaultLayout) {
+        // Fallback to searchLayout if it exists (migration)
+        settings.defaultLayout = settings.searchLayout || 'list';
+      }
       return settings;
     }
     return {
@@ -52,6 +58,7 @@ export async function getAppSettings(): Promise<AppSettings> {
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
+      defaultLayout: 'list',
       downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
     };
   } catch (error) {
@@ -61,6 +68,7 @@ export async function getAppSettings(): Promise<AppSettings> {
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
+      defaultLayout: 'list',
       downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
     };
   }
@@ -72,6 +80,17 @@ export async function setAppSettings(settings: AppSettings): Promise<void> {
   } catch (error) {
     logger().error('Service', 'Error saving app settings', { error });
   }
+}
+
+export async function getDefaultLayout(): Promise<'grid' | 'list'> {
+  const settings = await getAppSettings();
+  return settings.defaultLayout;
+}
+
+export async function setDefaultLayout(layout: 'grid' | 'list'): Promise<void> {
+  const settings = await getAppSettings();
+  settings.defaultLayout = layout;
+  await setAppSettings(settings);
 }
 
 export async function getDebugTabEnabled(): Promise<boolean> {

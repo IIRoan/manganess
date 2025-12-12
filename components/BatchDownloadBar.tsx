@@ -40,7 +40,10 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   const handleDownloadsChanged = useCallback(() => {
     if (!onDownloadsChanged) return;
     const maybePromise = onDownloadsChanged();
-    if (maybePromise && typeof (maybePromise as Promise<void>).then === 'function') {
+    if (
+      maybePromise &&
+      typeof (maybePromise as Promise<void>).then === 'function'
+    ) {
       void (maybePromise as Promise<void>).catch(() => {
         // ignore errors from downstream refresh callbacks
       });
@@ -78,8 +81,7 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   const missingCount = Math.max(totalChapters - downloadedCount, 0);
 
   const hasFailures = state.failedChapters.length > 0;
-  const isBusy =
-    state.status === 'preparing' || state.status === 'downloading';
+  const isBusy = state.status === 'preparing' || state.status === 'downloading';
   const isProcessing = isBusy || isManagingDownloads;
 
   const plannerLabel = useMemo(() => {
@@ -178,7 +180,9 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
       {state.status !== 'downloading' ? (
         <View style={styles.statsRow}>
           <Text style={styles.statText}>
-            Downloaded <Text style={styles.statHighlight}>{downloadedCount}</Text> of {totalChapters}
+            Downloaded{' '}
+            <Text style={styles.statHighlight}>{downloadedCount}</Text> of{' '}
+            {totalChapters}
           </Text>
         </View>
       ) : null}

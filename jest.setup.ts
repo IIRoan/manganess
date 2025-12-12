@@ -29,6 +29,7 @@ jest.mock('expo-modules-core', () => {
       addListener: jest.fn(),
       removeListeners: jest.fn(),
     })),
+    requireOptionalNativeModule: jest.fn(() => null),
     Platform: { OS: 'test' },
   };
 });
@@ -55,7 +56,9 @@ jest.mock('expo-file-system', () => {
     info() {
       return { exists: true, size: 0, uri: this.uri };
     }
-    static downloadFileAsync = jest.fn(async (_src: string, destFile: MockFile) => destFile);
+    static downloadFileAsync = jest.fn(
+      async (_src: string, destFile: MockFile) => destFile
+    );
   }
 
   class MockDirectory {
@@ -94,7 +97,6 @@ jest.mock('expo-file-system', () => {
   };
 });
 
-
 jest.mock('@react-native-community/netinfo', () => {
   return {
     addEventListener: jest.fn(() => jest.fn()),
@@ -119,21 +121,27 @@ jest.mock('@/services/offlineCacheService', () => {
 
   return {
     offlineCacheService: {
-      cacheMangaDetails: jest.fn(async (id: string, details: any, isBookmarked: boolean) => {
-        mockOfflineCacheStore.set(id, buildEntry(details, isBookmarked));
-      }),
-      getCachedMangaDetails: jest.fn(async (id: string) =>
-        mockOfflineCacheStore.get(id) ?? null
+      cacheMangaDetails: jest.fn(
+        async (id: string, details: any, isBookmarked: boolean) => {
+          mockOfflineCacheStore.set(id, buildEntry(details, isBookmarked));
+        }
+      ),
+      getCachedMangaDetails: jest.fn(
+        async (id: string) => mockOfflineCacheStore.get(id) ?? null
       ),
       getBookmarkedMangaDetails: jest.fn(async () =>
-        Array.from(mockOfflineCacheStore.values()).filter((entry: any) => entry.isBookmarked)
+        Array.from(mockOfflineCacheStore.values()).filter(
+          (entry: any) => entry.isBookmarked
+        )
       ),
-      updateMangaBookmarkStatus: jest.fn(async (id: string, isBookmarked: boolean) => {
-        const existing = mockOfflineCacheStore.get(id);
-        if (existing) {
-          mockOfflineCacheStore.set(id, { ...existing, isBookmarked });
+      updateMangaBookmarkStatus: jest.fn(
+        async (id: string, isBookmarked: boolean) => {
+          const existing = mockOfflineCacheStore.get(id);
+          if (existing) {
+            mockOfflineCacheStore.set(id, { ...existing, isBookmarked });
+          }
         }
-      }),
+      ),
       getAllCachedMangaDetails: jest.fn(async () => {
         const entries: Record<string, any> = {};
         mockOfflineCacheStore.forEach((value, key) => {
@@ -170,15 +178,19 @@ jest.mock('@/services/chapterStorageService', () => {
       getDownloadedChapters: jest.fn(async (mangaId: string) => {
         return Array.from(downloads.get(mangaId)?.keys() ?? []);
       }),
-      isChapterDownloaded: jest.fn(async (mangaId: string, chapterNumber: string) => {
-        return downloads.get(mangaId)?.has(chapterNumber) ?? false;
-      }),
+      isChapterDownloaded: jest.fn(
+        async (mangaId: string, chapterNumber: string) => {
+          return downloads.get(mangaId)?.has(chapterNumber) ?? false;
+        }
+      ),
       getChapterImages: jest.fn(async () => []),
-      saveChapterImages: jest.fn(async (mangaId: string, chapterNumber: string, images: any[]) => {
-        const chapters = downloads.get(mangaId) ?? new Map<string, any>();
-        chapters.set(chapterNumber, images);
-        downloads.set(mangaId, chapters);
-      }),
+      saveChapterImages: jest.fn(
+        async (mangaId: string, chapterNumber: string, images: any[]) => {
+          const chapters = downloads.get(mangaId) ?? new Map<string, any>();
+          chapters.set(chapterNumber, images);
+          downloads.set(mangaId, chapters);
+        }
+      ),
       deleteChapter: jest.fn(async (mangaId: string, chapterNumber: string) => {
         downloads.get(mangaId)?.delete(chapterNumber);
       }),
@@ -202,3 +214,19 @@ jest.mock('@/services/chapterStorageService', () => {
     },
   };
 });
+
+jest.mock('expo-constants', () => {
+  return {
+    manifest: {
+      extra: {},
+    },
+    platform: {
+      ios: {},
+      android: {},
+    },
+  };
+});
+
+jest.mock('expo-web-browser', () => ({
+  openBrowserAsync: jest.fn(),
+}));
