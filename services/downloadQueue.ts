@@ -8,11 +8,11 @@ import {
 } from '@/types/download';
 import { DownloadQueue } from '@/types/downloadInterfaces';
 import { isDebugEnabled } from '@/constants/env';
+import { downloadManagerService } from './downloadManager';
 
 // Queue configuration
 const QUEUE_STORAGE_KEY = 'download_queue';
-const MAX_CONCURRENT_DOWNLOADS = 3;
-const QUEUE_PROCESSING_INTERVAL = 1000; // 1 second
+const MAX_CONCURRENT_DOWNLOADS = 1; // Enforce 1 at a time for WebView safety
 
 interface QueueState {
   items: DownloadQueueItem[];
@@ -23,17 +23,35 @@ interface QueueState {
 
 interface PersistedQueueData {
   items: DownloadQueueItem[];
+  activeDownloads: DownloadItem[];
   isPaused: boolean;
   lastProcessed: number;
+}
+
+export interface ActiveWebViewRequest {
+  id: string; // Download ID
+  mangaId: string;
+  chapterNumber: string;
+  url: string;
+  attempt: number;
 }
 
 class DownloadQueueService implements DownloadQueue {
   private static instance: DownloadQueueService;
   private state: QueueState;
   private initialized: boolean = false;
-  private processingTimer: any = null;
   private saveTimer: any = null;
   private static readonly SAVE_DEBOUNCE_MS = 2000;
+
+  // WebView Coordination
+  private activeWebViewRequest: ActiveWebViewRequest | null = null;
+  private webViewListeners: Set<
+    (request: ActiveWebViewRequest | null) => void
+  > = new Set();
+  private currentDownloadResolver:
+    | ((data: { chapterId: string; vrfToken: string }) => void)
+    | null = null;
+  private currentDownloadRejecter: ((error: Error) => void) | null = null;
 
   // Event listeners for queue updates
   private listeners: Set<(status: QueueStatus) => void> = new Set();
@@ -58,37 +76,29 @@ class DownloadQueueService implements DownloadQueue {
     if (this.initialized) return;
 
     try {
-      // Set initialized flag immediately to prevent multiple calls
       this.initialized = true;
 
-      // Load queue data asynchronously without blocking
-      this.loadQueueFromStorage().catch((error) => {
-        console.error('Failed to load queue from storage:', error);
-      });
-
+      await this.loadQueueFromStorage();
       await this.setupAppStateHandling();
 
       if (isDebugEnabled()) {
         console.log('Download queue service initialized');
       }
 
-      // Start processing in next tick to avoid blocking
+      // Auto-resume: Start processing if we have items
       setTimeout(() => {
         if (!this.state.isPaused && this.state.items.length > 0) {
-          this.startProcessing().catch((error) => {
-            console.error('Failed to start queue processing:', error);
-          });
+          this.processQueue();
         }
-      }, 100);
+      }, 500);
     } catch (error) {
-      this.initialized = false; // Reset on error
+      this.initialized = false;
       console.error('Failed to initialize download queue:', error);
       throw error;
     }
   }
 
   private async setupAppStateHandling(): Promise<void> {
-    // Listen for app state changes to handle background/foreground transitions
     AppState.addEventListener('change', this.handleAppStateChange.bind(this));
   }
 
@@ -96,17 +106,21 @@ class DownloadQueueService implements DownloadQueue {
     nextAppState: AppStateStatus
   ): Promise<void> {
     if (nextAppState === 'background') {
-      // Persist queue state when going to background
       await this.persistQueueForBackground();
     } else if (nextAppState === 'active') {
-      // Restore and resume processing when coming to foreground
       await this.restoreFromBackground();
+      // Trigger processing on resume
+      if (
+        !this.state.isPaused &&
+        (this.state.items.length > 0 || this.state.activeDownloads.size > 0)
+      ) {
+        this.processQueue();
+      }
     }
   }
 
   private async persistQueueForBackground(): Promise<void> {
     try {
-      // Save current state with timestamp
       const backgroundState = {
         items: this.state.items,
         activeDownloads: Array.from(this.state.activeDownloads.entries()),
@@ -119,10 +133,6 @@ class DownloadQueueService implements DownloadQueue {
         'queue_background_state',
         JSON.stringify(backgroundState)
       );
-
-      if (isDebugEnabled()) {
-        console.log('Queue state persisted for background operation');
-      }
     } catch (error) {
       console.error('Failed to persist queue for background:', error);
     }
@@ -133,51 +143,12 @@ class DownloadQueueService implements DownloadQueue {
       const stored = await AsyncStorage.getItem('queue_background_state');
       if (!stored) return;
 
-      const backgroundState = JSON.parse(stored);
-      const timeSinceBackground =
-        Date.now() - backgroundState.backgroundTimestamp;
+      // We don't necessarily need to restore state here because loadQueueFromStorage
+      // handles the main persistence. This is mostly for short-term backgrounding.
+      // However, to be safe, we just clear the background flag.
+      // The persistent storage is the source of truth.
 
-      // If app was in background for more than 5 minutes, restart active downloads
-      if (timeSinceBackground > 5 * 60 * 1000) {
-        // Convert active downloads back to queue items
-        for (const [, download] of backgroundState.activeDownloads) {
-          if (download.status === DownloadStatus.DOWNLOADING) {
-            const queueItem: DownloadQueueItem = {
-              id: download.id,
-              mangaId: download.mangaId,
-              mangaTitle: download.mangaTitle,
-              chapterNumber: download.chapterNumber,
-              chapterUrl: download.chapterUrl,
-              priority: 1,
-              addedAt: download.createdAt,
-            };
-
-            // Add back to queue if not already present
-            const exists = this.state.items.some(
-              (item) => item.id === queueItem.id
-            );
-            if (!exists) {
-              this.state.items.push(queueItem);
-            }
-          }
-        }
-
-        // Clear active downloads as they need to be restarted
-        this.state.activeDownloads.clear();
-        this.sortQueueByPriority();
-      } else {
-        // Restore active downloads if background time was short
-        for (const [id, download] of backgroundState.activeDownloads) {
-          this.state.activeDownloads.set(id, download);
-        }
-      }
-
-      // Clean up background state
       await AsyncStorage.removeItem('queue_background_state');
-
-      if (isDebugEnabled()) {
-        console.log('Queue state restored from background');
-      }
     } catch (error) {
       console.error('Failed to restore from background:', error);
     }
@@ -188,8 +159,36 @@ class DownloadQueueService implements DownloadQueue {
       const stored = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
       if (stored) {
         const data: PersistedQueueData = JSON.parse(stored);
-        this.state.items = data.items || [];
+
+        // Start with stored items
+        const restoredItems = data.items || [];
+
+        // CRITICAL: Any "active" downloads from the previous session are now technically "interrupted".
+        // We must put them back into the QUEUE to be restarted.
+        if (data.activeDownloads && data.activeDownloads.length > 0) {
+          const activeAsQueueItems: DownloadQueueItem[] =
+            data.activeDownloads.map((download) => ({
+              id: download.id,
+              mangaId: download.mangaId,
+              mangaTitle: download.mangaTitle,
+              chapterNumber: download.chapterNumber,
+              chapterUrl: download.chapterUrl,
+              priority: 2, // High priority for interrupted
+              addedAt: download.createdAt,
+            }));
+
+          for (const item of activeAsQueueItems) {
+            if (!restoredItems.some((existing) => existing.id === item.id)) {
+              restoredItems.push(item);
+            }
+          }
+        }
+
+        this.state.items = restoredItems;
+        this.state.activeDownloads.clear(); // Clear active, they are now in queue
         this.state.isPaused = data.isPaused || false;
+
+        this.sortQueueByPriority();
 
         if (isDebugEnabled()) {
           console.log(
@@ -206,8 +205,11 @@ class DownloadQueueService implements DownloadQueue {
 
   private async saveQueueToStorage(): Promise<void> {
     try {
+      // When saving, if we have an active download, we should save it as 'active'
+      // so we know what was running.
       const data: PersistedQueueData = {
         items: this.state.items,
+        activeDownloads: Array.from(this.state.activeDownloads.values()),
         isPaused: this.state.isPaused,
         lastProcessed: Date.now(),
       };
@@ -244,7 +246,7 @@ class DownloadQueueService implements DownloadQueue {
 
   private getQueueStatusSync(): QueueStatus {
     return {
-      totalItems: this.state.items.length,
+      totalItems: this.state.items.length + this.state.activeDownloads.size,
       activeDownloads: this.state.activeDownloads.size,
       queuedItems: this.state.items.length,
       isPaused: this.state.isPaused,
@@ -255,44 +257,30 @@ class DownloadQueueService implements DownloadQueue {
   async addToQueue(item: DownloadQueueItem): Promise<void> {
     await this.initialize();
 
-    // Check if item already exists in queue
-    const existingIndex = this.state.items.findIndex(
-      (queueItem) =>
-        queueItem.mangaId === item.mangaId &&
-        queueItem.chapterNumber === item.chapterNumber
-    );
+    // Check if item already exists
+    const exists =
+      this.state.items.some((queueItem) => queueItem.id === item.id) ||
+      this.state.activeDownloads.has(item.id);
 
-    if (existingIndex !== -1) {
-      // Update existing item with new priority if higher
-      if (item.priority > (this.state.items[existingIndex]?.priority ?? 0)) {
-        this.state.items[existingIndex] = { ...item };
-        this.sortQueueByPriority();
-      }
+    if (exists) {
+      if (isDebugEnabled())
+        console.log(`Item ${item.id} already in queue/active`);
       return;
     }
 
-    // Add new item to queue
     this.state.items.push(item);
     this.sortQueueByPriority();
 
     this.scheduleSave();
     this.notifyListeners();
 
-    if (isDebugEnabled()) {
-      console.log(
-        `Added chapter ${item.chapterNumber} of ${item.mangaTitle} to download queue`
-      );
-    }
-
-    // Start processing if not paused
     if (!this.state.isPaused) {
-      await this.startProcessing();
+      this.processQueue();
     }
   }
 
   private sortQueueByPriority(): void {
     this.state.items.sort((a, b) => {
-      // Higher priority first, then by added time (FIFO for same priority)
       if (a.priority !== b.priority) {
         return b.priority - a.priority;
       }
@@ -312,237 +300,211 @@ class DownloadQueueService implements DownloadQueue {
         !(item.mangaId === mangaId && item.chapterNumber === chapterNumber)
     );
 
-    const removed = this.state.items.length < initialLength;
-
-    if (removed) {
-      this.scheduleSave();
-      this.notifyListeners();
-
-      if (isDebugEnabled()) {
-        console.log(
-          `Removed chapter ${chapterNumber} of manga ${mangaId} from queue`
-        );
-      }
+    // If it's active, we try to cancel it
+    const targetId = `${mangaId}_${chapterNumber}`;
+    if (this.state.activeDownloads.has(targetId)) {
+      await downloadManagerService.cancelDownload(targetId);
+      // The cancellation will eventually trigger cleanup, but we can force remove from our map
+      this.state.activeDownloads.delete(targetId);
     }
 
-    return removed;
+    this.scheduleSave();
+    this.notifyListeners();
+    return this.state.items.length < initialLength;
   }
 
   async processQueue(): Promise<void> {
     await this.initialize();
+    if (this.state.isPaused || this.state.isProcessing) return;
+    this.processNextItem();
+  }
 
-    if (this.state.isPaused || this.state.isProcessing) {
+  private async processNextItem(): Promise<void> {
+    // Loop guard
+    if (this.state.isPaused || this.state.items.length === 0) {
+      this.state.isProcessing = false;
+      this.notifyListeners();
       return;
     }
 
-    await this.startProcessing();
-  }
-
-  private async startProcessing(): Promise<void> {
-    if (this.state.isProcessing || this.state.isPaused) {
+    // Strict concurrency limit: 1 because we only have 1 hidden WebView
+    if (this.state.activeDownloads.size >= MAX_CONCURRENT_DOWNLOADS) {
       return;
     }
 
     this.state.isProcessing = true;
-    this.notifyListeners();
-
-    if (isDebugEnabled()) {
-      console.log('Starting download queue processing');
-    }
-
-    // Start the processing loop
-    this.processingTimer = setInterval(async () => {
-      try {
-        await this.processNextItems();
-      } catch (error) {
-        console.error('Error in queue processing:', error);
-      }
-    }, QUEUE_PROCESSING_INTERVAL);
-  }
-
-  private async processNextItems(): Promise<void> {
-    if (this.state.isPaused || this.state.items.length === 0) {
-      await this.stopProcessing();
+    const item = this.state.items.shift(); // Take from front
+    if (!item) {
+      this.state.isProcessing = false;
       return;
     }
 
-    const availableSlots =
-      MAX_CONCURRENT_DOWNLOADS - this.state.activeDownloads.size;
-
-    if (availableSlots <= 0) {
-      return; // All slots are busy
-    }
-
-    // Get next items to process
-    const itemsToProcess = this.state.items.slice(0, availableSlots);
-
-    for (const queueItem of itemsToProcess) {
-      try {
-        await this.startDownload(queueItem);
-      } catch (error) {
-        console.error(`Failed to start download for ${queueItem.id}:`, error);
-        // Remove failed item from queue
-        await this.removeFromQueue(queueItem.mangaId, queueItem.chapterNumber);
-      }
-    }
-  }
-
-  private async startDownload(queueItem: DownloadQueueItem): Promise<void> {
-    // Create download item
+    // Move to active
     const downloadItem: DownloadItem = {
-      id: queueItem.id,
-      mangaId: queueItem.mangaId,
-      mangaTitle: queueItem.mangaTitle,
-      chapterNumber: queueItem.chapterNumber,
-      chapterUrl: queueItem.chapterUrl,
+      id: item.id,
+      mangaId: item.mangaId,
+      mangaTitle: item.mangaTitle,
+      chapterNumber: item.chapterNumber,
+      chapterUrl: item.chapterUrl,
       status: DownloadStatus.DOWNLOADING,
       progress: 0,
       totalImages: 0,
       downloadedImages: 0,
-      createdAt: queueItem.addedAt,
+      createdAt: item.addedAt,
       updatedAt: Date.now(),
     };
 
-    // Add to active downloads
-    this.state.activeDownloads.set(queueItem.id, downloadItem);
-
-    // Remove from queue
-    this.state.items = this.state.items.filter(
-      (item) => item.id !== queueItem.id
-    );
-
+    this.state.activeDownloads.set(item.id, downloadItem);
     this.scheduleSave();
     this.notifyListeners();
 
-    if (isDebugEnabled()) {
-      console.log(`Started download for chapter ${queueItem.chapterNumber}`);
-    }
-
-    // TODO: This will be implemented when we create the download manager
-    // For now, we'll simulate the download process
-    this.simulateDownload(downloadItem);
-  }
-
-  private simulateDownload(downloadItem: DownloadItem): void {
-    // This is a placeholder simulation - will be replaced with actual download manager integration
-    setTimeout(() => {
-      // Simulate completion
-      downloadItem.status = DownloadStatus.COMPLETED;
-      downloadItem.progress = 100;
-      downloadItem.updatedAt = Date.now();
-
-      // Remove from active downloads
-      this.state.activeDownloads.delete(downloadItem.id);
+    try {
+      await this.executeDownload(item);
+    } catch (error) {
+      console.error(`Download failed for ${item.id}`, error);
+      this.state.activeDownloads.delete(item.id);
+      // Optional: Retry logic? For now, just drop it or maybe add to back with lower priority
+    } finally {
+      this.state.activeDownloads.delete(item.id);
+      this.scheduleSave();
       this.notifyListeners();
 
-      if (isDebugEnabled()) {
-        console.log(`Simulated completion of download ${downloadItem.id}`);
-      }
-    }, 5000); // 5 second simulation
+      // Next!
+      this.state.isProcessing = false;
+      // Small delay to let UI breathe and cleanup
+      setTimeout(() => this.processNextItem(), 500);
+    }
   }
+
+  private async executeDownload(item: DownloadQueueItem): Promise<void> {
+    // 1. Request WebView Interception
+    const tokens = await this.requestWebViewTokens(item);
+
+    // 2. Call DownloadManager
+    const result =
+      await downloadManagerService.downloadChapterFromInterceptedRequest(
+        item.mangaId,
+        item.chapterNumber,
+        tokens.chapterId,
+        tokens.vrfToken,
+        item.chapterUrl,
+        item.mangaTitle
+      );
+
+    if (!result.success) {
+      throw new Error(result.error?.message || 'Download failed');
+    }
+
+    // Success!
+    if (isDebugEnabled()) console.log(`Queue: Download success for ${item.id}`);
+  }
+
+  // --- WebView Coordination Logic ---
+
+  private requestWebViewTokens(
+    item: DownloadQueueItem
+  ): Promise<{ chapterId: string; vrfToken: string }> {
+    return new Promise((resolve, reject) => {
+      // Set timeout for the whole process
+      const timeout = setTimeout(() => {
+        this.setActiveWebViewRequest(null);
+        reject(new Error('WebView Token Interception Timeout'));
+      }, 45000);
+
+      this.currentDownloadResolver = (data) => {
+        clearTimeout(timeout);
+        resolve(data);
+      };
+
+      this.currentDownloadRejecter = (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      };
+
+      this.setActiveWebViewRequest({
+        id: item.id,
+        mangaId: item.mangaId,
+        chapterNumber: item.chapterNumber,
+        url: item.chapterUrl,
+        attempt: 1,
+      });
+    });
+  }
+
+  // Called by Host (UI)
+  subscribeWebView(
+    listener: (request: ActiveWebViewRequest | null) => void
+  ): () => void {
+    this.webViewListeners.add(listener);
+    listener(this.activeWebViewRequest);
+    return () => this.webViewListeners.delete(listener);
+  }
+
+  getActiveWebViewRequest(): ActiveWebViewRequest | null {
+    return this.activeWebViewRequest;
+  }
+
+  // Called by Host (UI) when WebView succeeds
+  handleWebViewIntercepted(chapterId: string, vrfToken: string) {
+    this.setActiveWebViewRequest(null); // Hide WebView
+    if (this.currentDownloadResolver) {
+      this.currentDownloadResolver({ chapterId, vrfToken });
+      this.currentDownloadResolver = null;
+      this.currentDownloadRejecter = null;
+    }
+  }
+
+  // Called by Host (UI) when WebView fails
+  handleWebViewError(error: string) {
+    this.setActiveWebViewRequest(null);
+    if (this.currentDownloadRejecter) {
+      this.currentDownloadRejecter(new Error(error));
+      this.currentDownloadResolver = null;
+      this.currentDownloadRejecter = null;
+    }
+  }
+
+  private setActiveWebViewRequest(request: ActiveWebViewRequest | null) {
+    this.activeWebViewRequest = request;
+    this.webViewListeners.forEach((l) => l(request));
+  }
+
+  // --- Standard Public API ---
 
   async pauseQueue(): Promise<void> {
     await this.initialize();
-
     this.state.isPaused = true;
-    await this.stopProcessing();
-
     this.scheduleSave();
     this.notifyListeners();
-
-    if (isDebugEnabled()) {
-      console.log('Download queue paused');
-    }
   }
 
   async resumeQueue(): Promise<void> {
     await this.initialize();
-
     this.state.isPaused = false;
     this.scheduleSave();
     this.notifyListeners();
-
-    if (isDebugEnabled()) {
-      console.log('Download queue resumed');
-    }
-
-    // Start processing if there are items in queue
-    if (this.state.items.length > 0) {
-      await this.startProcessing();
-    }
-  }
-
-  private async stopProcessing(): Promise<void> {
-    this.state.isProcessing = false;
-
-    if (this.processingTimer) {
-      clearInterval(this.processingTimer);
-      this.processingTimer = null;
-    }
-
-    this.notifyListeners();
-
-    if (isDebugEnabled()) {
-      console.log('Download queue processing stopped');
-    }
+    this.processQueue();
   }
 
   async pauseDownload(downloadId: string): Promise<void> {
-    await this.initialize();
-
-    const downloadItem = this.state.activeDownloads.get(downloadId);
-    if (downloadItem) {
-      downloadItem.status = DownloadStatus.PAUSED;
-      downloadItem.updatedAt = Date.now();
-
-      // TODO: Implement actual download pause logic when download manager is available
-
-      this.notifyListeners();
-
-      if (isDebugEnabled()) {
-        console.log(`Paused download ${downloadId}`);
-      }
-    }
+    // For now, "pausing" a specific download in a strict queue means
+    // maybe cancelling it and leaving it in queue?
+    // Or just pausing the whole queue.
+    // Current implementation in Manager pauses logic, but here we just update state.
+    // Simplest:
+    await downloadManagerService.pauseDownload(downloadId);
   }
 
   async resumeDownload(downloadId: string): Promise<void> {
-    await this.initialize();
-
-    const downloadItem = this.state.activeDownloads.get(downloadId);
-    if (downloadItem && downloadItem.status === DownloadStatus.PAUSED) {
-      downloadItem.status = DownloadStatus.DOWNLOADING;
-      downloadItem.updatedAt = Date.now();
-
-      // TODO: Implement actual download resume logic when download manager is available
-
-      this.notifyListeners();
-
-      if (isDebugEnabled()) {
-        console.log(`Resumed download ${downloadId}`);
-      }
-    }
+    await downloadManagerService.resumeDownload(downloadId);
   }
 
   async cancelDownload(downloadId: string): Promise<void> {
-    await this.initialize();
-
-    const downloadItem = this.state.activeDownloads.get(downloadId);
-    if (downloadItem) {
-      downloadItem.status = DownloadStatus.CANCELLED;
-      downloadItem.updatedAt = Date.now();
-
-      // Remove from active downloads
-      this.state.activeDownloads.delete(downloadId);
-
-      // TODO: Implement actual download cancellation logic when download manager is available
-
-      this.scheduleSave();
-      this.notifyListeners();
-
-      if (isDebugEnabled()) {
-        console.log(`Cancelled download ${downloadId}`);
-      }
-    }
+    await downloadManagerService.cancelDownload(downloadId);
+    // Also remove from items if present
+    this.state.items = this.state.items.filter((i) => i.id !== downloadId);
+    this.scheduleSave();
+    this.notifyListeners();
   }
 
   async getQueueStatus(): Promise<QueueStatus> {
@@ -560,262 +522,92 @@ class DownloadQueueService implements DownloadQueue {
     return [...this.state.items];
   }
 
+  async getDownloadById(id: string): Promise<DownloadItem | null> {
+    await this.initialize();
+    return this.state.activeDownloads.get(id) || null;
+  }
+
   async clearQueue(): Promise<void> {
     await this.initialize();
-
     this.state.items = [];
     this.scheduleSave();
     this.notifyListeners();
-
-    if (isDebugEnabled()) {
-      console.log('Download queue cleared');
-    }
   }
 
   async clearCompleted(): Promise<void> {
-    await this.initialize();
-
-    // Remove completed downloads from active downloads
-    const completedIds: string[] = [];
-    for (const [id, download] of this.state.activeDownloads.entries()) {
-      if (
-        download.status === DownloadStatus.COMPLETED ||
-        download.status === DownloadStatus.FAILED ||
-        download.status === DownloadStatus.CANCELLED
-      ) {
-        completedIds.push(id);
-      }
-    }
-
-    completedIds.forEach((id) => {
-      this.state.activeDownloads.delete(id);
-    });
-
-    if (completedIds.length > 0) {
-      this.notifyListeners();
-
-      if (isDebugEnabled()) {
-        console.log(`Cleared ${completedIds.length} completed downloads`);
-      }
-    }
+    // No-op in new architecture, active downloads are cleared automatically
   }
 
   async clearCompletedDownloads(): Promise<void> {
-    return this.clearCompleted();
+    // No-op
   }
 
-  // Event listener management
+  async isInQueue(mangaId: string, chapterNumber: string): Promise<boolean> {
+    await this.initialize();
+    return (
+      this.state.items.some(
+        (i) => i.mangaId === mangaId && i.chapterNumber === chapterNumber
+      ) ||
+      Array.from(this.state.activeDownloads.values()).some(
+        (i) => i.mangaId === mangaId && i.chapterNumber === chapterNumber
+      )
+    );
+  }
+
+  // Helpers for Manager to call back (Backward compat)
+  async updateDownloadProgress(
+    id: string,
+    progress: number,
+    dl: number,
+    total: number
+  ) {
+    const item = this.state.activeDownloads.get(id);
+    if (item) {
+      item.progress = progress;
+      item.downloadedImages = dl;
+      item.totalImages = total;
+      this.notifyListeners();
+    }
+  }
+
+  async completeDownload(_id: string) {
+    // Handled in executeDownload flow
+  }
+
+  async failDownload(_id: string, _error: string) {
+    // Handled in executeDownload flow
+  }
+
+  async processQueueInBackground(): Promise<boolean> {
+    await this.processQueue();
+    // Return true if we have active downloads or items in queue
+    return this.state.activeDownloads.size > 0 || this.state.items.length > 0;
+  }
+
+  async recoverFromAppRestart(): Promise<void> {
+    await this.initialize();
+  }
+
+  async saveRecoveryData(): Promise<void> {
+    await this.persistQueueForBackground();
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.listeners.clear();
+  }
+
   addStatusListener(listener: (status: QueueStatus) => void): () => void {
     this.listeners.add(listener);
-
-    // Return unsubscribe function
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return () => this.listeners.delete(listener);
   }
 
   removeStatusListener(listener: (status: QueueStatus) => void): void {
     this.listeners.delete(listener);
   }
-
-  // Utility methods
-  async getDownloadById(downloadId: string): Promise<DownloadItem | null> {
-    await this.initialize();
-    return this.state.activeDownloads.get(downloadId) || null;
-  }
-
-  async isInQueue(mangaId: string, chapterNumber: string): Promise<boolean> {
-    await this.initialize();
-
-    return (
-      this.state.items.some(
-        (item) =>
-          item.mangaId === mangaId && item.chapterNumber === chapterNumber
-      ) ||
-      Array.from(this.state.activeDownloads.values()).some(
-        (download) =>
-          download.mangaId === mangaId &&
-          download.chapterNumber === chapterNumber
-      )
-    );
-  }
-
-  async updateDownloadProgress(
-    downloadId: string,
-    progress: number,
-    downloadedImages: number,
-    totalImages: number
-  ): Promise<void> {
-    await this.initialize();
-
-    const downloadItem = this.state.activeDownloads.get(downloadId);
-    if (downloadItem) {
-      downloadItem.progress = progress;
-      downloadItem.downloadedImages = downloadedImages;
-      downloadItem.totalImages = totalImages;
-      downloadItem.updatedAt = Date.now();
-
-      this.notifyListeners();
-    }
-  }
-
-  async completeDownload(downloadId: string): Promise<void> {
-    await this.initialize();
-
-    const downloadItem = this.state.activeDownloads.get(downloadId);
-    if (downloadItem) {
-      downloadItem.status = DownloadStatus.COMPLETED;
-      downloadItem.progress = 100;
-      downloadItem.updatedAt = Date.now();
-
-      // Keep in active downloads for a while so UI can show completion
-      // Will be cleaned up by clearCompleted() or automatically after some time
-
-      this.notifyListeners();
-
-      if (isDebugEnabled()) {
-        console.log(`Completed download ${downloadId}`);
-      }
-    }
-  }
-
-  async failDownload(downloadId: string, error: string): Promise<void> {
-    await this.initialize();
-
-    const downloadItem = this.state.activeDownloads.get(downloadId);
-    if (downloadItem) {
-      downloadItem.status = DownloadStatus.FAILED;
-      downloadItem.error = error;
-      downloadItem.updatedAt = Date.now();
-
-      this.notifyListeners();
-
-      if (isDebugEnabled()) {
-        console.log(`Failed download ${downloadId}: ${error}`);
-      }
-    }
-  }
-
-  // Background task integration methods
-  async processQueueInBackground(): Promise<boolean> {
-    if (this.state.isPaused || this.state.items.length === 0) {
-      return false;
-    }
-
-    try {
-      const initialQueueSize = this.state.items.length;
-      const initialActiveCount = this.state.activeDownloads.size;
-
-      await this.processNextItems();
-
-      // Return true if we made progress
-      const madeProgress =
-        this.state.items.length < initialQueueSize ||
-        this.state.activeDownloads.size > initialActiveCount;
-
-      return madeProgress;
-    } catch (error) {
-      console.error('Error processing queue in background:', error);
-      return false;
-    }
-  }
-
-  async getBackgroundProcessingStatus(): Promise<{
-    canProcess: boolean;
-    queuedItems: number;
-    activeDownloads: number;
-    isPaused: boolean;
-  }> {
-    return {
-      canProcess: !this.state.isPaused && this.state.items.length > 0,
-      queuedItems: this.state.items.length,
-      activeDownloads: this.state.activeDownloads.size,
-      isPaused: this.state.isPaused,
-    };
-  }
-
-  // App restart recovery methods
-  async recoverFromAppRestart(): Promise<void> {
-    try {
-      // Check for any persisted active downloads that need to be restarted
-      const stored = await AsyncStorage.getItem('active_downloads_recovery');
-      if (stored) {
-        const recoveryData = JSON.parse(stored);
-        const timeSinceLastSave = Date.now() - recoveryData.timestamp;
-
-        // Only recover if data is recent (within 30 minutes)
-        if (timeSinceLastSave < 30 * 60 * 1000) {
-          for (const download of recoveryData.activeDownloads) {
-            // Convert back to queue item
-            const queueItem: DownloadQueueItem = {
-              id: download.id,
-              mangaId: download.mangaId,
-              mangaTitle: download.mangaTitle,
-              chapterNumber: download.chapterNumber,
-              chapterUrl: download.chapterUrl,
-              priority: 2, // Higher priority for recovered downloads
-              addedAt: download.createdAt,
-            };
-
-            await this.addToQueue(queueItem);
-          }
-
-          if (isDebugEnabled()) {
-            console.log(
-              `Recovered ${recoveryData.activeDownloads.length} downloads from app restart`
-            );
-          }
-        }
-
-        // Clean up recovery data
-        await AsyncStorage.removeItem('active_downloads_recovery');
-      }
-    } catch (error) {
-      console.error('Failed to recover from app restart:', error);
-    }
-  }
-
-  async saveRecoveryData(): Promise<void> {
-    try {
-      if (this.state.activeDownloads.size > 0) {
-        const recoveryData = {
-          activeDownloads: Array.from(this.state.activeDownloads.values()),
-          timestamp: Date.now(),
-        };
-
-        await AsyncStorage.setItem(
-          'active_downloads_recovery',
-          JSON.stringify(recoveryData)
-        );
-      }
-    } catch (error) {
-      console.error('Failed to save recovery data:', error);
-    }
-  }
-
-  // Cleanup method
-  async cleanup(): Promise<void> {
-    await this.stopProcessing();
-
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer);
-      this.saveTimer = null;
-    }
-
-    // Save recovery data before cleanup
-    await this.saveRecoveryData();
-
-    // Save final state
-    await this.saveQueueToStorage();
-
-    this.listeners.clear();
-    this.initialized = false;
-
-    if (isDebugEnabled()) {
-      console.log('Download queue service cleaned up');
-    }
-  }
 }
 
-// Export singleton instance
 export const downloadQueueService = DownloadQueueService.getInstance();

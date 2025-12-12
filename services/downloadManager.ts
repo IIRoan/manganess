@@ -22,7 +22,11 @@ import { downloadValidationService } from './downloadValidationService';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 import { webViewRequestInterceptor } from './webViewRequestInterceptor';
-import { AppState, AppStateStatus, NativeEventSubscription } from 'react-native';
+import {
+  AppState,
+  AppStateStatus,
+  NativeEventSubscription,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Download configuration
@@ -142,10 +146,14 @@ class DownloadManagerService implements DownloadManager {
         try {
           await this.pauseDownload(downloadId, reason);
         } catch (error) {
-          this.log.warn('Service', 'Failed to pause download during lifecycle event', {
-            downloadId,
-            error,
-          });
+          this.log.warn(
+            'Service',
+            'Failed to pause download during lifecycle event',
+            {
+              downloadId,
+              error,
+            }
+          );
         }
       })
     );
@@ -762,7 +770,9 @@ class DownloadManagerService implements DownloadManager {
     }
   }
 
-  private async loadPausedDownloadsFromStorage(): Promise<StoredPausedDownload[]> {
+  private async loadPausedDownloadsFromStorage(): Promise<
+    StoredPausedDownload[]
+  > {
     try {
       const raw = await AsyncStorage.getItem(PAUSED_DOWNLOAD_STORAGE_KEY);
       if (!raw) {
@@ -781,15 +791,8 @@ class DownloadManagerService implements DownloadManager {
           continue;
         }
 
-        const {
-          downloadId,
-          reason,
-          status,
-          timestamp,
-          context,
-        } = entry as Partial<
-          StoredPausedDownload
-        >;
+        const { downloadId, reason, status, timestamp, context } =
+          entry as Partial<StoredPausedDownload>;
 
         if (
           typeof downloadId !== 'string' ||
@@ -889,10 +892,14 @@ class DownloadManagerService implements DownloadManager {
       try {
         await this.resumeDownload(item.downloadId);
       } catch (error) {
-        this.log.error('Service', 'Failed to resume paused download on startup', {
-          downloadId: item.downloadId,
-          error,
-        });
+        this.log.error(
+          'Service',
+          'Failed to resume paused download on startup',
+          {
+            downloadId: item.downloadId,
+            error,
+          }
+        );
       }
     }
   }
@@ -1160,14 +1167,10 @@ class DownloadManagerService implements DownloadManager {
         }
 
         if (validationResult.integrityScore >= 50) {
-          this.log.warn(
-            'Service',
-            'Chapter partially corrupted but keeping',
-            {
-              downloadId,
-              integrityScore: validationResult.integrityScore,
-            }
-          );
+          this.log.warn('Service', 'Chapter partially corrupted but keeping', {
+            downloadId,
+            integrityScore: validationResult.integrityScore,
+          });
         } else {
           // Don't throw error if we have downloaded images - validation might be failing due to metadata issues
           if (downloadedImages.length > 0) {
@@ -1192,15 +1195,11 @@ class DownloadManagerService implements DownloadManager {
       downloadEventEmitter.emitCompleted(mangaId, chapterNumber, downloadId);
 
       if (isDebugEnabled()) {
-        this.log.info(
-          'Service',
-          'Chapter download completed successfully',
-          {
-            downloadId,
-            totalImages: downloadedImages.length,
-            integrityScore: validationResult.integrityScore,
-          }
-        );
+        this.log.info('Service', 'Chapter download completed successfully', {
+          downloadId,
+          totalImages: downloadedImages.length,
+          integrityScore: validationResult.integrityScore,
+        });
       }
 
       return {

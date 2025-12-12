@@ -46,6 +46,7 @@ describe('settingsService', () => {
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
+      defaultLayout: 'list',
       downloadSettings: {
         maxConcurrentDownloads: 3,
         maxStorageSize: 2147483648,
@@ -65,6 +66,7 @@ describe('settingsService', () => {
       enableDebugTab: true,
       onboardingCompleted: true,
       accentColor: '#fff',
+      defaultLayout: 'list' as const,
     };
     await setAppSettings(nextSettings);
     const result = await getAppSettings();

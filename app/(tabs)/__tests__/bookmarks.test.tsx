@@ -5,9 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import BookmarksScreen from '../bookmarks';
 import { getMangaData } from '@/services/bookmarkService';
+import { getDefaultLayout, setDefaultLayout } from '@/services/settingsService';
 
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: jest.fn(),
+  useFocusEffect: jest.fn((callback) => callback()),
 }));
 
 const mockUseTheme = jest.fn();
@@ -26,6 +27,11 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/services/bookmarkService', () => ({
   getMangaData: jest.fn(),
+}));
+
+jest.mock('@/services/settingsService', () => ({
+  getDefaultLayout: jest.fn(),
+  setDefaultLayout: jest.fn(),
 }));
 
 jest.mock('@/services/CacheImages', () => ({
@@ -117,6 +123,8 @@ describe('BookmarksScreen', () => {
         lastUpdated: 20,
       };
     });
+
+    (getDefaultLayout as jest.Mock).mockResolvedValue('grid');
   });
 
   it('renders fetched bookmarks and navigates to detail on tap', async () => {
@@ -160,11 +168,6 @@ describe('BookmarksScreen', () => {
 
     fireEvent.press(getByTestId('bookmarks-toggle-view'));
 
-    await waitFor(() =>
-      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-        'bookmarksViewMode',
-        'list'
-      )
-    );
+    await waitFor(() => expect(setDefaultLayout).toHaveBeenCalledWith('list'));
   });
 });

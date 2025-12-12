@@ -182,7 +182,6 @@ export default function ReadChapterScreen() {
   const manhwaScrollViewRef = useRef<ScrollView>(null);
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
 
-  
   const navigationTimestampRef = useRef<number>(0);
   const lastNavigatedChapterRef = useRef<string>('');
   const chapterListSwipeTranslateY = useRef(new Animated.Value(0)).current;
@@ -231,8 +230,6 @@ export default function ReadChapterScreen() {
     theme === 'system' ? systemColorScheme : (theme as ColorScheme);
   const styles = getStyles(colorScheme);
   const insets = useSafeAreaInsets();
-
-  
 
   const normalizedChapterParam = useMemo(
     () => normalizeChapterNumber(chapterNumber),
@@ -463,9 +460,8 @@ export default function ReadChapterScreen() {
       let resolvedTitle = mangaData?.title;
 
       if (!resolvedTitle) {
-        const cachedDetails = await offlineCacheService.getCachedMangaDetails(
-          mangaId
-        );
+        const cachedDetails =
+          await offlineCacheService.getCachedMangaDetails(mangaId);
         if (cachedDetails?.title) {
           resolvedTitle = cachedDetails.title;
         }
@@ -672,9 +668,8 @@ export default function ReadChapterScreen() {
 
     try {
       if (isOffline) {
-        const cachedDetails = await offlineCacheService.getCachedMangaDetails(
-          mangaId
-        );
+        const cachedDetails =
+          await offlineCacheService.getCachedMangaDetails(mangaId);
 
         if (cachedDetails) {
           setMangaDetails(cachedDetails);
@@ -743,9 +738,8 @@ export default function ReadChapterScreen() {
     } catch (error) {
       logger().error('Service', 'Error fetching manga details', { error });
 
-      const cachedDetails = await offlineCacheService.getCachedMangaDetails(
-        mangaId
-      );
+      const cachedDetails =
+        await offlineCacheService.getCachedMangaDetails(mangaId);
       if (cachedDetails) {
         setMangaDetails(cachedDetails);
         setMangaTitle((current) => current ?? cachedDetails.title);

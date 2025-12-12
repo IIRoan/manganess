@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  TextInput,
 } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
@@ -65,6 +66,8 @@ export default function DownloadsScreen() {
   const [isRefreshingImages, setIsRefreshingImages] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [offlineCacheStats, setOfflineCacheStats] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'size' | 'chapters' | 'name'>('size');
 
   const fetchCacheStats = useCallback(async () => {
     try {
@@ -398,6 +401,27 @@ export default function DownloadsScreen() {
     if (!timestamp) return 'Never';
     return new Date(timestamp).toLocaleDateString();
   };
+
+  const filteredAndSortedManga = React.useMemo(() => {
+    let filtered = mangaDownloads;
+
+    if (searchQuery.trim()) {
+      filtered = filtered.filter((manga) =>
+        manga.mangaId.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    let sorted = [...filtered];
+    if (sortBy === 'size') {
+      sorted.sort((a, b) => b.totalSize - a.totalSize);
+    } else if (sortBy === 'chapters') {
+      sorted.sort((a, b) => b.chapterCount - a.chapterCount);
+    } else if (sortBy === 'name') {
+      sorted.sort((a, b) => a.mangaId.localeCompare(b.mangaId));
+    }
+
+    return sorted;
+  }, [mangaDownloads, searchQuery, sortBy]);
 
   if (isLoading) {
     return (
@@ -880,55 +904,158 @@ export default function DownloadsScreen() {
           </View>
         ) : (
           <View style={styles.mangaList}>
-            <Text style={styles.sectionTitle}>Downloaded Manga</Text>
-            {mangaDownloads.map((manga) => (
-              <View key={manga.mangaId} style={styles.mangaCard}>
-                <TouchableOpacity
-                  style={styles.mangaInfo}
-                  onPress={() => router.push(`/manga/${manga.mangaId}`)}
-                >
-                  <View style={styles.mangaDetails}>
-                    <Text style={styles.mangaId} numberOfLines={1}>
-                      {manga.mangaId}
-                    </Text>
-                    <Text style={styles.mangaStats}>
-                      {manga.chapterCount} chapter
-                      {manga.chapterCount !== 1 ? 's' : ''} •{' '}
-                      {formatFileSize(manga.totalSize)}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
+            <View style={styles.mangaListHeader}>
+              <Text style={styles.sectionTitle}>Downloaded Manga</Text>
+              <Text style={styles.mangaCountBadge}>
+                {filteredAndSortedManga.length} of {mangaDownloads.length}
+              </Text>
+            </View>
 
+            <View style={styles.searchAndFilterSection}>
+              <View style={styles.searchInputContainer}>
+                <Ionicons
+                  name="search-outline"
+                  size={16}
+                  color={colors.tabIconDefault}
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search manga..."
+                  placeholderTextColor={colors.tabIconDefault}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setSearchQuery('')}
+                    style={styles.clearSearchButton}
+                  >
+                    <Ionicons
+                      name="close-circle"
+                      size={16}
+                      color={colors.tabIconDefault}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <View style={styles.sortButtonsContainer}>
                 <TouchableOpacity
                   style={[
-                    styles.deleteButton,
-                    deletingManga.has(manga.mangaId)
-                      ? styles.deleteButtonDisabled
-                      : null,
+                    styles.sortButtonSmall,
+                    sortBy === 'size' && styles.sortButtonSmallActive,
                   ]}
-                  onPress={() => handleDeleteManga(manga.mangaId)}
-                  disabled={deletingManga.has(manga.mangaId)}
+                  onPress={() => setSortBy('size')}
                 >
-                  {deletingManga.has(manga.mangaId) ? (
-                    <ActivityIndicator size="small" color={colors.error} />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color={colors.error}
-                      />
-                      <Text style={styles.deleteText}>Delete</Text>
-                    </>
-                  )}
+                  <Text
+                    style={[
+                      styles.sortButtonSmallText,
+                      sortBy === 'size' && styles.sortButtonSmallTextActive,
+                    ]}
+                  >
+                    Size
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.sortButtonSmall,
+                    sortBy === 'chapters' && styles.sortButtonSmallActive,
+                  ]}
+                  onPress={() => setSortBy('chapters')}
+                >
+                  <Text
+                    style={[
+                      styles.sortButtonSmallText,
+                      sortBy === 'chapters' && styles.sortButtonSmallTextActive,
+                    ]}
+                  >
+                    Chapters
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.sortButtonSmall,
+                    sortBy === 'name' && styles.sortButtonSmallActive,
+                  ]}
+                  onPress={() => setSortBy('name')}
+                >
+                  <Text
+                    style={[
+                      styles.sortButtonSmallText,
+                      sortBy === 'name' && styles.sortButtonSmallTextActive,
+                    ]}
+                  >
+                    Name
+                  </Text>
                 </TouchableOpacity>
               </View>
-            ))}
+            </View>
+
+            {filteredAndSortedManga.length === 0 ? (
+              <View style={styles.noResultsContainer}>
+                <Ionicons
+                  name="search-outline"
+                  size={40}
+                  color={colors.tabIconDefault}
+                />
+                <Text style={styles.noResultsText}>No results found</Text>
+                <Text style={styles.noResultsSubtext}>
+                  Try adjusting your search query
+                </Text>
+              </View>
+            ) : (
+              <>
+                {filteredAndSortedManga.map((manga) => (
+                  <View key={manga.mangaId} style={styles.mangaCard}>
+                    <TouchableOpacity
+                      style={styles.mangaInfo}
+                      onPress={() => router.push(`/manga/${manga.mangaId}`)}
+                    >
+                      <View style={styles.mangaDetails}>
+                        <Text style={styles.mangaId} numberOfLines={1}>
+                          {manga.mangaId}
+                        </Text>
+                        <Text style={styles.mangaStats}>
+                          {manga.chapterCount} chapter
+                          {manga.chapterCount !== 1 ? 's' : ''} •{' '}
+                          {formatFileSize(manga.totalSize)}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={20}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.deleteButton,
+                        deletingManga.has(manga.mangaId)
+                          ? styles.deleteButtonDisabled
+                          : null,
+                      ]}
+                      onPress={() => handleDeleteManga(manga.mangaId)}
+                      disabled={deletingManga.has(manga.mangaId)}
+                    >
+                      {deletingManga.has(manga.mangaId) ? (
+                        <ActivityIndicator size="small" color={colors.error} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="trash-outline"
+                            size={18}
+                            color={colors.error}
+                          />
+                          <Text style={styles.deleteText}>Delete</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </>
+            )}
           </View>
         )}
       </ScrollView>
@@ -1118,11 +1245,90 @@ const getStyles = (colors: typeof Colors.light) =>
     mangaList: {
       padding: 16,
     },
+    mangaListHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
     sectionTitle: {
       fontSize: 18,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 12,
+    },
+    mangaCountBadge: {
+      fontSize: 12,
+      color: colors.tabIconDefault,
+      backgroundColor: colors.card,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      fontWeight: '500',
+    },
+    searchAndFilterSection: {
+      marginBottom: 16,
+      gap: 10,
+    },
+    searchInputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    searchIcon: {
+      marginRight: 8,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.text,
+      padding: 0,
+    },
+    clearSearchButton: {
+      marginLeft: 8,
+    },
+    sortButtonsContainer: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    sortButtonSmall: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
+    },
+    sortButtonSmallActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    sortButtonSmallText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.tabIconDefault,
+    },
+    sortButtonSmallTextActive: {
+      color: colors.background,
+    },
+    noResultsContainer: {
+      alignItems: 'center',
+      paddingVertical: 40,
+    },
+    noResultsText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginTop: 12,
+    },
+    noResultsSubtext: {
+      fontSize: 13,
+      color: colors.tabIconDefault,
+      marginTop: 6,
     },
     mangaCard: {
       backgroundColor: colors.card,

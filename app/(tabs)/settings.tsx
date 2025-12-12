@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   useColorScheme,
   Image,
   Alert,
@@ -18,9 +17,12 @@ import { Colors, ColorScheme } from '@/constants/Colors';
 import {
   getDebugTabEnabled,
   setDebugTabEnabled,
+  getDefaultLayout,
+  setDefaultLayout,
 } from '@/services/settingsService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Reanimated, { FadeInDown } from 'react-native-reanimated';
 import * as AniListOAuth from '@/services/anilistOAuth';
 import { syncAllMangaWithAniList } from '@/services/anilistService';
 
@@ -48,6 +50,9 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [defaultLayout, setDefaultLayoutState] = useState<'grid' | 'list'>(
+    'list'
+  );
   const [selectedColor, setSelectedColor] = useState<string>(
     accentColor || colors.primary
   );
@@ -60,6 +65,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     loadEnableDebugTabSetting();
+    loadDefaultLayoutSetting();
     checkLoginStatus();
 
     // Update selected color when accentColor changes
@@ -80,6 +86,17 @@ export default function SettingsScreen() {
     }
   };
 
+  const loadDefaultLayoutSetting = async () => {
+    try {
+      const layout = await getDefaultLayout();
+      setDefaultLayoutState(layout);
+    } catch (error) {
+      logger().error('Service', 'Error loading default layout setting', {
+        error,
+      });
+    }
+  };
+
   const toggleEnableDebugTab = async (value: boolean) => {
     try {
       await setDebugTabEnabled(value);
@@ -87,6 +104,17 @@ export default function SettingsScreen() {
       setEnableDebugTab(value);
     } catch (error) {
       logger().error('Service', 'Error toggling enable debug tab setting', {
+        error,
+      });
+    }
+  };
+
+  const handleLayoutChange = async (layout: 'grid' | 'list') => {
+    try {
+      await setDefaultLayout(layout);
+      setDefaultLayoutState(layout);
+    } catch (error) {
+      logger().error('Service', 'Error saving default layout setting', {
         error,
       });
     }
@@ -171,14 +199,92 @@ export default function SettingsScreen() {
         colors={colors}
       />
 
-      <ScrollView
+      <Reanimated.ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Settings</Text>
+        <Reanimated.Text
+          entering={FadeInDown.delay(100).springify()}
+          style={styles.title}
+        >
+          Settings
+        </Reanimated.Text>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Theme</Text>
+        <Reanimated.View
+          entering={FadeInDown.delay(200).springify()}
+          style={styles.section}
+        >
+          <Text style={styles.sectionTitle}>Appearance</Text>
+          <View style={styles.subsection}>
+            <Text style={styles.subsectionTitle}>Default Layout</Text>
+            <View style={styles.segmentedControl}>
+              <TouchableOpacity
+                style={[
+                  styles.segmentButton,
+                  defaultLayout === 'list' && {
+                    backgroundColor: accentColor || colors.primary,
+                  },
+                ]}
+                onPress={() => handleLayoutChange('list')}
+              >
+                <Ionicons
+                  name="list"
+                  size={20}
+                  color={
+                    defaultLayout === 'list' ? '#FFFFFF' : colors.tabIconDefault
+                  }
+                />
+                <Text
+                  style={[
+                    styles.segmentText,
+                    defaultLayout === 'list' && styles.activeSegmentText,
+                    {
+                      color:
+                        defaultLayout === 'list'
+                          ? '#FFFFFF'
+                          : colors.tabIconDefault,
+                    },
+                  ]}
+                >
+                  List
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.segmentButton,
+                  defaultLayout === 'grid' && {
+                    backgroundColor: accentColor || colors.primary,
+                  },
+                ]}
+                onPress={() => handleLayoutChange('grid')}
+              >
+                <Ionicons
+                  name="grid"
+                  size={20}
+                  color={
+                    defaultLayout === 'grid' ? '#FFFFFF' : colors.tabIconDefault
+                  }
+                />
+                <Text
+                  style={[
+                    styles.segmentText,
+                    defaultLayout === 'grid' && styles.activeSegmentText,
+                    {
+                      color:
+                        defaultLayout === 'grid'
+                          ? '#FFFFFF'
+                          : colors.tabIconDefault,
+                    },
+                  ]}
+                >
+                  Grid
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Theme</Text>
           {themeOptions.map((option) => (
             <TouchableOpacity
               key={option.value}
@@ -232,9 +338,12 @@ export default function SettingsScreen() {
               <Text style={styles.optionText}>Reset to Default Color</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </Reanimated.View>
 
-        <View style={styles.section}>
+        <Reanimated.View
+          entering={FadeInDown.delay(300).springify()}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>AniList Integration</Text>
           {user ? (
             <>
@@ -295,9 +404,12 @@ export default function SettingsScreen() {
           <Text style={styles.noteText}>
             Note: AniList integration is still W.I.P
           </Text>
-        </View>
+        </Reanimated.View>
 
-        <View style={styles.section}>
+        <Reanimated.View
+          entering={FadeInDown.delay(400).springify()}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>Storage Management</Text>
           <TouchableOpacity
             style={styles.option}
@@ -307,9 +419,12 @@ export default function SettingsScreen() {
             <Text style={styles.optionText}>Manage Stored Data</Text>
             <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
-        </View>
+        </Reanimated.View>
 
-        <View style={styles.section}>
+        <Reanimated.View
+          entering={FadeInDown.delay(500).springify()}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>Developer Options</Text>
           <View style={styles.option}>
             <Ionicons name="bug-outline" size={24} color={colors.text} />
@@ -331,10 +446,10 @@ export default function SettingsScreen() {
           <Text style={styles.noteText}>
             You need to restart the app for this setting to take effect.
           </Text>
-        </View>
+        </Reanimated.View>
         {/* Add bottom padding space */}
         <View style={styles.bottomSpacing} />
-      </ScrollView>
+      </Reanimated.ScrollView>
       <Image
         source={require('@/assets/images/nessie.png')}
         style={styles.nessieImage}
@@ -392,6 +507,39 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     activeOptionText: {
       color: colors.primary,
+      fontWeight: '600',
+    },
+    subsection: {
+      marginBottom: 16,
+    },
+    subsectionTitle: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: colors.text,
+      marginBottom: 12,
+    },
+    segmentedControl: {
+      flexDirection: 'row',
+      backgroundColor: colors.background,
+      borderRadius: 8,
+      padding: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    segmentButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      borderRadius: 6,
+      gap: 8,
+    },
+    segmentText: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    activeSegmentText: {
       fontWeight: '600',
     },
     noteText: {

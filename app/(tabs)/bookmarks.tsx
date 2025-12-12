@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView,
   ScrollView,
   TextInput,
   Platform,
@@ -27,7 +26,10 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  useSafeAreaInsets,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 import { useOffline } from '@/contexts/OfflineContext';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { BookmarkItem, BookmarkStatus } from '@/types';
@@ -38,6 +40,7 @@ import Animated, {
   Easing,
   runOnJS,
   useDerivedValue,
+  FadeInDown,
 } from 'react-native-reanimated';
 import {
   Gesture,
@@ -45,6 +48,7 @@ import {
   GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import { imageCache } from '@/services/CacheImages';
+import { getDefaultLayout, setDefaultLayout } from '@/services/settingsService';
 
 // Constants
 const SECTIONS: BookmarkStatus[] = ['Reading', 'To Read', 'On Hold', 'Read'];
@@ -55,7 +59,7 @@ const SORT_OPTIONS = [
   { id: 'updated-asc', label: 'Last Read (Oldest)', icon: 'time' },
 ];
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const VIEW_MODE_STORAGE_KEY = 'bookmarksViewMode';
+// Removed VIEW_MODE_STORAGE_KEY as we use universal settings now
 
 // Types
 type ViewMode = 'grid' | 'list';
@@ -127,22 +131,22 @@ export default function BookmarksScreen() {
   const insets = useSafeAreaInsets();
 
   // Load view mode preference
-  useEffect(() => {
-    const loadViewMode = async () => {
-      try {
-        const saved = (await AsyncStorage.getItem(
-          VIEW_MODE_STORAGE_KEY
-        )) as ViewMode | null;
-        if (saved) setViewMode(saved);
-      } catch (e) {
-        console.error('Failed to load view mode:', e);
-      } finally {
-        setIsViewModeLoading(false);
-      }
-    };
+  useFocusEffect(
+    useCallback(() => {
+      const loadViewMode = async () => {
+        try {
+          const saved = await getDefaultLayout();
+          setViewMode(saved);
+        } catch (e) {
+          console.error('Failed to load view mode:', e);
+        } finally {
+          setIsViewModeLoading(false);
+        }
+      };
 
-    loadViewMode();
-  }, []);
+      loadViewMode();
+    }, [])
+  );
 
   // Process bookmarks: filter, sort and group by section
   const processBookmarks = useCallback(
@@ -315,7 +319,7 @@ export default function BookmarksScreen() {
     const newMode: ViewMode = viewMode === 'grid' ? 'list' : 'grid';
     setViewMode(newMode);
     try {
-      await AsyncStorage.setItem(VIEW_MODE_STORAGE_KEY, newMode);
+      await setDefaultLayout(newMode);
     } catch (e) {
       console.error('Failed to save view mode:', e);
     }
@@ -416,7 +420,10 @@ export default function BookmarksScreen() {
 
       if (viewMode === 'grid') {
         return (
-          <View style={styles.bookmarkCardWrapper}>
+          <Animated.View
+            entering={FadeInDown.delay(info.index * 30).springify()}
+            style={styles.bookmarkCardWrapper}
+          >
             <MangaCard
               title={item.title}
               imageUrl={item.imageUrl}
@@ -432,46 +439,48 @@ export default function BookmarksScreen() {
                 }
               }}
             />
-          </View>
+          </Animated.View>
         );
       }
 
       return (
-        <TouchableOpacity
-          style={styles.listItem}
-          onPress={() => handleBookmarkPress(item.id)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.listItemImageContainer}>
-            <MangaCard
-              title=""
-              imageUrl={item.imageUrl}
-              onPress={() => {}}
-              lastReadChapter={null}
-              style={styles.listItemImage}
-              context="bookmark"
-              mangaId={item.id}
-              onBookmarkChange={(_mangaId, newStatus) => {
-                if (newStatus === null) {
-                  fetchBookmarks();
-                } else {
-                  fetchBookmarks();
-                }
-              }}
+        <Animated.View entering={FadeInDown.delay(info.index * 30).springify()}>
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => handleBookmarkPress(item.id)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.listItemImageContainer}>
+              <MangaCard
+                title=""
+                imageUrl={item.imageUrl}
+                onPress={() => {}}
+                lastReadChapter={null}
+                style={styles.listItemImage}
+                context="bookmark"
+                mangaId={item.id}
+                onBookmarkChange={(_mangaId, newStatus) => {
+                  if (newStatus === null) {
+                    fetchBookmarks();
+                  } else {
+                    fetchBookmarks();
+                  }
+                }}
+              />
+            </View>
+            <View style={styles.listItemContent}>
+              <Text style={styles.listItemTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+              <Text style={styles.listItemChapter}>{item.lastReadChapter}</Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={24}
+              color={colors.tabIconDefault}
             />
-          </View>
-          <View style={styles.listItemContent}>
-            <Text style={styles.listItemTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={styles.listItemChapter}>{item.lastReadChapter}</Text>
-          </View>
-          <Ionicons
-            name="chevron-forward"
-            size={24}
-            color={colors.tabIconDefault}
-          />
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </Animated.View>
       );
     },
     [
@@ -732,8 +741,8 @@ export default function BookmarksScreen() {
                       ) : null}
                     </View>
                   ) : (
-                    <FlatList
-                      ref={(r: FlatList<BookmarkItem> | null) => {
+                    <Animated.FlatList
+                      ref={(r: any) => {
                         listRefs.current[sec] = r;
                       }}
                       data={sectionData[sec]}

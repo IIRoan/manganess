@@ -90,7 +90,10 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
   const handleGestureEnd = (event: any) => {
     'worklet';
     const threshold = 80;
-    if (event.nativeEvent.translationY > threshold || event.nativeEvent.velocityY > 500) {
+    if (
+      event.nativeEvent.translationY > threshold ||
+      event.nativeEvent.velocityY > 500
+    ) {
       gestureTranslateY.value = withTiming(screenHeight, {
         duration: 200,
         easing: Easing.in(Easing.ease),
@@ -133,37 +136,40 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
         <TouchableWithoutFeedback onPress={onClose}>
           <Animated.View style={[styles.modalOverlay, overlayAnimatedStyle]} />
         </TouchableWithoutFeedback>
-        <PanGestureHandler onGestureEvent={handleGestureEvent} onEnded={handleGestureEnd}>
+        <PanGestureHandler
+          onGestureEvent={handleGestureEvent}
+          onEnded={handleGestureEnd}
+        >
           <Animated.View style={[styles.container, containerAnimatedStyle]}>
             <View style={styles.handle} />
-          <View style={styles.header}>
-            <Text testID="bottom-popup-title" style={styles.title}>
-              {title}
-            </Text>
-          </View>
-          <View style={styles.optionsContainer}>
-            {options?.map((option, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.optionButton}
-                onPress={() => {
-                  option.onPress();
-                  onClose();
-                }}
-              >
-                {option.icon && (
-                  <View style={styles.iconContainer}>
-                    <Ionicons
-                      name={option.icon}
-                      size={24}
-                      color={colors.primary}
-                    />
-                  </View>
-                )}
-                <Text style={styles.optionText}>{option.text}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+            <View style={styles.header}>
+              <Text testID="bottom-popup-title" style={styles.title}>
+                {title}
+              </Text>
+            </View>
+            <View style={styles.optionsContainer}>
+              {options?.map((option, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.optionButton}
+                  onPress={() => {
+                    option.onPress();
+                    onClose();
+                  }}
+                >
+                  {option.icon && (
+                    <View style={styles.iconContainer}>
+                      <Ionicons
+                        name={option.icon}
+                        size={24}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
+                  <Text style={styles.optionText}>{option.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </Animated.View>
         </PanGestureHandler>
       </View>

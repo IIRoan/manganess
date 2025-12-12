@@ -24,3 +24,5 @@ env.ts
 !constants/env.ts
 .idea/
 
+
+.env.local
