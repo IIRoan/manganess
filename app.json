@@ -36,7 +36,8 @@
         {
           "url": "https://sentry.io/",
           "project": "react-native",
-          "organization": "lunaris-0c"
+          "organization": "lunaris-0c",
+          "uploadSourceMaps": false
         }
       ]
     ],
