@@ -1,11 +1,11 @@
 {
   "name": "manganess",
   "main": "expo-router/entry",
-  "version": "1.5",
+  "version": "1.6",
   "expo": {
     "name": "manganess",
     "slug": "manganess",
-    "version": "1.5",
+    "version": "1.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
