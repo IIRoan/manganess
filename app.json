@@ -50,7 +50,7 @@
     },
     "owner": "iroan",
     "runtimeVersion": {
-      "policy": "sdkVersion"
+      "policy": "fingerprint"
     },
     "updates": {
       "enabled": true,
