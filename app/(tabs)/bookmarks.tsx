@@ -556,7 +556,7 @@ export default function BookmarksScreen() {
   // Loading state
   if (isLoading || isViewModeLoading) {
     return (
-      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -567,7 +567,7 @@ export default function BookmarksScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <SafeAreaView style={styles.container}>
         <ImagePreloader urls={allImageUrls} />
 
         {/* Header */}
