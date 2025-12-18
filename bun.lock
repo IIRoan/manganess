@@ -50,7 +50,6 @@
       },
       "devDependencies": {
         "@babel/core": "^7.25.2",
-        "@testing-library/jest-native": "^5.4.3",
         "@testing-library/react-hooks": "^8.0.1",
         "@testing-library/react-native": "^13.3.3",
         "@types/jest": "29.5.14",
@@ -542,8 +541,6 @@
     "@sinonjs/commons": ["@sinonjs/commons@3.0.1", "", { "dependencies": { "type-detect": "4.0.8" } }, "sha512-K3mCHKQ9sVh8o1C9cxkwxaOmXoAMlDxC1mYyHrjqOWEcBjYr76t96zL2zlj5dUGZ3HSw240X1qgH3Mjf1yJWpQ=="],
 
     "@sinonjs/fake-timers": ["@sinonjs/fake-timers@10.3.0", "", { "dependencies": { "@sinonjs/commons": "^3.0.0" } }, "sha512-V4BG07kuYSUkTCSBHG8G8TNhM+F19jXFWnQtzj+we8DrkpSBCee9Z3Ms8yiGer/dlmhe35/Xdgyo3/0rQKg7YA=="],
-
-    "@testing-library/jest-native": ["@testing-library/jest-native@5.4.3", "", { "dependencies": { "chalk": "^4.1.2", "jest-diff": "^29.0.1", "jest-matcher-utils": "^29.0.1", "pretty-format": "^29.0.3", "redent": "^3.0.0" }, "peerDependencies": { "react": ">=16.0.0", "react-native": ">=0.59", "react-test-renderer": ">=16.0.0" } }, "sha512-/sSDGaOuE+PJ1Z9Kp4u7PQScSVVXGud59I/qsBFFJvIbcn4P6yYw6cBnBmbPF+X9aRIsTJRDl6gzw5ZkJNm66w=="],
 
     "@testing-library/react-hooks": ["@testing-library/react-hooks@8.0.1", "", { "dependencies": { "@babel/runtime": "^7.12.5", "react-error-boundary": "^3.1.0" }, "peerDependencies": { "@types/react": "^16.9.0 || ^17.0.0", "react": "^16.9.0 || ^17.0.0", "react-dom": "^16.9.0 || ^17.0.0", "react-test-renderer": "^16.9.0 || ^17.0.0" }, "optionalPeers": ["@types/react", "react-dom", "react-test-renderer"] }, "sha512-Aqhl2IVmLt8IovEVarNDFuJDVWVvhnr9/GCU6UUnrYXwgDFF9h2L2o2P9KBni1AST5sT6riAyoukFLyjQUgD/g=="],
 
