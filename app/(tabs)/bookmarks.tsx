@@ -26,10 +26,7 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
-import {
-  useSafeAreaInsets,
-  SafeAreaView,
-} from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOffline } from '@/contexts/OfflineContext';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { BookmarkItem, BookmarkStatus } from '@/types';
@@ -128,7 +125,6 @@ export default function BookmarksScreen() {
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
-  const insets = useSafeAreaInsets();
 
   // Load view mode preference
   useFocusEffect(
