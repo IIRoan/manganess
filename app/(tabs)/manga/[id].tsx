@@ -11,9 +11,9 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   useColorScheme,
-  StyleSheet,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import Svg, { Circle } from 'react-native-svg';
 import Reanimated, {
   useSharedValue,
@@ -22,7 +22,6 @@ import Reanimated, {
   FadeIn,
   interpolate,
   Extrapolation,
-  SharedValue,
   runOnJS,
 } from 'react-native-reanimated';
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
@@ -74,7 +73,7 @@ import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
 import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadStatus } from '@/types/download';
-import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
+import { useParallaxScroll } from '@/components/ParallaxLayout';
 
 const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList) as any;
 
@@ -89,8 +88,7 @@ const MangaBannerImage: React.FC<{
   bannerUrl: string;
   style: any;
   isOffline: boolean;
-  scrollY: SharedValue<number>;
-}> = ({ mangaId, bannerUrl, style, isOffline, scrollY }) => {
+}> = ({ mangaId, bannerUrl, style, isOffline }) => {
   const cachedBannerPath = useMangaImageCache(mangaId, bannerUrl, {
     enabled: !isOffline,
   });
@@ -112,12 +110,13 @@ const MangaBannerImage: React.FC<{
   }
 
   return (
-    <ParallaxImage
-      scrollY={scrollY}
-      source={displayUri}
-      height={325}
-      style={{ width: '100%', height: '100%' }}
-      containerStyle={[StyleSheet.absoluteFill, { zIndex: 0 }]}
+    <Image
+      source={{ uri: displayUri }}
+      style={style}
+      contentFit="cover"
+      contentPosition="top"
+      transition={500}
+      cachePolicy="memory-disk"
     />
   );
 };
@@ -659,7 +658,7 @@ export default function MangaDetailScreen() {
     []
   );
 
-  const { scrollY, scrollHandler } = useParallaxScroll((event) => {
+  const { scrollHandler } = useParallaxScroll((event) => {
     'worklet';
     runOnJS(handleScrollJS)(
       event.contentOffset.y,
@@ -763,13 +762,6 @@ export default function MangaDetailScreen() {
       !mangaDetails ? null : (
         <>
           <View style={styles.headerContainer}>
-            <MangaBannerImage
-              mangaId={id as string}
-              bannerUrl={mangaDetails.bannerImage}
-              style={styles.bannerImage}
-              isOffline={isOffline}
-              scrollY={scrollY}
-            />
             <View style={styles.overlay} />
             <View style={styles.headerContent}>
               <Text style={styles.title} numberOfLines={3} ellipsizeMode="tail">
@@ -907,8 +899,6 @@ export default function MangaDetailScreen() {
       colors,
       styles,
       handleLastReadChapterPress,
-      scrollY,
-      isOffline,
     ]
   );
 
@@ -954,6 +944,14 @@ export default function MangaDetailScreen() {
           />
 
           <View style={{ flex: 1 }}>
+            <View style={styles.bannerContainer} pointerEvents="none">
+              <MangaBannerImage
+                mangaId={id as string}
+                bannerUrl={mangaDetails.bannerImage}
+                style={styles.bannerImage}
+                isOffline={isOffline}
+              />
+            </View>
             <View style={[styles.fixedHeader, { paddingTop: insets.top + 10 }]}>
               <BackButton
                 variant="enhanced"

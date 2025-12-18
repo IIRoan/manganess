@@ -1,6 +1,8 @@
 import { StyleSheet } from 'react-native';
 import type { Colors } from '@/constants/Colors';
 
+const BANNER_HEIGHT = 325;
+
 const getStyles = (colors: typeof Colors.light) =>
   StyleSheet.create({
     container: {
@@ -35,17 +37,22 @@ const getStyles = (colors: typeof Colors.light) =>
       justifyContent: 'space-between',
       paddingHorizontal: 20,
     },
+    bannerContainer: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: BANNER_HEIGHT,
+      overflow: 'hidden',
+      zIndex: 0,
+    },
     headerContainer: {
-      height: 325,
+      height: BANNER_HEIGHT,
       position: 'relative',
       overflow: 'hidden',
     },
     bannerImage: {
-      width: '100%',
-      height: '200%',
-      resizeMode: 'cover',
-      position: 'absolute',
-      top: 0,
+      ...StyleSheet.absoluteFillObject,
     },
     overlay: {
       ...StyleSheet.absoluteFillObject,
