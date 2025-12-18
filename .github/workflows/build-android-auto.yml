@@ -4,16 +4,10 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    types: [closed]
-    branches:
-      - main
 
 jobs:
   build:
     name: EAS Build APK (Auto)
-    # Only run if the PR was merged (not just closed) or if it's a direct push
-    if: github.event.pull_request.merged == true || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Check for EXPO_TOKEN
