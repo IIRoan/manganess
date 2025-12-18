@@ -299,64 +299,61 @@ export class ImageExtractorService implements ImageExtractor {
       if (isDebugEnabled()) {
         this.log.warn('Service', 'No pages container found in HTML');
       }
-      return [];
-    }
+    } else {
+      const pagesContent = pagesContainerMatch[1];
 
-    const pagesContent = pagesContainerMatch[1];
+      if (pagesContent) {
+        // Extract individual page divs with images
+        const pageRegex = /<div class="page"[^>]*>([\s\S]*?)<\/div>/g;
+        let pageMatch;
+        let pageIndex = 1;
 
-    if (!pagesContent) {
-      return [];
-    }
+        while ((pageMatch = pageRegex.exec(pagesContent)) !== null) {
+          const pageContent = pageMatch[1];
 
-    // Extract individual page divs with images
-    const pageRegex = /<div class="page"[^>]*>([\s\S]*?)<\/div>/g;
-    let pageMatch;
-    let pageIndex = 1;
+          if (!pageContent) continue;
 
-    while ((pageMatch = pageRegex.exec(pagesContent)) !== null) {
-      const pageContent = pageMatch[1];
+          // Look for img tags within the page
+          const imgMatch = pageContent.match(/<img[^>]*>/);
 
-      if (!pageContent) continue;
+          if (!imgMatch) continue;
 
-      // Look for img tags within the page
-      const imgMatch = pageContent.match(/<img[^>]*>/);
+          const imgTag = imgMatch[0];
+          const srcMatch = imgTag.match(/src="([^"]*)"/);
+          const dataNumberMatch = imgTag.match(/data-number="(\d+)"/);
 
-      if (!imgMatch) continue;
+          const src = srcMatch ? srcMatch[1] : '';
+          const dataNumber = dataNumberMatch ? dataNumberMatch[1] : '';
 
-      const imgTag = imgMatch[0];
-      const srcMatch = imgTag.match(/src="([^"]*)"/);
-      const dataNumberMatch = imgTag.match(/data-number="(\d+)"/);
+          if (imgTag) {
+            // Determine page number from data-number attribute or use sequential index
+            const pageNumber = dataNumber ? parseInt(dataNumber, 10) : pageIndex;
 
-      const src = srcMatch ? srcMatch[1] : '';
-      const dataNumber = dataNumberMatch ? dataNumberMatch[1] : '';
+            // Determine if image is loaded or not
+            const isLoaded = !!src && src.trim() !== '';
 
-      if (imgTag) {
-        // Determine page number from data-number attribute or use sequential index
-        const pageNumber = dataNumber ? parseInt(dataNumber, 10) : pageIndex;
+            const chapterImage: ChapterImage = {
+              pageNumber,
+              originalUrl: src || '',
+              downloadStatus: isLoaded
+                ? ImageDownloadStatus.PENDING
+                : ImageDownloadStatus.PENDING,
+            };
 
-        // Determine if image is loaded or not
-        const isLoaded = !!src && src.trim() !== '';
+            images.push(chapterImage);
 
-        const chapterImage: ChapterImage = {
-          pageNumber,
-          originalUrl: src || '',
-          downloadStatus: isLoaded
-            ? ImageDownloadStatus.PENDING
-            : ImageDownloadStatus.PENDING,
-        };
+            if (isDebugEnabled()) {
+              this.log.info('Service', 'Found image', {
+                pageNumber,
+                hasUrl: !!src,
+                isLoaded,
+              });
+            }
+          }
 
-        images.push(chapterImage);
-
-        if (isDebugEnabled()) {
-          this.log.info('Service', 'Found image', {
-            pageNumber,
-            hasUrl: !!src,
-            isLoaded,
-          });
+          pageIndex++;
         }
       }
-
-      pageIndex++;
     }
 
     // Alternative parsing for different HTML structures

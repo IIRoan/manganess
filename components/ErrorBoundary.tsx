@@ -6,14 +6,14 @@ import { useTheme } from '@/constants/ThemeContext';
 
 interface ErrorBoundaryState {
   hasError: boolean;
-  error?: Error | undefined;
-  errorInfo?: React.ErrorInfo | undefined;
+  error?: Error;
+  errorInfo?: React.ErrorInfo;
 }
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
   fallback?: React.ComponentType<{
-    error?: Error | undefined;
+    error?: Error;
     resetError: () => void;
   }>;
 }
@@ -39,18 +39,20 @@ class ErrorBoundary extends React.Component<
   resetError = () => {
     this.setState({
       hasError: false,
-      error: undefined as Error | undefined,
-      errorInfo: undefined as React.ErrorInfo | undefined,
     });
   };
 
   override render() {
     if (this.state.hasError) {
+      const errorProps: { error?: Error } = this.state.error
+        ? { error: this.state.error }
+        : {};
+
       if (this.props.fallback) {
         const FallbackComponent = this.props.fallback;
         return (
           <FallbackComponent
-            error={this.state.error as Error | undefined}
+            {...errorProps}
             resetError={this.resetError}
           />
         );
@@ -58,7 +60,7 @@ class ErrorBoundary extends React.Component<
 
       return (
         <DefaultErrorFallback
-          error={this.state.error as Error | undefined}
+          {...errorProps}
           resetError={this.resetError}
         />
       );
@@ -69,7 +71,7 @@ class ErrorBoundary extends React.Component<
 }
 
 const DefaultErrorFallback: React.FC<{
-  error?: Error | undefined;
+  error?: Error;
   resetError: () => void;
 }> = ({ error, resetError }) => {
   const { actualTheme } = useTheme();
