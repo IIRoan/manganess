@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    "group:allNonMajor"
+  ],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["^expo", "^@expo/"],
+      "groupName": "expo packages"
+    },
+    {
+      "matchPackagePatterns": ["^react-native", "^@react-native"],
+      "groupName": "react-native packages"
+    },
+    {
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "dev dependencies"
+    }
+  ],
+  "schedule": ["every weekend"],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  }
+}

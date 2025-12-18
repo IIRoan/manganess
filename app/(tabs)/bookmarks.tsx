@@ -26,10 +26,7 @@ import { useTheme } from '@/constants/ThemeContext';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
-import {
-  useSafeAreaInsets,
-  SafeAreaView,
-} from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOffline } from '@/contexts/OfflineContext';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { BookmarkItem, BookmarkStatus } from '@/types';
@@ -128,7 +125,6 @@ export default function BookmarksScreen() {
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
   const styles = getStyles(colors);
-  const insets = useSafeAreaInsets();
 
   // Load view mode preference
   useFocusEffect(
@@ -556,7 +552,7 @@ export default function BookmarksScreen() {
   // Loading state
   if (isLoading || isViewModeLoading) {
     return (
-      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -567,7 +563,7 @@ export default function BookmarksScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <SafeAreaView style={styles.container}>
         <ImagePreloader urls={allImageUrls} />
 
         {/* Header */}
