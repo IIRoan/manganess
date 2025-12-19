@@ -762,6 +762,12 @@ export default function MangaDetailScreen() {
       !mangaDetails ? null : (
         <>
           <View style={styles.headerContainer}>
+            <MangaBannerImage
+              mangaId={id as string}
+              bannerUrl={mangaDetails.bannerImage}
+              style={styles.bannerImage}
+              isOffline={isOffline}
+            />
             <View style={styles.overlay} />
             <View style={styles.headerContent}>
               <Text style={styles.title} numberOfLines={3} ellipsizeMode="tail">
@@ -899,6 +905,7 @@ export default function MangaDetailScreen() {
       colors,
       styles,
       handleLastReadChapterPress,
+      isOffline,
     ]
   );
 
@@ -944,14 +951,6 @@ export default function MangaDetailScreen() {
           />
 
           <View style={{ flex: 1 }}>
-            <View style={styles.bannerContainer} pointerEvents="none">
-              <MangaBannerImage
-                mangaId={id as string}
-                bannerUrl={mangaDetails.bannerImage}
-                style={styles.bannerImage}
-                isOffline={isOffline}
-              />
-            </View>
             <View style={[styles.fixedHeader, { paddingTop: insets.top + 10 }]}>
               <BackButton
                 variant="enhanced"
@@ -994,7 +993,7 @@ export default function MangaDetailScreen() {
                 `chapter-${item.number}-${index}`
               }
               renderItem={renderChapterItem}
-              ListFooterComponent={<View style={{ height: 120 }} />}
+              ListFooterComponent={<View style={{ height: 120, backgroundColor: colors.card }} />}
               onScroll={scrollHandler}
               scrollEventThrottle={16}
               bounces={false}
