@@ -619,7 +619,7 @@ const getStyles = (
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.card,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingHorizontal: 12,
       height: 44,
       borderWidth: 1,
@@ -656,7 +656,7 @@ const getStyles = (
     // List View Styling
     resultItem: {
       flexDirection: 'row',
-      marginBottom: 16,
+      marginBottom: 12,
       height: 110, // Fixed height for list item
       backgroundColor: colors.card, // Optional: card background for the row
       borderRadius: 12,
@@ -735,14 +735,14 @@ const getStyles = (
       opacity: 0.8,
     },
     emptyStateTitle: {
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: '600',
       color: colors.text,
       marginBottom: 8,
       textAlign: 'center',
     },
     emptyStateText: {
-      fontSize: 15,
+      fontSize: 16,
       color: colors.tabIconDefault,
       textAlign: 'center',
       lineHeight: 22,
@@ -750,29 +750,29 @@ const getStyles = (
     },
     retryButton: {
       marginTop: 24,
-      paddingHorizontal: 24,
+      paddingHorizontal: 20,
       paddingVertical: 12,
-      borderRadius: 8,
+      borderRadius: 12,
       backgroundColor: colors.primary,
     },
     retryButtonText: {
       color: '#ffffff',
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '600',
     },
     offlineButton: {
       marginTop: 24,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 24,
+      paddingHorizontal: 20,
       paddingVertical: 12,
-      borderRadius: 100,
+      borderRadius: 12,
       backgroundColor: colors.primary,
       gap: 8,
     },
     offlineButtonText: {
       color: '#FFFFFF',
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '600',
     },
   });

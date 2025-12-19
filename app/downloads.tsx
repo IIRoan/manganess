@@ -1072,17 +1072,17 @@ const getStyles = (colors: typeof Colors.light) =>
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 15,
+      paddingHorizontal: 16,
+      paddingVertical: 16,
       backgroundColor: colors.card,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
     title: {
-      fontSize: 24,
+      fontSize: 26,
       fontWeight: 'bold',
       color: colors.text,
-      marginLeft: 15,
+      marginLeft: 16,
     },
     scrollView: {
       flex: 1,
@@ -1101,10 +1101,10 @@ const getStyles = (colors: typeof Colors.light) =>
       borderColor: colors.border,
     },
     statsTitle: {
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 12,
+      marginBottom: 16,
     },
     statsRow: {
       flexDirection: 'row',
@@ -1130,10 +1130,10 @@ const getStyles = (colors: typeof Colors.light) =>
       borderColor: colors.border,
     },
     cardTitle: {
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 12,
+      marginBottom: 16,
     },
     cardRow: {
       flexDirection: 'row',
@@ -1229,10 +1229,11 @@ const getStyles = (colors: typeof Colors.light) =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
+      padding: 24,
       paddingVertical: 60,
     },
     emptyText: {
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: '600',
       color: colors.text,
       marginTop: 16,
@@ -1252,7 +1253,7 @@ const getStyles = (colors: typeof Colors.light) =>
       marginBottom: 12,
     },
     sectionTitle: {
-      fontSize: 18,
+      fontSize: 20,
       fontWeight: '600',
       color: colors.text,
     },
