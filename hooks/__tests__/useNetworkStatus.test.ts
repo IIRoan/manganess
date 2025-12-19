@@ -29,7 +29,7 @@ describe('useNetworkStatus', () => {
     } as any);
   });
 
-  it('returns initial default state', () => {
+  it('returns initial default state', async () => {
     const { result } = renderHook(() => useNetworkStatus());
 
     expect(result.current).toEqual({
@@ -37,6 +37,11 @@ describe('useNetworkStatus', () => {
       isInternetReachable: null,
       type: 'unknown',
       isOffline: false,
+    });
+
+    // Wait for async state update from NetInfo.fetch() to complete
+    await waitFor(() => {
+      expect(result.current.type).toBe('wifi');
     });
   });
 
@@ -62,17 +67,25 @@ describe('useNetworkStatus', () => {
     });
   });
 
-  it('subscribes to network state changes', () => {
-    renderHook(() => useNetworkStatus());
+  it('subscribes to network state changes', async () => {
+    const { result } = renderHook(() => useNetworkStatus());
 
     expect(mockNetInfo.addEventListener).toHaveBeenCalledTimes(1);
     expect(mockNetInfo.addEventListener).toHaveBeenCalledWith(
       expect.any(Function)
     );
+
+    await waitFor(() => {
+      expect(result.current.type).toBe('wifi');
+    });
   });
 
-  it('unsubscribes on unmount', () => {
-    const { unmount } = renderHook(() => useNetworkStatus());
+  it('unsubscribes on unmount', async () => {
+    const { result, unmount } = renderHook(() => useNetworkStatus());
+
+    await waitFor(() => {
+      expect(result.current.type).toBe('wifi');
+    });
 
     unmount();
 
