@@ -23,6 +23,5 @@ android
 env.ts
 !constants/env.ts
 .idea/
-
-
+coverage
 .env.local
