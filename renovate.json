@@ -8,12 +8,12 @@
   "labels": ["dependencies"],
   "packageRules": [
     {
-      "matchPackagePatterns": ["^expo", "^@expo/"],
-      "groupName": "expo packages"
+      "groupName": "expo packages",
+      "matchPackageNames": ["/^expo/", "/^@expo//"]
     },
     {
-      "matchPackagePatterns": ["^react-native", "^@react-native"],
-      "groupName": "react-native packages"
+      "groupName": "react-native packages",
+      "matchPackageNames": ["/^react-native/", "/^@react-native/"]
     },
     {
       "matchDepTypes": ["devDependencies"],
