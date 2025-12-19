@@ -109,13 +109,13 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     contentContainer: {
       flexGrow: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: 16,
       justifyContent: 'center',
       paddingVertical: 40,
     },
     logoContainer: {
       alignItems: 'center',
-      marginBottom: 30,
+      marginBottom: 24,
     },
     logo: {
       width: 120,
@@ -132,26 +132,26 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 16,
       color: colors.text,
       textAlign: 'center',
-      marginBottom: 30,
+      marginBottom: 24,
     },
     section: {
-      marginBottom: 20,
+      marginBottom: 24,
     },
     sectionTitle: {
       fontSize: 20,
       fontWeight: '600',
-      marginBottom: 10,
+      marginBottom: 16,
       color: colors.text,
     },
     option: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 15,
-      paddingHorizontal: 10,
+      paddingHorizontal: 12,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 8,
-      marginBottom: 10,
+      borderRadius: 12,
+      marginBottom: 12,
     },
     activeOption: {
       backgroundColor: colors.primary + '20',
@@ -169,10 +169,10 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     completeButton: {
       backgroundColor: colors.primary,
-      padding: 15,
-      borderRadius: 10,
+      padding: 16,
+      borderRadius: 12,
       alignItems: 'center',
-      marginTop: 20,
+      marginTop: 24,
     },
     completeButtonText: {
       color: colors.card,

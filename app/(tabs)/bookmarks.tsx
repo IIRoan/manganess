@@ -38,6 +38,7 @@ import Animated, {
   runOnJS,
   useDerivedValue,
   FadeInDown,
+  interpolate,
 } from 'react-native-reanimated';
 import {
   Gesture,
@@ -62,8 +63,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 type ViewMode = 'grid' | 'list';
 
 // Animated Components
-const AnimatedTouchableOpacity =
-  Animated.createAnimatedComponent(TouchableOpacity);
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 // Helper component for preloading images
@@ -100,6 +99,10 @@ export default function BookmarksScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [showSortOptions, setShowSortOptions] = useState(false);
   const [allImageUrls, setAllImageUrls] = useState<string[]>([]);
+  const [tabMeasurements, setTabMeasurements] = useState<
+    { x: number; width: number }[]
+  >([]);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
   // Animation values
   const translateX = useSharedValue(0);
@@ -107,6 +110,7 @@ export default function BookmarksScreen() {
   const isAnimating = useSharedValue(false);
   const startX = useSharedValue(0);
   const pageIndex = useSharedValue(0);
+  const searchExpandProgress = useSharedValue(0);
 
   // Refs
   const router = useRouter();
@@ -277,6 +281,66 @@ export default function BookmarksScreen() {
     overflow: 'hidden',
   }));
 
+  // Animated style for sliding bubble indicator
+  const bubbleAnimStyle = useAnimatedStyle(() => {
+    if (tabMeasurements.length < SECTIONS.length) {
+      return { opacity: 0 };
+    }
+    const progress = -translateX.value / SCREEN_WIDTH;
+    const inputRange = SECTIONS.map((_, i) => i);
+    const xOutputRange = tabMeasurements.map((m) => m.x);
+    const widthOutputRange = tabMeasurements.map((m) => m.width);
+
+    const x = interpolate(progress, inputRange, xOutputRange, 'clamp');
+    const width = interpolate(progress, inputRange, widthOutputRange, 'clamp');
+
+    return {
+      transform: [{ translateX: x }],
+      width,
+      opacity: 1,
+    };
+  });
+
+  // Handler for measuring tab buttons
+  const handleTabLayout = useCallback(
+    (index: number, x: number, width: number) => {
+      setTabMeasurements((prev) => {
+        const newMeasurements = [...prev];
+        newMeasurements[index] = { x, width };
+        return newMeasurements;
+      });
+    },
+    []
+  );
+
+  // Animated style for search expansion
+  const searchContainerAnim = useAnimatedStyle(() => ({
+    height: interpolate(searchExpandProgress.value, [0, 1], [0, 46]),
+    opacity: searchExpandProgress.value,
+    marginTop: interpolate(searchExpandProgress.value, [0, 1], [0, 4]),
+    marginBottom: interpolate(searchExpandProgress.value, [0, 1], [0, 8]),
+  }));
+
+  // Focus search input (must be called from JS thread)
+  const focusSearchInput = useCallback(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  // Toggle search expansion
+  const toggleSearch = useCallback(() => {
+    if (isSearchExpanded) {
+      searchExpandProgress.value = withTiming(0, { duration: 250 }, () => {
+        runOnJS(setIsSearchExpanded)(false);
+      });
+      setSearchQuery('');
+    } else {
+      setIsSearchExpanded(true);
+      searchExpandProgress.value = withTiming(1, { duration: 250 }, () => {
+        runOnJS(focusSearchInput)();
+      });
+    }
+  }, [isSearchExpanded, searchExpandProgress, focusSearchInput]);
+
   // Event Handlers
   const handleBookmarkPress = useCallback(
     (id: string) => {
@@ -340,7 +404,10 @@ export default function BookmarksScreen() {
   useDerivedValue(() => {
     const idx = Math.max(
       0,
-      Math.min(SECTIONS.length - 1, Math.round(pageIndex.value))
+      Math.min(
+        SECTIONS.length - 1,
+        Math.round(-translateX.value / SCREEN_WIDTH)
+      )
     );
     runOnJS(updateAfterIndexChange)(idx);
   });
@@ -490,7 +557,7 @@ export default function BookmarksScreen() {
 
   // Render section button
   const renderSectionButton = useCallback(
-    (title: BookmarkStatus) => {
+    (title: BookmarkStatus, index: number) => {
       let icon: keyof typeof Ionicons.glyphMap = 'book';
       switch (title) {
         case 'To Read':
@@ -511,11 +578,15 @@ export default function BookmarksScreen() {
       const isActive = title === activeSection;
 
       return (
-        <AnimatedTouchableOpacity
+        <TouchableOpacity
           key={title}
-          style={[styles.sectionButton, isActive && styles.activeSectionButton]}
+          style={styles.sectionButton}
           onPress={() => changeSection(title)}
           activeOpacity={0.7}
+          onLayout={(e) => {
+            const { x, width } = e.nativeEvent.layout;
+            handleTabLayout(index, x, width);
+          }}
         >
           <Ionicons
             name={icon}
@@ -543,10 +614,10 @@ export default function BookmarksScreen() {
               {count}
             </Text>
           </View>
-        </AnimatedTouchableOpacity>
+        </TouchableOpacity>
       );
     },
-    [activeSection, sectionData, changeSection, styles, colors]
+    [activeSection, sectionData, changeSection, styles, colors, handleTabLayout]
   );
 
   // Loading state
@@ -587,6 +658,23 @@ export default function BookmarksScreen() {
           </View>
           <View style={styles.headerButtons}>
             <TouchableOpacity
+              testID="bookmarks-toggle-search"
+              style={[
+                styles.headerButton,
+                isSearchExpanded && styles.headerButtonActive,
+              ]}
+              onPress={toggleSearch}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Toggle search"
+            >
+              <Ionicons
+                name={isSearchExpanded ? 'close' : 'search'}
+                size={22}
+                color={isSearchExpanded ? colors.card : colors.text}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
               testID="bookmarks-toggle-sort"
               style={styles.headerButton}
               onPress={toggleSortOptions}
@@ -613,8 +701,8 @@ export default function BookmarksScreen() {
           </View>
         </View>
 
-        {/* Search */}
-        <View style={styles.searchContainer}>
+        {/* Expandable Search */}
+        <Animated.View style={[styles.searchContainer, searchContainerAnim]}>
           <View style={styles.searchInputContainer}>
             <Ionicons
               name="search"
@@ -644,7 +732,7 @@ export default function BookmarksScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
-        </View>
+        </Animated.View>
 
         {/* Sort Options */}
         <Animated.View
@@ -697,15 +785,14 @@ export default function BookmarksScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.sectionButtonsScroll}
           >
-            {SECTIONS.map(renderSectionButton)}
+            <View style={styles.tabsWrapper}>
+              <Animated.View style={[styles.slidingBubble, bubbleAnimStyle]} />
+              {SECTIONS.map((section, index) =>
+                renderSectionButton(section, index)
+              )}
+            </View>
           </ScrollView>
         </View>
-
-        {/* Count */}
-        <Text style={styles.resultCount}>
-          {sectionData[activeSection]?.length || 0}{' '}
-          {(sectionData[activeSection]?.length || 0) > 1 ? 'mangas' : 'manga'}
-        </Text>
 
         {/* Content Area with Gesture Detector */}
         <GestureDetector gesture={pan}>
@@ -780,8 +867,7 @@ const getStyles = (colors: typeof Colors.light) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 10,
+      paddingHorizontal: 16,
     },
     headerTitle: {
       fontSize: 26,
@@ -806,25 +892,28 @@ const getStyles = (colors: typeof Colors.light) =>
       shadowRadius: 1.5,
       elevation: 2,
     },
+    headerButtonActive: {
+      backgroundColor: colors.primary,
+    },
     searchContainer: {
-      paddingHorizontal: 20,
-      marginVertical: 6,
+      paddingHorizontal: 16,
+      overflow: 'hidden',
     },
     searchInputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.card,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      height: 36,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      height: 46,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.1,
-      shadowRadius: 1.5,
+      shadowRadius: 2,
       elevation: 2,
     },
     searchIcon: {
-      marginRight: 5,
+      marginRight: 8,
     },
     searchInput: {
       flex: 1,
@@ -837,8 +926,8 @@ const getStyles = (colors: typeof Colors.light) =>
       marginLeft: 3,
     },
     sortOptionsContainerWrapper: {
-      marginHorizontal: 20,
-      borderRadius: 10,
+      marginHorizontal: 16,
+      borderRadius: 12,
       marginBottom: 8,
       overflow: 'hidden',
       backgroundColor: colors.card,
@@ -875,30 +964,45 @@ const getStyles = (colors: typeof Colors.light) =>
       fontWeight: '600',
     },
     sectionButtonsContainer: {
-      marginBottom: 8,
-      paddingBottom: 5,
+      marginTop: 2,
+      marginBottom: 12,
+      alignItems: 'center',
     },
     sectionButtonsScroll: {
-      paddingHorizontal: 15,
-      alignItems: 'center',
+      flexGrow: 0,
+    },
+    tabsWrapper: {
+      flexDirection: 'row',
+      position: 'relative',
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      padding: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.08,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    slidingBubble: {
+      position: 'absolute',
+      top: 4,
+      bottom: 4,
+      borderRadius: 18,
+      backgroundColor: colors.primary,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 4,
     },
     sectionButton: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 7,
-      paddingHorizontal: 14,
+      paddingHorizontal: 12,
       borderRadius: 18,
-      backgroundColor: colors.card,
-      marginHorizontal: 4,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.08,
-      shadowRadius: 1,
-      elevation: 1.5,
-    },
-    activeSectionButton: {
-      backgroundColor: colors.primary,
-      elevation: 3,
+      backgroundColor: 'transparent',
+      marginHorizontal: 2,
     },
     sectionButtonIcon: {
       marginRight: 5,
@@ -912,25 +1016,22 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.card,
     },
     sectionCount: {
-      backgroundColor: colors.background + '99',
-      minWidth: 20,
-      height: 20,
-      borderRadius: 10,
+      backgroundColor: colors.border,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
       justifyContent: 'center',
       alignItems: 'center',
-      marginLeft: 6,
-      paddingHorizontal: 5,
-      borderWidth: 1,
-      borderColor: colors.border,
+      marginLeft: 5,
+      paddingHorizontal: 4,
     },
     activeSectionCount: {
-      backgroundColor: colors.card + 'CC',
-      borderColor: colors.primary + '50',
+      backgroundColor: colors.card + 'E6',
     },
     sectionCountText: {
-      fontSize: 11,
+      fontSize: 10,
       fontWeight: '700',
-      color: colors.text,
+      color: colors.tabIconDefault,
     },
     activeSectionCountText: {
       color: colors.primary,
@@ -946,14 +1047,14 @@ const getStyles = (colors: typeof Colors.light) =>
       flexDirection: 'row',
     },
     resultCount: {
-      paddingHorizontal: 20,
+      paddingHorizontal: 16,
       paddingBottom: 8,
-      fontSize: 13,
+      fontSize: 14,
       color: colors.tabIconDefault,
     },
     listContentContainer: {
-      paddingHorizontal: 15,
-      paddingBottom: 80,
+      paddingHorizontal: 16,
+      paddingBottom: 100,
     },
     columnWrapper: {
       justifyContent: 'space-between',
@@ -1021,7 +1122,7 @@ const getStyles = (colors: typeof Colors.light) =>
       flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 30,
+      padding: 24,
       marginTop: -50,
     },
     emptyStateText: {
