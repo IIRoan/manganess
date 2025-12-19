@@ -467,7 +467,7 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     scrollView: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: 16,
     },
     colorPreview: {
       width: 30,
@@ -477,18 +477,18 @@ const getStyles = (colors: typeof Colors.light) =>
       borderColor: colors.border,
     },
     title: {
-      fontSize: 28,
+      fontSize: 26,
       fontWeight: 'bold',
-      marginBottom: 20,
+      marginBottom: 24,
       color: colors.text,
     },
     section: {
-      marginBottom: 30,
+      marginBottom: 24,
     },
     sectionTitle: {
       fontSize: 20,
       fontWeight: '600',
-      marginBottom: 10,
+      marginBottom: 16,
       color: colors.text,
     },
     option: {
@@ -565,10 +565,10 @@ const getStyles = (colors: typeof Colors.light) =>
     userInfo: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 15,
+      marginBottom: 16,
       backgroundColor: colors.background,
-      padding: 10,
-      borderRadius: 10,
+      padding: 12,
+      borderRadius: 12,
     },
     avatar: {
       width: 50,
@@ -584,8 +584,8 @@ const getStyles = (colors: typeof Colors.light) =>
     loginButton: {
       backgroundColor: colors.primary,
       padding: 15,
-      borderRadius: 10,
-      marginTop: 10,
+      borderRadius: 12,
+      marginTop: 12,
     },
     loginButtonText: {
       color: colors.card,
@@ -596,8 +596,8 @@ const getStyles = (colors: typeof Colors.light) =>
     syncButton: {
       backgroundColor: colors.primary,
       padding: 15,
-      borderRadius: 10,
-      marginTop: 15,
+      borderRadius: 12,
+      marginTop: 16,
     },
     syncButtonText: {
       color: colors.card,
