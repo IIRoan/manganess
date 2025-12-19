@@ -77,6 +77,7 @@
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "doctor": "bunx expo-doctor"
   },
   "dependencies": {
