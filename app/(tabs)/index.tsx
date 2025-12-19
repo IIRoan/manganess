@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   trendingList: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingBottom: 8,
   },
   trendingItem: {
@@ -842,12 +842,12 @@ const styles = StyleSheet.create({
   },
   browseButton: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   browseButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -874,18 +874,18 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   retryButton: {
-    paddingHorizontal: 30,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
     elevation: 2,
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   recentlyReadList: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingBottom: 8,
   },
   recentlyReadItem: {
@@ -963,7 +963,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 25,
+    borderRadius: 12,
     gap: 8,
   },
   offlineButtonText: {
