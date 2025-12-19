@@ -130,7 +130,7 @@
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "29.5.14",
     "@types/lodash": "^4.17.20",
-    "@types/react": "~19.1.10",
+    "@types/react": "~19.2.0",
     "baseline-browser-mapping": "^2.9.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
