@@ -33,6 +33,22 @@ function isCloudflareHtml(html: string): boolean {
   );
 }
 
+/**
+ * Safely strips all HTML tags by repeatedly applying the regex until no tags remain.
+ * This prevents incomplete sanitization where nested/malformed tags like "<scr<script>ipt>"
+ * could reassemble into dangerous tags after a single pass.
+ */
+function stripHtmlTags(input: string): string {
+  const tagPattern = /<[^>]*>/g;
+  let result = input;
+  let previous: string;
+  do {
+    previous = result;
+    result = result.replace(tagPattern, '');
+  } while (result !== previous);
+  return result;
+}
+
 export interface MangaItem {
   id: string;
   title: string;
@@ -296,11 +312,12 @@ const parseMangaDetails = (html: string): MangaDetails => {
     ? decode(descriptionMatch[1].trim()) || 'No description available'
     : 'No description available';
 
-  description = description
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<p>/gi, '')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<(?:.|\n)*?>/gm, '')
+  description = stripHtmlTags(
+    description
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<p>/gi, '')
+      .replace(/<\/p>/gi, '\n\n')
+  )
     .trim();
 
   const authorMatch = html.match(
@@ -309,7 +326,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const authors = authorMatch?.[1]
     ? authorMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => a.replace(/<[^>]*>/g, '')) || []
+        ?.map((a) => stripHtmlTags(a)) || []
     : [];
 
   const published =
@@ -322,7 +339,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const genres = genresMatch?.[1]
     ? genresMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => a.replace(/<[^>]*>/g, '')) || []
+        ?.map((a) => stripHtmlTags(a)) || []
     : [];
 
   const rating =
@@ -1113,7 +1130,7 @@ export const getChapterIdFromPage = async (
     }
 
     // Fallback: look for script tags that might contain the chapter ID
-    const scriptMatches = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+    const scriptMatches = html.match(/<script[^>]*>([\s\S]*?)<\/script\s*>/gi);
     if (scriptMatches) {
       for (const script of scriptMatches) {
         // Look for numeric IDs in script content
