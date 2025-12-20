@@ -380,8 +380,6 @@ describe('bookmarkService', () => {
       await updateDownloadStatus('dl1', '5', {
         status: DownloadStatus.DOWNLOADING,
         progress: 50,
-        downloadedPages: 5,
-        totalPages: 10,
       });
 
       const stored = await AsyncStorage.getItem('manga_dl1');
@@ -405,8 +403,6 @@ describe('bookmarkService', () => {
       await updateDownloadStatus('dl2', '3', {
         status: DownloadStatus.COMPLETED,
         progress: 100,
-        downloadedPages: 20,
-        totalPages: 20,
       });
 
       const stored = await AsyncStorage.getItem('manga_dl2');
@@ -418,8 +414,6 @@ describe('bookmarkService', () => {
       await updateDownloadStatus('non-existent', '1', {
         status: DownloadStatus.DOWNLOADING,
         progress: 0,
-        downloadedPages: 0,
-        totalPages: 10,
       });
 
       // Should not throw

@@ -49,7 +49,7 @@ jest.mock('expo-file-system', () => {
       this.exists = false;
       mockFiles.delete(this.uri);
     }
-    static async downloadFileAsync(url: string, file: MockFile) {
+    static async downloadFileAsync(_url: string, file: MockFile) {
       if (mockDownloadError) {
         throw mockDownloadError;
       }
@@ -406,7 +406,7 @@ describe('CacheImages', () => {
 
   describe('useImageCache hook', () => {
     it('uses cached image path for generic cache hook', async () => {
-      const spy = jest
+      const getCachedSpy = jest
         .spyOn(imageCache, 'getCachedImagePath')
         .mockResolvedValue('cached-uri');
 
@@ -419,7 +419,7 @@ describe('CacheImages', () => {
       await waitFor(() => {
         expect(result.current).toBe('cached-uri');
       });
-      expect(spy).toHaveBeenCalledWith(
+      expect(getCachedSpy).toHaveBeenCalledWith(
         'https://img/test.jpg',
         'search',
         undefined
@@ -427,7 +427,7 @@ describe('CacheImages', () => {
     });
 
     it('returns original URL when caching fails', async () => {
-      const spy = jest
+      jest
         .spyOn(imageCache, 'getCachedImagePath')
         .mockRejectedValue(new Error('Cache error'));
 
@@ -474,16 +474,16 @@ describe('CacheImages', () => {
     });
 
     it('uses getCachedMangaImagePath when validation disabled', async () => {
-      const spy = jest
+      const getCachedSpy = jest
         .spyOn(imageCache, 'getCachedMangaImagePath')
         .mockResolvedValue('cached-path');
 
-      const { result } = renderHook(() =>
+      renderHook(() =>
         useMangaImageCache('m1', 'https://img/m1.jpg', { enabled: false })
       );
 
       await waitFor(() => {
-        expect(spy).toHaveBeenCalledWith('m1', 'https://img/m1.jpg');
+        expect(getCachedSpy).toHaveBeenCalledWith('m1', 'https://img/m1.jpg');
       });
     });
 

@@ -261,7 +261,16 @@ describe('useDownloadStatus', () => {
     it('detects queued downloads from queue service', async () => {
       mockDownloadQueue.getDownloadById.mockResolvedValue({
         id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
         status: DownloadStatus.QUEUED,
+        progress: 0,
+        totalImages: 10,
+        downloadedImages: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
 
       const { result } = renderHook(() => useDownloadStatus(defaultOptions));
@@ -275,9 +284,19 @@ describe('useDownloadStatus', () => {
     it('detects downloading status with progress from queue', async () => {
       mockDownloadQueue.getDownloadById.mockResolvedValue({
         id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
         status: DownloadStatus.DOWNLOADING,
+        progress: 50,
+        totalImages: 10,
+        downloadedImages: 5,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
       mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
         progress: 50,
         estimatedTimeRemaining: 30,
         downloadSpeed: 1024,
@@ -297,7 +316,16 @@ describe('useDownloadStatus', () => {
     it('detects paused downloads from queue', async () => {
       mockDownloadQueue.getDownloadById.mockResolvedValue({
         id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
         status: DownloadStatus.PAUSED,
+        progress: 30,
+        totalImages: 10,
+        downloadedImages: 3,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
 
       const { result } = renderHook(() => useDownloadStatus(defaultOptions));
@@ -311,7 +339,16 @@ describe('useDownloadStatus', () => {
     it('detects failed downloads from queue', async () => {
       mockDownloadQueue.getDownloadById.mockResolvedValue({
         id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
         status: DownloadStatus.FAILED,
+        progress: 0,
+        totalImages: 10,
+        downloadedImages: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
 
       const { result } = renderHook(() => useDownloadStatus(defaultOptions));
@@ -324,9 +361,22 @@ describe('useDownloadStatus', () => {
 
     it('detects active downloads not yet in queue by id match', async () => {
       mockDownloadManager.getActiveDownloads.mockResolvedValue([
-        { id: 'manga-1_1', mangaId: 'manga-1', chapterNumber: '1' },
+        {
+          id: 'manga-1_1',
+          mangaId: 'manga-1',
+          mangaTitle: 'Test Manga',
+          chapterNumber: '1',
+          chapterUrl: '/read/manga-1/en/chapter-1',
+          status: DownloadStatus.DOWNLOADING,
+          progress: 25,
+          totalImages: 10,
+          downloadedImages: 2,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
       ]);
       mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
         progress: 25,
       });
 
@@ -341,9 +391,22 @@ describe('useDownloadStatus', () => {
 
     it('detects active downloads by mangaId and chapterNumber match', async () => {
       mockDownloadManager.getActiveDownloads.mockResolvedValue([
-        { id: 'different-id', mangaId: 'manga-1', chapterNumber: '1' },
+        {
+          id: 'different-id',
+          mangaId: 'manga-1',
+          mangaTitle: 'Test Manga',
+          chapterNumber: '1',
+          chapterUrl: '/read/manga-1/en/chapter-1',
+          status: DownloadStatus.DOWNLOADING,
+          progress: 75,
+          totalImages: 10,
+          downloadedImages: 7,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
       ]);
       mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
         progress: 75,
         estimatedTimeRemaining: 10,
         downloadSpeed: 2048,

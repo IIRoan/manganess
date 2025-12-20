@@ -724,7 +724,7 @@ describe('mangaFireService', () => {
     it('fetches multiple chapters in batches', async () => {
       // Track call count to return different responses
       let callCount = 0;
-      mockedAxios.get.mockImplementation((url) => {
+      mockedAxios.get.mockImplementation((_url) => {
         callCount++;
         // Each chapter URL requires 3 calls: VRF token, chapter ID, then images
         // Calls 1, 4 = VRF token fetch (returns HTML)
