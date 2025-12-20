@@ -196,7 +196,7 @@ describe('mangaFireService', () => {
           CloudflareDetectedError
         );
       }
-    });
+    }, 30000); // Increased timeout due to retry logic with exponential backoff
 
     it('throws error on invalid response data', async () => {
       mockedAxios.get.mockResolvedValue({ data: null });
@@ -691,11 +691,15 @@ describe('mangaFireService', () => {
     });
 
     it('fetches images by extracting chapter ID from page', async () => {
-      // First call gets the page with chapter ID
+      // First call: getVrfTokenFromChapterPage
+      mockedAxios.get.mockResolvedValueOnce({
+        data: '<html>some page content</html>',
+      });
+      // Second call: getChapterIdFromPage - gets the page with chapter ID
       mockedAxios.get.mockResolvedValueOnce({
         data: 'var chapterId = 1234567;',
       });
-      // Second call gets the images
+      // Third call: fetchChapterImages - gets the images
       mockedAxios.get.mockResolvedValueOnce({
         data: {
           status: 200,
@@ -718,17 +722,31 @@ describe('mangaFireService', () => {
 
   describe('batchFetchChapterImages', () => {
     it('fetches multiple chapters in batches', async () => {
-      // Mock for chapter ID extraction
+      // Track call count to return different responses
+      let callCount = 0;
       mockedAxios.get.mockImplementation((url) => {
-        if (url.includes('/read/')) {
+        callCount++;
+        // Each chapter URL requires 3 calls: VRF token, chapter ID, then images
+        // Calls 1, 4 = VRF token fetch (returns HTML)
+        // Calls 2, 5 = Chapter ID fetch (returns HTML with chapterId)
+        // Calls 3, 6 = Images fetch (returns JSON)
+        const callInCycle = ((callCount - 1) % 3) + 1;
+
+        if (callInCycle === 1) {
+          // VRF token page
+          return Promise.resolve({ data: '<html>some content</html>' });
+        } else if (callInCycle === 2) {
+          // Chapter ID page
           return Promise.resolve({ data: 'var chapterId = 1234567;' });
+        } else {
+          // Images API
+          return Promise.resolve({
+            data: {
+              status: 200,
+              result: { images: [['https://img.jpg']] },
+            },
+          });
         }
-        return Promise.resolve({
-          data: {
-            status: 200,
-            result: { images: [['https://img.jpg']] },
-          },
-        });
       });
 
       const urls = ['/read/manga/en/chapter-1', '/read/manga/en/chapter-2'];
@@ -744,7 +762,7 @@ describe('mangaFireService', () => {
 
       expect(results).toHaveLength(2);
       expect(onProgress).toHaveBeenCalled();
-    });
+    }, 30000); // Increased timeout for retry logic
 
     it('handles errors in batch processing', async () => {
       mockedAxios.get.mockRejectedValue(new Error('Network error'));
