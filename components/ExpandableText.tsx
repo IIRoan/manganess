@@ -52,13 +52,6 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
     });
   }, [isTruncated]);
 
-  console.log(
-    'Rendering with isExpanded:',
-    isExpanded,
-    'isTruncated:',
-    isTruncated
-  );
-
   return (
     <TouchableOpacity
       onPress={toggleExpand}
