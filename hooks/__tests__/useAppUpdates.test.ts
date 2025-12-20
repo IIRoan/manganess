@@ -324,23 +324,32 @@ describe('useAppUpdates', () => {
 
   describe('isUpdateInProgress', () => {
     it('returns true when checking', async () => {
+      let resolveCheck: (value: { success: boolean; message: string }) => void;
       updateService.checkForUpdate.mockImplementation(
         () =>
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ success: true, message: '' }), 100)
-          )
+          new Promise((resolve) => {
+            resolveCheck = resolve;
+          })
       );
 
       const { result } = renderHook(() => useAppUpdates());
 
-      let checking: boolean;
-      await act(async () => {
-        const promise = result.current.checkForUpdate();
-        checking = result.current.isUpdateInProgress;
-        await promise;
+      // Start the check but don't await it
+      let checkPromise: Promise<any>;
+      act(() => {
+        checkPromise = result.current.checkForUpdate();
       });
 
-      expect(checking!).toBe(true);
+      // Now isChecking should be true (state update has been flushed by act)
+      expect(result.current.updateStatus.isChecking).toBe(true);
+      expect(result.current.isUpdateInProgress).toBe(true);
+
+      // Resolve the promise and complete the check
+      await act(async () => {
+        resolveCheck({ success: true, message: '' });
+        await checkPromise!;
+      });
+
       expect(result.current.isUpdateInProgress).toBe(false);
     });
 

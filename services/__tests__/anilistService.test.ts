@@ -273,7 +273,13 @@ describe('anilistService', () => {
         expiresAt: Date.now() + 1000,
       });
 
-      (globalThis.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      // First call (search) succeeds, second call (update) fails
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          json: () => Promise.resolve({ data: { Media: { id: 123 } } }),
+          ok: true,
+        })
+        .mockRejectedValueOnce(new Error('Network error'));
 
       const result = await updateAniListStatus('Title', 'Reading', [], 0);
 
@@ -461,7 +467,13 @@ describe('anilistService', () => {
         readChapters: [],
       });
 
-      (globalThis.fetch as jest.Mock).mockRejectedValue(new Error('API Error'));
+      // First call (search) succeeds, second call (update) fails
+      (globalThis.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          json: () => Promise.resolve({ data: { Media: { id: 500 } } }),
+          ok: true,
+        })
+        .mockRejectedValueOnce(new Error('API Error'));
 
       const results = await syncAllMangaWithAniList();
 

@@ -944,19 +944,22 @@ export const extractChapterIdFromUrl = (chapterUrl: string): string | null => {
 export const extractVrfTokenFromHtml = (html: string): string | null => {
   const log = logger();
   try {
-    // Multiple patterns to find VRF token
+    // Multiple patterns to find VRF token (more specific patterns first)
     const vrfPatterns = [
-      /vrf['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /"vrf"['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /data-vrf['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /vrfToken['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /vrf_token['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
+      // Specific attribute patterns with proper = handling (check these first)
+      /data-vrf\s*=\s*["']([a-zA-Z0-9+/]+)["']/gi,
+      // Script variable assignments
+      /var\s+vrf\s*=\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /let\s+vrf\s*=\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /const\s+vrf\s*=\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      // JSON-like patterns
+      /"vrf"\s*:\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /vrfToken\s*[:=]\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /vrf_token\s*[:=]\s*["']([a-zA-Z0-9+/=]+)["']/gi,
       // Look for base64-like strings that could be VRF tokens
-      /['"](ZBYeRCjYBk0[a-zA-Z0-9+/=]{40,})['"]/gi,
-      // Look in script tags
-      /var\s+vrf\s*=\s*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /let\s+vrf\s*=\s*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /const\s+vrf\s*=\s*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
+      /["'](ZBYeRCjYBk0[a-zA-Z0-9+/=]{40,})["']/gi,
+      // Generic vrf pattern (last resort, less specific)
+      /\bvrf\s*[:=]\s*["']([a-zA-Z0-9+/=]+)["']/gi,
     ];
 
     for (const pattern of vrfPatterns) {
