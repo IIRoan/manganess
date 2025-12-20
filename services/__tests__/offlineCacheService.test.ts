@@ -240,17 +240,26 @@ describe('offlineCacheService', () => {
     });
 
     it('keeps most recent searches when limiting', async () => {
-      // Cache 12 searches with delays
-      for (let i = 0; i < 12; i++) {
-        await offlineCacheService.cacheSearchResults(`query-${i}`, [
-          mockMangaItem,
-        ]);
-      }
+      // Mock Date.now to return incrementing values to ensure deterministic ordering
+      let mockTime = 1000000;
+      jest.spyOn(Date, 'now').mockImplementation(() => mockTime++);
 
-      // The most recent search should still be cached
-      const recentCached =
-        await offlineCacheService.getCachedSearchResults('query-11');
-      expect(recentCached).not.toBeNull();
+      try {
+        // Cache 12 searches - each will get a unique, incrementing timestamp
+        for (let i = 0; i < 12; i++) {
+          await offlineCacheService.cacheSearchResults(`query-${i}`, [
+            mockMangaItem,
+          ]);
+        }
+
+        // The most recent search should still be cached
+        const recentCached =
+          await offlineCacheService.getCachedSearchResults('query-11');
+        expect(recentCached).not.toBeNull();
+      } finally {
+        // Restore original Date.now
+        jest.spyOn(Date, 'now').mockRestore();
+      }
     });
   });
 

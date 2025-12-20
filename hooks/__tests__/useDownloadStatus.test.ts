@@ -245,6 +245,253 @@ describe('useDownloadStatus', () => {
     unmount();
   });
 
+  describe('initial status detection', () => {
+    it('detects completed downloads from storage', async () => {
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.COMPLETED);
+      expect(result.current.isDownloaded).toBe(true);
+      expect(result.current.progress).toBe(100);
+    });
+
+    it('detects queued downloads from queue service', async () => {
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
+        status: DownloadStatus.QUEUED,
+        progress: 0,
+        totalImages: 10,
+        downloadedImages: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.QUEUED);
+      expect(result.current.isQueued).toBe(true);
+    });
+
+    it('detects downloading status with progress from queue', async () => {
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
+        status: DownloadStatus.DOWNLOADING,
+        progress: 50,
+        totalImages: 10,
+        downloadedImages: 5,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
+        progress: 50,
+        estimatedTimeRemaining: 30,
+        downloadSpeed: 1024,
+      });
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.DOWNLOADING);
+      expect(result.current.isDownloading).toBe(true);
+      expect(result.current.progress).toBe(50);
+      expect(result.current.estimatedTimeRemaining).toBe(30);
+      expect(result.current.downloadSpeed).toBe(1024);
+    });
+
+    it('detects paused downloads from queue', async () => {
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
+        status: DownloadStatus.PAUSED,
+        progress: 30,
+        totalImages: 10,
+        downloadedImages: 3,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.PAUSED);
+      expect(result.current.isPaused).toBe(true);
+    });
+
+    it('detects failed downloads from queue', async () => {
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        mangaId: 'manga-1',
+        mangaTitle: 'Test Manga',
+        chapterNumber: '1',
+        chapterUrl: '/read/manga-1/en/chapter-1',
+        status: DownloadStatus.FAILED,
+        progress: 0,
+        totalImages: 10,
+        downloadedImages: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.FAILED);
+      expect(result.current.isFailed).toBe(true);
+    });
+
+    it('detects active downloads not yet in queue by id match', async () => {
+      mockDownloadManager.getActiveDownloads.mockResolvedValue([
+        {
+          id: 'manga-1_1',
+          mangaId: 'manga-1',
+          mangaTitle: 'Test Manga',
+          chapterNumber: '1',
+          chapterUrl: '/read/manga-1/en/chapter-1',
+          status: DownloadStatus.DOWNLOADING,
+          progress: 25,
+          totalImages: 10,
+          downloadedImages: 2,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ]);
+      mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
+        progress: 25,
+      });
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.DOWNLOADING);
+      expect(result.current.isDownloading).toBe(true);
+      expect(result.current.progress).toBe(25);
+    });
+
+    it('detects active downloads by mangaId and chapterNumber match', async () => {
+      mockDownloadManager.getActiveDownloads.mockResolvedValue([
+        {
+          id: 'different-id',
+          mangaId: 'manga-1',
+          mangaTitle: 'Test Manga',
+          chapterNumber: '1',
+          chapterUrl: '/read/manga-1/en/chapter-1',
+          status: DownloadStatus.DOWNLOADING,
+          progress: 75,
+          totalImages: 10,
+          downloadedImages: 7,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ]);
+      mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
+        progress: 75,
+        estimatedTimeRemaining: 10,
+        downloadSpeed: 2048,
+      });
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.DOWNLOADING);
+      expect(result.current.progress).toBe(75);
+    });
+
+    it('handles errors gracefully and sets failed status', async () => {
+      mockChapterStorage.isChapterDownloaded.mockRejectedValue(
+        new Error('Storage error')
+      );
+
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      expect(result.current.status).toBe(DownloadStatus.FAILED);
+      expect(result.current.isFailed).toBe(true);
+      expect(mockLoggerInstance.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('refresh functionality', () => {
+    it('provides a refresh function that updates status', async () => {
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      // Simulate download completion
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      await act(async () => {
+        result.current.refresh();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isDownloaded).toBe(true);
+      });
+    });
+  });
+
+  describe('event handling edge cases', () => {
+    it('updates on download_resumed event', async () => {
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      await act(async () => {
+        triggerEvent('manga-1', '1', {
+          type: 'download_resumed',
+          mangaId: 'manga-1',
+          chapterNumber: '1',
+          progress: 60,
+        });
+      });
+
+      expect(result.current.status).toBe(DownloadStatus.DOWNLOADING);
+      expect(result.current.isDownloading).toBe(true);
+    });
+
+    it('ignores unknown event types', async () => {
+      const { result } = renderHook(() => useDownloadStatus(defaultOptions));
+
+      await waitForInitialLoad(result);
+
+      const previousStatus = result.current.status;
+
+      await act(async () => {
+        triggerEvent('manga-1', '1', {
+          type: 'unknown_event',
+          mangaId: 'manga-1',
+          chapterNumber: '1',
+        });
+      });
+
+      expect(result.current.status).toBe(previousStatus);
+    });
+  });
+
   it('re-subscribes when mangaId changes', async () => {
     const { rerender } = renderHook<
       ReturnType<typeof useDownloadStatus>,

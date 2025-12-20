@@ -33,6 +33,22 @@ function isCloudflareHtml(html: string): boolean {
   );
 }
 
+/**
+ * Safely strips all HTML tags by repeatedly applying the regex until no tags remain.
+ * This prevents incomplete sanitization where nested/malformed tags like "<scr<script>ipt>"
+ * could reassemble into dangerous tags after a single pass.
+ */
+function stripHtmlTags(input: string): string {
+  const tagPattern = /<[^>]*>/g;
+  let result = input;
+  let previous: string;
+  do {
+    previous = result;
+    result = result.replace(tagPattern, '');
+  } while (result !== previous);
+  return result;
+}
+
 export interface MangaItem {
   id: string;
   title: string;
@@ -296,11 +312,12 @@ const parseMangaDetails = (html: string): MangaDetails => {
     ? decode(descriptionMatch[1].trim()) || 'No description available'
     : 'No description available';
 
-  description = description
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<p>/gi, '')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<(?:.|\n)*?>/gm, '')
+  description = stripHtmlTags(
+    description
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<p>/gi, '')
+      .replace(/<\/p>/gi, '\n\n')
+  )
     .trim();
 
   const authorMatch = html.match(
@@ -309,7 +326,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const authors = authorMatch?.[1]
     ? authorMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => a.replace(/<[^>]*>/g, '')) || []
+        ?.map((a) => stripHtmlTags(a)) || []
     : [];
 
   const published =
@@ -322,7 +339,7 @@ const parseMangaDetails = (html: string): MangaDetails => {
   const genres = genresMatch?.[1]
     ? genresMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => a.replace(/<[^>]*>/g, '')) || []
+        ?.map((a) => stripHtmlTags(a)) || []
     : [];
 
   const rating =
@@ -944,19 +961,22 @@ export const extractChapterIdFromUrl = (chapterUrl: string): string | null => {
 export const extractVrfTokenFromHtml = (html: string): string | null => {
   const log = logger();
   try {
-    // Multiple patterns to find VRF token
+    // Multiple patterns to find VRF token (more specific patterns first)
     const vrfPatterns = [
-      /vrf['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /"vrf"['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /data-vrf['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /vrfToken['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /vrf_token['":\s]*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
+      // Specific attribute patterns with proper = handling (check these first)
+      /data-vrf\s*=\s*["']([a-zA-Z0-9+/]+)["']/gi,
+      // Script variable assignments
+      /var\s+vrf\s*=\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /let\s+vrf\s*=\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /const\s+vrf\s*=\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      // JSON-like patterns
+      /"vrf"\s*:\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /vrfToken\s*[:=]\s*["']([a-zA-Z0-9+/=]+)["']/gi,
+      /vrf_token\s*[:=]\s*["']([a-zA-Z0-9+/=]+)["']/gi,
       // Look for base64-like strings that could be VRF tokens
-      /['"](ZBYeRCjYBk0[a-zA-Z0-9+/=]{40,})['"]/gi,
-      // Look in script tags
-      /var\s+vrf\s*=\s*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /let\s+vrf\s*=\s*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
-      /const\s+vrf\s*=\s*['"]*([a-zA-Z0-9+/=]+)['"]*(?!\w)/gi,
+      /["'](ZBYeRCjYBk0[a-zA-Z0-9+/=]{40,})["']/gi,
+      // Generic vrf pattern (last resort, less specific)
+      /\bvrf\s*[:=]\s*["']([a-zA-Z0-9+/=]+)["']/gi,
     ];
 
     for (const pattern of vrfPatterns) {
@@ -1110,7 +1130,7 @@ export const getChapterIdFromPage = async (
     }
 
     // Fallback: look for script tags that might contain the chapter ID
-    const scriptMatches = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+    const scriptMatches = html.match(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi);
     if (scriptMatches) {
       for (const script of scriptMatches) {
         // Look for numeric IDs in script content
