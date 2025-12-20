@@ -1130,7 +1130,7 @@ export const getChapterIdFromPage = async (
     }
 
     // Fallback: look for script tags that might contain the chapter ID
-    const scriptMatches = html.match(/<script[^>]*>([\s\S]*?)<\/script\s*>/gi);
+    const scriptMatches = html.match(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi);
     if (scriptMatches) {
       for (const script of scriptMatches) {
         // Look for numeric IDs in script content
