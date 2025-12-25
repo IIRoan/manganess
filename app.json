@@ -30,16 +30,7 @@
         }
       ],
       "expo-font",
-      "expo-web-browser",
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io/",
-          "project": "react-native",
-          "organization": "lunaris-0c",
-          "uploadSourceMaps": false
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
