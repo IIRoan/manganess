@@ -6,7 +6,7 @@ import {
   ThemeProvider as NavigationThemeProvider,
 } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
@@ -46,10 +46,23 @@ function RootLayoutNav() {
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
   const activeTheme = theme === 'system' ? colorScheme : theme;
+  const pathname = usePathname();
+
+  // Ensure status bar is always visible on non-chapter pages
+  const isChapterPage = pathname.includes('/chapter/');
+
+  useEffect(() => {
+    if (!isChapterPage) {
+      // Force status bar to be visible on all non-chapter pages
+      StatusBar.setHidden(false);
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent');
+    }
+  }, [isChapterPage, pathname]);
 
   return (
     <>
-      <StatusBar translucent backgroundColor="transparent" />
+      <StatusBar translucent backgroundColor="transparent" hidden={false} />
       <NavigationThemeProvider
         value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}
       >
