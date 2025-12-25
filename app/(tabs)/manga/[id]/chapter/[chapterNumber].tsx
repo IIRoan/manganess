@@ -483,23 +483,10 @@ export default function ReadChapterScreen() {
       );
 
       setMangaTitle((current) => current ?? titleToUse);
-
-      // Show success toast
-      const shortTitle = titleToUse.length > 15 ? titleToUse.substring(0, 15) + '…' : titleToUse;
-      showToast({
-        message: `${shortTitle}: Ch.${normalizedChapterParam || chapterNumber} marked as read`,
-        icon: 'checkmark',
-        type: 'success',
-        duration: 2000,
-      });
     } catch (error) {
       logger().error('Service', 'Error marking chapter as read', { error });
-      showToast({
-        message: 'Failed to mark chapter as read',
-        type: 'error',
-      });
     }
-  }, [id, chapterNumber, normalizedChapterParam, isOffline, showToast]);
+  }, [id, chapterNumber, normalizedChapterParam, isOffline]);
 
   // Detect content type based on image dimensions
   const detectContentType = useCallback((images: ChapterImage[]) => {
