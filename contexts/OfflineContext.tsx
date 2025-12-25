@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { logger } from '@/utils/logger';
 
@@ -38,14 +38,19 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({
   const networkState = useNetworkStatus();
   const [isOffline, setIsOffline] = useState(false);
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(false);
+  const offlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let offlineTimer: ReturnType<typeof setTimeout> | undefined;
-    let onlineTimer: ReturnType<typeof setTimeout> | undefined;
 
     if (networkState.isOffline) {
+      // Clear any pending offline timer before scheduling a new one
+      if (offlineTimerRef.current) {
+        clearTimeout(offlineTimerRef.current);
+      }
+
       // Only mark as offline after a delay to account for short connectivity losses
-      offlineTimer = setTimeout(() => {
+      offlineTimerRef.current = setTimeout(() => {
         setIsOffline(true);
         setShowOfflineIndicator(true);
         logger().info('Network', 'Device went offline (after debounce)', {
@@ -56,14 +61,20 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({
       }, OFFLINE_DEBOUNCE_DELAY);
     } else {
       // Clear any pending offline timer
-      if (offlineTimer) {
-        clearTimeout(offlineTimer);
+      if (offlineTimerRef.current) {
+        clearTimeout(offlineTimerRef.current);
+        offlineTimerRef.current = null;
       }
 
       // Mark as online immediately, but hide indicator with a delay
       setIsOffline(false);
 
-      onlineTimer = setTimeout(() => {
+      // Clear any pending online timer before scheduling a new one
+      if (onlineTimerRef.current) {
+        clearTimeout(onlineTimerRef.current);
+      }
+
+      onlineTimerRef.current = setTimeout(() => {
         setShowOfflineIndicator(false);
       }, ONLINE_DEBOUNCE_DELAY);
 
@@ -75,11 +86,13 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({
     }
 
     return () => {
-      if (offlineTimer) {
-        clearTimeout(offlineTimer);
+      if (offlineTimerRef.current) {
+        clearTimeout(offlineTimerRef.current);
+        offlineTimerRef.current = null;
       }
-      if (onlineTimer) {
-        clearTimeout(onlineTimer);
+      if (onlineTimerRef.current) {
+        clearTimeout(onlineTimerRef.current);
+        onlineTimerRef.current = null;
       }
     };
   }, [

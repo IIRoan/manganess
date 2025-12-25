@@ -79,6 +79,11 @@ describe('OfflineContext', () => {
         </OfflineProvider>
       );
 
+      // Advance timers to account for offline debounce delay (5 seconds)
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
+
       expect(getByTestId('isOffline').props.children).toBe('true');
       expect(getByTestId('isConnected').props.children).toBe('false');
       expect(getByTestId('networkType').props.children).toBe('none');
@@ -108,6 +113,11 @@ describe('OfflineContext', () => {
         </OfflineProvider>
       );
 
+      // Advance timers to account for offline debounce delay (5 seconds)
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
+
       expect(getByTestId('showOfflineIndicator').props.children).toBe('true');
     });
 
@@ -125,6 +135,11 @@ describe('OfflineContext', () => {
           <TestConsumer />
         </OfflineProvider>
       );
+
+      // Advance timers to account for offline debounce delay (5 seconds)
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
 
       expect(getByTestId('showOfflineIndicator').props.children).toBe('true');
 
