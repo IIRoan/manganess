@@ -16,7 +16,6 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  withSequence,
   runOnJS,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,7 +58,7 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
 
   const [toastConfig, setToastConfig] = useState<ToastConfig | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<number | null>(null);
 
   const translateY = useSharedValue(100);
   const opacity = useSharedValue(0);
