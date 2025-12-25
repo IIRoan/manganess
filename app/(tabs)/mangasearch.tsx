@@ -267,7 +267,7 @@ export default function MangaSearchScreen() {
       }
     };
     performSearch();
-  }, [vrfToken, debouncedSearchQuery, checkForCloudflare]);
+  }, [vrfToken, debouncedSearchQuery, checkForCloudflare, loadSearchHistory]);
 
   // Clear search
   const clearSearch = useCallback(() => {
@@ -303,7 +303,7 @@ export default function MangaSearchScreen() {
     hapticFeedback.onPress();
     await removeSearchHistoryItem(query);
     await loadSearchHistory();
-  }, []);
+  }, [loadSearchHistory]);
 
   // Handle clear all history
   const handleClearAllHistory = useCallback(async () => {
