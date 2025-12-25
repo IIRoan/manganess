@@ -9,8 +9,7 @@ import {
   AppState,
   StatusBar,
 } from 'react-native';
-import { Tabs, usePathname, useNavigation } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { Tabs, usePathname, useNavigation, useFocusEffect } from 'expo-router';
 import { isDebugEnabled } from '@/constants/env';
 import { Ionicons } from '@expo/vector-icons';
 import {

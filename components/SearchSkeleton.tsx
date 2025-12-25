@@ -17,11 +17,9 @@ interface SearchSkeletonProps {
 
 const SkeletonItem = ({
   layoutMode,
-  index,
   colors,
 }: {
   layoutMode: 'grid' | 'list';
-  index: number;
   colors: typeof Colors.light;
 }) => {
   const shimmer = useSharedValue(0);
@@ -111,7 +109,6 @@ export default function SearchSkeleton({
         {items.map((i) => (
           <SkeletonItem
             key={i}
-            index={i}
             layoutMode={layoutMode}
             colors={colors}
           />
@@ -125,7 +122,6 @@ export default function SearchSkeleton({
       {items.map((i) => (
         <SkeletonItem
           key={i}
-          index={i}
           layoutMode={layoutMode}
           colors={colors}
         />
