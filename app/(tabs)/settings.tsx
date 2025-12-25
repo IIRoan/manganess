@@ -6,7 +6,6 @@ import {
   StyleSheet,
   useColorScheme,
   Image,
-  Alert,
   Switch,
   Platform,
   ActivityIndicator,
@@ -200,7 +199,7 @@ export default function SettingsScreen() {
   const handleSyncAllManga = async () => {
     try {
       setIsSyncing(true);
-      const results = await syncAllMangaWithAniList();
+      await syncAllMangaWithAniList();
       showToast({
         message: 'Manga synced with AniList successfully!',
         type: 'success',
