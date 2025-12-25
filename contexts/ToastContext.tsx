@@ -58,7 +58,7 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
 
   const [toastConfig, setToastConfig] = useState<ToastConfig | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const timeoutRef = useRef<number | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const translateY = useSharedValue(100);
   const opacity = useSharedValue(0);
