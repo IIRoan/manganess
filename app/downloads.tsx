@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
 import { Ionicons } from '@expo/vector-icons';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { imageCache } from '@/services/CacheImages';
@@ -50,6 +51,7 @@ export default function DownloadsScreen() {
   const styles = getStyles(colors);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { showToast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
   const [storageStats, setStorageStats] = useState<any>(null);
@@ -140,9 +142,11 @@ export default function DownloadsScreen() {
             try {
               setDeletingManga((prev) => new Set(prev).add(mangaId));
 
-              const manga = mangaDownloads.find((m) => m.mangaId === mangaId);
-              if (manga) {
-                for (const chapterNumber of manga.chapters) {
+              const mangaToDelete = mangaDownloads.find((m) => m.mangaId === mangaId);
+              const chapterCount = mangaToDelete?.chapterCount || 0;
+
+              if (mangaToDelete) {
+                for (const chapterNumber of mangaToDelete.chapters) {
                   await chapterStorageService.deleteChapter(
                     mangaId,
                     chapterNumber
@@ -152,9 +156,21 @@ export default function DownloadsScreen() {
 
               // Reload downloads
               await loadDownloads();
+
+              if (chapterCount > 0) {
+                showToast({
+                  message: `Deleted ${chapterCount} chapter${chapterCount !== 1 ? 's' : ''}`,
+                  type: 'success',
+                  icon: 'trash-outline',
+                  duration: 2000,
+                });
+              }
             } catch (error) {
               logger().error('Storage', 'Error deleting manga', { error });
-              Alert.alert('Error', 'Failed to delete chapters');
+              showToast({
+                message: 'Failed to delete chapters',
+                type: 'error',
+              });
             } finally {
               setDeletingManga((prev) => {
                 const next = new Set(prev);
@@ -182,11 +198,20 @@ export default function DownloadsScreen() {
               setIsLoading(true);
               await chapterStorageService.clearAllDownloads();
               await loadDownloads();
+              showToast({
+                message: `Cleared all downloads`,
+                type: 'success',
+                icon: 'trash-outline',
+                duration: 2000,
+              });
             } catch (error) {
               logger().error('Storage', 'Error clearing all downloads', {
                 error,
               });
-              Alert.alert('Error', 'Failed to clear downloads');
+              showToast({
+                message: 'Failed to clear downloads',
+                type: 'error',
+              });
             } finally {
               setIsLoading(false);
             }
@@ -220,16 +245,21 @@ export default function DownloadsScreen() {
                 setIsCacheLoading(true);
                 await imageCache.clearCache(context);
                 await fetchCacheStats();
-                Alert.alert(
-                  'Success',
-                  `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully.`
-                );
+                showToast({
+                  message: `${contextName.charAt(0).toUpperCase() + contextName.slice(1)} cleared successfully`,
+                  type: 'success',
+                  icon: 'trash-outline',
+                  duration: 2000,
+                });
               } catch (error) {
                 logger().error('Storage', 'Error clearing cache', {
                   error,
                   contextName,
                 });
-                Alert.alert('Error', `Failed to clear ${contextName}.`);
+                showToast({
+                  message: `Failed to clear ${contextName}`,
+                  type: 'error',
+                });
               } finally {
                 setIsCacheLoading(false);
                 setActiveCacheAction(null);
@@ -269,17 +299,25 @@ export default function DownloadsScreen() {
       } catch {}
       file.write(jsonString, { encoding: 'utf8' });
 
+      showToast({
+        message: 'Data exported successfully',
+        type: 'success',
+        icon: 'download',
+        duration: 2500,
+      });
+
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, {
           mimeType: 'application/json',
           dialogTitle: 'Export App Data',
         });
-      } else {
-        Alert.alert('Export Complete', `File saved to ${file.uri}`);
       }
     } catch (error) {
       logger().error('Service', 'Export error', { error });
-      Alert.alert('Error', 'Failed to export data');
+      showToast({
+        message: 'Failed to export data',
+        type: 'error',
+      });
     } finally {
       setIsExporting(false);
     }
@@ -311,13 +349,18 @@ export default function DownloadsScreen() {
                 try {
                   setIsImporting(true);
                   await importAppData(importedData);
-                  Alert.alert(
-                    'Success',
-                    'Data imported! Please restart the app'
-                  );
+                  showToast({
+                    message: 'Data imported! Please restart the app',
+                    type: 'success',
+                    icon: 'checkmark-circle',
+                    duration: 3000,
+                  });
                 } catch (error) {
                   logger().error('Service', 'Import error', { error });
-                  Alert.alert('Error', 'Failed to import data');
+                  showToast({
+                    message: 'Failed to import data',
+                    type: 'error',
+                  });
                 } finally {
                   setIsImporting(false);
                 }
@@ -328,7 +371,10 @@ export default function DownloadsScreen() {
       );
     } catch (error) {
       logger().error('Service', 'Import error', { error });
-      Alert.alert('Error', 'Failed to import data');
+      showToast({
+        message: 'Failed to import data',
+        type: 'error',
+      });
     }
   };
 
@@ -346,10 +392,18 @@ export default function DownloadsScreen() {
                 setIsClearingData(true);
                 await clearAppData();
                 await loadDownloads();
-                Alert.alert('Success', 'All app data has been cleared.');
+                showToast({
+                  message: 'All app data has been cleared',
+                  type: 'success',
+                  icon: 'checkmark-circle',
+                  duration: 2500,
+                });
               } catch (error) {
                 logger().error('Service', 'Error clearing app data', { error });
-                Alert.alert('Error', 'Failed to clear app data.');
+                showToast({
+                  message: 'Failed to clear app data',
+                  type: 'error',
+                });
               } finally {
                 setIsClearingData(false);
               }
@@ -364,10 +418,18 @@ export default function DownloadsScreen() {
     try {
       setIsRefreshingImages(true);
       const result = await refreshMangaImages();
-      Alert.alert(result.success ? 'Success' : 'Error', result.message);
+      showToast({
+        message: result.message,
+        type: result.success ? 'success' : 'warning',
+        icon: result.success ? 'checkmark-circle' : 'warning',
+        duration: 2500,
+      });
     } catch (error) {
       logger().error('Service', 'Error refreshing manga images', { error });
-      Alert.alert('Error', 'Failed to refresh manga images');
+      showToast({
+        message: 'Failed to refresh manga images',
+        type: 'error',
+      });
     } finally {
       setIsRefreshingImages(false);
     }
@@ -377,13 +439,21 @@ export default function DownloadsScreen() {
     try {
       setIsMigrating(true);
       const result = await migrateToNewStorage();
-      Alert.alert(result.success ? 'Success' : 'Error', result.message);
+      showToast({
+        message: result.message,
+        type: result.success ? 'success' : 'warning',
+        icon: result.success ? 'checkmark-circle' : 'warning',
+        duration: 2500,
+      });
       if (result.success) {
         await loadDownloads();
       }
     } catch (error) {
       logger().error('Service', 'Error migrating data', { error });
-      Alert.alert('Error', 'Failed to migrate data');
+      showToast({
+        message: 'Failed to migrate data',
+        type: 'error',
+      });
     } finally {
       setIsMigrating(false);
     }

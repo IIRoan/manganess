@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, type ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
 import { useBatchDownload } from '@/hooks/useBatchDownload';
 import BatchDownloadPlannerModal from '@/components/BatchDownloadPlannerModal';
 import type { Chapter } from '@/types';
@@ -36,6 +37,7 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   const colorScheme = theme === 'system' ? systemTheme : (theme as ColorScheme);
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
+  const { showToast } = useToast();
 
   const handleDownloadsChanged = useCallback(() => {
     if (!onDownloadsChanged) return;
@@ -64,6 +66,29 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   const [plannerVisible, setPlannerVisible] = useState(false);
   const [planSummary, setPlanSummary] = useState<string | null>(null);
   const [isManagingDownloads, setIsManagingDownloads] = useState(false);
+  const [previousStatus, setPreviousStatus] = useState<string>(state.status);
+
+  // Show toast when batch download completes
+  useEffect(() => {
+    if (previousStatus === 'downloading' && state.status === 'idle') {
+      if (state.failedChapters.length > 0) {
+        showToast({
+          message: `Downloaded with ${state.failedChapters.length} failure${state.failedChapters.length === 1 ? '' : 's'}`,
+          type: 'warning',
+          icon: 'warning',
+          duration: 3000,
+        });
+      } else {
+        showToast({
+          message: `Batch download completed successfully!`,
+          type: 'success',
+          icon: 'checkmark-circle',
+          duration: 2500,
+        });
+      }
+    }
+    setPreviousStatus(state.status);
+  }, [state.status, state.failedChapters.length, showToast, previousStatus]);
 
   const downloadedChapterDetails = useMemo(() => {
     if (!chapters?.length || !downloadedChapters?.length) {
@@ -114,6 +139,12 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   ) => {
     setPlanSummary(summary);
     setPlannerVisible(false);
+    showToast({
+      message: `Starting download of ${selection.length} chapter${selection.length === 1 ? '' : 's'}...`,
+      type: 'info',
+      icon: 'download',
+      duration: 2500,
+    });
     void startBatchDownload(selection);
   };
 
@@ -137,6 +168,12 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
           selection.length === 1 ? '' : 's'
         }`
       );
+      showToast({
+        message: `Deleted ${selection.length} chapter${selection.length === 1 ? '' : 's'}`,
+        type: 'success',
+        icon: 'checkmark-circle',
+        duration: 2500,
+      });
       handleDownloadsChanged();
     } catch (error) {
       log.error('Service', 'Failed to delete offline chapters', {
@@ -145,6 +182,12 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
         error: error instanceof Error ? error.message : String(error),
       });
       setPlanSummary('Failed to remove downloads');
+      showToast({
+        message: 'Failed to delete chapters',
+        type: 'error',
+        icon: 'close-circle',
+        duration: 3000,
+      });
     } finally {
       setIsManagingDownloads(false);
     }

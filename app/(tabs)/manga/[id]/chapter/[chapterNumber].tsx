@@ -47,6 +47,7 @@ import { ChapterImage } from '@/types/download';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useOffline } from '@/contexts/OfflineContext';
+import { useToast } from '@/contexts/ToastContext';
 import CustomWebView from '@/components/CustomWebView';
 import {
   ChapterGuideOverlay,
@@ -155,6 +156,7 @@ export default function ReadChapterScreen() {
   const router = useRouter();
   const { handleBackPress: navigateBack } = useNavigationHistory();
   const { isOffline } = useOffline();
+  const { showToast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -481,10 +483,23 @@ export default function ReadChapterScreen() {
       );
 
       setMangaTitle((current) => current ?? titleToUse);
+
+      // Show success toast
+      const shortTitle = titleToUse.length > 15 ? titleToUse.substring(0, 15) + '…' : titleToUse;
+      showToast({
+        message: `${shortTitle}: Ch.${normalizedChapterParam || chapterNumber} marked as read`,
+        icon: 'checkmark',
+        type: 'success',
+        duration: 2000,
+      });
     } catch (error) {
       logger().error('Service', 'Error marking chapter as read', { error });
+      showToast({
+        message: 'Failed to mark chapter as read',
+        type: 'error',
+      });
     }
-  }, [id, chapterNumber, normalizedChapterParam, isOffline]);
+  }, [id, chapterNumber, normalizedChapterParam, isOffline, showToast]);
 
   // Detect content type based on image dimensions
   const detectContentType = useCallback((images: ChapterImage[]) => {
