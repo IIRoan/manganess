@@ -47,7 +47,6 @@ import { ChapterImage } from '@/types/download';
 import { useTheme } from '@/constants/ThemeContext';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useOffline } from '@/contexts/OfflineContext';
-import { useToast } from '@/contexts/ToastContext';
 import CustomWebView from '@/components/CustomWebView';
 import {
   ChapterGuideOverlay,
@@ -156,7 +155,6 @@ export default function ReadChapterScreen() {
   const router = useRouter();
   const { handleBackPress: navigateBack } = useNavigationHistory();
   const { isOffline } = useOffline();
-  const { showToast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
