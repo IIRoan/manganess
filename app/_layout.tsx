@@ -22,21 +22,6 @@ import { useNavigationPerf } from '@/hooks/useNavigationPerf';
 import { logger } from '@/utils/logger';
 import Constants from 'expo-constants';
 import { downloadManagerService } from '@/services/downloadManager';
-import * as Sentry from '@sentry/react-native';
-
-Sentry.init({
-  dsn: 'https://7bcd6652c918fd0f44f3d78deafa1ab9@o4510380885082112.ingest.de.sentry.io/4510380894060624',
-
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: true,
-
-  // Enable Logs
-  enableLogs: true,
-
-  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
-  // spotlight: __DEV__,
-});
 
 SplashScreen.preventAutoHideAsync();
 
@@ -92,7 +77,7 @@ function RootLayoutNav() {
   );
 }
 
-export default Sentry.wrap(function RootLayout() {
+export default function RootLayout() {
   useEffect(() => {
     if (!isDebugEnabled()) return;
     enableAsyncStorageLogging();
@@ -144,4 +129,4 @@ export default Sentry.wrap(function RootLayout() {
       </ThemeProvider>
     </GestureHandlerRootView>
   );
-});
+}
