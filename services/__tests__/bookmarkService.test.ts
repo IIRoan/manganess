@@ -143,11 +143,13 @@ describe('bookmarkService', () => {
       const handler = jest.fn();
       const popup = getBookmarkPopupConfig('Reading', 'Title', handler, handler);
       expect(popup.options).toHaveLength(5);
-      expect(popup.title).toContain('Update Bookmark');
+      expect(popup.title).toContain('Update');
+      expect(popup.title).toContain('Title');
 
       const popupNew = getBookmarkPopupConfig(null, 'Title', handler, handler);
       expect(popupNew.options).toHaveLength(4);
       expect(popupNew.title).toContain('Bookmark');
+      expect(popupNew.title).toContain('Title');
     });
 
     it('includes all bookmark status options', () => {
