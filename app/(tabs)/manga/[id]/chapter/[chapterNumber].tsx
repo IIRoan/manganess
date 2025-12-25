@@ -805,6 +805,11 @@ export default function ReadChapterScreen() {
     };
   }, [downloadedImages, contentType, normalizedChapterParam]);
 
+  // Reset title when manga changes to ensure proper update
+  useEffect(() => {
+    setMangaTitle(null);
+  }, [id]);
+
   // Initialize navigation tracking when chapter changes
   useEffect(() => {
     navigationTimestampRef.current = Date.now();
