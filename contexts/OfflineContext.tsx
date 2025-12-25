@@ -28,28 +28,44 @@ interface OfflineProviderProps {
   children: React.ReactNode;
 }
 
+// Debounce delays (in milliseconds)
+const OFFLINE_DEBOUNCE_DELAY = 5000; // Wait 5 seconds before marking as offline
+const ONLINE_DEBOUNCE_DELAY = 2000; // Wait 2 seconds before hiding offline indicator
+
 export const OfflineProvider: React.FC<OfflineProviderProps> = ({
   children,
 }) => {
   const networkState = useNetworkStatus();
+  const [isOffline, setIsOffline] = useState(false);
   const [showOfflineIndicator, setShowOfflineIndicator] = useState(false);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let offlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let onlineTimer: ReturnType<typeof setTimeout> | undefined;
 
-    // Show offline indicator when going offline
     if (networkState.isOffline) {
-      setShowOfflineIndicator(true);
-      logger().info('Network', 'Device went offline', {
-        type: networkState.type,
-        isConnected: networkState.isConnected,
-        isInternetReachable: networkState.isInternetReachable,
-      });
+      // Only mark as offline after a delay to account for short connectivity losses
+      offlineTimer = setTimeout(() => {
+        setIsOffline(true);
+        setShowOfflineIndicator(true);
+        logger().info('Network', 'Device went offline (after debounce)', {
+          type: networkState.type,
+          isConnected: networkState.isConnected,
+          isInternetReachable: networkState.isInternetReachable,
+        });
+      }, OFFLINE_DEBOUNCE_DELAY);
     } else {
-      // Hide indicator after a delay when coming back online
-      timer = setTimeout(() => {
+      // Clear any pending offline timer
+      if (offlineTimer) {
+        clearTimeout(offlineTimer);
+      }
+
+      // Mark as online immediately, but hide indicator with a delay
+      setIsOffline(false);
+
+      onlineTimer = setTimeout(() => {
         setShowOfflineIndicator(false);
-      }, 2000);
+      }, ONLINE_DEBOUNCE_DELAY);
 
       logger().info('Network', 'Device came online', {
         type: networkState.type,
@@ -59,8 +75,11 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({
     }
 
     return () => {
-      if (timer) {
-        clearTimeout(timer);
+      if (offlineTimer) {
+        clearTimeout(offlineTimer);
+      }
+      if (onlineTimer) {
+        clearTimeout(onlineTimer);
       }
     };
   }, [
@@ -71,7 +90,7 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({
   ]);
 
   const value: OfflineContextType = {
-    isOffline: networkState.isOffline,
+    isOffline,
     isConnected: networkState.isConnected,
     networkType: networkState.type,
     showOfflineIndicator,
