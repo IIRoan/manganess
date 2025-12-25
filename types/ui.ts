@@ -16,6 +16,7 @@ export interface Option {
   text: string;
   onPress: () => void;
   icon?: IconName;
+  isSelected?: boolean;
 }
 
 export interface AlertOption {

@@ -217,60 +217,52 @@ export const getBookmarkPopupConfig = (
   handleSaveBookmark: (status: BookmarkStatus) => void,
   handleRemoveBookmark: () => void
 ) => {
+  // Truncate title if too long for popup
+  const displayTitle =
+    mangaTitle.length > 25 ? mangaTitle.substring(0, 25) + '...' : mangaTitle;
+
+  const baseOptions = [
+    {
+      text: 'To Read',
+      onPress: () => handleSaveBookmark('To Read'),
+      icon: 'book-outline' as IconName,
+      isSelected: bookmarkStatus === 'To Read',
+    },
+    {
+      text: 'Reading',
+      onPress: () => handleSaveBookmark('Reading'),
+      icon: 'book' as IconName,
+      isSelected: bookmarkStatus === 'Reading',
+    },
+    {
+      text: 'On Hold',
+      onPress: () => handleSaveBookmark('On Hold'),
+      icon: 'pause-circle-outline' as IconName,
+      isSelected: bookmarkStatus === 'On Hold',
+    },
+    {
+      text: 'Read',
+      onPress: () => handleSaveBookmark('Read'),
+      icon: 'checkmark-circle-outline' as IconName,
+      isSelected: bookmarkStatus === 'Read',
+    },
+  ];
+
   return {
     title: bookmarkStatus
-      ? `Update Bookmark for ${mangaTitle}`
-      : `Bookmark ${mangaTitle}`,
+      ? `Update "${displayTitle}"`
+      : `Bookmark "${displayTitle}"`,
     options: bookmarkStatus
       ? [
-          {
-            text: 'To Read',
-            onPress: () => handleSaveBookmark('To Read'),
-            icon: 'book-outline' as IconName,
-          },
-          {
-            text: 'Reading',
-            onPress: () => handleSaveBookmark('Reading'),
-            icon: 'book' as IconName,
-          },
-          {
-            text: 'On Hold',
-            onPress: () => handleSaveBookmark('On Hold'),
-            icon: 'pause-circle-outline' as IconName,
-          },
-          {
-            text: 'Read',
-            onPress: () => handleSaveBookmark('Read'),
-            icon: 'checkmark-circle-outline' as IconName,
-          },
+          ...baseOptions,
           {
             text: 'Unbookmark',
             onPress: handleRemoveBookmark,
             icon: 'close-circle-outline' as IconName,
+            isSelected: false,
           },
         ]
-      : [
-          {
-            text: 'To Read',
-            onPress: () => handleSaveBookmark('To Read'),
-            icon: 'book-outline' as IconName,
-          },
-          {
-            text: 'Reading',
-            onPress: () => handleSaveBookmark('Reading'),
-            icon: 'book' as IconName,
-          },
-          {
-            text: 'On Hold',
-            onPress: () => handleSaveBookmark('On Hold'),
-            icon: 'pause-circle-outline' as IconName,
-          },
-          {
-            text: 'Read',
-            onPress: () => handleSaveBookmark('Read'),
-            icon: 'checkmark-circle-outline' as IconName,
-          },
-        ],
+      : baseOptions,
   };
 };
 
@@ -280,7 +272,9 @@ export const getChapterLongPressAlertConfig = (
   mangaDetails: any,
   id: string,
   readChapters: string[],
-  setReadChapters: (chapters: string[]) => void
+  setReadChapters: (chapters: string[]) => void,
+  onSuccess?: (markedCount: number, chapterNumber: string) => void,
+  onError?: () => void
 ) => {
   if (!isRead) {
     return {
@@ -320,9 +314,16 @@ export const getChapterLongPressAlertConfig = (
                   lastUpdated: Date.now(),
                 });
                 setReadChapters(updatedReadChapters);
+
+                // Call success callback with the count of newly marked chapters
+                const newlyMarkedCount = chaptersToMark.filter(
+                  (ch: string) => !readChapters.includes(ch)
+                ).length;
+                onSuccess?.(newlyMarkedCount, chapterNumber);
               }
             } catch (error) {
               console.error('Error marking chapters as read:', error);
+              onError?.();
             }
           },
         },

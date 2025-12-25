@@ -56,6 +56,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import LastReadChapterBar from '@/components/LastReadChapterBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '@/utils/haptics';
+import { useToast } from '@/contexts/ToastContext';
 import getStyles from './[id].styles';
 import { logger } from '@/utils/logger';
 import { useMangaImageCache } from '@/services/CacheImages';
@@ -203,6 +204,9 @@ export default function MangaDetailScreen() {
 
   // Haptic feedback
   const haptics = useHapticFeedback();
+
+  // Toast notifications
+  const { showToast } = useToast();
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
@@ -458,6 +462,7 @@ export default function MangaDetailScreen() {
   const handleSaveBookmark = useCallback(
     async (status: BookmarkStatus) => {
       if (!mangaDetails) return;
+      const previousStatus = bookmarkStatus;
       try {
         await saveBookmark(
           id as string,
@@ -468,11 +473,33 @@ export default function MangaDetailScreen() {
           setIsBookmarkPopupVisible,
           setReadChapters
         );
+
+        // Show success toast
+        const statusIcons: Record<BookmarkStatus, 'book-outline' | 'book' | 'pause-circle-outline' | 'checkmark-circle-outline'> = {
+          'To Read': 'book-outline',
+          'Reading': 'book',
+          'On Hold': 'pause-circle-outline',
+          'Read': 'checkmark-circle-outline',
+        };
+        const shortTitle = mangaDetails.title.length > 20
+          ? mangaDetails.title.substring(0, 20) + '…'
+          : mangaDetails.title;
+        showToast({
+          message: previousStatus
+            ? `${shortTitle} → ${status}`
+            : `${shortTitle} added to ${status}`,
+          icon: statusIcons[status],
+          type: 'success',
+        });
       } catch (error) {
         console.error('Error saving bookmark:', error);
+        showToast({
+          message: 'Failed to update bookmark',
+          type: 'error',
+        });
       }
     },
-    [id, mangaDetails, readChapters]
+    [id, mangaDetails, readChapters, bookmarkStatus, showToast]
   );
 
   const handleRemoveBookmark = useCallback(async () => {
@@ -482,10 +509,26 @@ export default function MangaDetailScreen() {
         setBookmarkStatus,
         setIsBookmarkPopupVisible
       );
+
+      // Show success toast
+      const shortTitle = mangaDetails?.title
+        ? mangaDetails.title.length > 20
+          ? mangaDetails.title.substring(0, 20) + '…'
+          : mangaDetails.title
+        : 'Manga';
+      showToast({
+        message: `${shortTitle} removed from bookmarks`,
+        icon: 'trash-outline',
+        type: 'info',
+      });
     } catch (error) {
       console.error('Error removing bookmark:', error);
+      showToast({
+        message: 'Failed to remove bookmark',
+        type: 'error',
+      });
     }
-  }, [id]);
+  }, [id, showToast, mangaDetails?.title]);
 
   const handleBookmark = useCallback(() => {
     if (!mangaDetails) return;
@@ -520,14 +563,37 @@ export default function MangaDetailScreen() {
         mangaDetails,
         id as string,
         readChapters,
-        setReadChapters
+        setReadChapters,
+        // Success callback
+        (markedCount: number, upToChapter: string) => {
+          const shortTitle = mangaDetails?.title
+            ? mangaDetails.title.length > 15
+              ? mangaDetails.title.substring(0, 15) + '…'
+              : mangaDetails.title
+            : '';
+          showToast({
+            message:
+              markedCount > 1
+                ? `${shortTitle}: ${markedCount} chapters marked read`
+                : `${shortTitle}: Up to Ch.${upToChapter} marked read`,
+            icon: 'checkmark-done',
+            type: 'success',
+          });
+        },
+        // Error callback
+        () => {
+          showToast({
+            message: 'Failed to mark chapters as read',
+            type: 'error',
+          });
+        }
       );
       if (config) {
         setAlertConfig(config);
         setIsAlertVisible(true);
       }
     },
-    [haptics, readChapters, mangaDetails, id]
+    [haptics, readChapters, mangaDetails, id, showToast]
   );
 
   const handleMarkAsUnread = useCallback(
@@ -554,11 +620,27 @@ export default function MangaDetailScreen() {
           currentlyOpenSwipeable.close();
           setCurrentlyOpenSwipeable(null);
         }
+
+        // Show success toast
+        const shortTitle = mangaDetails?.title
+          ? mangaDetails.title.length > 15
+            ? mangaDetails.title.substring(0, 15) + '…'
+            : mangaDetails.title
+          : '';
+        showToast({
+          message: `${shortTitle}: Ch.${chapterNumber} marked unread`,
+          icon: 'refresh',
+          type: 'success',
+        });
       } catch (error) {
         console.error('Error marking chapter as unread:', error);
+        showToast({
+          message: 'Failed to mark as unread',
+          type: 'error',
+        });
       }
     },
-    [id, readChapters, currentlyOpenSwipeable]
+    [id, readChapters, currentlyOpenSwipeable, showToast, mangaDetails?.title]
   );
 
   const handleDeleteDownload = useCallback(
@@ -578,11 +660,27 @@ export default function MangaDetailScreen() {
         );
 
         await refreshDownloadedChapters();
+
+        // Show success toast
+        const shortTitle = mangaDetails?.title
+          ? mangaDetails.title.length > 15
+            ? mangaDetails.title.substring(0, 15) + '…'
+            : mangaDetails.title
+          : '';
+        showToast({
+          message: `${shortTitle}: Ch.${chapterNumber} download deleted`,
+          icon: 'trash-outline',
+          type: 'info',
+        });
       } catch (deleteError) {
         console.error('Error deleting downloaded chapter:', deleteError);
+        showToast({
+          message: 'Failed to delete download',
+          type: 'error',
+        });
       }
     },
-    [id, refreshDownloadedChapters]
+    [id, refreshDownloadedChapters, showToast, mangaDetails?.title]
   );
 
   const handleChapterPress = useCallback(

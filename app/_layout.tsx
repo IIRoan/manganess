@@ -15,6 +15,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import BatchDownloadHost from '@/components/BatchDownloadHost';
 import { OfflineProvider } from '@/contexts/OfflineContext';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
+import { ToastProvider } from '@/contexts/ToastContext';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
@@ -122,9 +123,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
       <ThemeProvider>
         <OfflineProvider>
-          <RootLayoutNav />
-
-          <OfflineIndicator />
+          <ToastProvider>
+            <RootLayoutNav />
+            <OfflineIndicator />
+          </ToastProvider>
         </OfflineProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
