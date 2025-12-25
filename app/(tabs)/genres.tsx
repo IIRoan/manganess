@@ -246,7 +246,17 @@ export default function GenresScreen() {
         contentContainerStyle={styles.contentContainer}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>Genres</Text>
+            <View style={styles.headerTop}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => router.push('/')}
+                accessible={true}
+                accessibilityLabel="Go back to home"
+              >
+                <Ionicons name="arrow-back" size={24} color={colors.text} />
+              </TouchableOpacity>
+              <Text style={styles.title}>Genres</Text>
+            </View>
             <View
               style={[
                 styles.searchInputContainer,
@@ -297,11 +307,16 @@ const getStyles = (colors: typeof Colors.light) =>
       marginBottom: 16,
       marginTop: 12,
     },
+    headerTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
     title: {
       fontSize: 26,
       fontWeight: 'bold',
       color: colors.text,
-      marginBottom: 16,
+      flex: 1,
     },
     searchInputContainer: {
       flexDirection: 'row',
