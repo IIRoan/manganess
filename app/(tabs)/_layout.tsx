@@ -51,8 +51,7 @@ export default function TabLayout() {
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   // Get update status from the hook
-  const { updateStatus, updateAndReload, checkForUpdate, isUpdateInProgress } =
-    useAppUpdates();
+  const { updateStatus, updateAndReload, isUpdateInProgress } = useAppUpdates();
 
   // Swipe gesture integration
   const {
@@ -108,32 +107,26 @@ export default function TabLayout() {
     }
   }, []);
 
+  // Simplified update check - uses the service's built-in lock to prevent duplicates
+  // and does check + download + apply in a single optimized flow
   const performUpdateCheck = useCallback(async () => {
     if (isDebugEnabled()) logger().debug('Service', 'Performing update check');
-    try {
-      // First check if update is available
-      const checkResult = await checkForUpdate();
-      if (isDebugEnabled())
-        logger().debug('Service', 'Update check result', { checkResult });
 
-      if (checkResult.success) {
-        if (isDebugEnabled())
-          logger().debug(
-            'Service',
-            'Update available, downloading and applying'
-          );
-        // If an update is available, download and apply it
-        await updateAndReload();
-      } else {
-        if (isDebugEnabled())
-          logger().debug('Service', 'No update available or unable to check', {
-            message: checkResult.message,
-          });
-      }
-    } catch (error) {
-      logger().error('Service', 'Error in update process', { error });
+    // updateAndReload handles everything:
+    // - Environment checks (Expo Go, dev mode, etc.)
+    // - Lock to prevent duplicate simultaneous checks
+    // - Check for updates
+    // - Download if available
+    // - Apply and reload if successful
+    const result = await updateAndReload();
+
+    if (isDebugEnabled()) {
+      logger().debug('Service', 'Update check completed', {
+        success: result.success,
+        message: result.message,
+      });
     }
-  }, [checkForUpdate, updateAndReload]);
+  }, [updateAndReload]);
 
   useEffect(() => {
     loadEnableDebugTabSetting();
