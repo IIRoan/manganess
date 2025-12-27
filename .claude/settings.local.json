@@ -1,3 +1,9 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(bun run lint)"
+    ]
+  },
   "spinnerTipsEnabled": false
 }
