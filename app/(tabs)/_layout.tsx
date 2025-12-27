@@ -7,8 +7,9 @@ import {
   useColorScheme,
   Animated,
   AppState,
+  StatusBar,
 } from 'react-native';
-import { Tabs, usePathname, useNavigation } from 'expo-router';
+import { Tabs, usePathname, useNavigation, useFocusEffect } from 'expo-router';
 import { isDebugEnabled } from '@/constants/env';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -190,6 +191,29 @@ export default function TabLayout() {
       refreshLastReadManga();
     }
   }, [pathname, refreshLastReadManga]);
+
+  // Ensure status bar is always visible on non-chapter pages
+  const isChapterPage = pathname.includes('/chapter/');
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isChapterPage) {
+        // Force status bar to be visible on all non-chapter pages
+        StatusBar.setHidden(false);
+        StatusBar.setTranslucent(true);
+        StatusBar.setBackgroundColor('transparent');
+      }
+    }, [isChapterPage])
+  );
+
+  // Also ensure status bar visibility when pathname changes (covers navigation within tabs)
+  useEffect(() => {
+    if (!isChapterPage) {
+      StatusBar.setHidden(false);
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent');
+    }
+  }, [isChapterPage]);
 
   // Update animation based on whether we should show the indicator
   useEffect(() => {

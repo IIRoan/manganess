@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { useHapticFeedback } from '@/utils/haptics';
+import { useToast } from '@/contexts/ToastContext';
 import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
 import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
@@ -58,6 +59,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     [colors, size, appearance]
   );
   const haptics = useHapticFeedback();
+  const { showToast } = useToast();
 
   const log = logger();
   const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>(
@@ -104,6 +106,12 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       if (progressUpdate.status === DownloadStatus.COMPLETED) {
         setDownloadStatus(DownloadStatus.COMPLETED);
         onDownloadComplete?.();
+        showToast({
+          message: `Chapter ${chapterNumber} downloaded successfully`,
+          type: 'success',
+          icon: 'download',
+          duration: 2500,
+        });
 
         // Emit download completion event
         downloadEventEmitter.emitCompleted(
@@ -114,6 +122,12 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       } else if (progressUpdate.status === DownloadStatus.FAILED) {
         setDownloadStatus(DownloadStatus.FAILED);
         onDownloadError?.('Download failed');
+        showToast({
+          message: `Failed to download chapter ${chapterNumber}`,
+          type: 'error',
+          icon: 'close-circle',
+          duration: 3000,
+        });
 
         // Emit download failed event
         downloadEventEmitter.emitFailed(
@@ -124,7 +138,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         );
       }
     },
-    [mangaId, chapterNumber, onDownloadComplete, onDownloadError]
+    [mangaId, chapterNumber, onDownloadComplete, onDownloadError, showToast]
   );
 
   // Load initial download status with throttling
@@ -279,6 +293,12 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     setDownloadStatus(DownloadStatus.DOWNLOADING);
     setProgress(0);
     onDownloadStart?.();
+    showToast({
+      message: `Downloading chapter ${chapterNumber}...`,
+      type: 'info',
+      icon: 'download',
+      duration: 2000,
+    });
 
     // Step 1: Open hidden WebView to intercept AJAX request
     if (isDebugEnabled()) {
@@ -394,12 +414,24 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     const downloadId = generateDownloadId(mangaId, chapterNumber);
     await downloadManagerService.pauseDownload(downloadId);
     setDownloadStatus(DownloadStatus.PAUSED);
+    showToast({
+      message: `Chapter ${chapterNumber} download paused`,
+      type: 'info',
+      icon: 'pause',
+      duration: 2000,
+    });
   };
 
   const resumeDownload = async () => {
     const downloadId = generateDownloadId(mangaId, chapterNumber);
     await downloadManagerService.resumeDownload(downloadId);
     setDownloadStatus(DownloadStatus.DOWNLOADING);
+    showToast({
+      message: `Resuming download for chapter ${chapterNumber}`,
+      type: 'info',
+      icon: 'play',
+      duration: 2000,
+    });
   };
 
   const handlePressIn = () => {

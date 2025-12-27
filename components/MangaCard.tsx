@@ -31,6 +31,7 @@ import {
   removeBookmark,
 } from '@/services/bookmarkService';
 import { Ionicons } from '@expo/vector-icons';
+import { useToast } from '@/contexts/ToastContext';
 
 interface EnhancedMangaCardProps extends MangaCardProps {
   context?: CacheContext;
@@ -63,6 +64,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const scaleAnim = useSharedValue(1);
   const haptics = useHapticFeedback();
   const { isOffline } = useOffline();
+  const { showToast } = useToast();
 
   // Load bookmark status when component mounts or mangaId changes
   useEffect(() => {
@@ -155,6 +157,8 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const handleSaveBookmark = async (status: BookmarkStatus) => {
     if (!mangaId) return;
 
+    const previousStatus = bookmarkStatus;
+
     try {
       // Update local state immediately for instant feedback
       setBookmarkStatus(status);
@@ -177,6 +181,22 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
         () => {}
       );
 
+      // Show success toast
+      const statusIcons: Record<BookmarkStatus, 'book-outline' | 'book' | 'pause-circle-outline' | 'checkmark-circle-outline'> = {
+        'To Read': 'book-outline',
+        'Reading': 'book',
+        'On Hold': 'pause-circle-outline',
+        'Read': 'checkmark-circle-outline',
+      };
+      const shortTitle = title.length > 20 ? title.substring(0, 20) + '…' : title;
+      showToast({
+        message: previousStatus
+          ? `${shortTitle} → ${status}`
+          : `${shortTitle} added to ${status}`,
+        icon: statusIcons[status],
+        type: 'success',
+      });
+
       // Notify parent component about bookmark change
       if (onBookmarkChange) {
         onBookmarkChange(mangaId, status);
@@ -186,6 +206,10 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
       // Revert local state if there was an error
       const mangaData = await getMangaData(mangaId);
       setBookmarkStatus(mangaData?.bookmarkStatus || null);
+      showToast({
+        message: 'Failed to update bookmark',
+        type: 'error',
+      });
     }
   };
 
@@ -203,6 +227,14 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
         () => {}
       );
 
+      // Show success toast
+      const shortTitle = title.length > 20 ? title.substring(0, 20) + '…' : title;
+      showToast({
+        message: `${shortTitle} removed from bookmarks`,
+        icon: 'trash-outline',
+        type: 'info',
+      });
+
       // Notify parent component about bookmark change
       if (onBookmarkChange) {
         onBookmarkChange(mangaId, null);
@@ -212,6 +244,10 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
       // Revert local state if there was an error
       const mangaData = await getMangaData(mangaId);
       setBookmarkStatus(mangaData?.bookmarkStatus || null);
+      showToast({
+        message: 'Failed to remove bookmark',
+        type: 'error',
+      });
     }
   };
 

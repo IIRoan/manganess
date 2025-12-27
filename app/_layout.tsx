@@ -6,7 +6,7 @@ import {
   ThemeProvider as NavigationThemeProvider,
 } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
@@ -15,6 +15,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import BatchDownloadHost from '@/components/BatchDownloadHost';
 import { OfflineProvider } from '@/contexts/OfflineContext';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
+import { ToastProvider } from '@/contexts/ToastContext';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
@@ -31,10 +32,23 @@ function RootLayoutNav() {
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
   const activeTheme = theme === 'system' ? colorScheme : theme;
+  const pathname = usePathname();
+
+  // Ensure status bar is always visible on non-chapter pages
+  const isChapterPage = pathname.includes('/chapter/');
+
+  useEffect(() => {
+    if (!isChapterPage) {
+      // Force status bar to be visible on all non-chapter pages
+      StatusBar.setHidden(false);
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent');
+    }
+  }, [isChapterPage, pathname]);
 
   return (
     <>
-      <StatusBar translucent backgroundColor="transparent" />
+      <StatusBar translucent backgroundColor="transparent" hidden={false} />
       <NavigationThemeProvider
         value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}
       >
@@ -109,9 +123,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
       <ThemeProvider>
         <OfflineProvider>
-          <RootLayoutNav />
-
-          <OfflineIndicator />
+          <ToastProvider>
+            <RootLayoutNav />
+            <OfflineIndicator />
+          </ToastProvider>
         </OfflineProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

@@ -6,12 +6,12 @@ import {
   StyleSheet,
   useColorScheme,
   Image,
-  Alert,
   Switch,
   Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useTheme, Theme } from '@/constants/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import {
@@ -45,6 +45,7 @@ export default function SettingsScreen() {
   const colors = Colors[colorScheme];
   const styles = getStyles(colors);
   const router = useRouter();
+  const { showToast } = useToast();
   const [user, setUser] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const insets = useSafeAreaInsets();
@@ -102,9 +103,19 @@ export default function SettingsScreen() {
       await setDebugTabEnabled(value);
       logger().debug('Service', 'Saved enableDebugTab', { value });
       setEnableDebugTab(value);
+      showToast({
+        message: `Debug tab ${value ? 'enabled' : 'disabled'} please restart`,
+        type: 'success',
+        icon: value ? 'bug' : 'close-circle',
+        duration: 2000,
+      });
     } catch (error) {
       logger().error('Service', 'Error toggling enable debug tab setting', {
         error,
+      });
+      showToast({
+        message: 'Failed to update debug tab setting',
+        type: 'error',
       });
     }
   };
@@ -139,18 +150,28 @@ export default function SettingsScreen() {
       if (authData) {
         const userData = await AniListOAuth.getCurrentUser();
         setUser(userData.data.Viewer);
-        Alert.alert('Success', 'Successfully logged in to AniList!');
+        showToast({
+          message: 'Successfully logged in to AniList!',
+          type: 'success',
+          icon: 'checkmark-circle',
+          duration: 2500,
+        });
       }
     } catch (error: unknown) {
       logger().error('Service', 'AniList login error', { error });
       if (error instanceof Error) {
         if (error.message.includes('cancelled')) {
-          Alert.alert('Cancelled', 'Login was cancelled by user');
+          showToast({
+            message: 'Login cancelled by user',
+            type: 'info',
+            duration: 2000,
+          });
         } else {
-          Alert.alert(
-            'Error',
-            `Failed to login with AniList: ${error.message}`
-          );
+          showToast({
+            message: `Failed to login with AniList: ${error.message}`,
+            type: 'error',
+            duration: 3000,
+          });
         }
       }
     }
@@ -160,23 +181,38 @@ export default function SettingsScreen() {
     try {
       await AniListOAuth.logout();
       setUser(null);
+      showToast({
+        message: 'Successfully logged out from AniList',
+        type: 'success',
+        icon: 'log-out-outline',
+        duration: 2000,
+      });
     } catch (error: unknown) {
       logger().error('Service', 'AniList logout error', { error });
-      Alert.alert('Error', 'Failed to logout');
+      showToast({
+        message: 'Failed to logout from AniList',
+        type: 'error',
+      });
     }
   };
 
   const handleSyncAllManga = async () => {
     try {
       setIsSyncing(true);
-      const results = await syncAllMangaWithAniList();
-      Alert.alert('Sync Results', results.join('\n'));
+      await syncAllMangaWithAniList();
+      showToast({
+        message: 'Manga synced with AniList successfully!',
+        type: 'success',
+        icon: 'checkmark-circle',
+        duration: 2500,
+      });
     } catch (error) {
       logger().error('Service', 'Error syncing manga', { error });
-      Alert.alert(
-        'Error',
-        `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      showToast({
+        message: `Failed to sync manga: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error',
+        duration: 3000,
+      });
     } finally {
       setIsSyncing(false);
     }
@@ -186,6 +222,21 @@ export default function SettingsScreen() {
     setSelectedColor(color);
     setAccentColor(color);
     setColorPickerVisible(false);
+  };
+
+  const handleThemeChange = (newTheme: Theme) => {
+    setTheme(newTheme);
+  };
+
+  const handleResetAccentColor = () => {
+    setAccentColor(undefined);
+    setSelectedColor(colors.primary);
+    showToast({
+      message: 'Accent color reset to default',
+      type: 'success',
+      icon: 'checkmark',
+      duration: 2000,
+    });
   };
 
   return (
@@ -292,7 +343,7 @@ export default function SettingsScreen() {
                 styles.option,
                 theme === option.value && styles.activeOption,
               ]}
-              onPress={() => setTheme(option.value)}
+              onPress={() => handleThemeChange(option.value)}
             >
               <Ionicons
                 name={option.icon as keyof typeof Ionicons.glyphMap}
@@ -332,7 +383,7 @@ export default function SettingsScreen() {
           {accentColor && (
             <TouchableOpacity
               style={[styles.option, { borderBottomWidth: 0, marginTop: -10 }]}
-              onPress={() => setAccentColor(undefined)}
+              onPress={handleResetAccentColor}
             >
               <Ionicons name="refresh-outline" size={24} color={colors.text} />
               <Text style={styles.optionText}>Reset to Default Color</Text>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   TextInput,
@@ -6,12 +6,15 @@ import {
   Text,
   TouchableOpacity,
   SafeAreaView,
-  useWindowDimensions,
+  Dimensions,
+  Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
-import { Stack, useRouter, useFocusEffect } from 'expo-router'; // Combined imports
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
+import SearchSkeleton from '@/components/SearchSkeleton';
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/constants/ThemeContext';
 import { MANGA_API_URL } from '@/constants/Config';
@@ -24,12 +27,20 @@ import {
   setVrfToken as setServiceVrfToken,
 } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
+import {
+  getSearchHistory,
+  addSearchHistoryItem,
+  removeSearchHistoryItem,
+  clearSearchHistory,
+  type SearchHistoryItem,
+} from '@/services/searchHistoryService';
 import { useDebounce } from '@/hooks/useDebounce';
 import { logger } from '@/utils/logger';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import { useOffline } from '@/contexts/OfflineContext';
 import { offlineCacheService } from '@/services/offlineCacheService';
-import { getDefaultLayout } from '@/services/settingsService'; // Import settings service
+import { getDefaultLayout } from '@/services/settingsService';
+import { hapticFeedback } from '@/utils/haptics';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
 /* Type Definitions */
@@ -37,12 +48,18 @@ interface LastReadChapters {
   [key: string]: string | null;
 }
 
+// Get initial dimensions once to avoid keyboard-triggered re-renders
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 export default function MangaSearchScreen() {
   // Theme and layout settings
   const { actualTheme } = useTheme();
   const colors = Colors[actualTheme];
-  const { width, height } = useWindowDimensions();
-  const styles = getStyles(colors, width, height);
+  // Use stable dimensions to prevent re-renders on keyboard open/close
+  const styles = useMemo(
+    () => getStyles(colors, SCREEN_WIDTH, SCREEN_HEIGHT),
+    [colors]
+  );
   const insets = useSafeAreaInsets();
   const { isOffline } = useOffline();
 
@@ -67,16 +84,46 @@ export default function MangaSearchScreen() {
   const [vrfWebViewKey, setVrfWebViewKey] = useState(0);
   const currentQueryRef = useRef<string | null>(null);
   const vrfTokenQueryRef = useRef<string | null>(null);
+  const vrfRetryCountRef = useRef<Map<string, number>>(new Map());
+  const MAX_VRF_RETRIES = 2;
+  const [lastCompletedQuery, setLastCompletedQuery] = useState<string | null>(null);
 
   // Layout State
   const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('list');
 
-  // Load layout setting on focus
+  // Search History State
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const hasLoadedHistoryRef = useRef(false);
+
+  // Load layout setting and search history on mount (not on focus to avoid re-animations)
+  useEffect(() => {
+    const loadInitialData = async () => {
+      const [layout, history] = await Promise.all([
+        getDefaultLayout(),
+        getSearchHistory(),
+      ]);
+      setLayoutMode(layout);
+      setSearchHistory(history);
+      hasLoadedHistoryRef.current = true;
+      // Small delay to ensure smooth transition
+      setTimeout(() => setIsInitialLoad(false), 50);
+    };
+    loadInitialData();
+  }, []);
+
+  // Refresh layout on focus (but not history to avoid re-animation)
   useFocusEffect(
     useCallback(() => {
       getDefaultLayout().then(setLayoutMode);
     }, [])
   );
+
+  const loadSearchHistory = useCallback(async () => {
+    const history = await getSearchHistory();
+    setSearchHistory(history);
+  }, []);
 
   // Focus input field on screen focus
   useFocusEffect(
@@ -95,9 +142,9 @@ export default function MangaSearchScreen() {
     if (q.length > 2) {
       setIsLoading(true);
       setError(null);
+      setShowHistory(false);
       currentQueryRef.current = q;
 
-      // If offline, try to load cached search results
       // If offline, don't allow search
       if (isOffline) {
         setSearchResults([]);
@@ -121,6 +168,7 @@ export default function MangaSearchScreen() {
     } else if (q.length === 0) {
       setSearchResults([]);
       setIsLoading(false);
+      setShowHistory(true);
       currentQueryRef.current = null;
     }
   }, [debouncedSearchQuery, isOffline]);
@@ -148,6 +196,17 @@ export default function MangaSearchScreen() {
           if (inFlightSeqRef.current !== seq) return; // ignore stale
           setSearchResults(items);
 
+          // Mark this query as completed (for "no results" display)
+          setLastCompletedQuery(debouncedSearchQuery.trim().toLowerCase());
+
+          // Reset retry count on success
+          const key = debouncedSearchQuery.trim().toLowerCase();
+          vrfRetryCountRef.current.delete(key);
+
+          // Add to search history on successful search
+          await addSearchHistoryItem(debouncedSearchQuery);
+          await loadSearchHistory();
+
           // Cache search results for offline use
           await offlineCacheService.cacheSearchResults(
             debouncedSearchQuery,
@@ -159,6 +218,47 @@ export default function MangaSearchScreen() {
             return;
           }
           if (inFlightSeqRef.current !== seq) return; // ignore stale
+
+          // Check if it's a 403 error (stale VRF token)
+          const is403 = err?.response?.status === 403 ||
+                        err?.message?.includes('403') ||
+                        err?.message?.includes('Request failed with status code 403');
+
+          if (is403) {
+            const key = debouncedSearchQuery.trim().toLowerCase();
+            const retryCount = vrfRetryCountRef.current.get(key) || 0;
+
+            if (retryCount < MAX_VRF_RETRIES) {
+              // Increment retry count
+              vrfRetryCountRef.current.set(key, retryCount + 1);
+
+              // Invalidate the cached VRF token for this query
+              vrfCacheRef.current.delete(key);
+
+              // Force a fresh VRF token fetch
+              setVrfToken(null);
+              vrfTokenQueryRef.current = null;
+              setVrfWebViewKey((k) => k + 1);
+
+              logger().warn('Service', 'VRF token expired, fetching fresh token', {
+                query: debouncedSearchQuery,
+                retryAttempt: retryCount + 1,
+                maxRetries: MAX_VRF_RETRIES
+              });
+              return; // Don't set error - will retry with fresh token
+            } else {
+              // Max retries reached, show error
+              vrfRetryCountRef.current.delete(key);
+              logger().error('Service', 'Max VRF retries reached', {
+                query: debouncedSearchQuery,
+                retries: retryCount
+              });
+              setTokenError(true);
+              setIsLoading(false);
+              return;
+            }
+          }
+
           setError('Failed to fetch manga. Please try again.');
           logger().error('Service', 'Failed to fetch manga', { error: err });
         } finally {
@@ -167,12 +267,14 @@ export default function MangaSearchScreen() {
       }
     };
     performSearch();
-  }, [vrfToken, debouncedSearchQuery, checkForCloudflare]);
+  }, [vrfToken, debouncedSearchQuery, checkForCloudflare, loadSearchHistory]);
 
   // Clear search
   const clearSearch = useCallback(() => {
     setSearchQuery('');
     setSearchResults([]);
+    setShowHistory(true);
+    setLastCompletedQuery(null);
     currentQueryRef.current = null;
     inFlightSeqRef.current++;
     inputRef.current?.focus();
@@ -188,6 +290,27 @@ export default function MangaSearchScreen() {
     },
     [router]
   );
+
+  // Handle history item press
+  const handleHistoryItemPress = useCallback((query: string) => {
+    hapticFeedback.onSelection();
+    setSearchQuery(query);
+    setShowHistory(false);
+  }, []);
+
+  // Handle history item delete
+  const handleHistoryItemDelete = useCallback(async (query: string) => {
+    hapticFeedback.onPress();
+    await removeSearchHistoryItem(query);
+    await loadSearchHistory();
+  }, [loadSearchHistory]);
+
+  // Handle clear all history
+  const handleClearAllHistory = useCallback(async () => {
+    hapticFeedback.onPress();
+    await clearSearchHistory();
+    setSearchHistory([]);
+  }, []);
 
   // Fetch last read chapters without blocking the UI; parallelize and cancel on changes
   useEffect(() => {
@@ -385,10 +508,52 @@ export default function MangaSearchScreen() {
     })();
   `;
 
+  // Render search history item - memoized to prevent re-renders
+  const renderHistoryItem = useCallback(
+    (item: SearchHistoryItem) => (
+      <Pressable
+        key={item.query}
+        style={({ pressed }) => [
+          styles.historyItem,
+          pressed && { opacity: 0.7 },
+        ]}
+        onPress={() => handleHistoryItemPress(item.query)}
+      >
+        <View style={styles.historyItemContent}>
+          <Ionicons
+            name="time-outline"
+            size={18}
+            color={colors.tabIconDefault}
+          />
+          <Text style={styles.historyItemText} numberOfLines={1}>
+            {item.query}
+          </Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => handleHistoryItemDelete(item.query)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={styles.historyDeleteButton}
+        >
+          <Ionicons
+            name="close"
+            size={18}
+            color={colors.tabIconDefault}
+          />
+        </TouchableOpacity>
+      </Pressable>
+    ),
+    [styles, colors, handleHistoryItemPress, handleHistoryItemDelete]
+  );
+
   const EmptyState = useCallback(() => {
-    // While loading, let the FlatList's built-in refreshing control display the spinner
-    if (isLoading) {
+    // Show nothing during initial load to prevent flicker
+    if (isInitialLoad) {
       return null;
+    }
+
+    // Show skeleton while loading search results
+    if (isLoading) {
+      return <SearchSkeleton layoutMode={layoutMode} count={6} />;
     }
 
     if (tokenError) {
@@ -456,6 +621,58 @@ export default function MangaSearchScreen() {
       );
     }
 
+    // No results found after search (only show if search actually completed for this query)
+    const currentQueryNormalized = searchQuery.trim().toLowerCase();
+    const searchCompleted = lastCompletedQuery === currentQueryNormalized;
+
+    if (searchCompleted && searchResults.length === 0 && currentQueryNormalized.length > 2) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <View style={styles.emptyStateIcon}>
+            <Ionicons
+              name="search-outline"
+              size={48}
+              color={colors.tabIconDefault}
+            />
+          </View>
+          <Text style={styles.emptyStateTitle}>No Results Found</Text>
+          <Text style={styles.emptyStateText}>
+            We couldn&apos;t find any manga matching &quot;{searchQuery.trim()}&quot;.
+            Try a different title or check your spelling.
+          </Text>
+          <TouchableOpacity
+            style={[styles.clearSearchButton, { borderColor: colors.primary }]}
+            onPress={clearSearch}
+          >
+            <Text style={[styles.clearSearchButtonText, { color: colors.primary }]}>
+              Clear Search
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Show search history
+    if (searchHistory.length > 0 && showHistory) {
+      return (
+        <View>
+          <View style={styles.historyHeader}>
+            <Text style={styles.historyTitle}>Recent Searches</Text>
+            <TouchableOpacity
+              onPress={handleClearAllHistory}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.clearAllText}>Clear All</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.historyList}>
+            {searchHistory.map(renderHistoryItem)}
+          </View>
+        </View>
+      );
+    }
+
+    // Default empty state
     return (
       <View style={styles.emptyStateContainer}>
         <View style={styles.emptyStateIcon}>
@@ -471,11 +688,21 @@ export default function MangaSearchScreen() {
     styles,
     colors.primary,
     colors.error,
+    colors.tabIconDefault,
     tokenError,
     searchQuery,
+    searchResults.length,
+    lastCompletedQuery,
     isLoading,
+    isInitialLoad,
     isOffline,
     router,
+    layoutMode,
+    searchHistory,
+    showHistory,
+    renderHistoryItem,
+    handleClearAllHistory,
+    clearSearch,
   ]);
 
   return (
@@ -522,7 +749,14 @@ export default function MangaSearchScreen() {
                 }
               }}
             />
-            {searchQuery.length > 0 && (
+            {isLoading && (
+              <ActivityIndicator
+                size="small"
+                color={colors.primary}
+                style={styles.searchLoader}
+              />
+            )}
+            {searchQuery.length > 0 && !isLoading && (
               <TouchableOpacity
                 onPress={clearSearch}
                 style={styles.clearButton}
@@ -630,13 +864,16 @@ const getStyles = (
     },
     searchInput: {
       flex: 1,
-      fontSize: 17, // iOS standard size
+      fontSize: 17,
       color: colors.text,
       paddingVertical: 8,
       height: '100%',
     },
     clearButton: {
       padding: 4,
+    },
+    searchLoader: {
+      marginRight: 4,
     },
     loadingContainer: {
       flex: 1,
@@ -657,11 +894,10 @@ const getStyles = (
     resultItem: {
       flexDirection: 'row',
       marginBottom: 12,
-      height: 110, // Fixed height for list item
-      backgroundColor: colors.card, // Optional: card background for the row
+      height: 110,
+      backgroundColor: colors.card,
       borderRadius: 12,
       overflow: 'hidden',
-      // Elevation/Shadow for the row
       shadowColor: colors.text,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
@@ -669,19 +905,17 @@ const getStyles = (
       elevation: 2,
     },
     cardWrapperList: {
-      width: 80, // Fixed width for the cover image part
-      height: 110, // Matches item height
-      overflow: 'hidden', // CRITICAL: hides the text part of MangaCard
+      width: 80,
+      height: 110,
+      overflow: 'hidden',
     },
     // Grid View Styling
     cardWrapperGrid: {
       width: gridCardWidth,
-      marginBottom: 0, // Handled by columnWrapper/gap
+      marginBottom: 0,
     },
     card: {
       width: '100%',
-      // Grid: MangaCard handles aspect ratio (3/4)
-      // List: Cropped via cardWrapperList
     },
     itemInfo: {
       flex: 1,
@@ -774,6 +1008,64 @@ const getStyles = (
       color: '#FFFFFF',
       fontSize: 16,
       fontWeight: '600',
+    },
+    clearSearchButton: {
+      marginTop: 24,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      backgroundColor: 'transparent',
+    },
+    clearSearchButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    // Search History Styles
+    historyHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 12,
+    },
+    historyTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    clearAllText: {
+      fontSize: 14,
+      color: colors.primary,
+      fontWeight: '500',
+    },
+    historyList: {
+      paddingHorizontal: 16,
+    },
+    historyItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      paddingHorizontal: 12,
+      backgroundColor: colors.card,
+      borderRadius: 10,
+      marginBottom: 8,
+    },
+    historyItemContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      gap: 12,
+    },
+    historyItemText: {
+      fontSize: 15,
+      color: colors.text,
+      flex: 1,
+    },
+    historyDeleteButton: {
+      padding: 4,
     },
   });
 };
