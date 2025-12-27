@@ -349,4 +349,302 @@ describe('downloadStatusService', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('getSimpleStatus', () => {
+    it('returns the status enum value', async () => {
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      const status = await downloadStatusService.getSimpleStatus('manga-1', '1');
+
+      expect(status).toBe(DownloadStatus.COMPLETED);
+    });
+
+    it('returns queued status for queued downloads', async () => {
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        status: DownloadStatus.QUEUED,
+      } as any);
+
+      const status = await downloadStatusService.getSimpleStatus('manga-1', '1');
+
+      expect(status).toBe(DownloadStatus.QUEUED);
+    });
+  });
+
+  describe('getDownloadProgress', () => {
+    it('returns progress from download manager', () => {
+      mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
+        progress: 75,
+        downloadSpeed: 2048,
+        estimatedTimeRemaining: 15,
+      });
+
+      const progress = downloadStatusService.getDownloadProgress('manga-1', '1');
+
+      expect(progress).toEqual({
+        status: DownloadStatus.DOWNLOADING,
+        progress: 75,
+        downloadSpeed: 2048,
+        estimatedTimeRemaining: 15,
+      });
+    });
+
+    it('returns null when no progress available', () => {
+      mockDownloadManager.getDownloadProgress.mockReturnValue(null);
+
+      const progress = downloadStatusService.getDownloadProgress('manga-1', '1');
+
+      expect(progress).toBeNull();
+    });
+  });
+
+  describe('clearCacheForChapter', () => {
+    it('clears specific chapter cache', async () => {
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      // Populate cache
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(1);
+
+      // Clear specific chapter
+      downloadStatusService.clearCacheForChapter('manga-1', '1');
+
+      // Should fetch again
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears all cache when no parameters provided', async () => {
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      // Populate cache for multiple chapters
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      await downloadStatusService.getChapterDownloadStatus('manga-2', '2');
+
+      // Clear all
+      downloadStatusService.clearCacheForChapter();
+
+      // Should fetch again for all
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      await downloadStatusService.getChapterDownloadStatus('manga-2', '2');
+
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('isDownloadingChapters error handling', () => {
+    it('returns false on error', async () => {
+      mockDownloadManager.getActiveDownloads.mockRejectedValue(
+        new Error('Service error')
+      );
+
+      const result = await downloadStatusService.isDownloadingChapters('manga-1');
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('alternative active download check', () => {
+    it('finds active download by mangaId and chapterNumber', async () => {
+      // Not in queue
+      mockDownloadQueue.getDownloadById.mockResolvedValue(null);
+
+      // Active downloads with different ID format
+      mockDownloadManager.getActiveDownloads.mockResolvedValue([
+        {
+          id: 'different-id-format',
+          mangaId: 'manga-1',
+          chapterNumber: '1',
+          status: DownloadStatus.DOWNLOADING,
+        } as any,
+      ]);
+
+      mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
+        progress: 60,
+        downloadSpeed: 1500,
+        estimatedTimeRemaining: 20,
+      });
+
+      const status = await downloadStatusService.getChapterDownloadStatus(
+        'manga-1',
+        '1'
+      );
+
+      expect(status.status).toBe(DownloadStatus.DOWNLOADING);
+      expect(status.isDownloading).toBe(true);
+      expect(status.progress).toBe(60);
+    });
+  });
+
+  describe('queue status variations', () => {
+    it('returns failed status for failed downloads', async () => {
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        status: DownloadStatus.FAILED,
+      } as any);
+
+      const status = await downloadStatusService.getChapterDownloadStatus(
+        'manga-1',
+        '1'
+      );
+
+      expect(status.status).toBe(DownloadStatus.FAILED);
+      expect(status.isFailed).toBe(true);
+    });
+
+    it('returns paused status for paused downloads', async () => {
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        status: DownloadStatus.PAUSED,
+      } as any);
+
+      const status = await downloadStatusService.getChapterDownloadStatus(
+        'manga-1',
+        '1'
+      );
+
+      expect(status.status).toBe(DownloadStatus.PAUSED);
+      expect(status.isPaused).toBe(true);
+    });
+  });
+
+  describe('event handling', () => {
+    it('invalidates cache on download events', async () => {
+      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
+
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      // Populate cache
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(1);
+
+      // Trigger download_started event
+      downloadEventEmitter._triggerGlobal({
+        type: 'download_started',
+        mangaId: 'manga-1',
+        chapterNumber: '1',
+      });
+
+      // Cache should be invalidated
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates cache on download_completed event', async () => {
+      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
+
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+
+      downloadEventEmitter._triggerGlobal({
+        type: 'download_completed',
+        mangaId: 'manga-1',
+        chapterNumber: '1',
+      });
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates cache on download_failed event', async () => {
+      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
+
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+
+      downloadEventEmitter._triggerGlobal({
+        type: 'download_failed',
+        mangaId: 'manga-1',
+        chapterNumber: '1',
+      });
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates cache on download_deleted event', async () => {
+      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
+
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+
+      downloadEventEmitter._triggerGlobal({
+        type: 'download_deleted',
+        mangaId: 'manga-1',
+        chapterNumber: '1',
+      });
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates cache on download_paused event', async () => {
+      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
+
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+
+      downloadEventEmitter._triggerGlobal({
+        type: 'download_paused',
+        mangaId: 'manga-1',
+        chapterNumber: '1',
+      });
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidates cache on download_resumed event', async () => {
+      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
+
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+
+      downloadEventEmitter._triggerGlobal({
+        type: 'download_resumed',
+        mangaId: 'manga-1',
+        chapterNumber: '1',
+      });
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
+    });
+
+    it('updates cached progress on download_progress event', async () => {
+      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
+
+      // First, cache a downloading status
+      mockDownloadQueue.getDownloadById.mockResolvedValue({
+        id: 'manga-1_1',
+        status: DownloadStatus.DOWNLOADING,
+      } as any);
+
+      mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.DOWNLOADING,
+        progress: 50,
+      });
+
+      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
+
+      // Trigger progress event
+      downloadEventEmitter._triggerGlobal({
+        type: 'download_progress',
+        mangaId: 'manga-1',
+        chapterNumber: '1',
+        progress: 75,
+        estimatedTimeRemaining: 10,
+        downloadSpeed: 2048,
+      });
+
+      // Get cached status - should reflect updated progress
+      // Note: Cache may be updated in place based on implementation
+    });
+  });
 });

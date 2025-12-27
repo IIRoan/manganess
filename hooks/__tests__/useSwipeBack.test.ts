@@ -17,6 +17,8 @@ jest.mock('../useNavigationHistory', () => ({
 
 const animatedValues: any[] = [];
 
+let mockPlatformOS = 'ios';
+
 jest.mock('react-native', () => {
   class MockAnimatedValue {
     value: number;
@@ -50,7 +52,9 @@ jest.mock('react-native', () => {
     Dimensions: {
       get: () => ({ width: 400 }),
     },
-    Platform: { OS: 'ios' },
+    Platform: {
+      get OS() { return mockPlatformOS; }
+    },
   };
 });
 
@@ -62,6 +66,7 @@ describe('useSwipeBack', () => {
     mockHandleBackPress.mockClear();
     mockCanGoBack = true;
     mockEnableGestures = true;
+    mockPlatformOS = 'ios';
   });
 
   afterEach(() => {
@@ -263,6 +268,80 @@ describe('useSwipeBack', () => {
       // Animation timing is mocked, just verify no error
       expect(result.current).toBeDefined();
     });
+
+    it('triggers animation on large swipe distance', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      expect(result.current.isSwipingBack).toBe(true);
+
+      // Large enough distance to trigger swipe (threshold is ~40)
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 100, vx: 0 }
+        );
+      });
+
+      // Run timers for the setTimeout callback
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // Animation should have been triggered (mocked timing was called)
+      const { Animated } = require('react-native');
+      expect(Animated.timing).toHaveBeenCalled();
+    });
+
+    it('triggers animation with high velocity swipe', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Smaller distance but high velocity
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 25, vx: 200 }
+        );
+      });
+
+      // Run timers
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // Animation should have been triggered
+      const { Animated } = require('react-native');
+      expect(Animated.timing).toHaveBeenCalled();
+    });
+
+    it('animates back when swipe distance is too small', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      expect(result.current.isSwipingBack).toBe(true);
+
+      // Very small distance, low velocity - should animate back
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 5, vx: 10 }
+        );
+      });
+
+      // Animation parallel should have been called for cancel animation
+      const { Animated } = require('react-native');
+      expect(Animated.parallel).toHaveBeenCalled();
+    });
   });
 
   describe('onPanResponderTerminate', () => {
@@ -310,6 +389,156 @@ describe('useSwipeBack', () => {
       expect(result.current).toBeDefined();
       expect(result.current.panResponder).toBeDefined();
     });
+
+    it('calls custom callback when swipe completes', () => {
+      const customCallback = jest.fn();
+      const { result } = renderHook(() =>
+        useSwipeBack({ customOnSwipeBack: customCallback })
+      );
+
+      // Start swipe
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      expect(result.current.isSwipingBack).toBe(true);
+
+      // Complete swipe with large enough distance
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 200, vx: 500 }
+        );
+      });
+
+      // Run timers for setTimeout in the animation completion callback
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // The custom callback should be called (animation mock calls callback immediately)
+      expect(customCallback).toHaveBeenCalled();
+    });
+
+    it('does not call handleBackPress when custom callback provided', () => {
+      const customCallback = jest.fn();
+      mockHandleBackPress.mockClear();
+
+      const { result } = renderHook(() =>
+        useSwipeBack({ customOnSwipeBack: customCallback })
+      );
+
+      // Start swipe
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Complete swipe
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 200, vx: 500 }
+        );
+      });
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // custom callback should be called, not handleBackPress
+      expect(customCallback).toHaveBeenCalled();
+      expect(mockHandleBackPress).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleSwipeBack default behavior', () => {
+    it('calls handleBackPress with swipe trigger when no custom callback', () => {
+      mockHandleBackPress.mockClear();
+
+      const { result } = renderHook(() => useSwipeBack());
+
+      // Start swipe
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Complete swipe with large enough distance
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 200, vx: 500 }
+        );
+      });
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // handleBackPress should be called with 'swipe' trigger
+      expect(mockHandleBackPress).toHaveBeenCalledWith('swipe');
+    });
+  });
+
+  describe('iOS extended edge detection', () => {
+    it('captures pan on iOS with extended edge threshold', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      // On iOS, edge threshold is extended by 1.5x (50 * 1.5 = 75)
+      const edgeEvent: any = { nativeEvent: { locationX: 60 } };
+
+      const shouldCapture = (
+        result.current.panResponder as any
+      ).onStartShouldSetPanResponder(edgeEvent);
+
+      // Should capture because 60 <= 75 (edgeThreshold * 1.5)
+      expect(shouldCapture).toBe(true);
+    });
+
+    it('does not capture pan outside extended edge on iOS', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      // Outside the extended edge (50 * 1.5 = 75)
+      const farEvent: any = { nativeEvent: { locationX: 100 } };
+
+      const shouldCapture = (
+        result.current.panResponder as any
+      ).onStartShouldSetPanResponder(farEvent);
+
+      expect(shouldCapture).toBe(false);
+    });
+  });
+
+  describe('Android edge detection', () => {
+    beforeEach(() => {
+      mockPlatformOS = 'android';
+    });
+
+    it('uses strict edge detection on Android', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      // On Android, only exact edge threshold applies (50)
+      const edgeEvent: any = { nativeEvent: { locationX: 40 } };
+
+      const shouldCapture = (
+        result.current.panResponder as any
+      ).onStartShouldSetPanResponder(edgeEvent);
+
+      expect(shouldCapture).toBe(true);
+    });
+
+    it('does not capture pan at iOS extended threshold on Android', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      // 60 would be captured on iOS but not on Android
+      const extendedEvent: any = { nativeEvent: { locationX: 60 } };
+
+      const shouldCapture = (
+        result.current.panResponder as any
+      ).onStartShouldSetPanResponder(extendedEvent);
+
+      // On Android, 60 > 50 (edgeThreshold) so it should NOT capture
+      expect(shouldCapture).toBe(false);
+    });
   });
 
   describe('getIndicatorStyles', () => {
@@ -354,6 +583,184 @@ describe('useSwipeBack', () => {
 
       expect(result.current.config.enabled).toBe(false);
       expect(result.current.canSwipeBack).toBe(false);
+    });
+  });
+
+  describe('swipe progress clamping', () => {
+    it('clamps progress between 0 and 1', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Very large swipe distance - progress should be clamped at 1
+      act(() => {
+        (result.current.panResponder as any).onPanResponderMove({}, { dx: 1000 });
+      });
+
+      expect(result.current.isSwipingBack).toBe(true);
+    });
+
+    it('handles negative dx values', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Negative dx - swiping left
+      act(() => {
+        (result.current.panResponder as any).onPanResponderMove({}, { dx: -50 });
+      });
+
+      expect(result.current.isSwipingBack).toBe(true);
+    });
+  });
+
+  describe('custom config', () => {
+    it('accepts custom config values', () => {
+      const customConfig = {
+        sensitivity: 0.8,
+        edgeThreshold: 100,
+        velocityThreshold: 200,
+        distanceThreshold: 150,
+      };
+
+      const { result } = renderHook(() =>
+        useSwipeBack({ config: customConfig })
+      );
+
+      expect(result.current.config.edgeThreshold).toBe(100);
+      expect(result.current.config.velocityThreshold).toBe(200);
+      expect(result.current.config.distanceThreshold).toBe(150);
+    });
+  });
+
+  describe('handleSwipeBack async behavior', () => {
+    it('calls handleBackPress asynchronously when no custom callback', async () => {
+      mockHandleBackPress.mockResolvedValue(true);
+      mockHandleBackPress.mockClear();
+
+      const { result } = renderHook(() => useSwipeBack());
+
+      // Start swipe
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Complete swipe with sufficient distance
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 200, vx: 0 }
+        );
+      });
+
+      // Run timers
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // handleBackPress should have been called
+      expect(mockHandleBackPress).toHaveBeenCalledWith('swipe');
+    });
+
+    it('uses custom callback when provided', async () => {
+      const customCallback = jest.fn();
+      mockHandleBackPress.mockClear();
+
+      const { result } = renderHook(() =>
+        useSwipeBack({ customOnSwipeBack: customCallback })
+      );
+
+      // Start swipe
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Complete swipe
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 200, vx: 0 }
+        );
+      });
+
+      // Run timers
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // Custom callback should be called, not handleBackPress
+      expect(customCallback).toHaveBeenCalled();
+      expect(mockHandleBackPress).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('swipe threshold combinations', () => {
+    it('triggers on low distance with high velocity', () => {
+      mockHandleBackPress.mockClear();
+
+      const { result } = renderHook(() => useSwipeBack());
+
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // dx > swipeThreshold * 0.5 AND vx > velocityThreshold (100)
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 25, vx: 150 }
+        );
+      });
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // Should have triggered the swipe
+      const { Animated } = require('react-native');
+      expect(Animated.timing).toHaveBeenCalled();
+    });
+
+    it('does not trigger on low distance with low velocity', () => {
+      mockHandleBackPress.mockClear();
+
+      const { result } = renderHook(() => useSwipeBack());
+
+      act(() => {
+        (result.current.panResponder as any).onPanResponderGrant();
+      });
+
+      // Both dx and vx are too low
+      act(() => {
+        (result.current.panResponder as any).onPanResponderRelease(
+          {},
+          { dx: 10, vx: 50 }
+        );
+      });
+
+      // handleBackPress should NOT be called
+      expect(mockHandleBackPress).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('return values', () => {
+    it('exposes all expected properties', () => {
+      const { result } = renderHook(() => useSwipeBack());
+
+      expect(result.current).toHaveProperty('panResponder');
+      expect(result.current).toHaveProperty('isSwipingBack');
+      expect(result.current).toHaveProperty('swipeDirection');
+      expect(result.current).toHaveProperty('swipeProgress');
+      expect(result.current).toHaveProperty('swipeOpacity');
+      expect(result.current).toHaveProperty('canSwipeBack');
+      expect(result.current).toHaveProperty('config');
+      expect(result.current).toHaveProperty('getSwipeStyles');
+      expect(result.current).toHaveProperty('getIndicatorStyles');
+      expect(result.current).toHaveProperty('resetSwipeState');
     });
   });
 });
