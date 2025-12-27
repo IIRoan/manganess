@@ -3,6 +3,7 @@ import {
   View,
   Text,
   Pressable,
+  ScrollView,
   TouchableWithoutFeedback,
   StyleSheet,
   Animated,
@@ -141,9 +142,16 @@ const Alert: React.FC<CustomAlertProps> = ({
               {title}
             </Text>
             {message ? (
-              <Text style={styles.message} numberOfLines={3}>
-                {message}
-              </Text>
+              <ScrollView
+                style={styles.messageScroll}
+                contentContainerStyle={styles.messageScrollContent}
+                showsVerticalScrollIndicator
+                alwaysBounceVertical={false}
+              >
+                <Text style={styles.message} selectable>
+                  {message}
+                </Text>
+              </ScrollView>
             ) : null}
           </View>
         </View>
@@ -269,8 +277,14 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 14,
       color: colors.tabIconDefault,
       lineHeight: 21,
-      marginTop: 6,
       opacity: 0.9,
+    },
+    messageScroll: {
+      marginTop: 6,
+      maxHeight: 260,
+    },
+    messageScrollContent: {
+      paddingBottom: 2,
     },
     optionsContainer: {
       paddingHorizontal: 24,
