@@ -2,7 +2,7 @@
   "expo": {
     "name": "manganess",
     "slug": "manganess",
-    "version": "1.6",
+    "version": "1.8",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
@@ -41,9 +41,7 @@
       }
     },
     "owner": "iroan",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
+    "runtimeVersion": "1.8.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
