@@ -42,7 +42,7 @@ const isDevBuild = (): boolean => {
 const getEnvironmentLabel = (): string => {
   if (isExpoGo()) return 'Expo Go';
   if (isDevelopment()) return 'Development Mode';
-  if (isDevBuild()) return 'Development Build';
+  if (isDevBuild()) return 'Development Build (used in prod)';
   return 'Production Build';
 };
 
@@ -136,8 +136,7 @@ export default function DebugScreen() {
       showAlertWithConfig({
         title: 'Updates Not Available',
         message:
-          unavailableReason ||
-          'Updates are not available in this environment.',
+          unavailableReason || 'Updates are not available in this environment.',
         options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
       });
       return;
@@ -179,8 +178,7 @@ export default function DebugScreen() {
       showAlertWithConfig({
         title: 'Updates Not Available',
         message:
-          unavailableReason ||
-          'Updates are not available in this environment.',
+          unavailableReason || 'Updates are not available in this environment.',
         options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
       });
       return;
@@ -708,7 +706,9 @@ export default function DebugScreen() {
               <Text style={styles.sectionTitle}>Expo Updates</Text>
             </View>
             <Ionicons
-              name={expandedSection === 'updates' ? 'chevron-up' : 'chevron-down'}
+              name={
+                expandedSection === 'updates' ? 'chevron-up' : 'chevron-down'
+              }
               size={20}
               color={colors.text}
             />
@@ -726,7 +726,9 @@ export default function DebugScreen() {
                     ]}
                   >
                     <Ionicons
-                      name={isExpoGo() ? 'phone-portrait-outline' : 'rocket-outline'}
+                      name={
+                        isExpoGo() ? 'phone-portrait-outline' : 'rocket-outline'
+                      }
                       size={16}
                       color="#FFFFFF"
                     />
@@ -736,7 +738,9 @@ export default function DebugScreen() {
                   </View>
                 </View>
                 <View style={styles.environmentDetails}>
-                  <Text style={styles.environmentLabel}>Execution Environment</Text>
+                  <Text style={styles.environmentLabel}>
+                    Execution Environment
+                  </Text>
                   <Text style={styles.environmentValue}>
                     {getExecutionEnvironment()}
                   </Text>
@@ -746,10 +750,15 @@ export default function DebugScreen() {
               {/* Expo Go Warning */}
               {isExpoGo() && (
                 <View style={styles.expoGoWarning}>
-                  <Ionicons name="information-circle" size={20} color="#8B5CF6" />
+                  <Ionicons
+                    name="information-circle"
+                    size={20}
+                    color="#8B5CF6"
+                  />
                   <Text style={styles.expoGoWarningText}>
-                    Running in Expo Go. OTA updates are not available in this environment.
-                    Build a development or production build to enable updates.
+                    Running in Expo Go. OTA updates are not available in this
+                    environment. Build a development or production build to
+                    enable updates.
                   </Text>
                 </View>
               )}
@@ -760,7 +769,11 @@ export default function DebugScreen() {
                 <TouchableOpacity
                   style={[
                     styles.channelBadge,
-                    { backgroundColor: getChannelColor(extendedUpdateInfo.channel).bg },
+                    {
+                      backgroundColor: getChannelColor(
+                        extendedUpdateInfo.channel
+                      ).bg,
+                    },
                   ]}
                   onPress={showChannelInfo}
                   activeOpacity={0.8}
@@ -773,7 +786,9 @@ export default function DebugScreen() {
                   <Text
                     style={[
                       styles.channelBadgeText,
-                      { color: getChannelColor(extendedUpdateInfo.channel).text },
+                      {
+                        color: getChannelColor(extendedUpdateInfo.channel).text,
+                      },
                     ]}
                   >
                     {getChannelDisplayName(extendedUpdateInfo.channel)}
@@ -845,7 +860,9 @@ export default function DebugScreen() {
                 {extendedUpdateInfo.isEmergencyLaunch && (
                   <View style={[styles.statusBadge, styles.emergencyBadge]}>
                     <Ionicons name="warning" size={14} color="#EF4444" />
-                    <Text style={[styles.statusBadgeText, { color: '#EF4444' }]}>
+                    <Text
+                      style={[styles.statusBadgeText, { color: '#EF4444' }]}
+                    >
                       Emergency
                     </Text>
                   </View>
@@ -864,7 +881,11 @@ export default function DebugScreen() {
                   disabled={!extendedUpdateInfo.updateId}
                 >
                   <View style={styles.infoCardHeader}>
-                    <Ionicons name="finger-print-outline" size={18} color={colors.text} />
+                    <Ionicons
+                      name="finger-print-outline"
+                      size={18}
+                      color={colors.text}
+                    />
                     <Text style={styles.infoCardTitle}>Update ID</Text>
                   </View>
                   <Text style={styles.infoCardValue} numberOfLines={1}>
@@ -882,17 +903,25 @@ export default function DebugScreen() {
                   style={styles.infoCard}
                   onPress={() =>
                     extendedUpdateInfo.runtimeVersion &&
-                    copyToClipboard(extendedUpdateInfo.runtimeVersion, 'Runtime Version')
+                    copyToClipboard(
+                      extendedUpdateInfo.runtimeVersion,
+                      'Runtime Version'
+                    )
                   }
                   disabled={!extendedUpdateInfo.runtimeVersion}
                 >
                   <View style={styles.infoCardHeader}>
-                    <Ionicons name="code-slash-outline" size={18} color={colors.text} />
+                    <Ionicons
+                      name="code-slash-outline"
+                      size={18}
+                      color={colors.text}
+                    />
                     <Text style={styles.infoCardTitle}>Runtime Version</Text>
                   </View>
                   <Text style={styles.infoCardValue} numberOfLines={1}>
                     {extendedUpdateInfo.runtimeVersion
-                      ? extendedUpdateInfo.runtimeVersion.substring(0, 16) + '...'
+                      ? extendedUpdateInfo.runtimeVersion.substring(0, 16) +
+                        '...'
                       : 'N/A'}
                   </Text>
                   {extendedUpdateInfo.runtimeVersion && (
@@ -911,7 +940,9 @@ export default function DebugScreen() {
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Auto Check:</Text>
-                  <Text style={styles.infoValue}>{extendedUpdateInfo.checkAutomatically}</Text>
+                  <Text style={styles.infoValue}>
+                    {extendedUpdateInfo.checkAutomatically}
+                  </Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Platform:</Text>
@@ -933,7 +964,11 @@ export default function DebugScreen() {
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Project ID:</Text>
                     <Text style={styles.infoValue} numberOfLines={1}>
-                      {Constants.expoConfig.extra.eas.projectId.substring(0, 12)}...
+                      {Constants.expoConfig.extra.eas.projectId.substring(
+                        0,
+                        12
+                      )}
+                      ...
                     </Text>
                   </View>
                 )}
@@ -953,15 +988,24 @@ export default function DebugScreen() {
                   style={[
                     styles.updateButton,
                     { backgroundColor: accentColor || colors.primary },
-                    (updateStatus.isChecking || isExpoGo()) && styles.buttonDisabled,
+                    (updateStatus.isChecking || isExpoGo()) &&
+                      styles.buttonDisabled,
                   ]}
                   onPress={checkForUpdateDetailed}
-                  disabled={updateStatus.isChecking || updateStatus.isDownloading || isExpoGo()}
+                  disabled={
+                    updateStatus.isChecking ||
+                    updateStatus.isDownloading ||
+                    isExpoGo()
+                  }
                 >
                   {updateStatus.isChecking ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Ionicons name="refresh-outline" size={20} color="#FFFFFF" />
+                    <Ionicons
+                      name="refresh-outline"
+                      size={20}
+                      color="#FFFFFF"
+                    />
                   )}
                   <Text style={styles.updateButtonText}>
                     {isExpoGo()
@@ -976,10 +1020,15 @@ export default function DebugScreen() {
                   style={[
                     styles.updateButtonSecondary,
                     { borderColor: accentColor || colors.primary },
-                    (updateStatus.isDownloading || isExpoGo()) && styles.buttonDisabled,
+                    (updateStatus.isDownloading || isExpoGo()) &&
+                      styles.buttonDisabled,
                   ]}
                   onPress={fetchAndApplyUpdate}
-                  disabled={updateStatus.isChecking || updateStatus.isDownloading || isExpoGo()}
+                  disabled={
+                    updateStatus.isChecking ||
+                    updateStatus.isDownloading ||
+                    isExpoGo()
+                  }
                 >
                   {updateStatus.isDownloading ? (
                     <ActivityIndicator
@@ -999,7 +1048,9 @@ export default function DebugScreen() {
                       { color: accentColor || colors.primary },
                     ]}
                   >
-                    {updateStatus.isDownloading ? 'Fetching...' : 'Force Fetch Update'}
+                    {updateStatus.isDownloading
+                      ? 'Fetching...'
+                      : 'Force Fetch Update'}
                   </Text>
                 </TouchableOpacity>
 
@@ -1008,7 +1059,11 @@ export default function DebugScreen() {
                     style={styles.smallButton}
                     onPress={showManifestDetails}
                   >
-                    <Ionicons name="document-text-outline" size={18} color={colors.text} />
+                    <Ionicons
+                      name="document-text-outline"
+                      size={18}
+                      color={colors.text}
+                    />
                     <Text style={styles.smallButtonText}>Manifest</Text>
                   </TouchableOpacity>
 
@@ -1123,7 +1178,6 @@ export default function DebugScreen() {
             <Text style={styles.optionText}>Clear Image Cache</Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
 
       <Alert
