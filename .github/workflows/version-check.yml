@@ -1,0 +1,112 @@
+name: Version Check
+
+on:
+  push:
+    branches: [main, testing]
+  pull_request:
+    branches: [main, testing]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-versions:
+    name: Check Version Consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Check version consistency
+        run: |
+          echo "Checking version consistency across files..."
+          echo ""
+
+          # Extract versions from app.json
+          APP_VERSION=$(jq -r '.expo.version' app.json)
+          RUNTIME_VERSION=$(jq -r '.expo.runtimeVersion' app.json)
+
+          # Extract versions from package.json
+          PKG_VERSION=$(jq -r '.version' package.json)
+          PKG_EXPO_VERSION=$(jq -r '.expo.version' package.json)
+
+          echo "Found versions:"
+          echo "  app.json → expo.version: $APP_VERSION"
+          echo "  app.json → expo.runtimeVersion: $RUNTIME_VERSION"
+          echo "  package.json → version: $PKG_VERSION"
+          echo "  package.json → expo.version: $PKG_EXPO_VERSION"
+          echo ""
+
+          ERRORS=0
+
+          # Check that all base versions match
+          if [ "$APP_VERSION" != "$PKG_VERSION" ]; then
+            echo "❌ ERROR: app.json version ($APP_VERSION) does not match package.json version ($PKG_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ app.json version matches package.json version"
+          fi
+
+          if [ "$APP_VERSION" != "$PKG_EXPO_VERSION" ]; then
+            echo "❌ ERROR: app.json version ($APP_VERSION) does not match package.json expo.version ($PKG_EXPO_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ app.json version matches package.json expo.version"
+          fi
+
+          if [ "$PKG_VERSION" != "$PKG_EXPO_VERSION" ]; then
+            echo "❌ ERROR: package.json version ($PKG_VERSION) does not match package.json expo.version ($PKG_EXPO_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ package.json version matches package.json expo.version"
+          fi
+
+          # Check that runtimeVersion starts with the base version
+          # e.g., if version is "1.8", runtimeVersion should be "1.8.x"
+          if [[ ! "$RUNTIME_VERSION" =~ ^${APP_VERSION}\. ]]; then
+            echo "❌ ERROR: runtimeVersion ($RUNTIME_VERSION) should start with version prefix ($APP_VERSION.)"
+            echo "   For version $APP_VERSION, runtimeVersion should be something like ${APP_VERSION}.0, ${APP_VERSION}.1, etc."
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ runtimeVersion ($RUNTIME_VERSION) correctly prefixed with version ($APP_VERSION)"
+          fi
+
+          # Check for empty or null versions
+          if [ "$APP_VERSION" = "null" ] || [ -z "$APP_VERSION" ]; then
+            echo "❌ ERROR: app.json expo.version is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ "$RUNTIME_VERSION" = "null" ] || [ -z "$RUNTIME_VERSION" ]; then
+            echo "❌ ERROR: app.json expo.runtimeVersion is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ "$PKG_VERSION" = "null" ] || [ -z "$PKG_VERSION" ]; then
+            echo "❌ ERROR: package.json version is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ "$PKG_EXPO_VERSION" = "null" ] || [ -z "$PKG_EXPO_VERSION" ]; then
+            echo "❌ ERROR: package.json expo.version is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          echo ""
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Version check failed with $ERRORS error(s)"
+            echo ""
+            echo "Please ensure all versions are updated consistently:"
+            echo "  1. app.json → expo.version (e.g., \"1.8\")"
+            echo "  2. app.json → expo.runtimeVersion (e.g., \"1.8.0\" - update patch for native changes)"
+            echo "  3. package.json → version (e.g., \"1.8\")"
+            echo "  4. package.json → expo.version (e.g., \"1.8\")"
+            exit 1
+          else
+            echo "✓ All version checks passed!"
+          fi
