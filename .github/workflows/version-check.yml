@@ -1,0 +1,201 @@
+name: Version Check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-versions:
+    name: Check Version Bump Required
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          path: pr-branch
+
+      - name: Checkout main branch
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          path: main-branch
+
+      - name: Check version consistency and bump
+        run: |
+          echo "========================================="
+          echo "Checking version consistency in PR branch"
+          echo "========================================="
+          echo ""
+
+          # Extract versions from PR branch
+          PR_APP_VERSION=$(jq -r '.expo.version' pr-branch/app.json)
+          PR_RUNTIME_VERSION=$(jq -r '.expo.runtimeVersion' pr-branch/app.json)
+          PR_PKG_VERSION=$(jq -r '.version' pr-branch/package.json)
+          PR_PKG_EXPO_VERSION=$(jq -r '.expo.version' pr-branch/package.json)
+
+          # Extract versions from main branch
+          MAIN_APP_VERSION=$(jq -r '.expo.version' main-branch/app.json)
+          MAIN_RUNTIME_VERSION=$(jq -r '.expo.runtimeVersion' main-branch/app.json)
+          MAIN_PKG_VERSION=$(jq -r '.version' main-branch/package.json)
+
+          echo "Main branch versions:"
+          echo "  app.json → expo.version: $MAIN_APP_VERSION"
+          echo "  app.json → expo.runtimeVersion: $MAIN_RUNTIME_VERSION"
+          echo "  package.json → version: $MAIN_PKG_VERSION"
+          echo ""
+          echo "PR branch versions:"
+          echo "  app.json → expo.version: $PR_APP_VERSION"
+          echo "  app.json → expo.runtimeVersion: $PR_RUNTIME_VERSION"
+          echo "  package.json → version: $PR_PKG_VERSION"
+          echo "  package.json → expo.version: $PR_PKG_EXPO_VERSION"
+          echo ""
+
+          ERRORS=0
+
+          # =========================================
+          # Check PR branch version consistency
+          # =========================================
+          echo "--- Checking PR branch version consistency ---"
+
+          if [ "$PR_APP_VERSION" != "$PR_PKG_VERSION" ]; then
+            echo "❌ ERROR: app.json version ($PR_APP_VERSION) does not match package.json version ($PR_PKG_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ app.json version matches package.json version"
+          fi
+
+          if [ "$PR_APP_VERSION" != "$PR_PKG_EXPO_VERSION" ]; then
+            echo "❌ ERROR: app.json version ($PR_APP_VERSION) does not match package.json expo.version ($PR_PKG_EXPO_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ app.json version matches package.json expo.version"
+          fi
+
+          if [ "$PR_PKG_VERSION" != "$PR_PKG_EXPO_VERSION" ]; then
+            echo "❌ ERROR: package.json version ($PR_PKG_VERSION) does not match package.json expo.version ($PR_PKG_EXPO_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ package.json version matches package.json expo.version"
+          fi
+
+          # Check that runtimeVersion starts with the base version
+          if [[ ! "$PR_RUNTIME_VERSION" =~ ^${PR_APP_VERSION}\. ]]; then
+            echo "❌ ERROR: runtimeVersion ($PR_RUNTIME_VERSION) should start with version prefix ($PR_APP_VERSION.)"
+            echo "   For version $PR_APP_VERSION, runtimeVersion should be something like ${PR_APP_VERSION}.0, ${PR_APP_VERSION}.1, etc."
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "✓ runtimeVersion ($PR_RUNTIME_VERSION) correctly prefixed with version ($PR_APP_VERSION)"
+          fi
+
+          # Check for empty or null versions
+          if [ "$PR_APP_VERSION" = "null" ] || [ -z "$PR_APP_VERSION" ]; then
+            echo "❌ ERROR: app.json expo.version is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ "$PR_RUNTIME_VERSION" = "null" ] || [ -z "$PR_RUNTIME_VERSION" ]; then
+            echo "❌ ERROR: app.json expo.runtimeVersion is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ "$PR_PKG_VERSION" = "null" ] || [ -z "$PR_PKG_VERSION" ]; then
+            echo "❌ ERROR: package.json version is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          if [ "$PR_PKG_EXPO_VERSION" = "null" ] || [ -z "$PR_PKG_EXPO_VERSION" ]; then
+            echo "❌ ERROR: package.json expo.version is missing or null"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          echo ""
+          echo "--- Checking version bump from main branch ---"
+
+          # =========================================
+          # Compare versions: PR must be higher than main
+          # =========================================
+
+          # Function to compare versions (returns 0 if v1 > v2, 1 otherwise)
+          version_greater() {
+            local v1=$1
+            local v2=$2
+
+            # Split versions into parts
+            IFS='.' read -ra V1_PARTS <<< "$v1"
+            IFS='.' read -ra V2_PARTS <<< "$v2"
+
+            # Compare each part
+            local max_parts=${#V1_PARTS[@]}
+            if [ ${#V2_PARTS[@]} -gt $max_parts ]; then
+              max_parts=${#V2_PARTS[@]}
+            fi
+
+            for ((i=0; i<max_parts; i++)); do
+              local part1=${V1_PARTS[i]:-0}
+              local part2=${V2_PARTS[i]:-0}
+
+              if [ "$part1" -gt "$part2" ] 2>/dev/null; then
+                return 0
+              elif [ "$part1" -lt "$part2" ] 2>/dev/null; then
+                return 1
+              fi
+            done
+
+            # Versions are equal
+            return 1
+          }
+
+          # Check if PR version is greater than main version
+          if version_greater "$PR_APP_VERSION" "$MAIN_APP_VERSION"; then
+            echo "✓ Version bumped: $MAIN_APP_VERSION → $PR_APP_VERSION"
+          else
+            echo "❌ ERROR: Version must be bumped! Current main: $MAIN_APP_VERSION, PR: $PR_APP_VERSION"
+            echo "   Please update to a higher version (e.g., $(echo $MAIN_APP_VERSION | awk -F. '{print $1"."$2+1}') or higher)"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          # Check if runtimeVersion is greater than or equal to main (can stay same for JS-only updates)
+          if version_greater "$PR_RUNTIME_VERSION" "$MAIN_RUNTIME_VERSION" || [ "$PR_RUNTIME_VERSION" = "$MAIN_RUNTIME_VERSION" ]; then
+            if [ "$PR_RUNTIME_VERSION" = "$MAIN_RUNTIME_VERSION" ]; then
+              echo "✓ runtimeVersion unchanged: $PR_RUNTIME_VERSION (JS-only update)"
+            else
+              echo "✓ runtimeVersion bumped: $MAIN_RUNTIME_VERSION → $PR_RUNTIME_VERSION (native changes)"
+            fi
+          else
+            echo "❌ ERROR: runtimeVersion cannot decrease! Current main: $MAIN_RUNTIME_VERSION, PR: $PR_RUNTIME_VERSION"
+            ERRORS=$((ERRORS + 1))
+          fi
+
+          # =========================================
+          # Final summary
+          # =========================================
+          echo ""
+          echo "========================================="
+          if [ $ERRORS -gt 0 ]; then
+            echo "❌ Version check failed with $ERRORS error(s)"
+            echo "========================================="
+            echo ""
+            echo "Please ensure:"
+            echo "  1. All versions are consistent across files"
+            echo "  2. Version is bumped higher than main branch ($MAIN_APP_VERSION)"
+            echo "  3. runtimeVersion is updated if native code changed"
+            echo ""
+            echo "Files to update:"
+            echo "  • app.json → expo.version"
+            echo "  • app.json → expo.runtimeVersion (bump patch for native changes)"
+            echo "  • package.json → version"
+            echo "  • package.json → expo.version"
+            exit 1
+          else
+            echo "✓ All version checks passed!"
+            echo "========================================="
+          fi
