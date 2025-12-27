@@ -151,22 +151,46 @@ const BottomPopup: React.FC<BottomPopupProps> = ({
               {options?.map((option, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={styles.optionButton}
+                  style={[
+                    styles.optionButton,
+                    option.isSelected && styles.selectedOption,
+                  ]}
                   onPress={() => {
                     option.onPress();
                     onClose();
                   }}
                 >
                   {option.icon && (
-                    <View style={styles.iconContainer}>
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        option.isSelected && styles.selectedIconContainer,
+                      ]}
+                    >
                       <Ionicons
                         name={option.icon}
                         size={24}
+                        color={option.isSelected ? '#fff' : colors.primary}
+                      />
+                    </View>
+                  )}
+                  <Text
+                    style={[
+                      styles.optionText,
+                      option.isSelected && styles.selectedOptionText,
+                    ]}
+                  >
+                    {option.text}
+                  </Text>
+                  {option.isSelected && (
+                    <View style={styles.checkmarkContainer}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={22}
                         color={colors.primary}
                       />
                     </View>
                   )}
-                  <Text style={styles.optionText}>{option.text}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -230,6 +254,12 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
     },
+    selectedOption: {
+      backgroundColor: `${colors.primary}10`,
+      marginHorizontal: -24,
+      paddingHorizontal: 24,
+      borderRadius: 0,
+    },
     iconContainer: {
       width: 40,
       height: 40,
@@ -239,10 +269,20 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       alignItems: 'center',
       marginRight: 16,
     },
+    selectedIconContainer: {
+      backgroundColor: colors.primary,
+    },
     optionText: {
       fontSize: 18,
       color: colors.text,
       flex: 1,
+    },
+    selectedOptionText: {
+      fontWeight: '600',
+      color: colors.text,
+    },
+    checkmarkContainer: {
+      marginLeft: 8,
     },
   });
 

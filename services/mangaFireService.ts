@@ -115,8 +115,20 @@ async function retryApiCall<T>(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await operation();
-    } catch (error) {
+    } catch (error: any) {
       lastError = error as Error;
+
+      // Don't retry on 403 errors - these indicate stale VRF token
+      // Let the UI handle refreshing the token
+      const is403 = error?.response?.status === 403 ||
+                    error?.message?.includes('403');
+      if (is403) {
+        log.warn('Network', 'Request failed with 403 - VRF token may be stale', {
+          attempt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw lastError;
+      }
 
       if (attempt === maxRetries) {
         throw lastError;
