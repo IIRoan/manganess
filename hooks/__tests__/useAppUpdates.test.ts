@@ -4,6 +4,19 @@ jest.mock('@/services/updateService', () => ({
   performFullUpdateFlow: jest.fn(),
   applyUpdate: jest.fn(),
   checkForUpdate: jest.fn(),
+  checkDownloadAndApplyUpdate: jest.fn(),
+  areUpdatesAvailable: jest.fn(() => true),
+  getUnavailableReason: jest.fn(() => null),
+  isUpdateLocked: jest.fn(() => false),
+  getUpdateInfo: jest.fn(() => ({
+    channel: 'testing',
+    runtimeVersion: '1.0.0',
+    updateId: 'test-update-id',
+    createdAt: new Date('2024-01-01'),
+    isEmbeddedLaunch: false,
+    isEmergencyLaunch: false,
+    checkAutomatically: 'ON_LOAD',
+  })),
 }));
 
 import { useAppUpdates } from '../useAppUpdates';
@@ -13,6 +26,19 @@ const updateService = require('@/services/updateService');
 describe('useAppUpdates', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mock defaults after clearing
+    updateService.areUpdatesAvailable.mockReturnValue(true);
+    updateService.getUnavailableReason.mockReturnValue(null);
+    updateService.isUpdateLocked.mockReturnValue(false);
+    updateService.getUpdateInfo.mockReturnValue({
+      channel: 'testing',
+      runtimeVersion: '1.0.0',
+      updateId: 'test-update-id',
+      createdAt: new Date('2024-01-01'),
+      isEmbeddedLaunch: false,
+      isEmergencyLaunch: false,
+      checkAutomatically: 'ON_LOAD',
+    });
   });
 
   describe('checkForUpdate', () => {
@@ -266,8 +292,8 @@ describe('useAppUpdates', () => {
 
   describe('updateAndReload', () => {
     it('performs full update and reload', async () => {
-      updateService.performFullUpdateFlow.mockImplementation(
-        async (_options: any, statusCallback: any) => {
+      updateService.checkDownloadAndApplyUpdate.mockImplementation(
+        async (statusCallback: any) => {
           statusCallback({
             isChecking: false,
             isUpdateAvailable: true,
@@ -286,17 +312,13 @@ describe('useAppUpdates', () => {
         expect(response.success).toBe(true);
       });
 
-      expect(updateService.performFullUpdateFlow).toHaveBeenCalledWith(
-        expect.objectContaining({
-          silent: true,
-          forceReload: true,
-        }),
+      expect(updateService.checkDownloadAndApplyUpdate).toHaveBeenCalledWith(
         expect.any(Function)
       );
     });
 
     it('handles errors during updateAndReload', async () => {
-      updateService.performFullUpdateFlow.mockRejectedValue(
+      updateService.checkDownloadAndApplyUpdate.mockRejectedValue(
         new Error('Reload failed')
       );
 
@@ -310,7 +332,9 @@ describe('useAppUpdates', () => {
     });
 
     it('handles non-Error thrown values in updateAndReload', async () => {
-      updateService.performFullUpdateFlow.mockRejectedValue('Reload error');
+      updateService.checkDownloadAndApplyUpdate.mockRejectedValue(
+        'Reload error'
+      );
 
       const { result } = renderHook(() => useAppUpdates());
 
