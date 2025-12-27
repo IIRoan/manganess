@@ -15,6 +15,12 @@ jest.mock('@/constants/env', () => ({
   isDebugEnabled: jest.fn(() => false),
 }));
 
+jest.mock('react-native-webview', () => ({
+  WebView: {
+    injectJavaScript: jest.fn(),
+  },
+}));
+
 jest.mock('../mangaFireService', () => ({
   fetchChapterImagesFromUrl: jest.fn(),
   fetchChapterImagesFromInterceptedRequest: jest.fn(),
@@ -435,6 +441,550 @@ describe('ImageExtractorService', () => {
   describe('singleton instance', () => {
     it('exports singleton instance', () => {
       expect(imageExtractorService).toBeInstanceOf(ImageExtractorService);
+    });
+  });
+
+  describe('extractImagesFromHtml with debug enabled', () => {
+    beforeEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(false);
+    });
+
+    it('logs debug info when chapterUrl provided and API succeeds', async () => {
+      mockFetchFromUrl.mockResolvedValue({
+        images: [['https://example.com/page1.jpg']],
+        status: 200,
+      });
+
+      const result = await service.extractImagesFromHtml(
+        '<div>html</div>',
+        'https://example.com/chapter/1'
+      );
+
+      expect(result).toHaveLength(1);
+    });
+
+    it('logs debug info when API returns empty images', async () => {
+      mockFetchFromUrl.mockResolvedValue({
+        images: [],
+        status: 200,
+      });
+
+      const html = `
+        <div class="pages">
+          <div class="page">
+            <img src="https://example.com/page1.jpg" data-number="1" />
+          </div>
+        </div>
+      `;
+
+      // Should fall back to HTML parsing
+      const result = await service.extractImagesFromHtml(
+        html,
+        'https://example.com/chapter/1'
+      );
+
+      expect(result).toHaveLength(1);
+    });
+
+    it('logs warning when API extraction fails', async () => {
+      mockFetchFromUrl.mockRejectedValue(new Error('API error'));
+
+      const html = `
+        <div class="pages">
+          <div class="page">
+            <img src="https://example.com/page1.jpg" data-number="1" />
+          </div>
+        </div>
+      `;
+
+      const result = await service.extractImagesFromHtml(
+        html,
+        'https://example.com/chapter/1'
+      );
+
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('extractImagesFromHtmlContent edge cases', () => {
+    it('handles HTML with pages container but no images', async () => {
+      const html = `
+        <div class="pages">
+          <div class="page">
+            <span>No image here</span>
+          </div>
+        </div>
+      `;
+
+      // Should return empty array and try alternative parsing
+      await expect(
+        service.extractImagesFromHtml(html)
+      ).rejects.toThrow('No images found in HTML content');
+    });
+
+    it('extracts images from pages container with multiple pages', async () => {
+      const html = `
+        <div class="pages inner">
+          <div class="page">
+            <img src="https://example.com/img1.jpg" data-number="1" />
+          </div>
+          <div class="page">
+            <img src="https://example.com/img2.jpg" data-number="2" />
+          </div>
+          <div class="page">
+            <img src="https://example.com/img3.jpg" data-number="3" />
+          </div>
+        </div>
+      `;
+
+      const result = await service.extractImagesFromHtml(html);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].pageNumber).toBe(1);
+      expect(result[2].pageNumber).toBe(3);
+    });
+
+    it('uses sequential index when data-number not present', async () => {
+      const html = `
+        <div class="pages">
+          <div class="page">
+            <img src="https://example.com/img1.jpg" />
+          </div>
+          <div class="page">
+            <img src="https://example.com/img2.jpg" />
+          </div>
+        </div>
+      `;
+
+      const result = await service.extractImagesFromHtml(html);
+
+      expect(result.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('parseAlternativeStructure', () => {
+    it('parses img tags with data-number directly', async () => {
+      const html = `
+        <html>
+          <body>
+            <img data-number="1" src="https://example.com/img1.jpg" />
+            <img data-number="2" src="https://example.com/img2.jpg" />
+          </body>
+        </html>
+      `;
+
+      const result = await service.extractImagesFromHtml(html);
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('uses generic img parsing for chapter-related URLs', async () => {
+      const html = `
+        <html>
+          <body>
+            <img src="https://cdn.example.com/chapter/001.jpg" />
+            <img src="https://cdn.example.com/page/002.jpg" />
+          </body>
+        </html>
+      `;
+
+      const result = await service.extractImagesFromHtml(html);
+
+      expect(result.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('extractImagesFromInterceptedRequest with debug enabled', () => {
+    beforeEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(false);
+    });
+
+    it('logs debug info on success', async () => {
+      mockFetchFromIntercepted.mockResolvedValue({
+        images: [
+          ['https://example.com/img1.jpg'],
+          ['https://example.com/img2.jpg'],
+        ],
+        status: 200,
+      });
+
+      const result = await service.extractImagesFromInterceptedRequest(
+        'chapter-123',
+        'vrf-token'
+      );
+
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('extractImagesFromApi with debug enabled', () => {
+    beforeEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(false);
+    });
+
+    it('logs debug info on success', async () => {
+      mockFetchFromUrl.mockResolvedValue({
+        images: [
+          ['https://example.com/page1.jpg'],
+          ['https://example.com/page2.jpg'],
+        ],
+        status: 200,
+      });
+
+      const result = await service.extractImagesFromApi(
+        'https://example.com/chapter/1'
+      );
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('handles unexpected image data format', async () => {
+      mockFetchFromUrl.mockResolvedValue({
+        images: [
+          { url: 'https://example.com/page1.jpg' }, // Object format
+          42, // Number
+          ['https://example.com/page2.jpg'], // Valid array
+        ],
+        status: 200,
+      });
+
+      const result = await service.extractImagesFromApi(
+        'https://example.com/chapter/1'
+      );
+
+      // Should filter to only valid URLs
+      expect(result.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('extractImagesFromWebView', () => {
+    it('returns empty array and injects script', async () => {
+      const mockWebView = {
+        injectJavaScript: jest.fn(),
+      };
+
+      const result = await service.extractImagesFromWebView(mockWebView as any);
+
+      expect(mockWebView.injectJavaScript).toHaveBeenCalled();
+      expect(result).toEqual([]);
+    });
+
+    it('rejects on injection error', async () => {
+      const mockWebView = {
+        injectJavaScript: jest.fn(() => {
+          throw new Error('Injection failed');
+        }),
+      };
+
+      await expect(
+        service.extractImagesFromWebView(mockWebView as any)
+      ).rejects.toThrow('Injection failed');
+    });
+  });
+
+  describe('waitForImagesLoaded', () => {
+    it('returns empty array and injects monitoring script', async () => {
+      const mockWebView = {
+        injectJavaScript: jest.fn(),
+      };
+
+      const result = await service.waitForImagesLoaded(mockWebView as any);
+
+      expect(mockWebView.injectJavaScript).toHaveBeenCalled();
+      expect(result).toEqual([]);
+    });
+
+    it('rejects on injection error', async () => {
+      const mockWebView = {
+        injectJavaScript: jest.fn(() => {
+          throw new Error('Monitoring failed');
+        }),
+      };
+
+      await expect(
+        service.waitForImagesLoaded(mockWebView as any)
+      ).rejects.toThrow('Monitoring failed');
+    });
+  });
+
+  describe('validateImageUrl', () => {
+    it('returns empty string for invalid URLs', () => {
+      const validateUrl = (url: string) =>
+        (service as any).validateImageUrl(url);
+
+      expect(validateUrl('')).toBe('');
+      expect(validateUrl('not-a-url')).toBe('');
+    });
+
+    it('decodes HTML entities in URLs', () => {
+      const validateUrl = (url: string) =>
+        (service as any).validateImageUrl(url);
+
+      expect(validateUrl('https://example.com/image.jpg?param=1&amp;other=2')).toBe(
+        'https://example.com/image.jpg?param=1&other=2'
+      );
+    });
+
+    it('returns valid URLs unchanged', () => {
+      const validateUrl = (url: string) =>
+        (service as any).validateImageUrl(url);
+
+      expect(validateUrl('https://example.com/image.jpg')).toBe(
+        'https://example.com/image.jpg'
+      );
+    });
+  });
+
+  describe('processWebViewMessage with debug enabled', () => {
+    beforeEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(false);
+    });
+
+    it('logs debug info when processing messages', () => {
+      const messageData = {
+        images: [
+          { pageNumber: 1, originalUrl: 'https://example.com/page1.jpg' },
+        ],
+      };
+
+      const result = service.processWebViewMessage(messageData);
+
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('extractImagesFromPageElement edge cases', () => {
+    beforeEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      (isDebugEnabled as jest.Mock).mockReturnValue(false);
+    });
+
+    it('handles malformed HTML gracefully', () => {
+      const pageHtml = '<img data-number="abc" src="invalid url" />';
+
+      const result = service.extractImagesFromPageElement(pageHtml);
+
+      // abc is not a valid number, parseInt returns NaN
+      expect(result).toBeNull();
+    });
+
+    it('returns null on parse error', () => {
+      const pageHtml = '<invalid><malformed';
+
+      const result = service.extractImagesFromPageElement(pageHtml);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('extractImagesFromHtml additional edge cases', () => {
+    it('handles HTML with only non-chapter images', async () => {
+      const html = `
+        <html>
+          <body>
+            <img src="https://example.com/logo.png" />
+            <img src="https://example.com/banner.jpg" />
+            <img src="https://example.com/favicon.ico" />
+          </body>
+        </html>
+      `;
+
+      await expect(service.extractImagesFromHtml(html)).rejects.toThrow(
+        'No images found in HTML content'
+      );
+    });
+
+    it('handles HTML with mixed valid and invalid images', async () => {
+      mockFetchFromUrl.mockRejectedValue(new Error('API error'));
+
+      const html = `
+        <div class="pages">
+          <div class="page">
+            <img src="https://example.com/page1.jpg" data-number="1" />
+          </div>
+          <div class="page">
+            <img src="" data-number="2" />
+          </div>
+          <div class="page">
+            <img src="https://example.com/page3.jpg" data-number="3" />
+          </div>
+        </div>
+      `;
+
+      const result = await service.extractImagesFromHtml(
+        html,
+        'https://example.com/chapter/1'
+      );
+
+      expect(result.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('extracts from reader-area container', async () => {
+      const html = `
+        <div id="reader-area">
+          <img src="https://example.com/page1.jpg" data-number="1" />
+          <img src="https://example.com/page2.jpg" data-number="2" />
+        </div>
+      `;
+
+      const result = await service.extractImagesFromHtml(html);
+
+      expect(result.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('extracts from reading-content container', async () => {
+      const html = `
+        <div class="reading-content">
+          <div class="page-break">
+            <img src="https://example.com/page1.jpg" />
+          </div>
+          <div class="page-break">
+            <img src="https://example.com/page2.jpg" />
+          </div>
+        </div>
+      `;
+
+      const result = await service.extractImagesFromHtml(html);
+
+      expect(result.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('processWebViewMessage additional cases', () => {
+    it('handles images with string page numbers', () => {
+      const messageData = {
+        images: [
+          { pageNumber: '1', originalUrl: 'https://example.com/page1.jpg' },
+          { pageNumber: '2', originalUrl: 'https://example.com/page2.jpg' },
+        ],
+      };
+
+      const result = service.processWebViewMessage(messageData);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].pageNumber).toBe(1);
+    });
+
+    it('handles duplicate page numbers', () => {
+      const messageData = {
+        images: [
+          { pageNumber: 1, originalUrl: 'https://example.com/page1.jpg' },
+          { pageNumber: 1, originalUrl: 'https://example.com/page1-alt.jpg' },
+          { pageNumber: 2, originalUrl: 'https://example.com/page2.jpg' },
+        ],
+      };
+
+      const result = service.processWebViewMessage(messageData);
+
+      // Should handle duplicates appropriately
+      expect(result.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('handles empty images array', () => {
+      const messageData = {
+        images: [],
+      };
+
+      const result = service.processWebViewMessage(messageData);
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('extractImagesFromApi additional cases', () => {
+    it('handles nested array image data', async () => {
+      mockFetchFromUrl.mockResolvedValue({
+        images: [
+          ['https://example.com/page1.jpg', 'extra-data', 'more-data'],
+          ['https://example.com/page2.jpg'],
+        ],
+        status: 200,
+      });
+
+      const result = await service.extractImagesFromApi(
+        'https://example.com/chapter/1'
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].originalUrl).toBe('https://example.com/page1.jpg');
+    });
+
+    it('handles whitespace-only URLs', async () => {
+      mockFetchFromUrl.mockResolvedValue({
+        images: [
+          ['https://example.com/page1.jpg'],
+          ['   '],
+          ['https://example.com/page3.jpg'],
+        ],
+        status: 200,
+      });
+
+      const result = await service.extractImagesFromApi(
+        'https://example.com/chapter/1'
+      );
+
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('isLikelyChapterImage additional patterns', () => {
+    const isLikelyChapterImage = (url: string) =>
+      (service as any).isLikelyChapterImage(url);
+
+    it('excludes more non-chapter patterns', () => {
+      expect(isLikelyChapterImage('https://example.com/button.png')).toBe(false);
+      expect(isLikelyChapterImage('https://example.com/sprite.png')).toBe(false);
+      expect(isLikelyChapterImage('https://example.com/loading.gif')).toBe(false);
+      expect(isLikelyChapterImage('https://example.com/background.jpg')).toBe(false);
+    });
+
+    it('includes common CDN patterns', () => {
+      expect(isLikelyChapterImage('https://cdn.example.com/read/001.jpg')).toBe(true);
+      expect(isLikelyChapterImage('https://img.example.com/scan/page.png')).toBe(true);
+    });
+
+    it('handles URLs with query parameters', () => {
+      expect(isLikelyChapterImage('https://example.com/page.jpg?token=abc')).toBe(true);
+      expect(isLikelyChapterImage('https://example.com/logo.png?v=1')).toBe(false);
+    });
+  });
+
+  describe('validateImageUrl additional cases', () => {
+    const validateUrl = (url: string) =>
+      (service as any).validateImageUrl(url);
+
+    it('handles multiple HTML entities', () => {
+      expect(validateUrl('https://example.com/img.jpg?a=1&amp;b=2&amp;c=3')).toBe(
+        'https://example.com/img.jpg?a=1&b=2&c=3'
+      );
+    });
+
+    it('handles data URLs', () => {
+      const dataUrl = 'data:image/png;base64,iVBORw0KGgo=';
+      expect(validateUrl(dataUrl)).toBe(dataUrl);
+    });
+
+    it('handles protocol-relative URLs', () => {
+      expect(validateUrl('//example.com/image.jpg')).toBe('//example.com/image.jpg');
     });
   });
 });

@@ -318,6 +318,112 @@ describe('bookmarkService', () => {
       const parsed = JSON.parse(stored!);
       expect(parsed.lastNotifiedChapter).toBe('5');
     });
+
+    it('handles marking as Read with no chapters (empty chapters array)', async () => {
+      const setBookmarkStatus = jest.fn();
+      const setIsAlertVisible = jest.fn();
+      const setReadChapters = jest.fn();
+
+      const mangaDetails = {
+        title: 'Series',
+        bannerImage: 'img',
+        chapters: [],
+      };
+
+      await saveBookmark(
+        'm6',
+        'Read',
+        mangaDetails,
+        [],
+        setBookmarkStatus,
+        setIsAlertVisible,
+        setReadChapters
+      );
+
+      expect(Alert.alert).toHaveBeenCalled();
+      const args = (Alert.alert as jest.Mock).mock.calls[0];
+      const options = args[2];
+
+      // Press "Yes" - should handle empty chapters gracefully
+      await options[1].onPress();
+      expect(setReadChapters).not.toHaveBeenCalled();
+    });
+
+    it('handles marking as Read with null mangaDetails', async () => {
+      const setBookmarkStatus = jest.fn();
+      const setIsAlertVisible = jest.fn();
+      const setReadChapters = jest.fn();
+
+      // mangaDetails is null
+      await saveBookmark(
+        'm7',
+        'Read',
+        null,
+        [],
+        setBookmarkStatus,
+        setIsAlertVisible,
+        setReadChapters
+      );
+
+      // Should still work with null mangaDetails
+      expect(setBookmarkStatus).toHaveBeenCalledWith('Read');
+      expect(setIsAlertVisible).toHaveBeenCalledWith(false);
+    });
+
+    it('handles "No" response with empty readChapters', async () => {
+      const setBookmarkStatus = jest.fn();
+      const setIsAlertVisible = jest.fn();
+      const setReadChapters = jest.fn();
+
+      const mangaDetails = {
+        title: 'Series',
+        bannerImage: 'img',
+        chapters: [{ number: '1' }, { number: '2' }],
+      };
+
+      await saveBookmark(
+        'm8',
+        'Read',
+        mangaDetails,
+        [], // empty readChapters
+        setBookmarkStatus,
+        setIsAlertVisible,
+        setReadChapters
+      );
+
+      const args = (Alert.alert as jest.Mock).mock.calls[0];
+      const options = args[2];
+
+      // Press "No" with empty readChapters - should still update AniList
+      await options[0].onPress();
+      expect(updateAniListStatus).toHaveBeenCalledWith('Series', 'Read', [], 2);
+    });
+
+    it('handles To Read status correctly', async () => {
+      const setBookmarkStatus = jest.fn();
+      const setIsAlertVisible = jest.fn();
+      const setReadChapters = jest.fn();
+
+      const mangaDetails = {
+        title: 'Series',
+        bannerImage: 'img',
+        chapters: [{ number: '1' }],
+      };
+
+      await saveBookmark(
+        'm9',
+        'To Read',
+        mangaDetails,
+        [],
+        setBookmarkStatus,
+        setIsAlertVisible,
+        setReadChapters
+      );
+
+      expect(setBookmarkStatus).toHaveBeenCalledWith('To Read');
+      expect(updateAniListStatus).toHaveBeenCalledWith('Series', 'To Read', [], 1);
+      expect(Alert.alert).not.toHaveBeenCalled(); // No prompt for To Read
+    });
   });
 
   describe('getChapterLongPressAlertConfig', () => {
@@ -364,6 +470,51 @@ describe('bookmarkService', () => {
       );
 
       expect(config).toBeNull();
+    });
+
+    it('does nothing when manga data does not exist', async () => {
+      const setReadChapters = jest.fn();
+      const onSuccess = jest.fn();
+
+      // No manga data exists for 'nonexistent'
+      const config = getChapterLongPressAlertConfig(
+        false,
+        '2',
+        { chapters: [{ number: '1' }, { number: '2' }] },
+        'nonexistent',
+        [],
+        setReadChapters,
+        onSuccess
+      );
+
+      await config?.options?.[1]?.onPress?.();
+
+      // setReadChapters should not be called when manga data doesn't exist
+      expect(setReadChapters).not.toHaveBeenCalled();
+      expect(onSuccess).not.toHaveBeenCalled();
+    });
+
+    it('handles empty mangaDetails.chapters gracefully', async () => {
+      const setReadChapters = jest.fn();
+
+      await AsyncStorage.setItem(
+        'manga_empty-chapters',
+        JSON.stringify({ id: 'empty-chapters', readChapters: [] })
+      );
+
+      const config = getChapterLongPressAlertConfig(
+        false,
+        '2',
+        { chapters: [] }, // Empty chapters array
+        'empty-chapters',
+        [],
+        setReadChapters
+      );
+
+      await config?.options?.[1]?.onPress?.();
+
+      // Should not crash, but readChapters should be updated (even if empty)
+      expect(setReadChapters).toHaveBeenCalledWith([]);
     });
   });
 
@@ -643,6 +794,264 @@ describe('bookmarkService', () => {
     it('returns 0 when no downloads exist', async () => {
       const result = await getTotalDownloadSize();
       expect(result).toBe(0);
+    });
+
+    it('returns 0 on error', async () => {
+      jest.spyOn(AsyncStorage, 'getAllKeys').mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await getTotalDownloadSize();
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('Error handling', () => {
+    it('handles error in setMangaData gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'setItem').mockRejectedValueOnce(new Error('Storage error'));
+
+      // Should not throw
+      await expect(
+        setMangaData({
+          id: 'error-test',
+          title: 'Test',
+          bannerImage: 'img.jpg',
+          readChapters: [],
+          bookmarkStatus: 'Reading',
+          lastUpdated: Date.now(),
+        })
+      ).resolves.not.toThrow();
+    });
+
+    it('handles error in removeBookmark gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'removeItem').mockRejectedValueOnce(new Error('Storage error'));
+
+      const setBookmarkStatus = jest.fn();
+      const setIsAlertVisible = jest.fn();
+
+      // Should not throw
+      await expect(
+        removeBookmark('error-id', setBookmarkStatus, setIsAlertVisible)
+      ).resolves.not.toThrow();
+    });
+
+    it('handles error in removeDownloadStatus gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+
+      // Should not throw
+      await expect(
+        removeDownloadStatus('error-id', '1')
+      ).resolves.not.toThrow();
+    });
+
+    it('handles error in updateTotalDownloadSize gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+
+      // Should not throw
+      await expect(
+        updateTotalDownloadSize('error-id', 100)
+      ).resolves.not.toThrow();
+    });
+
+    it('handles error in getChapterDownloadStatus gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await getChapterDownloadStatus('error-id', '1');
+      expect(result).toBeNull();
+    });
+
+    it('handles error in isChapterDownloaded gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await isChapterDownloaded('error-id', '1');
+      expect(result).toBe(false);
+    });
+
+    it('handles error in getAllDownloadedManga gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'getAllKeys').mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await getAllDownloadedManga();
+      expect(result).toEqual([]);
+    });
+
+    it('handles saveBookmark error gracefully', async () => {
+      // Mock offlineCacheService to throw an error after setMangaData succeeds
+      // This triggers the catch block in saveBookmark since setMangaData swallows its own errors
+      const { offlineCacheService } = require('@/services/offlineCacheService');
+      offlineCacheService.cacheMangaDetails.mockRejectedValueOnce(new Error('Cache error'));
+
+      const setBookmarkStatus = jest.fn();
+      const setIsAlertVisible = jest.fn();
+      const setReadChapters = jest.fn();
+
+      // Should not throw and should show error alert
+      await saveBookmark(
+        'error-manga',
+        'Reading',
+        { title: 'Test', bannerImage: 'img', chapters: [] },
+        [],
+        setBookmarkStatus,
+        setIsAlertVisible,
+        setReadChapters
+      );
+
+      expect(Alert.alert).toHaveBeenCalledWith('Error', expect.any(String));
+    });
+
+    it('handles updateDownloadStatus error gracefully', async () => {
+      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+
+      // Should not throw
+      await expect(
+        updateDownloadStatus('error-id', '1', { status: DownloadStatus.DOWNLOADING, progress: 50 })
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('getChapterLongPressAlertConfig edge cases', () => {
+    it('handles error during chapter marking', async () => {
+      // setReadChapters throws to trigger the catch block and onError callback
+      // Note: setMangaData and getMangaData catch their own errors, so we need
+      // to throw from setReadChapters which is called after those complete
+      const setReadChapters = jest.fn().mockImplementation(() => {
+        throw new Error('Component error');
+      });
+      const onError = jest.fn();
+
+      // Set up valid manga data so getMangaData returns it
+      await AsyncStorage.setItem(
+        'manga_error-manga',
+        JSON.stringify({ id: 'error-manga', readChapters: [], lastReadChapter: '' })
+      );
+
+      const config = getChapterLongPressAlertConfig(
+        false,
+        '2',
+        { chapters: [{ number: '1' }, { number: '2' }] },
+        'error-manga',
+        [],
+        setReadChapters,
+        undefined,
+        onError
+      );
+
+      await config?.options?.[1]?.onPress?.();
+
+      expect(onError).toHaveBeenCalled();
+    });
+
+    it('calls success callback with correct count', async () => {
+      const setReadChapters = jest.fn();
+      const onSuccess = jest.fn();
+
+      await AsyncStorage.setItem(
+        'manga_success',
+        JSON.stringify({ id: 'success', readChapters: [], lastReadChapter: '' })
+      );
+
+      const config = getChapterLongPressAlertConfig(
+        false,
+        '3',
+        { chapters: [{ number: '1' }, { number: '2' }, { number: '3' }] },
+        'success',
+        [],
+        setReadChapters,
+        onSuccess
+      );
+
+      await config?.options?.[1]?.onPress?.();
+
+      expect(onSuccess).toHaveBeenCalledWith(3, '3');
+    });
+
+    it('cancel option does nothing', async () => {
+      const setReadChapters = jest.fn();
+
+      const config = getChapterLongPressAlertConfig(
+        false,
+        '2',
+        { chapters: [{ number: '1' }, { number: '2' }] },
+        'manga1',
+        [],
+        setReadChapters
+      );
+
+      config?.options?.[0]?.onPress?.();
+
+      expect(setReadChapters).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getBookmarkPopupConfig edge cases', () => {
+    it('truncates long titles', () => {
+      const handler = jest.fn();
+      const longTitle = 'This is a very long title that should be truncated';
+      const popup = getBookmarkPopupConfig(null, longTitle, handler, handler);
+
+      expect(popup.title.length).toBeLessThan(longTitle.length + 20);
+      expect(popup.title).toContain('...');
+    });
+
+    it('marks correct option as selected', () => {
+      const handler = jest.fn();
+      const popup = getBookmarkPopupConfig('To Read', 'Title', handler, handler);
+
+      const toReadOption = popup.options.find((o: any) => o.text === 'To Read');
+      const readingOption = popup.options.find((o: any) => o.text === 'Reading');
+
+      expect(toReadOption?.isSelected).toBe(true);
+      expect(readingOption?.isSelected).toBe(false);
+    });
+
+    it('option handlers trigger callbacks', () => {
+      const handleSave = jest.fn();
+      const handleRemove = jest.fn();
+      const popup = getBookmarkPopupConfig('Reading', 'Title', handleSave, handleRemove);
+
+      const toReadOption = popup.options.find((o: any) => o.text === 'To Read');
+      toReadOption?.onPress();
+
+      expect(handleSave).toHaveBeenCalledWith('To Read');
+
+      const unbookmarkOption = popup.options.find((o: any) => o.text === 'Unbookmark');
+      unbookmarkOption?.onPress();
+
+      expect(handleRemove).toHaveBeenCalled();
+    });
+
+    it('triggers all status option handlers', () => {
+      const handleSave = jest.fn();
+      const handleRemove = jest.fn();
+      const popup = getBookmarkPopupConfig(null, 'Title', handleSave, handleRemove);
+
+      // Trigger Reading option
+      const readingOption = popup.options.find((o: any) => o.text === 'Reading');
+      readingOption?.onPress();
+      expect(handleSave).toHaveBeenCalledWith('Reading');
+
+      // Trigger On Hold option
+      const onHoldOption = popup.options.find((o: any) => o.text === 'On Hold');
+      onHoldOption?.onPress();
+      expect(handleSave).toHaveBeenCalledWith('On Hold');
+
+      // Trigger Read option
+      const readOption = popup.options.find((o: any) => o.text === 'Read');
+      readOption?.onPress();
+      expect(handleSave).toHaveBeenCalledWith('Read');
+    });
+
+    it('marks On Hold as selected when current status', () => {
+      const handler = jest.fn();
+      const popup = getBookmarkPopupConfig('On Hold', 'Title', handler, handler);
+
+      const onHoldOption = popup.options.find((o: any) => o.text === 'On Hold');
+      expect(onHoldOption?.isSelected).toBe(true);
+    });
+
+    it('marks Read as selected when current status', () => {
+      const handler = jest.fn();
+      const popup = getBookmarkPopupConfig('Read', 'Title', handler, handler);
+
+      const readOption = popup.options.find((o: any) => o.text === 'Read');
+      expect(readOption?.isSelected).toBe(true);
     });
   });
 });
