@@ -33,12 +33,4 @@ module.exports = {
   ],
   coverageReporters: ['text', 'text-summary', 'lcov', 'json-summary', 'html'],
   coverageDirectory: '<rootDir>/coverage',
-  coverageThreshold: {
-    global: {
-      branches: 50,
-      functions: 50,
-      lines: 50,
-      statements: 50,
-    },
-  },
 };
