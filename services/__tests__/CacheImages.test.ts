@@ -1001,4 +1001,135 @@ describe('CacheImages', () => {
       expect(stats.chapterCount).toBeGreaterThanOrEqual(0);
     });
   });
+
+  describe('search cache stale metadata handling', () => {
+    it('refreshes stale search cache metadata when file exists', async () => {
+      // First, cache an image
+      mockFileExists.mockReturnValue(true);
+      mockFileInfo.mockReturnValue({ exists: true, size: 512 });
+
+      // First call creates metadata
+      await imageCache.getCachedImagePath('https://example.com/stale-search-unique.jpg', 'search');
+
+      // Simulate time passing (metadata will be stale)
+      const originalDateNow = Date.now;
+      Date.now = jest.fn(() => originalDateNow() + 2 * 60 * 60 * 1000); // 2 hours later
+
+      // Second call should refresh the stale metadata
+      const result = await imageCache.getCachedImagePath('https://example.com/stale-search-unique.jpg', 'search');
+
+      expect(result).toContain('file://');
+      Date.now = originalDateNow;
+    });
+
+    it('creates metadata for existing file without metadata', async () => {
+      mockFileExists.mockReturnValue(true);
+      mockFileInfo.mockReturnValue({ exists: true, size: 768 });
+
+      const result = await imageCache.getCachedImagePath('https://example.com/no-meta-search-unique.jpg', 'search');
+
+      expect(result).toContain('file://');
+    });
+  });
+
+  describe('downloadSearchImage error with existing file', () => {
+    it('uses existing file when download fails but file exists', async () => {
+      // File doesn't exist initially
+      let fileExists = false;
+      mockFileExists.mockImplementation(() => fileExists);
+      mockFileInfo.mockImplementation(() => ({ exists: fileExists, size: fileExists ? 256 : 0 }));
+
+      // Download fails, but file exists after (e.g., race condition)
+      mockDownloadFileAsync.mockImplementation(async () => {
+        fileExists = true; // File was created by another process
+        throw new Error('Download failed but file exists');
+      });
+
+      const result = await imageCache.getCachedImagePath('https://example.com/race-condition-unique.jpg', 'search');
+
+      // Should return cached file path since file exists after error
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('getDownloadImagePath metadata handling', () => {
+    it('updates lastAccessed for existing download metadata', async () => {
+      mockFileExists.mockReturnValue(true);
+      mockFileInfo.mockReturnValue({ exists: true, size: 1024 });
+      mockDownloadFileAsync.mockResolvedValue({
+        uri: mockFileUri,
+        info: () => ({ exists: true, size: 1024 }),
+      });
+
+      // First cache
+      await imageCache.cacheChapterImage('https://example.com/dl-update-unique.jpg', 'dl-manga-unique', 'ch1', 5);
+
+      // Second access should update lastAccessed
+      const result = await imageCache.cacheChapterImage('https://example.com/dl-update-unique.jpg', 'dl-manga-unique', 'ch1', 5);
+
+      expect(result).toContain('file://');
+    });
+
+    it('creates metadata for existing file without metadata', async () => {
+      mockFileExists.mockReturnValue(true);
+      mockFileInfo.mockReturnValue({ exists: true, size: 512 });
+
+      const result = await imageCache.getCachedImagePath('https://example.com/dl-no-meta-unique.jpg', 'download', 'dl-no-meta-manga-unique');
+
+      expect(result).toContain('file://');
+    });
+  });
+
+  describe('getChapterImagePath stale metadata removal', () => {
+    it('removes stale metadata when cached file no longer exists', async () => {
+      mockFileExists.mockReturnValue(true);
+      mockFileInfo.mockReturnValue({ exists: true, size: 1024 });
+      mockDownloadFileAsync.mockResolvedValue({
+        uri: mockFileUri,
+        info: () => ({ exists: true, size: 1024 }),
+      });
+
+      // First cache
+      await imageCache.cacheChapterImage('https://example.com/stale-chapter-unique.jpg', 'stale-ch-manga-unique', 'ch5', 10);
+
+      // File no longer exists
+      mockFileExists.mockReturnValue(false);
+      mockFileInfo.mockReturnValue({ exists: false, size: 0 });
+
+      // Get chapter path - should return null and clean metadata
+      const result = await imageCache.getChapterImagePath('stale-ch-manga-unique', 'ch5', 10);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('clearCache functionality', () => {
+    it('clears search cache and verifies directory recreation', async () => {
+      await imageCache.clearCache('search');
+      expect(mockDirDelete).toHaveBeenCalled();
+    });
+
+    it('clears manga cache and verifies directory recreation', async () => {
+      await imageCache.clearCache('manga');
+      expect(mockDirDelete).toHaveBeenCalled();
+    });
+
+    it('clears download cache and verifies directory recreation', async () => {
+      await imageCache.clearCache('download');
+      expect(mockDirDelete).toHaveBeenCalled();
+    });
+  });
+
+  describe('getCacheStats error handling', () => {
+    it('returns valid stats structure', async () => {
+      const stats = await imageCache.getCacheStats();
+
+      expect(stats).toHaveProperty('totalSize');
+      expect(stats).toHaveProperty('totalFiles');
+      expect(stats).toHaveProperty('mangaCount');
+      expect(stats).toHaveProperty('searchCount');
+      expect(stats).toHaveProperty('downloadCount');
+      expect(typeof stats.totalSize).toBe('number');
+    });
+  });
 });
