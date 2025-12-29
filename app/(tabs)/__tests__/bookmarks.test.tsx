@@ -59,6 +59,7 @@ jest.mock('@expo/vector-icons', () => ({
 
 // Mock MangaCard as a functional component to allow interaction testing
 jest.mock('@/components/MangaCard', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { TouchableOpacity, Text, View } = require('react-native');
   return function MockMangaCard({ title, onPress, onBookmarkChange, mangaId }: any) {
     return (
