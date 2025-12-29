@@ -23,6 +23,8 @@ import {
   getChapterIdFromPage,
   fetchChapterImagesFromUrl,
   batchFetchChapterImages,
+  getVrfTokenFromChapterPage,
+  fetchChapterImagesFromInterceptedRequest,
 } from '../mangaFireService';
 
 jest.mock('axios');
@@ -821,6 +823,521 @@ describe('mangaFireService', () => {
       expect(results[0]).toHaveProperty('error');
       expect(onError).toHaveBeenCalled();
       jest.useRealTimers();
+    });
+
+    it('adds delay between batches when configured', async () => {
+      jest.useFakeTimers();
+      let callCount = 0;
+      mockedAxios.get.mockImplementation(() => {
+        callCount++;
+        const callInCycle = ((callCount - 1) % 3) + 1;
+        if (callInCycle === 1) {
+          return Promise.resolve({ data: '<html>content</html>' });
+        } else if (callInCycle === 2) {
+          return Promise.resolve({ data: 'var chapterId = 1234567;' });
+        } else {
+          return Promise.resolve({
+            data: { status: 200, result: { images: [['https://img.jpg']] } },
+          });
+        }
+      });
+
+      const urls = ['/read/manga/en/chapter-1', '/read/manga/en/chapter-2', '/read/manga/en/chapter-3'];
+      const resultsPromise = batchFetchChapterImages(urls, {
+        maxConcurrent: 1,
+        delayBetweenRequests: 500,
+      });
+
+      await jest.runAllTimersAsync();
+      const results = await resultsPromise;
+
+      expect(results).toHaveLength(3);
+      jest.useRealTimers();
+    });
+  });
+
+  describe('getVrfTokenFromChapterPage', () => {
+    it('extracts VRF token from form input', async () => {
+      const html = '<input name="vrf" value="test-vrf-token-12345678901234567890-abcdef">';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      expect(token).toBe('test-vrf-token-12345678901234567890-abcdef');
+    });
+
+    it('extracts VRF token from alternate form input format', async () => {
+      const html = '<input value="test-vrf-value-12345678901234567890-xyz" name="vrf">';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      expect(token).toBe('test-vrf-value-12345678901234567890-xyz');
+    });
+
+    it('falls back to extractVrfTokenFromHtml when form input not found', async () => {
+      const html = 'const vrf = "FALLBACKVRFTOKENVALUE123456789012345678901234567890"';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      expect(token).toBe('FALLBACKVRFTOKENVALUE123456789012345678901234567890');
+    });
+
+    it('handles full URLs', async () => {
+      mockedAxios.get.mockResolvedValue({ data: '<html></html>' });
+
+      await getVrfTokenFromChapterPage('https://mangafire.to/read/manga/en/chapter-1');
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        'https://mangafire.to/read/manga/en/chapter-1',
+        expect.any(Object)
+      );
+    });
+
+    it('returns null on network error', async () => {
+      mockedAxios.get.mockRejectedValue(new Error('Network error'));
+
+      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      expect(token).toBeNull();
+    });
+
+    it('rejects short VRF tokens from form input', async () => {
+      const html = '<input name="vrf" value="short">';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      expect(token).toBeNull();
+    });
+  });
+
+  describe('fetchChapterImagesFromInterceptedRequest', () => {
+    it('fetches images using intercepted VRF token', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          status: 200,
+          result: { images: [['https://img1.jpg'], ['https://img2.jpg']] },
+        },
+      });
+
+      const result = await fetchChapterImagesFromInterceptedRequest(
+        '12345',
+        'intercepted-vrf-token-123456789',
+        '/read/manga/en/chapter-1'
+      );
+
+      expect(result.images).toHaveLength(2);
+      expect(result.status).toBe(200);
+    });
+
+    it('throws error on failure', async () => {
+      jest.useFakeTimers();
+      mockedAxios.get.mockRejectedValue(new Error('API error'));
+
+      let thrownError: Error | undefined;
+      const promise = fetchChapterImagesFromInterceptedRequest(
+        '12345',
+        'vrf-token',
+        '/read/manga/en/chapter-1'
+      ).catch(e => { thrownError = e; });
+
+      await jest.runAllTimersAsync();
+      await promise;
+
+      expect(thrownError).toBeDefined();
+      expect(thrownError?.message).toBe('API error');
+      jest.useRealTimers();
+    });
+  });
+
+  describe('extractVrfTokenFromHtml edge cases', () => {
+    it('finds VRF token with let declaration', () => {
+      const html = 'let vrf = "LETVRFTOKENVALUE123456789012345678901234567890"';
+      const token = extractVrfTokenFromHtml(html);
+      expect(token).toBe('LETVRFTOKENVALUE123456789012345678901234567890');
+    });
+
+    it('finds VRF token with const declaration', () => {
+      const html = 'const vrf = "CONSTVRFTOKENVALUE12345678901234567890123456789"';
+      const token = extractVrfTokenFromHtml(html);
+      expect(token).toBe('CONSTVRFTOKENVALUE12345678901234567890123456789');
+    });
+
+    it('finds VRF token in JSON format', () => {
+      const html = '{"vrf": "JSONVRFTOKENVALUE1234567890123456789012345678901"}';
+      const token = extractVrfTokenFromHtml(html);
+      expect(token).toBe('JSONVRFTOKENVALUE1234567890123456789012345678901');
+    });
+
+    it('finds vrfToken format', () => {
+      const html = 'vrfToken: "VRFTOKENFORMAT1234567890123456789012345678901234"';
+      const token = extractVrfTokenFromHtml(html);
+      expect(token).toBe('VRFTOKENFORMAT1234567890123456789012345678901234');
+    });
+
+    it('finds vrf_token format', () => {
+      // Token value must match [a-zA-Z0-9+/=]+ pattern (no underscores)
+      const html = 'vrf_token:"VRFTOKENFORMAT1234567890123456789012345678901"';
+      const token = extractVrfTokenFromHtml(html);
+      expect(token).toBe('VRFTOKENFORMAT1234567890123456789012345678901');
+    });
+
+    it('finds base64 fallback when no other pattern matches', () => {
+      // Long base64-like string that doesn't match other patterns
+      const html = 'randomfield: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678901234567890+/="';
+      const token = extractVrfTokenFromHtml(html);
+      expect(token).not.toBeNull();
+      expect(token!.length).toBeGreaterThan(40);
+    });
+
+    it('prefers longer base64 match', () => {
+      const html = 'token1: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" token2: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"';
+      const token = extractVrfTokenFromHtml(html);
+      expect(token).toBe('BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB');
+    });
+  });
+
+  describe('getChapterIdFromPage edge cases', () => {
+    it('extracts chapter ID from data-chapter-id attribute', async () => {
+      const html = '<div data-chapter-id="7654321"></div>';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('7654321');
+    });
+
+    it('extracts chapter ID from JSON chapterId format', async () => {
+      const html = '{"chapterId": 8765432}';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('8765432');
+    });
+
+    it('extracts chapter ID from chapter_id JSON format', async () => {
+      const html = '{"chapter_id": 9876543}';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('9876543');
+    });
+
+    it('extracts chapter ID from URL pattern in script', async () => {
+      const html = 'url: "/ajax/read/chapter/5432198"';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('5432198');
+    });
+
+    it('extracts chapter ID from script tag with 6+ digit number', async () => {
+      const html = '<script>var someVar = 1987654;</script>';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('1987654');
+    });
+
+    it('filters out year-like numbers starting with 20', async () => {
+      const html = '<script>var year = 20231225; var chapterId = 1234567;</script>';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('1234567');
+    });
+
+    it('handles full URL input', async () => {
+      mockedAxios.get.mockResolvedValue({ data: 'var chapterId = 1111111;' });
+
+      await getChapterIdFromPage('https://mangafire.to/read/manga/en/chapter-1');
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        'https://mangafire.to/read/manga/en/chapter-1',
+        expect.any(Object)
+      );
+    });
+
+    it('extracts and stores VRF token when found', async () => {
+      const html = 'const vrf = "VRFTOKENFROMCHAPTER123456789012345678901234567890"; var chapterId = 1234567;';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      await getChapterIdFromPage('/read/manga/en/chapter-1');
+
+      // VRF token should be stored
+      expect(getVrfToken()).toBe('VRFTOKENFROMCHAPTER123456789012345678901234567890');
+    });
+
+    it('throws error on invalid response data', async () => {
+      mockedAxios.get.mockResolvedValue({ data: null });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBeNull();
+    });
+
+    it('extracts chapter ID using let chapterId pattern', async () => {
+      const html = 'let chapterId = 3456789;';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('3456789');
+    });
+
+    it('extracts chapter ID using const chapterId pattern', async () => {
+      const html = 'const chapterId = 4567890;';
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      expect(id).toBe('4567890');
+    });
+  });
+
+  describe('fetchMangaDetails chapter parsing edge cases', () => {
+    it('extracts chapter number from URL when heading extraction fails', async () => {
+      const html = `
+        <h1 itemprop="name">Test Manga</h1>
+        <h6></h6>
+        <p>Ongoing</p>
+        <li class="item">
+          <a href="/read/test/en/chapter-15.5">
+            <span></span>
+            <span>Jan 1, 2024</span>
+          </a>
+        </li>
+      `;
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const details = await fetchMangaDetails('test-manga');
+
+      expect(details.chapters).toHaveLength(1);
+      expect(details.chapters[0].number).toBe('15.5');
+    });
+
+    it('handles chapter with extra title after colon', async () => {
+      const html = `
+        <h1 itemprop="name">Test Manga</h1>
+        <li class="item">
+          <a href="/read/test/en/chapter-10">
+            <span>Chapter 10: The Beginning</span>
+            <span>Jan 1, 2024</span>
+          </a>
+        </li>
+      `;
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const details = await fetchMangaDetails('test-manga');
+
+      expect(details.chapters).toHaveLength(1);
+      expect(details.chapters[0].number).toBe('10');
+      expect(details.chapters[0].title).toBe('Chapter 10: The Beginning');
+    });
+
+    it('skips chapters without valid number', async () => {
+      // Use empty spans and URL without chapter- prefix to ensure no valid number
+      const html = `
+        <h1 itemprop="name">Test Manga</h1>
+        <li class="item">
+          <a href="/read/test/en/page-1">
+            <span></span>
+            <span>Jan 1, 2024</span>
+          </a>
+        </li>
+        <li class="item">
+          <a href="/read/test/en/chapter-5">
+            <span>Chapter 5</span>
+            <span>Jan 2, 2024</span>
+          </a>
+        </li>
+      `;
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const details = await fetchMangaDetails('test-manga');
+
+      expect(details.chapters).toHaveLength(1);
+      expect(details.chapters[0].number).toBe('5');
+    });
+
+    it('handles non-Chapter prefixed headings', async () => {
+      const html = `
+        <h1 itemprop="name">Test Manga</h1>
+        <li class="item">
+          <a href="/read/test/en/chapter-100">
+            <span>100</span>
+            <span>Jan 1, 2024</span>
+          </a>
+        </li>
+      `;
+      mockedAxios.get.mockResolvedValue({ data: html });
+
+      const details = await fetchMangaDetails('test-manga');
+
+      expect(details.chapters).toHaveLength(1);
+      expect(details.chapters[0].number).toBe('100');
+    });
+  });
+
+  describe('searchManga retry logic', () => {
+    it('does not retry on 403 error', async () => {
+      const error403 = new Error('Request failed with status code 403');
+      (error403 as any).response = { status: 403 };
+      mockedAxios.get.mockRejectedValue(error403);
+
+      await expect(searchManga('test')).rejects.toThrow();
+
+      // Should only be called once (no retries for 403)
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries on other errors', async () => {
+      jest.useFakeTimers();
+      const networkError = new Error('Network error');
+      mockedAxios.get.mockRejectedValue(networkError);
+
+      const promise = searchManga('test').catch(() => {});
+      await jest.runAllTimersAsync();
+      await promise;
+
+      // Should retry 3 times
+      expect(mockedAxios.get).toHaveBeenCalledTimes(3);
+      jest.useRealTimers();
+    });
+  });
+
+  describe('fetchChapterImages with VRF token', () => {
+    it('includes VRF token in request when provided', async () => {
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          status: 200,
+          result: { images: [['https://img.jpg']] },
+        },
+      });
+
+      await fetchChapterImages('12345', 'my-vrf-token');
+
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        expect.stringContaining('vrf=my-vrf-token'),
+        expect.any(Object)
+      );
+    });
+
+    it('uses session VRF token when no token provided', async () => {
+      setVrfToken('session-vrf-token');
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          status: 200,
+          result: { images: [['https://img.jpg']] },
+        },
+      });
+
+      await fetchChapterImages('12345');
+
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        expect.stringContaining('vrf=session-vrf-token'),
+        expect.any(Object)
+      );
+    });
+
+    it('throws error when response data is null', async () => {
+      jest.useFakeTimers();
+      mockedAxios.get.mockResolvedValue({ data: null });
+
+      let thrownError: Error | undefined;
+      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
+      await jest.runAllTimersAsync();
+      await promise;
+
+      expect(thrownError?.message).toContain('Invalid response data');
+      jest.useRealTimers();
+    });
+  });
+
+  describe('fetchChapterImagesFromUrl with VRF token', () => {
+    it('uses provided VRF token', async () => {
+      setVrfToken('existing-session-token');
+
+      // getChapterIdFromPage
+      mockedAxios.get.mockResolvedValueOnce({ data: 'var chapterId = 1234567;' });
+      // fetchChapterImages
+      mockedAxios.get.mockResolvedValueOnce({
+        data: { status: 200, result: { images: [['https://img.jpg']] } },
+      });
+
+      const result = await fetchChapterImagesFromUrl('/read/manga/en/chapter-1', 'provided-vrf-token');
+
+      expect(result.images).toHaveLength(1);
+    });
+
+    it('extracts VRF token when none provided and none in session', async () => {
+      setVrfToken(''); // Clear session token
+
+      // getVrfTokenFromChapterPage
+      mockedAxios.get.mockResolvedValueOnce({
+        data: '<input name="vrf" value="extracted-vrf-token-123456789012345">',
+      });
+      // getChapterIdFromPage
+      mockedAxios.get.mockResolvedValueOnce({ data: 'var chapterId = 1234567;' });
+      // fetchChapterImages
+      mockedAxios.get.mockResolvedValueOnce({
+        data: { status: 200, result: { images: [['https://img.jpg']] } },
+      });
+
+      const result = await fetchChapterImagesFromUrl('/read/manga/en/chapter-1');
+
+      expect(result.images).toHaveLength(1);
+    });
+  });
+
+  describe('markChapterAsRead error handling', () => {
+    it('handles error during setMangaData', async () => {
+      getMangaData.mockResolvedValue({
+        id: 'manga1',
+        title: 'Test',
+        readChapters: ['1'],
+      });
+      setMangaData.mockRejectedValue(new Error('Storage error'));
+      setLastReadManga.mockResolvedValue(undefined);
+
+      // Should not throw, just log error
+      await expect(markChapterAsRead('manga1', '2', 'Test')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('updateAniListProgress error handling', () => {
+    it('handles error during AniList update', async () => {
+      isLoggedInToAniList.mockResolvedValue(true);
+      searchAnilistMangaByName.mockResolvedValue({ id: 123 });
+      updateMangaStatus.mockRejectedValue(new Error('AniList API error'));
+
+      // Should not throw, just log error
+      await expect(
+        updateAniListProgress('id', 'Title', 5, 'Reading')
+      ).resolves.toBeUndefined();
+    });
+
+    it('maps default status when bookmark status is unknown', async () => {
+      isLoggedInToAniList.mockResolvedValue(true);
+      searchAnilistMangaByName.mockResolvedValue({ id: 123 });
+      updateMangaStatus.mockResolvedValue(undefined);
+
+      await updateAniListProgress('id', 'Title', 5, 'Unknown Status');
+
+      expect(updateMangaStatus).toHaveBeenCalledWith(123, 'CURRENT', 5);
+    });
+  });
+
+  describe('parseSearchResults pattern 2 fallback', () => {
+    it('uses pattern 2 when pattern 1 fails', () => {
+      // HTML that doesn't match pattern 1 but matches pattern 2
+      const html = `
+        <a href="/manga/test-id" class="card">
+          <img src="https://image.jpg" alt="Test">
+          <span class="type">Manhwa</span>
+          <a href="/manga/test-id">Test Title</a>
+        </a>
+      `;
+
+      const items = parseSearchResults(html);
+      expect(items).toEqual([
+        expect.objectContaining({
+          id: 'test-id',
+          title: 'Test Title',
+          type: 'Manhwa',
+        }),
+      ]);
     });
   });
 });
