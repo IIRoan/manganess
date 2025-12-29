@@ -1104,7 +1104,7 @@ describe('mangaFireService', () => {
       const details = await fetchMangaDetails('test-manga');
 
       expect(details.chapters).toHaveLength(1);
-      expect(details.chapters[0].number).toBe('15.5');
+      expect(details.chapters[0]!.number).toBe('15.5');
     });
 
     it('handles chapter with extra title after colon', async () => {
@@ -1122,8 +1122,8 @@ describe('mangaFireService', () => {
       const details = await fetchMangaDetails('test-manga');
 
       expect(details.chapters).toHaveLength(1);
-      expect(details.chapters[0].number).toBe('10');
-      expect(details.chapters[0].title).toBe('Chapter 10: The Beginning');
+      expect(details.chapters[0]!.number).toBe('10');
+      expect(details.chapters[0]!.title).toBe('Chapter 10: The Beginning');
     });
 
     it('skips chapters without valid number', async () => {
@@ -1148,7 +1148,7 @@ describe('mangaFireService', () => {
       const details = await fetchMangaDetails('test-manga');
 
       expect(details.chapters).toHaveLength(1);
-      expect(details.chapters[0].number).toBe('5');
+      expect(details.chapters[0]!.number).toBe('5');
     });
 
     it('handles non-Chapter prefixed headings', async () => {
@@ -1166,7 +1166,7 @@ describe('mangaFireService', () => {
       const details = await fetchMangaDetails('test-manga');
 
       expect(details.chapters).toHaveLength(1);
-      expect(details.chapters[0].number).toBe('100');
+      expect(details.chapters[0]!.number).toBe('100');
     });
   });
 

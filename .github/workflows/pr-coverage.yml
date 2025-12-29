@@ -1,0 +1,481 @@
+name: PR Coverage Report
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: coverage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Test Coverage Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: true
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests with coverage
+        run: bun run test:coverage --ci --maxWorkers=2
+        continue-on-error: true
+        id: test
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+      - name: Generate Coverage Report Comment
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Read coverage summary
+            let coverageSummary = null;
+            try {
+              const summaryPath = './coverage/coverage-summary.json';
+              if (fs.existsSync(summaryPath)) {
+                coverageSummary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+              }
+            } catch (e) {
+              console.log('Could not read coverage summary:', e.message);
+            }
+
+            // Get changed files in this PR
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100
+            });
+
+            const changedTsFiles = files
+              .filter(f => /\.(ts|tsx)$/.test(f.filename))
+              .filter(f => !f.filename.includes('__tests__'))
+              .filter(f => !f.filename.includes('.d.ts'))
+              .map(f => f.filename);
+
+            // Build the comment
+            let comment = '## Coverage Report\n\n';
+
+            const testStatus = '${{ steps.test.outcome }}';
+            if (testStatus === 'failure') {
+              comment += '> **Warning:** Some tests failed. Coverage data may be incomplete.\n\n';
+            }
+
+            if (coverageSummary && coverageSummary.total) {
+              const total = coverageSummary.total;
+
+              const getStatus = (pct) => {
+                if (pct >= 80) return 'PASS';
+                if (pct >= 50) return 'OK';
+                return 'LOW';
+              };
+
+              const formatPct = (pct) => pct.toFixed(2);
+
+              // Overall coverage table
+              comment += '### Overall Coverage\n\n';
+              comment += '```\n';
+              comment += '┌─────────────┬────────────┬─────────────────────┬────────┐\n';
+              comment += '│ Metric      │ Coverage   │ Covered / Total     │ Status │\n';
+              comment += '├─────────────┼────────────┼─────────────────────┼────────┤\n';
+              comment += `│ Statements  │ ${formatPct(total.statements.pct).padStart(7)}%  │ ${String(total.statements.covered).padStart(7)} / ${String(total.statements.total).padEnd(7)} │ ${getStatus(total.statements.pct).padEnd(6)} │\n`;
+              comment += `│ Branches    │ ${formatPct(total.branches.pct).padStart(7)}%  │ ${String(total.branches.covered).padStart(7)} / ${String(total.branches.total).padEnd(7)} │ ${getStatus(total.branches.pct).padEnd(6)} │\n`;
+              comment += `│ Functions   │ ${formatPct(total.functions.pct).padStart(7)}%  │ ${String(total.functions.covered).padStart(7)} / ${String(total.functions.total).padEnd(7)} │ ${getStatus(total.functions.pct).padEnd(6)} │\n`;
+              comment += `│ Lines       │ ${formatPct(total.lines.pct).padStart(7)}%  │ ${String(total.lines.covered).padStart(7)} / ${String(total.lines.total).padEnd(7)} │ ${getStatus(total.lines.pct).padEnd(6)} │\n`;
+              comment += '└─────────────┴────────────┴─────────────────────┴────────┘\n';
+              comment += '```\n\n';
+
+              // Coverage for changed files
+              if (changedTsFiles.length > 0) {
+                comment += '### Changed Files Coverage\n\n';
+                comment += '<details>\n<summary>View file-level coverage details</summary>\n\n';
+                comment += '| File | Stmts | Branch | Funcs | Lines |\n';
+                comment += '|------|-------|--------|-------|-------|\n';
+
+                let hasChangedFileCoverage = false;
+
+                for (const file of changedTsFiles) {
+                  const coverageKey = Object.keys(coverageSummary).find(key =>
+                    key !== 'total' && key.endsWith(file)
+                  );
+
+                  if (coverageKey && coverageSummary[coverageKey]) {
+                    hasChangedFileCoverage = true;
+                    const fileCov = coverageSummary[coverageKey];
+                    const shortName = file.length > 45 ? '...' + file.slice(-42) : file;
+
+                    comment += `| \`${shortName}\` `;
+                    comment += `| ${formatPct(fileCov.statements.pct)}% `;
+                    comment += `| ${formatPct(fileCov.branches.pct)}% `;
+                    comment += `| ${formatPct(fileCov.functions.pct)}% `;
+                    comment += `| ${formatPct(fileCov.lines.pct)}% |\n`;
+                  }
+                }
+
+                if (!hasChangedFileCoverage) {
+                  comment += '| _No coverage data available_ | - | - | - | - |\n';
+                }
+
+                comment += '\n</details>\n\n';
+
+                // List files without coverage
+                const uncoveredFiles = changedTsFiles.filter(file => {
+                  const coverageKey = Object.keys(coverageSummary).find(key =>
+                    key !== 'total' && key.endsWith(file)
+                  );
+                  return !coverageKey;
+                });
+
+                if (uncoveredFiles.length > 0) {
+                  comment += '### Uncovered Changed Files\n\n';
+                  comment += 'The following changed files have no test coverage:\n\n';
+                  comment += '```\n';
+                  for (const file of uncoveredFiles.slice(0, 10)) {
+                    comment += `  - ${file}\n`;
+                  }
+                  if (uncoveredFiles.length > 10) {
+                    comment += `  ... and ${uncoveredFiles.length - 10} more\n`;
+                  }
+                  comment += '```\n\n';
+                }
+              }
+
+              // Find files with low coverage
+              const lowCoverageFiles = [];
+              for (const [filePath, data] of Object.entries(coverageSummary)) {
+                if (filePath === 'total') continue;
+                if (data.lines && data.lines.pct < 50) {
+                  lowCoverageFiles.push({
+                    path: filePath,
+                    coverage: data.lines.pct
+                  });
+                }
+              }
+
+              if (lowCoverageFiles.length > 0) {
+                lowCoverageFiles.sort((a, b) => a.coverage - b.coverage);
+
+                comment += '### Low Coverage Files (< 50%)\n\n';
+                comment += '<details>\n<summary>View files needing attention</summary>\n\n';
+                comment += '| File | Lines |\n';
+                comment += '|------|-------|\n';
+
+                for (const file of lowCoverageFiles.slice(0, 15)) {
+                  const shortPath = file.path.replace(process.cwd(), '').replace(/^\//, '');
+                  const displayPath = shortPath.length > 55 ? '...' + shortPath.slice(-52) : shortPath;
+                  comment += `| \`${displayPath}\` | ${file.coverage.toFixed(2)}% |\n`;
+                }
+
+                if (lowCoverageFiles.length > 15) {
+                  comment += `| _... and ${lowCoverageFiles.length - 15} more_ | |\n`;
+                }
+
+                comment += '\n</details>\n\n';
+              }
+
+            } else {
+              comment += '> **Error:** Coverage data not available. Tests may have failed to run.\n\n';
+            }
+
+            // Coverage thresholds
+            comment += '### Threshold Check\n\n';
+            comment += '```\n';
+
+            if (coverageSummary && coverageSummary.total) {
+              const thresholds = { statements: 50, branches: 50, functions: 50, lines: 50 };
+              const total = coverageSummary.total;
+
+              for (const [metric, threshold] of Object.entries(thresholds)) {
+                const actual = total[metric].pct;
+                const status = actual >= threshold ? 'PASS' : 'FAIL';
+                const indicator = actual >= threshold ? '[OK]' : '[!!]';
+                const metricName = metric.charAt(0).toUpperCase() + metric.slice(1);
+                comment += `${indicator} ${metricName.padEnd(12)} ${actual.toFixed(2).padStart(6)}% (required: ${threshold}%) - ${status}\n`;
+              }
+            } else {
+              comment += '[??] Coverage data unavailable\n';
+            }
+
+            comment += '```\n\n';
+            comment += '---\n';
+            comment += '_Generated by coverage workflow_\n';
+
+            // Find and update or create comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' &&
+              c.body.includes('## Coverage Report')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+
+      - name: Check Coverage Thresholds
+        if: always()
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "Coverage summary found, checking thresholds..."
+            echo ""
+
+            node -e "
+              const fs = require('fs');
+              const data = JSON.parse(fs.readFileSync('./coverage/coverage-summary.json', 'utf8'));
+              const total = data.total;
+
+              const thresholds = {
+                statements: 50,
+                branches: 50,
+                functions: 50,
+                lines: 50
+              };
+
+              let failed = false;
+
+              console.log('┌────────────────────────────────────────────────┐');
+              console.log('│              Coverage Results                  │');
+              console.log('├──────────────┬──────────┬────────────┬─────────┤');
+              console.log('│ Metric       │ Actual   │ Required   │ Status  │');
+              console.log('├──────────────┼──────────┼────────────┼─────────┤');
+
+              for (const [metric, threshold] of Object.entries(thresholds)) {
+                const actual = total[metric].pct;
+                const status = actual >= threshold ? 'PASS' : 'FAIL';
+                const metricName = metric.charAt(0).toUpperCase() + metric.slice(1);
+                if (actual < threshold) failed = true;
+                console.log(\`│ \${metricName.padEnd(12)} │ \${actual.toFixed(2).padStart(6)}%  │ \${String(threshold).padStart(6)}%    │ \${status.padEnd(7)} │\`);
+              }
+
+              console.log('└──────────────┴──────────┴────────────┴─────────┘');
+              console.log('');
+
+              if (failed) {
+                console.log('[FAIL] Coverage thresholds not met');
+                process.exit(1);
+              } else {
+                console.log('[OK] All coverage thresholds passed');
+              }
+            "
+          else
+            echo "[WARN] No coverage summary found"
+            exit 1
+          fi
+
+  coverage-comparison:
+    name: Coverage Comparison
+    runs-on: ubuntu-latest
+    needs: coverage
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 20
+    env:
+      CI: true
+
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-base-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run base branch coverage
+        run: bun run test:coverage --ci --maxWorkers=2 || true
+        continue-on-error: true
+
+      - name: Save base coverage
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            cp coverage/coverage-summary.json /tmp/base-coverage.json
+          else
+            echo '{"total":{"lines":{"pct":0},"statements":{"pct":0},"functions":{"pct":0},"branches":{"pct":0}}}' > /tmp/base-coverage.json
+          fi
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Install dependencies (PR)
+        run: bun install --frozen-lockfile
+
+      - name: Run PR branch coverage
+        run: bun run test:coverage --ci --maxWorkers=2 || true
+        continue-on-error: true
+
+      - name: Compare and Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let baseCoverage = null;
+            let prCoverage = null;
+
+            try {
+              baseCoverage = JSON.parse(fs.readFileSync('/tmp/base-coverage.json', 'utf8'));
+            } catch (e) {
+              console.log('Could not read base coverage:', e.message);
+            }
+
+            try {
+              prCoverage = JSON.parse(fs.readFileSync('./coverage/coverage-summary.json', 'utf8'));
+            } catch (e) {
+              console.log('Could not read PR coverage:', e.message);
+            }
+
+            if (!baseCoverage || !prCoverage) {
+              console.log('Skipping comparison - missing coverage data');
+              return;
+            }
+
+            const baseTotal = baseCoverage.total;
+            const prTotal = prCoverage.total;
+
+            const getDiff = (pr, base) => {
+              const diff = pr - base;
+              if (diff > 0.01) return `+${diff.toFixed(2)}%`;
+              if (diff < -0.01) return `${diff.toFixed(2)}%`;
+              return `+0.00%`;
+            };
+
+            const getTrend = (pr, base) => {
+              const diff = pr - base;
+              if (diff > 0.01) return '(up)';
+              if (diff < -0.01) return '(down)';
+              return '(-)';
+            };
+
+            let comment = '## Coverage Comparison\n\n';
+            comment += '```\n';
+            comment += '┌──────────────┬─────────────┬─────────────┬───────────────────┐\n';
+            comment += '│ Metric       │ Base        │ PR          │ Change            │\n';
+            comment += '├──────────────┼─────────────┼─────────────┼───────────────────┤\n';
+
+            const metrics = ['statements', 'branches', 'functions', 'lines'];
+
+            for (const metric of metrics) {
+              const basePct = baseTotal[metric]?.pct || 0;
+              const prPct = prTotal[metric]?.pct || 0;
+              const diff = getDiff(prPct, basePct);
+              const trend = getTrend(prPct, basePct);
+              const metricName = metric.charAt(0).toUpperCase() + metric.slice(1);
+              comment += `│ ${metricName.padEnd(12)} │ ${basePct.toFixed(2).padStart(7)}%    │ ${prPct.toFixed(2).padStart(7)}%    │ ${diff.padStart(8)} ${trend.padEnd(6)} │\n`;
+            }
+
+            comment += '└──────────────┴─────────────┴─────────────┴───────────────────┘\n';
+            comment += '```\n\n';
+
+            // Overall verdict
+            const linesDiff = (prTotal.lines?.pct || 0) - (baseTotal.lines?.pct || 0);
+            if (linesDiff > 0.01) {
+              comment += '**Status:** Coverage improved\n';
+            } else if (linesDiff < -5) {
+              comment += '**Status:** Coverage decreased significantly - consider adding tests\n';
+            } else if (linesDiff < -0.01) {
+              comment += '**Status:** Coverage slightly decreased\n';
+            } else {
+              comment += '**Status:** Coverage stable\n';
+            }
+
+            comment += '\n---\n';
+            comment += '_Generated by coverage workflow_\n';
+
+            // Find and update or create comparison comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' &&
+              c.body.includes('## Coverage Comparison')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }

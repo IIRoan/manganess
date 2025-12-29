@@ -97,7 +97,7 @@ describe('env', () => {
       const throwingEnv = new Proxy(
         {},
         {
-          get(target, prop) {
+          get(_target, prop) {
             if (prop === 'EXPO_PUBLIC_DEBUG') {
               throw new Error('Simulated error');
             }
