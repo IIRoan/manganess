@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import BookmarksScreen from '../bookmarks';
 import { getMangaData } from '@/services/bookmarkService';
 import { getDefaultLayout, setDefaultLayout } from '@/services/settingsService';
+import { imageCache } from '@/services/CacheImages';
 
 // Mock all dependencies
 jest.mock('@react-navigation/native', () => ({
@@ -531,7 +532,6 @@ describe('BookmarksScreen', () => {
   });
 
   it('preloads images', async () => {
-    const { imageCache } = require('@/services/CacheImages');
 
     const { queryByText } = renderScreen();
 
