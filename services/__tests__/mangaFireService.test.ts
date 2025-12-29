@@ -165,22 +165,27 @@ describe('mangaFireService', () => {
     });
 
     it('throws CloudflareDetectedError when challenge HTML detected', async () => {
+      jest.useFakeTimers();
       mockedAxios.get.mockResolvedValue({
         data: '<html>cf-browser-verification</html>',
       });
 
-      try {
-        await searchManga('test');
-        fail('Should have thrown CloudflareDetectedError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(CloudflareDetectedError);
-        expect((error as CloudflareDetectedError).message).toContain(
-          'Cloudflare verification detected'
-        );
-      }
+      let thrownError: Error | undefined;
+      const promise = searchManga('test').catch(e => { thrownError = e; });
+
+      await jest.runAllTimersAsync();
+      await promise;
+
+      expect(thrownError).toBeDefined();
+      expect(thrownError).toBeInstanceOf(CloudflareDetectedError);
+      expect((thrownError as CloudflareDetectedError).message).toContain(
+        'Cloudflare verification detected'
+      );
+      jest.useRealTimers();
     });
 
     it('detects Cloudflare with various markers', async () => {
+      jest.useFakeTimers();
       const markers = [
         'cf_captcha_kind',
         'attention required',
@@ -192,16 +197,28 @@ describe('mangaFireService', () => {
           data: `<html>${marker}</html>`,
         });
 
-        await expect(searchManga('test')).rejects.toBeInstanceOf(
-          CloudflareDetectedError
-        );
+        let thrownError: Error | undefined;
+        const promise = searchManga('test').catch(e => { thrownError = e; });
+        await jest.runAllTimersAsync();
+        await promise;
+
+        expect(thrownError).toBeInstanceOf(CloudflareDetectedError);
       }
-    }, 30000); // Increased timeout due to retry logic with exponential backoff
+      jest.useRealTimers();
+    });
 
     it('throws error on invalid response data', async () => {
+      jest.useFakeTimers();
       mockedAxios.get.mockResolvedValue({ data: null });
 
-      await expect(searchManga('test')).rejects.toThrow('Invalid response data');
+      let thrownError: Error | undefined;
+      const promise = searchManga('test').catch(e => { thrownError = e; });
+      await jest.runAllTimersAsync();
+      await promise;
+
+      expect(thrownError).toBeDefined();
+      expect(thrownError?.message).toContain('Invalid response data');
+      jest.useRealTimers();
     });
   });
 
@@ -516,6 +533,7 @@ describe('mangaFireService', () => {
     });
 
     it('throws error on invalid API status', async () => {
+      jest.useFakeTimers();
       mockedAxios.get.mockResolvedValue({
         data: {
           status: 500,
@@ -523,12 +541,18 @@ describe('mangaFireService', () => {
         },
       });
 
-      await expect(fetchChapterImages('12345')).rejects.toThrow(
-        'API returned status 500'
-      );
+      let thrownError: Error | undefined;
+      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
+      await jest.runAllTimersAsync();
+      await promise;
+
+      expect(thrownError).toBeDefined();
+      expect(thrownError?.message).toContain('API returned status 500');
+      jest.useRealTimers();
     });
 
     it('throws error on missing images in response', async () => {
+      jest.useFakeTimers();
       mockedAxios.get.mockResolvedValue({
         data: {
           status: 200,
@@ -536,12 +560,18 @@ describe('mangaFireService', () => {
         },
       });
 
-      await expect(fetchChapterImages('12345')).rejects.toThrow(
-        'Invalid image data'
-      );
+      let thrownError: Error | undefined;
+      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
+      await jest.runAllTimersAsync();
+      await promise;
+
+      expect(thrownError).toBeDefined();
+      expect(thrownError?.message).toContain('Invalid image data');
+      jest.useRealTimers();
     });
 
     it('throws error on empty images array', async () => {
+      jest.useFakeTimers();
       mockedAxios.get.mockResolvedValue({
         data: {
           status: 200,
@@ -549,9 +579,14 @@ describe('mangaFireService', () => {
         },
       });
 
-      await expect(fetchChapterImages('12345')).rejects.toThrow(
-        'No images found'
-      );
+      let thrownError: Error | undefined;
+      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
+      await jest.runAllTimersAsync();
+      await promise;
+
+      expect(thrownError).toBeDefined();
+      expect(thrownError?.message).toContain('No images found');
+      jest.useRealTimers();
     });
   });
 
@@ -722,6 +757,7 @@ describe('mangaFireService', () => {
 
   describe('batchFetchChapterImages', () => {
     it('fetches multiple chapters in batches', async () => {
+      jest.useFakeTimers();
       // Track call count to return different responses
       let callCount = 0;
       mockedAxios.get.mockImplementation((_url) => {
@@ -753,29 +789,38 @@ describe('mangaFireService', () => {
       const onProgress = jest.fn();
       const onError = jest.fn();
 
-      const results = await batchFetchChapterImages(urls, {
+      const resultsPromise = batchFetchChapterImages(urls, {
         maxConcurrent: 1,
         delayBetweenRequests: 0,
         onProgress,
         onError,
       });
 
+      await jest.runAllTimersAsync();
+      const results = await resultsPromise;
+
       expect(results).toHaveLength(2);
       expect(onProgress).toHaveBeenCalled();
-    }, 30000); // Increased timeout for retry logic
+      jest.useRealTimers();
+    });
 
     it('handles errors in batch processing', async () => {
+      jest.useFakeTimers();
       mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
       const urls = ['/read/manga/en/chapter-1'];
       const onError = jest.fn();
 
-      const results = await batchFetchChapterImages(urls, {
+      const resultsPromise = batchFetchChapterImages(urls, {
         onError,
       });
 
+      await jest.runAllTimersAsync();
+      const results = await resultsPromise;
+
       expect(results[0]).toHaveProperty('error');
       expect(onError).toHaveBeenCalled();
+      jest.useRealTimers();
     });
   });
 });
