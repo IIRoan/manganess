@@ -354,7 +354,7 @@ describe('readChapterService', () => {
 
       const result = await getRecentlyReadManga();
       expect(result.length).toBe(1);
-      expect(result[0].id).toBe('a');
+      expect(result[0]!.id).toBe('a');
     });
   });
 });

@@ -380,9 +380,9 @@ describe('settingsService', () => {
     it('has correct byte values', () => {
       const options = getStorageSizeOptions();
 
-      expect(options[0].value).toBe(500 * 1024 * 1024);
-      expect(options[1].value).toBe(1024 * 1024 * 1024);
-      expect(options[2].value).toBe(2 * 1024 * 1024 * 1024);
+      expect(options[0]!.value).toBe(500 * 1024 * 1024);
+      expect(options[1]!.value).toBe(1024 * 1024 * 1024);
+      expect(options[2]!.value).toBe(2 * 1024 * 1024 * 1024);
     });
   });
 

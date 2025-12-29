@@ -544,8 +544,8 @@ describe('ImageExtractorService', () => {
       const result = await service.extractImagesFromHtml(html);
 
       expect(result).toHaveLength(3);
-      expect(result[0].pageNumber).toBe(1);
-      expect(result[2].pageNumber).toBe(3);
+      expect(result[0]!.pageNumber).toBe(1);
+      expect(result[2]!.pageNumber).toBe(3);
     });
 
     it('uses sequential index when data-number not present', async () => {
@@ -653,8 +653,8 @@ describe('ImageExtractorService', () => {
     it('handles unexpected image data format', async () => {
       mockFetchFromUrl.mockResolvedValue({
         images: [
-          { url: 'https://example.com/page1.jpg' }, // Object format
-          42, // Number
+          { url: 'https://example.com/page1.jpg' } as unknown as string[], // Object format
+          42 as unknown as string[], // Number
           ['https://example.com/page2.jpg'], // Valid array
         ],
         status: 200,
@@ -881,7 +881,7 @@ describe('ImageExtractorService', () => {
       const result = service.processWebViewMessage(messageData);
 
       expect(result).toHaveLength(2);
-      expect(result[0].pageNumber).toBe(1);
+      expect(result[0]!.pageNumber).toBe(1);
     });
 
     it('handles duplicate page numbers', () => {
@@ -925,7 +925,7 @@ describe('ImageExtractorService', () => {
       );
 
       expect(result).toHaveLength(2);
-      expect(result[0].originalUrl).toBe('https://example.com/page1.jpg');
+      expect(result[0]!.originalUrl).toBe('https://example.com/page1.jpg');
     });
 
     it('handles whitespace-only URLs', async () => {
