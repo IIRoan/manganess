@@ -33,15 +33,15 @@ const { getMangaData } = require('../bookmarkService');
 describe('anilistService', () => {
   const originalFetch = globalThis.fetch;
 
+  afterAll(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   beforeEach(async () => {
     jest.clearAllMocks();
     globalThis.fetch = jest.fn();
     (Date.now as unknown as jest.Mock | undefined)?.mockRestore?.();
     await AsyncStorage.clear();
-  });
-
-  afterAll(() => {
-    globalThis.fetch = originalFetch;
   });
 
   describe('isLoggedInToAniList', () => {

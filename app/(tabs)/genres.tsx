@@ -106,10 +106,14 @@ export default function GenresScreen() {
         const html = response.data as string;
         const mangaItems = parseGenreManga(html);
         setMangaList(mangaItems);
+      } else {
+        setMangaList([]);
       }
     } catch (error) {
       logger().error('Service', 'Error fetching genre manga', { error });
       setMangaList([]);
+    } finally {
+      setLoading(false);
     }
   };
 
