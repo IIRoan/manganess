@@ -141,8 +141,9 @@ export default function HomeScreen() {
     } catch (error) {
       logger().error('Service', 'Error fetching manga data', { error });
 
-      // If we haven't shown cached data yet, show error
-      if (isLoading) {
+      // Only show error if we don't have any cached data to display
+      const hasNoData = mostViewedManga.length === 0 && newReleases.length === 0;
+      if (hasNoData) {
         setError(
           'An error occurred while fetching manga data. Please try again.'
         );
@@ -151,7 +152,8 @@ export default function HomeScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isRefreshing, checkForCloudflare, isOffline, isLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRefreshing, checkForCloudflare, isOffline]);
 
   const fetchRecentlyReadManga = useCallback(async (showLoading = true) => {
     try {
