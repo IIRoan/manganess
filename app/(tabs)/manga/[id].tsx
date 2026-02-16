@@ -188,6 +188,7 @@ export default function MangaDetailScreen() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('down');
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [hasJumpedToLatestRead, setHasJumpedToLatestRead] = useState(false);
 
   // Animated value for the scroll button opacity
   const scrollButtonOpacity = useSharedValue(0);
@@ -788,6 +789,68 @@ export default function MangaDetailScreen() {
     };
   });
 
+  const latestReadChapterIndex = useMemo(() => {
+    const normalizedLastReadChapter = lastReadChapter
+      ?.replace('Chapter ', '')
+      .trim();
+    const parsedLastReadChapter = normalizedLastReadChapter
+      ? Number.parseFloat(normalizedLastReadChapter)
+      : Number.NaN;
+
+    if (!mangaDetails?.chapters?.length || !normalizedLastReadChapter) {
+      return -1;
+    }
+
+    return mangaDetails.chapters.findIndex(
+      (chapter) =>
+        chapter.number === normalizedLastReadChapter ||
+        (Number.isFinite(parsedLastReadChapter) &&
+          Number.parseFloat(chapter.number) === parsedLastReadChapter)
+    );
+  }, [lastReadChapter, mangaDetails?.chapters]);
+
+  const shouldUseDownAction = scrollDirection === 'down' && scrollProgress < 0.95;
+
+  useEffect(() => {
+    setHasJumpedToLatestRead(false);
+  }, [id, lastReadChapter]);
+
+  const handleSmartScrollPress = useCallback(() => {
+    haptics.onSelection();
+
+    if (!shouldUseDownAction) {
+      setHasJumpedToLatestRead(false);
+      flashListRef.current?.scrollToOffset({
+        offset: 0,
+        animated: true,
+      });
+      return;
+    }
+
+    if (latestReadChapterIndex >= 0 && !hasJumpedToLatestRead) {
+      setHasJumpedToLatestRead(true);
+      flashListRef.current?.scrollToIndex({
+        index: latestReadChapterIndex,
+        animated: true,
+        viewPosition: 0.5,
+      });
+      return;
+    }
+
+    if (latestReadChapterIndex >= 0) {
+      flashListRef.current?.scrollToEnd({ animated: true });
+      return;
+    }
+
+    flashListRef.current?.scrollToEnd({ animated: true });
+  }, [
+    haptics,
+    shouldUseDownAction,
+    latestReadChapterIndex,
+    hasJumpedToLatestRead,
+    setHasJumpedToLatestRead,
+  ]);
+
   const renderChapterItem = useCallback(
     ({ item: chapter, index }: { item: Chapter; index: number }) => {
       if (!mangaDetails) return null;
@@ -1110,22 +1173,16 @@ export default function MangaDetailScreen() {
               pointerEvents={showScrollButton ? 'auto' : 'none'}
             >
               <TouchableOpacity
-                onPress={() => {
-                  haptics.onSelection();
-                  if (scrollDirection === 'down' && scrollProgress < 0.95) {
-                    flashListRef.current?.scrollToEnd({ animated: true });
-                  } else {
-                    flashListRef.current?.scrollToOffset({
-                      offset: 0,
-                      animated: true,
-                    });
-                  }
-                }}
+                onPress={handleSmartScrollPress}
                 style={styles.smartScrollButtonTouchable}
                 accessibilityRole="button"
                 accessibilityLabel={
-                  scrollDirection === 'down'
-                    ? 'Scroll to bottom'
+                  shouldUseDownAction
+                    ? latestReadChapterIndex >= 0
+                      ? hasJumpedToLatestRead
+                        ? 'Scroll to bottom'
+                        : 'Scroll to latest read chapter'
+                      : 'Scroll to bottom'
                     : 'Scroll to top'
                 }
               >
