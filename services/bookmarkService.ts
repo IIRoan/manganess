@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
-import { updateAniListStatus } from './anilistService';
 import { offlineCacheService } from './offlineCacheService';
 import {
   BookmarkStatus,
@@ -12,6 +11,19 @@ import {
 } from '@/types';
 
 const MANGA_STORAGE_PREFIX = 'manga_';
+
+const getAniListService = () =>
+  require('./anilistService') as typeof import('./anilistService');
+
+const updateAniListStatusForBookmark = async (
+  mangaTitle: string,
+  status: 'To Read' | 'Reading' | 'Read',
+  readChapters: string[],
+  totalChapters: number
+) => {
+  const { updateAniListStatus } = getAniListService();
+  return updateAniListStatus(mangaTitle, status, readChapters, totalChapters);
+};
 
 export const getMangaData = async (id: string): Promise<MangaData | null> => {
   try {
@@ -146,7 +158,7 @@ export const saveBookmark = async (
                   lastReadChapter: highestReadChapter,
                 });
               }
-              await updateAniListStatus(
+              await updateAniListStatusForBookmark(
                 mangaDetails?.title,
                 status,
                 readChapters,
@@ -158,7 +170,7 @@ export const saveBookmark = async (
             text: 'Yes',
             onPress: async () => {
               await markAllChaptersAsRead(id, mangaDetails, setReadChapters);
-              await updateAniListStatus(
+              await updateAniListStatusForBookmark(
                 mangaDetails?.title,
                 status,
                 readChapters,
@@ -170,7 +182,7 @@ export const saveBookmark = async (
       );
     } else if (status !== 'On Hold') {
       // Only update AniList if status is not "On Hold" since that status doesn't exist on AniList
-      await updateAniListStatus(
+      await updateAniListStatusForBookmark(
         mangaDetails?.title,
         status,
         readChapters,
