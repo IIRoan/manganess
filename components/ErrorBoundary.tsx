@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -51,18 +51,12 @@ class ErrorBoundary extends React.Component<
       if (this.props.fallback) {
         const FallbackComponent = this.props.fallback;
         return (
-          <FallbackComponent
-            {...errorProps}
-            resetError={this.resetError}
-          />
+          <FallbackComponent {...errorProps} resetError={this.resetError} />
         );
       }
 
       return (
-        <DefaultErrorFallback
-          {...errorProps}
-          resetError={this.resetError}
-        />
+        <DefaultErrorFallback {...errorProps} resetError={this.resetError} />
       );
     }
 

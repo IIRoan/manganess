@@ -27,7 +27,7 @@ import Reanimated, {
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors, type ColorScheme } from '@/constants/Colors';
 import ExpandableText from '@/components/ExpandableText';
 import AlertComponent from '@/components/Alert';
@@ -56,11 +56,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import LastReadChapterBar from '@/components/LastReadChapterBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '@/utils/haptics';
-import { useToast } from '@/contexts/ToastContext';
+import { useToast } from '@/hooks/useToast';
 import getStyles from './[id].styles';
 import { logger } from '@/utils/logger';
 import { useMangaImageCache } from '@/services/CacheImages';
-import { useOffline } from '@/contexts/OfflineContext';
+import { useOffline } from '@/hooks/useOffline';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import type {
   AlertConfig,
@@ -72,7 +72,6 @@ import type {
 import BatchDownloadBar from '@/components/BatchDownloadBar';
 import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
-import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadStatus } from '@/types/download';
 import { useParallaxScroll } from '@/components/ParallaxLayout';
 
@@ -476,15 +475,22 @@ export default function MangaDetailScreen() {
         );
 
         // Show success toast
-        const statusIcons: Record<BookmarkStatus, 'book-outline' | 'book' | 'pause-circle-outline' | 'checkmark-circle-outline'> = {
+        const statusIcons: Record<
+          BookmarkStatus,
+          | 'book-outline'
+          | 'book'
+          | 'pause-circle-outline'
+          | 'checkmark-circle-outline'
+        > = {
           'To Read': 'book-outline',
-          'Reading': 'book',
+          Reading: 'book',
           'On Hold': 'pause-circle-outline',
-          'Read': 'checkmark-circle-outline',
+          Read: 'checkmark-circle-outline',
         };
-        const shortTitle = mangaDetails.title.length > 20
-          ? mangaDetails.title.substring(0, 20) + '…'
-          : mangaDetails.title;
+        const shortTitle =
+          mangaDetails.title.length > 20
+            ? mangaDetails.title.substring(0, 20) + '…'
+            : mangaDetails.title;
         showToast({
           message: previousStatus
             ? `${shortTitle} → ${status}`
@@ -653,13 +659,6 @@ export default function MangaDetailScreen() {
       try {
         await chapterStorageService.deleteChapter(id as string, chapterNumber);
 
-        // Emit download deleted event
-        downloadEventEmitter.emitDeleted(
-          id as string,
-          chapterNumber,
-          `${id as string}_${chapterNumber}`
-        );
-
         await refreshDownloadedChapters();
 
         // Show success toast
@@ -809,7 +808,8 @@ export default function MangaDetailScreen() {
     );
   }, [lastReadChapter, mangaDetails?.chapters]);
 
-  const shouldUseDownAction = scrollDirection === 'down' && scrollProgress < 0.95;
+  const shouldUseDownAction =
+    scrollDirection === 'down' && scrollProgress < 0.95;
 
   useEffect(() => {
     setHasJumpedToLatestRead(false);
@@ -1154,7 +1154,9 @@ export default function MangaDetailScreen() {
                 `chapter-${item.number}-${index}`
               }
               renderItem={renderChapterItem}
-              ListFooterComponent={<View style={{ height: 120, backgroundColor: colors.card }} />}
+              ListFooterComponent={
+                <View style={{ height: 120, backgroundColor: colors.card }} />
+              }
               onScroll={scrollHandler}
               scrollEventThrottle={16}
               bounces={false}

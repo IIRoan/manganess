@@ -12,7 +12,7 @@ import { FlashList } from '@shopify/flash-list';
 import Reanimated from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,8 +35,8 @@ import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import axios from 'axios';
 import { MangaItem, RecentMangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
-import { useOffline } from '@/contexts/OfflineContext';
-import { offlineCacheService } from '@/services/offlineCacheService';
+import { useOffline } from '@/hooks/useOffline';
+import { useCachedData } from '@/hooks/useCachedData';
 import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -61,6 +61,7 @@ export default function HomeScreen() {
     useCloudflareDetection();
   const insets = useSafeAreaInsets();
   const { isOffline } = useOffline();
+  const { getCachedHomeData, cacheHomeData } = useCachedData();
 
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [newReleases, setNewReleases] = useState<MangaItem[]>([]);
@@ -82,7 +83,7 @@ export default function HomeScreen() {
       setError(null);
 
       // 1. Load cached data immediately (Stale-while-revalidate)
-      const cachedData = await offlineCacheService.getCachedHomeData();
+      const cachedData = getCachedHomeData();
       if (cachedData) {
         setMostViewedManga(cachedData.mostViewed);
         setNewReleases(cachedData.newReleases);
@@ -133,16 +134,13 @@ export default function HomeScreen() {
       setFeaturedManga(newFeatured);
 
       // Cache the fresh data
-      await offlineCacheService.cacheHomeData(
-        parsedMostViewed,
-        parsedNewReleases,
-        newFeatured
-      );
+      await cacheHomeData(parsedMostViewed, parsedNewReleases, newFeatured);
     } catch (error) {
       logger().error('Service', 'Error fetching manga data', { error });
 
       // Only show error if we don't have any cached data to display
-      const hasNoData = mostViewedManga.length === 0 && newReleases.length === 0;
+      const hasNoData =
+        mostViewedManga.length === 0 && newReleases.length === 0;
       if (hasNoData) {
         setError(
           'An error occurred while fetching manga data. Please try again.'

@@ -48,7 +48,7 @@ Every component follows this structure:
 // 1. Imports (grouped and ordered)
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 
 // 2. Type definitions
@@ -205,7 +205,7 @@ const getStyles = (colors: typeof Colors.light) =>
 
 ### Theme Hooks
 
-- **useTheme** - Theme context access (`constants/ThemeContext.tsx`)
+- **useTheme** - Theme atom access (`hooks/useTheme.ts`)
 - **useThemeColor** - Color resolution (`hooks/useThemeColor.ts`)
 
 ### Utility Hooks
@@ -293,7 +293,7 @@ const getStyles = (colors: typeof Colors.light) =>
 
 - **Development**: `bun start`, `bun android`, `bun ios`
 - **Building**: `bun run build`, `bun run build:ios`
-- **Quality**: `bun run lint`, `bun run type-check`
+- **Quality**: `bun run lint`, `bun run type-check` , `bun run test`
 
 ## Key Patterns to Follow
 

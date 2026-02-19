@@ -17,7 +17,7 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-jest.mock('@/constants/ThemeContext', () => ({
+jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
     actualTheme: 'light',
     accentColor: '#007AFF',
@@ -37,7 +37,10 @@ jest.mock('@/components/MangaCard', () => {
   return function MockMangaCard({ title, onPress, mangaId }: any) {
     return (
       <View testID={`manga-card-${mangaId}`}>
-        <TouchableOpacity testID={`manga-card-press-${mangaId}`} onPress={onPress}>
+        <TouchableOpacity
+          testID={`manga-card-press-${mangaId}`}
+          onPress={onPress}
+        >
           <Text>{title}</Text>
         </TouchableOpacity>
       </View>
