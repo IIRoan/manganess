@@ -59,7 +59,6 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
     retryFailedChapters,
     remainingChapters,
   } = useBatchDownload(mangaId, mangaTitle, chapters, {
-    onChapterDownloaded: handleDownloadsChanged,
     onBatchFinished: handleDownloadsChanged,
   });
 
@@ -70,7 +69,10 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
 
   // Show toast when batch download completes
   useEffect(() => {
-    if (previousStatus === 'downloading' && state.status === 'idle') {
+    if (
+      previousStatus === 'downloading' &&
+      (state.status === 'completed' || state.status === 'error')
+    ) {
       if (state.failedChapters.length > 0) {
         showToast({
           message: `Downloaded with ${state.failedChapters.length} failure${state.failedChapters.length === 1 ? '' : 's'}`,
@@ -80,7 +82,7 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
         });
       } else {
         showToast({
-          message: `Batch download completed successfully!`,
+          message: 'Batch download completed',
           type: 'success',
           icon: 'checkmark-circle',
           duration: 2500,

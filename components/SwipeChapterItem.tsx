@@ -156,6 +156,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
               ]}
               onPress={() => {
                 onDeleteDownload?.();
+                downloadStatus.refresh();
                 swipeableRef.current?.close();
               }}
               activeOpacity={0.7}

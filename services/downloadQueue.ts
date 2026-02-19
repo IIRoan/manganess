@@ -9,6 +9,10 @@ import {
 import { DownloadQueue } from '@/types/downloadInterfaces';
 import { isDebugEnabled } from '@/constants/env';
 
+// Lazy import to avoid circular dependency with batchDownloadOrchestrator
+const getOrchestrator = () =>
+  require('./batchDownloadOrchestrator').batchDownloadOrchestrator;
+
 // Queue configuration
 const QUEUE_STORAGE_KEY = 'download_queue';
 const MAX_CONCURRENT_DOWNLOADS = 1; // Enforce 1 at a time for WebView safety
@@ -366,10 +370,24 @@ class DownloadQueueService implements DownloadQueue {
 
     try {
       await this.executeDownload(item);
+
+      // Notify batch orchestrator of successful download
+      getOrchestrator().handleDownloadEvent({
+        type: 'download_completed',
+        mangaId: item.mangaId,
+        chapterNumber: item.chapterNumber,
+      });
     } catch (error) {
       console.error(`Download failed for ${item.id}`, error);
       this.state.activeDownloads.delete(item.id);
-      // Optional: Retry logic? For now, just drop it or maybe add to back with lower priority
+
+      // Notify batch orchestrator of failed download
+      getOrchestrator().handleDownloadEvent({
+        type: 'download_failed',
+        mangaId: item.mangaId,
+        chapterNumber: item.chapterNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       this.state.activeDownloads.delete(item.id);
       this.scheduleSave();

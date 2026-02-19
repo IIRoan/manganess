@@ -37,10 +37,8 @@ export const useDownloadStatus = ({
 
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [serviceProgress, setServiceProgress] = useState<DownloadProgress | null>(
-    null
-  );
-  const [servicePaused, setServicePaused] = useState(false);
+  const [serviceProgress, setServiceProgress] =
+    useState<DownloadProgress | null>(null);
   const mountedRef = useRef(true);
 
   // Check if chapter is downloaded on disk (async check)
@@ -78,7 +76,6 @@ export const useDownloadStatus = ({
   const syncServiceStatus = useCallback(() => {
     try {
       const progress = downloadManagerService.getDownloadProgress(downloadId);
-      const paused = downloadManagerService.isDownloadPaused(downloadId);
 
       if (mountedRef.current) {
         setServiceProgress((prev) => {
@@ -90,10 +87,8 @@ export const useDownloadStatus = ({
           ) {
             return prev;
           }
-
           return progress;
         });
-        setServicePaused(paused);
       }
     } catch (error) {
       log.warn('Service', 'Failed to sync download manager service status', {
@@ -112,7 +107,6 @@ export const useDownloadStatus = ({
         if (!mountedRef.current) return;
 
         setServiceProgress(progress);
-        setServicePaused(progress.status === DownloadStatus.PAUSED);
 
         if (progress.status === DownloadStatus.COMPLETED) {
           checkDownloaded();
@@ -174,38 +168,23 @@ export const useDownloadStatus = ({
       };
     }
 
-    // Fallback to legacy download manager service while migration is in progress
-    if (servicePaused) {
-      return {
-        status: DownloadStatus.PAUSED,
-        isDownloaded: false,
-        isDownloading: false,
-        isQueued: false,
-        isFailed: false,
-        isPaused: true,
-        progress: serviceProgress?.progress ?? 0,
-      };
-    }
-
+    // Fall back to the legacy download manager service
     if (serviceProgress) {
       const isFailed = serviceProgress.status === DownloadStatus.FAILED;
       const isPaused = serviceProgress.status === DownloadStatus.PAUSED;
-      const isCompleted = serviceProgress.status === DownloadStatus.COMPLETED;
 
       return {
-        status: isCompleted
-          ? DownloadStatus.COMPLETED
-          : isFailed
-            ? DownloadStatus.FAILED
-            : isPaused
-              ? DownloadStatus.PAUSED
-              : DownloadStatus.DOWNLOADING,
-        isDownloaded: isCompleted,
-        isDownloading: !isFailed && !isPaused && !isCompleted,
+        status: isFailed
+          ? DownloadStatus.FAILED
+          : isPaused
+            ? DownloadStatus.PAUSED
+            : DownloadStatus.DOWNLOADING,
+        isDownloaded: false,
+        isDownloading: !isFailed && !isPaused,
         isQueued: false,
         isFailed,
         isPaused,
-        progress: isCompleted ? 100 : serviceProgress.progress,
+        progress: serviceProgress.progress,
         estimatedTimeRemaining: serviceProgress.estimatedTimeRemaining,
         downloadSpeed: serviceProgress.downloadSpeed,
       };
@@ -241,14 +220,10 @@ export const useDownloadStatus = ({
     };
   })();
 
-  const refresh = useCallback(() => {
-    checkDownloaded();
-  }, [checkDownloaded]);
-
   return {
     ...statusInfo,
     isLoading,
-    refresh,
+    refresh: checkDownloaded,
     downloadId,
   };
 };

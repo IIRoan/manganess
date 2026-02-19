@@ -40,7 +40,7 @@ export interface BatchDownloadState {
 export interface UseBatchDownloadOptions {
   maxRetries?: number;
   throttleDelayMs?: number;
-  onChapterDownloaded?: (chapter: BatchChapter) => void;
+  onChapterDownloaded?: (chapterNumber: string) => void;
   onBatchFinished?: (payload: {
     status: BatchStatus;
     failedChapters: BatchFailure[];
@@ -325,6 +325,8 @@ class BatchDownloadOrchestrator {
     if (newProcessed >= session.state.totalChapters) {
       this.finalize(session, 'completed', 'All chapters downloaded');
     }
+
+    session.options?.onChapterDownloaded?.(chapterNumber);
   }
 
   private handleChapterFailure(
@@ -371,12 +373,22 @@ class BatchDownloadOrchestrator {
       status,
       isCancelling: false,
       message: message ?? null,
-      progress: 100, // Ensure we show full bar
+      progress: status === 'completed' ? 100 : session.state.progress,
     });
 
-    if (session.options.onBatchFinished) {
-      // Call callback (if needed)
+    if (session.options?.onBatchFinished) {
+      session.options.onBatchFinished({
+        status,
+        failedChapters: session.state.failedChapters,
+      });
     }
+
+    // Reset to idle after a short delay so the UI can show the final state
+    setTimeout(() => {
+      if (session.state.status === status) {
+        this.updateState(session, this.getDefaultState());
+      }
+    }, 3000);
   }
 
   private updateState(session: Session, partial: Partial<BatchDownloadState>) {
