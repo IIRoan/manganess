@@ -591,6 +591,12 @@ class DownloadManagerService implements DownloadManager {
       this.pausedDownloads.delete(downloadId);
       this.downloadContexts.delete(downloadId);
 
+      // Notify listeners that this download is complete so UI can refresh
+      this.notifyProgressListeners(downloadId, {
+        status: DownloadStatus.COMPLETED,
+        progress: 100,
+      });
+
       try {
         await downloadQueueService.completeDownload(downloadId);
       } catch (error) {
@@ -1441,9 +1447,7 @@ class DownloadManagerService implements DownloadManager {
           progress.totalImages
         );
 
-        // Progress is now tracked via downloadManagerAtom
-
-        // Notify progress listeners
+        // Progress is now tracked via progress listeners
         this.notifyProgressListeners(
           downloadId,
           this.createProgressUpdate(progress)
