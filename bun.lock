@@ -13,6 +13,7 @@
         "@react-navigation/bottom-tabs": "^7.0.0",
         "@react-navigation/native": "^7.0.0",
         "@shopify/flash-list": "2.0.2",
+        "@zedux/react": "^1.3.5",
         "axios": "^1.7.8",
         "expo": "~54.0.30",
         "expo-background-fetch": "~14.0.9",
@@ -667,6 +668,12 @@
     "@xtuc/ieee754": ["@xtuc/ieee754@1.2.0", "", {}, "sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA=="],
 
     "@xtuc/long": ["@xtuc/long@4.2.2", "", {}, "sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ=="],
+
+    "@zedux/atoms": ["@zedux/atoms@1.3.5", "", { "dependencies": { "@zedux/core": "1.3.5" } }, "sha512-sFdPNyO1Mi/tICGDpJPL8xclc/3tIO4mrwm+y1GAGuCUfc+jwQomFnh6A3+03X6Cb7SLZAGUTsdKeALTTcQ/qw=="],
+
+    "@zedux/core": ["@zedux/core@1.3.5", "", {}, "sha512-2a5bC2Hir0d8qddcQWUbrfSEgugSiQ5CGb7XlK6uk87bEYf0ynyHItgCSU34HrFP0xvoYiodgy61r/8Kc/8aJQ=="],
+
+    "@zedux/react": ["@zedux/react@1.3.5", "", { "dependencies": { "@zedux/atoms": "1.3.5" }, "peerDependencies": { "react": ">=18.0.0" } }, "sha512-pgcZ4PH00L5fHM90djJrtsBibA3kV45hm2dELyCtQFnwLBCD+uOvUJWgCP3axmLIsXlUGbGvq/OPCo0RLAP1pA=="],
 
     "abab": ["abab@2.0.6", "", {}, "sha512-j2afSsaIENvHZN2B8GOpF566vZ5WVk5opAiMTvWgaQT8DkbOqsTfvNAvHoRGU2zzP8cPoqys+xHTRDWW8L+/BA=="],
 

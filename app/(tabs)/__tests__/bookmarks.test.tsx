@@ -4,7 +4,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import BookmarksScreen from '../bookmarks';
-import { getMangaData } from '@/services/bookmarkService';
 import { getDefaultLayout, setDefaultLayout } from '@/services/settingsService';
 import { imageCache } from '@/services/CacheImages';
 import { chapterStorageService } from '@/services/chapterStorageService';
@@ -20,7 +19,7 @@ jest.mock('@react-navigation/native', () => ({
   }),
 }));
 
-jest.mock('@/constants/ThemeContext', () => ({
+jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ actualTheme: 'light' }),
 }));
 
@@ -34,10 +33,6 @@ jest.mock('@/services/chapterStorageService', () => ({
   },
 }));
 
-jest.mock('@/services/bookmarkService', () => ({
-  getMangaData: jest.fn(),
-}));
-
 jest.mock('@/services/settingsService', () => ({
   getDefaultLayout: jest.fn(),
   setDefaultLayout: jest.fn(),
@@ -47,10 +42,24 @@ jest.mock('@/services/CacheImages', () => ({
   imageCache: { getCachedImagePath: jest.fn() },
 }));
 
-// Mock offline context with controllable state
+// Mock offline hook with controllable state
 let mockIsOffline = false;
-jest.mock('@/contexts/OfflineContext', () => ({
+jest.mock('@/hooks/useOffline', () => ({
   useOffline: () => ({ isOffline: mockIsOffline }),
+}));
+
+// Mock useBookmarks hook with controllable state
+let mockAtomBookmarks: any[] = [];
+const mockRefreshBookmarks = jest.fn().mockResolvedValue(undefined);
+jest.mock('@/hooks/useBookmarks', () => ({
+  useBookmarks: () => ({
+    bookmarks: mockAtomBookmarks,
+    bookmarkKeys: mockAtomBookmarks.map((b: any) => `bookmark_${b.id}`),
+    lastUpdated: Date.now(),
+    addBookmark: jest.fn(),
+    removeBookmark: jest.fn(),
+    refreshBookmarks: mockRefreshBookmarks,
+  }),
 }));
 
 jest.mock('@expo/vector-icons', () => ({
@@ -61,10 +70,18 @@ jest.mock('@expo/vector-icons', () => ({
 jest.mock('@/components/MangaCard', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { TouchableOpacity, Text, View } = require('react-native');
-  return function MockMangaCard({ title, onPress, onBookmarkChange, mangaId }: any) {
+  return function MockMangaCard({
+    title,
+    onPress,
+    onBookmarkChange,
+    mangaId,
+  }: any) {
     return (
       <View testID={`manga-card-${mangaId}`}>
-        <TouchableOpacity testID={`manga-card-press-${mangaId}`} onPress={onPress}>
+        <TouchableOpacity
+          testID={`manga-card-press-${mangaId}`}
+          onPress={onPress}
+        >
           <Text>{title}</Text>
         </TouchableOpacity>
         {onBookmarkChange && (
@@ -100,35 +117,36 @@ describe('BookmarksScreen', () => {
     mockIsOffline = false;
     mockRouterPush.mockClear();
 
-    // Default mock setup
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') return JSON.stringify(['bookmark_1', 'bookmark_2']);
-      if (key === 'bookmarkChanged') return 'false';
-      return null;
-    });
-
-    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
-
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Manga Alpha',
-          bookmarkStatus: 'Reading',
-          lastReadChapter: 10,
-          bannerImage: 'alpha.jpg',
-          lastUpdated: 100,
-        };
-      }
-      return {
+    // Default mock setup - provide bookmark data via atom mock
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga Alpha',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '10',
+        bannerImage: 'alpha.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+      {
         id: '2',
         title: 'Manga Beta',
         bookmarkStatus: 'Read',
-        lastReadChapter: 5,
+        lastReadChapter: '5',
         bannerImage: 'beta.jpg',
         lastUpdated: 200,
-      };
-    });
+        readChapters: [],
+      },
+    ];
+
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(
+      async (key: string) => {
+        if (key === 'bookmarkChanged') return 'false';
+        return null;
+      }
+    );
+
+    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
 
     (getDefaultLayout as jest.Mock).mockResolvedValue('grid');
     (setDefaultLayout as jest.Mock).mockResolvedValue(undefined);
@@ -216,7 +234,9 @@ describe('BookmarksScreen', () => {
 
     await waitFor(() => {
       // Multiple empty states rendered for each section
-      expect(queryAllByText('No bookmarks found for "nonexistent"').length).toBeGreaterThan(0);
+      expect(
+        queryAllByText('No bookmarks found for "nonexistent"').length
+      ).toBeGreaterThan(0);
     });
   });
 
@@ -265,10 +285,7 @@ describe('BookmarksScreen', () => {
   });
 
   it('shows empty state with no bookmarks', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') return JSON.stringify([]);
-      return null;
-    });
+    mockAtomBookmarks = [];
 
     const { queryByText } = renderScreen();
 
@@ -284,7 +301,9 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles view mode load error', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     (getDefaultLayout as jest.Mock).mockRejectedValue(new Error('Load error'));
 
     const { queryByText } = renderScreen();
@@ -297,20 +316,20 @@ describe('BookmarksScreen', () => {
       expect(queryByText('Loading...')).toBeNull();
     });
 
-    expect(consoleSpy).toHaveBeenCalledWith('Failed to load view mode:', expect.any(Error));
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to load view mode:',
+      expect.any(Error)
+    );
     consoleSpy.mockRestore();
   });
 
   it('handles fetch bookmarks error', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
 
-    // Mock to reject only for bookmarkKeys, not other calls
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') {
-        throw new Error('Fetch error');
-      }
-      return null;
-    });
+    // Mock refreshBookmarks to reject
+    mockRefreshBookmarks.mockRejectedValueOnce(new Error('Fetch error'));
 
     const { queryByText } = renderScreen();
 
@@ -322,12 +341,17 @@ describe('BookmarksScreen', () => {
       expect(queryByText('Loading...')).toBeNull();
     });
 
-    expect(consoleSpy).toHaveBeenCalledWith('Failed to fetch bookmarks:', expect.any(Error));
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Failed to fetch bookmarks:',
+      expect.any(Error)
+    );
     consoleSpy.mockRestore();
   });
 
   it('handles view mode save error', async () => {
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     (setDefaultLayout as jest.Mock).mockRejectedValue(new Error('Save error'));
 
     const { getByTestId, queryByText } = renderScreen();
@@ -347,7 +371,10 @@ describe('BookmarksScreen', () => {
     });
 
     await waitFor(() => {
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to save view mode:', expect.any(Error));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to save view mode:',
+        expect.any(Error)
+      );
     });
 
     consoleSpy.mockRestore();
@@ -406,7 +433,8 @@ describe('BookmarksScreen', () => {
   });
 
   it('clears search from empty state', async () => {
-    const { getByPlaceholderText, getAllByText, queryByText, queryAllByText } = renderScreen();
+    const { getByPlaceholderText, getAllByText, queryByText, queryAllByText } =
+      renderScreen();
 
     await act(async () => {
       jest.runAllTimers();
@@ -471,12 +499,16 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles manga with undefined status', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: undefined,
-      bannerImage: 'test.jpg',
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: undefined,
+        bannerImage: 'test.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -490,13 +522,17 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles null lastReadChapter', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: null,
-      bannerImage: 'test.jpg',
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: null,
+        bannerImage: 'test.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -510,7 +546,7 @@ describe('BookmarksScreen', () => {
   });
 
   it('skips null manga data', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue(null);
+    mockAtomBookmarks = [];
 
     const { queryByText } = renderScreen();
 
@@ -526,7 +562,7 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles empty bookmark keys', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    mockAtomBookmarks = [];
 
     const { queryByText } = renderScreen();
 
@@ -544,22 +580,27 @@ describe('BookmarksScreen', () => {
   it('refreshes on bookmarkChanged flag', async () => {
     let bookmarkChangedCalls = 0;
 
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') return JSON.stringify(['bookmark_1']);
-      if (key === 'bookmarkChanged') {
-        bookmarkChangedCalls++;
-        // Return 'true' only on first call, then 'false' to prevent infinite loop
-        return bookmarkChangedCalls === 1 ? 'true' : 'false';
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(
+      async (key: string) => {
+        if (key === 'bookmarkChanged') {
+          bookmarkChangedCalls++;
+          // Return 'true' only on first call, then 'false' to prevent infinite loop
+          return bookmarkChangedCalls === 1 ? 'true' : 'false';
+        }
+        return null;
       }
-      return null;
-    });
+    );
 
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      bannerImage: '1.jpg',
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        bannerImage: '1.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -571,11 +612,13 @@ describe('BookmarksScreen', () => {
       expect(queryByText('Loading...')).toBeNull();
     });
 
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('bookmarkChanged', 'false');
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      'bookmarkChanged',
+      'false'
+    );
   });
 
   it('preloads images', async () => {
-
     const { queryByText } = renderScreen();
 
     await act(async () => {
@@ -590,26 +633,26 @@ describe('BookmarksScreen', () => {
   });
 
   it('sorts by last read recent (updated-desc)', async () => {
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Manga A',
-          bookmarkStatus: 'Reading',
-          lastReadChapter: 10,
-          bannerImage: 'a.jpg',
-          lastUpdated: 100,
-        };
-      }
-      return {
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga A',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '10',
+        bannerImage: 'a.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+      {
         id: '2',
         title: 'Manga B',
         bookmarkStatus: 'Reading',
-        lastReadChapter: 5,
+        lastReadChapter: '5',
         bannerImage: 'b.jpg',
         lastUpdated: 200,
-      };
-    });
+        readChapters: [],
+      },
+    ];
 
     const { getByTestId, getByText, queryByText } = renderScreen();
 
@@ -641,26 +684,26 @@ describe('BookmarksScreen', () => {
   });
 
   it('sorts by last read oldest (updated-asc)', async () => {
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Manga A',
-          bookmarkStatus: 'Reading',
-          lastReadChapter: 10,
-          bannerImage: 'a.jpg',
-          lastUpdated: 100,
-        };
-      }
-      return {
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga A',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '10',
+        bannerImage: 'a.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+      {
         id: '2',
         title: 'Manga B',
         bookmarkStatus: 'Reading',
-        lastReadChapter: 5,
+        lastReadChapter: '5',
         bannerImage: 'b.jpg',
         lastUpdated: 200,
-      };
-    });
+        readChapters: [],
+      },
+    ];
 
     const { getByTestId, getByText, queryByText } = renderScreen();
 
@@ -694,31 +737,33 @@ describe('BookmarksScreen', () => {
   it('shows only manga with downloaded chapters when offline', async () => {
     mockIsOffline = true;
 
-    (chapterStorageService.getDownloadedChapters as jest.Mock).mockImplementation(async (id: string) => {
+    (
+      chapterStorageService.getDownloadedChapters as jest.Mock
+    ).mockImplementation(async (id: string) => {
       if (id === '1') return [{ chapterNumber: 1 }];
       return []; // No downloaded chapters for manga 2
     });
 
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Manga With Downloads',
-          bookmarkStatus: 'Reading',
-          lastReadChapter: 1,
-          bannerImage: 'downloads.jpg',
-          lastUpdated: 100,
-        };
-      }
-      return {
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga With Downloads',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '1',
+        bannerImage: 'downloads.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+      {
         id: '2',
         title: 'Manga Without Downloads',
         bookmarkStatus: 'Reading',
-        lastReadChapter: 5,
+        lastReadChapter: '5',
         bannerImage: 'nodownloads.jpg',
         lastUpdated: 200,
-      };
-    });
+        readChapters: [],
+      },
+    ];
 
     const { getByText, queryByText } = renderScreen();
 
@@ -738,14 +783,20 @@ describe('BookmarksScreen', () => {
   it('skips manga when getDownloadedChapters throws error in offline mode', async () => {
     mockIsOffline = true;
 
-    (chapterStorageService.getDownloadedChapters as jest.Mock).mockRejectedValue(new Error('Storage error'));
+    (
+      chapterStorageService.getDownloadedChapters as jest.Mock
+    ).mockRejectedValue(new Error('Storage error'));
 
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      bannerImage: 'test.jpg',
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        bannerImage: 'test.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -780,7 +831,10 @@ describe('BookmarksScreen', () => {
     });
 
     // Type something in search
-    fireEvent.changeText(getByPlaceholderText('Search bookmarks...'), 'test query');
+    fireEvent.changeText(
+      getByPlaceholderText('Search bookmarks...'),
+      'test query'
+    );
 
     await act(async () => {
       jest.runAllTimers();
@@ -827,15 +881,6 @@ describe('BookmarksScreen', () => {
   it('renders in list view mode', async () => {
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
 
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => ({
-      id,
-      title: `Manga ${id}`,
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 5,
-      bannerImage: `${id}.jpg`,
-      lastUpdated: 100,
-    }));
-
     const { queryByText } = renderScreen();
 
     await act(async () => {
@@ -848,23 +893,17 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles invalid bookmark key format', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') return JSON.stringify(['invalid_key_without_id', 'bookmark_1']);
-      if (key === 'bookmarkChanged') return 'false';
-      return null;
-    });
-
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Valid Manga',
-          bookmarkStatus: 'Reading',
-          bannerImage: 'valid.jpg',
-        };
-      }
-      return null;
-    });
+    // With the atom-based approach, invalid keys are handled by the atom itself
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Valid Manga',
+        bookmarkStatus: 'Reading',
+        bannerImage: 'valid.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -878,22 +917,24 @@ describe('BookmarksScreen', () => {
   });
 
   it('switches to all section tabs', async () => {
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Reading Manga',
-          bookmarkStatus: 'Reading',
-          bannerImage: 'reading.jpg',
-        };
-      }
-      return {
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Reading Manga',
+        bookmarkStatus: 'Reading',
+        bannerImage: 'reading.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+      {
         id: '2',
         title: 'On Hold Manga',
         bookmarkStatus: 'On Hold',
         bannerImage: 'onhold.jpg',
-      };
-    });
+        readChapters: [],
+        lastUpdated: 200,
+      },
+    ];
 
     const { getByText, queryByText } = renderScreen();
 
@@ -928,24 +969,24 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles manga with undefined lastUpdated for sorting', async () => {
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Manga No Update',
-          bookmarkStatus: 'Reading',
-          bannerImage: 'no-update.jpg',
-          lastUpdated: undefined,
-        };
-      }
-      return {
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga No Update',
+        bookmarkStatus: 'Reading',
+        bannerImage: 'no-update.jpg',
+        lastUpdated: undefined,
+        readChapters: [],
+      },
+      {
         id: '2',
         title: 'Manga With Update',
         bookmarkStatus: 'Reading',
         bannerImage: 'update.jpg',
         lastUpdated: 100,
-      };
-    });
+        readChapters: [],
+      },
+    ];
 
     const { getByTestId, getByText, queryByText } = renderScreen();
 
@@ -1002,13 +1043,16 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles manga with empty bannerImage', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Manga No Image',
-      bookmarkStatus: 'Reading',
-      bannerImage: '',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga No Image',
+        bookmarkStatus: 'Reading',
+        bannerImage: '',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -1022,29 +1066,40 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles manga in all status types', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') {
-        return JSON.stringify(['bookmark_1', 'bookmark_2', 'bookmark_3', 'bookmark_4']);
-      }
-      if (key === 'bookmarkChanged') return 'false';
-      return null;
-    });
-
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      const statuses: Record<string, string> = {
-        '1': 'Reading',
-        '2': 'To Read',
-        '3': 'On Hold',
-        '4': 'Read',
-      };
-      return {
-        id,
-        title: `Manga ${id}`,
-        bookmarkStatus: statuses[id],
-        bannerImage: `${id}.jpg`,
-        lastUpdated: parseInt(id) * 100,
-      };
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga 1',
+        bookmarkStatus: 'Reading',
+        bannerImage: '1.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+      {
+        id: '2',
+        title: 'Manga 2',
+        bookmarkStatus: 'To Read',
+        bannerImage: '2.jpg',
+        lastUpdated: 200,
+        readChapters: [],
+      },
+      {
+        id: '3',
+        title: 'Manga 3',
+        bookmarkStatus: 'On Hold',
+        bannerImage: '3.jpg',
+        lastUpdated: 300,
+        readChapters: [],
+      },
+      {
+        id: '4',
+        title: 'Manga 4',
+        bookmarkStatus: 'Read',
+        bannerImage: '4.jpg',
+        lastUpdated: 400,
+        readChapters: [],
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -1058,12 +1113,16 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles manga with invalid status that falls back to Reading', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Invalid Status Manga',
-      bookmarkStatus: 'InvalidStatus',
-      bannerImage: 'invalid.jpg',
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Invalid Status Manga',
+        bookmarkStatus: 'InvalidStatus',
+        bannerImage: 'invalid.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+    ];
 
     const { queryByText } = renderScreen();
 
@@ -1077,14 +1136,17 @@ describe('BookmarksScreen', () => {
   });
 
   it('navigates to manga details when pressing a bookmark in grid view', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 5,
-      bannerImage: 'test.jpg',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: 'test.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { getAllByTestId, queryByText } = renderScreen();
 
@@ -1110,14 +1172,17 @@ describe('BookmarksScreen', () => {
   it('renders list view correctly and verifies manga card exists', async () => {
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
 
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 5,
-      bannerImage: 'test.jpg',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: 'test.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { getAllByTestId, queryByText } = renderScreen();
 
@@ -1135,14 +1200,17 @@ describe('BookmarksScreen', () => {
   });
 
   it('refreshes bookmarks when removing a bookmark in grid view', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 5,
-      bannerImage: 'test.jpg',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: 'test.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { getAllByTestId, queryByText } = renderScreen();
 
@@ -1162,19 +1230,22 @@ describe('BookmarksScreen', () => {
       jest.runAllTimers();
     });
 
-    // fetchBookmarks should be called again
-    expect(getMangaData).toHaveBeenCalled();
+    // refreshBookmarks should be called
+    expect(mockRefreshBookmarks).toHaveBeenCalled();
   });
 
   it('refreshes bookmarks when changing bookmark status in grid view', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 5,
-      bannerImage: 'test.jpg',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: 'test.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { getAllByTestId, queryByText } = renderScreen();
 
@@ -1194,21 +1265,24 @@ describe('BookmarksScreen', () => {
       jest.runAllTimers();
     });
 
-    // fetchBookmarks should be called again
-    expect(getMangaData).toHaveBeenCalled();
+    // refreshBookmarks should be called
+    expect(mockRefreshBookmarks).toHaveBeenCalled();
   });
 
   it('refreshes bookmarks when removing a bookmark in list view', async () => {
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
 
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 5,
-      bannerImage: 'test.jpg',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: 'test.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { getAllByTestId, queryByText } = renderScreen();
 
@@ -1228,21 +1302,24 @@ describe('BookmarksScreen', () => {
       jest.runAllTimers();
     });
 
-    // fetchBookmarks should be called again
-    expect(getMangaData).toHaveBeenCalled();
+    // refreshBookmarks should be called
+    expect(mockRefreshBookmarks).toHaveBeenCalled();
   });
 
   it('refreshes bookmarks when changing bookmark status in list view', async () => {
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
 
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 5,
-      bannerImage: 'test.jpg',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: 'test.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { getAllByTestId, queryByText } = renderScreen();
 
@@ -1262,21 +1339,24 @@ describe('BookmarksScreen', () => {
       jest.runAllTimers();
     });
 
-    // fetchBookmarks should be called again
-    expect(getMangaData).toHaveBeenCalled();
+    // refreshBookmarks should be called
+    expect(mockRefreshBookmarks).toHaveBeenCalled();
   });
 
   it('renders list view with chapter info', async () => {
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
 
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'List View Manga',
-      bookmarkStatus: 'Reading',
-      lastReadChapter: 10,
-      bannerImage: 'list.jpg',
-      lastUpdated: 100,
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'List View Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '10',
+        bannerImage: 'list.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
 
     const { queryByText, getAllByText } = renderScreen();
 
@@ -1294,14 +1374,26 @@ describe('BookmarksScreen', () => {
   it('renders multiple manga in list view', async () => {
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
 
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => ({
-      id,
-      title: `Manga ${id}`,
-      bookmarkStatus: 'Reading',
-      lastReadChapter: parseInt(id) * 5,
-      bannerImage: `${id}.jpg`,
-      lastUpdated: parseInt(id) * 100,
-    }));
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga 1',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: '1.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+      {
+        id: '2',
+        title: 'Manga 2',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '10',
+        bannerImage: '2.jpg',
+        lastUpdated: 200,
+        readChapters: [],
+      },
+    ];
 
     const { queryByText, getAllByText } = renderScreen();
 
@@ -1318,12 +1410,16 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles section tab layout events', async () => {
-    (getMangaData as jest.Mock).mockResolvedValue({
-      id: '1',
-      title: 'Test Manga',
-      bookmarkStatus: 'Reading',
-      bannerImage: 'test.jpg',
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Test Manga',
+        bookmarkStatus: 'Reading',
+        bannerImage: 'test.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+    ];
 
     const { getByText, queryByText } = renderScreen();
 
@@ -1349,22 +1445,24 @@ describe('BookmarksScreen', () => {
   });
 
   it('handles rapid section switching', async () => {
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      if (id === '1') {
-        return {
-          id: '1',
-          title: 'Reading Manga',
-          bookmarkStatus: 'Reading',
-          bannerImage: 'reading.jpg',
-        };
-      }
-      return {
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Reading Manga',
+        bookmarkStatus: 'Reading',
+        bannerImage: 'reading.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+      {
         id: '2',
         title: 'To Read Manga',
         bookmarkStatus: 'To Read',
         bannerImage: 'toread.jpg',
-      };
-    });
+        readChapters: [],
+        lastUpdated: 200,
+      },
+    ];
 
     const { getByText, queryByText } = renderScreen();
 
@@ -1388,10 +1486,7 @@ describe('BookmarksScreen', () => {
   });
 
   it('shows correct empty state message for different sections', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') return JSON.stringify([]);
-      return null;
-    });
+    mockAtomBookmarks = [];
 
     const { getByText, queryByText } = renderScreen();
 
@@ -1419,22 +1514,32 @@ describe('BookmarksScreen', () => {
   });
 
   it('displays correct section counts', async () => {
-    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
-      if (key === 'bookmarkKeys') {
-        return JSON.stringify(['bookmark_1', 'bookmark_2', 'bookmark_3']);
-      }
-      if (key === 'bookmarkChanged') return 'false';
-      return null;
-    });
-
-    (getMangaData as jest.Mock).mockImplementation(async (id: string) => {
-      const data: Record<string, any> = {
-        '1': { id: '1', title: 'Manga 1', bookmarkStatus: 'Reading', bannerImage: '1.jpg' },
-        '2': { id: '2', title: 'Manga 2', bookmarkStatus: 'Reading', bannerImage: '2.jpg' },
-        '3': { id: '3', title: 'Manga 3', bookmarkStatus: 'To Read', bannerImage: '3.jpg' },
-      };
-      return data[id];
-    });
+    mockAtomBookmarks = [
+      {
+        id: '1',
+        title: 'Manga 1',
+        bookmarkStatus: 'Reading',
+        bannerImage: '1.jpg',
+        readChapters: [],
+        lastUpdated: 100,
+      },
+      {
+        id: '2',
+        title: 'Manga 2',
+        bookmarkStatus: 'Reading',
+        bannerImage: '2.jpg',
+        readChapters: [],
+        lastUpdated: 200,
+      },
+      {
+        id: '3',
+        title: 'Manga 3',
+        bookmarkStatus: 'To Read',
+        bannerImage: '3.jpg',
+        readChapters: [],
+        lastUpdated: 300,
+      },
+    ];
 
     const { queryByText, getByText } = renderScreen();
 

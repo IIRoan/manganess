@@ -8,7 +8,6 @@ import {
   ImageDownloadStatus,
   DownloadProgress as DownloadProgressType,
 } from '@/types/download';
-import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadManager } from '@/types/downloadInterfaces';
 import { imageExtractorService } from './imageExtractor';
 import { chapterStorageService } from './chapterStorageService';
@@ -535,21 +534,9 @@ class DownloadManagerService implements DownloadManager {
           timestamp: Date.now(),
         });
       }
-
-      downloadEventEmitter.emitResumed(
-        context.mangaId,
-        context.chapterNumber,
-        downloadId,
-        progress.progress
-      );
     } else {
       // New download attempt
       this.pausedDownloads.delete(downloadId);
-      downloadEventEmitter.emitStarted(
-        context.mangaId,
-        context.chapterNumber,
-        downloadId
-      );
     }
 
     try {
@@ -573,7 +560,6 @@ class DownloadManagerService implements DownloadManager {
   ): Promise<DownloadResult> {
     const pausedInfo = this.pausedDownloads.get(downloadId);
     const isExplicitPause = pausedInfo?.status === 'paused';
-    const progressSnapshot = this.activeDownloads.get(downloadId);
 
     // Cleanup common resources
     this.activeDownloads.delete(downloadId);
@@ -634,13 +620,6 @@ class DownloadManagerService implements DownloadManager {
           error,
         });
       }
-
-      downloadEventEmitter.emitPaused(
-        context.mangaId,
-        context.chapterNumber,
-        downloadId,
-        progressSnapshot?.progress
-      );
 
       if (isDebugEnabled()) {
         this.log.warn('Service', 'Download paused due to recoverable error', {
@@ -1191,8 +1170,7 @@ class DownloadManagerService implements DownloadManager {
         }
       }
 
-      // Emit download completion event
-      downloadEventEmitter.emitCompleted(mangaId, chapterNumber, downloadId);
+      // Download completion is now tracked via downloadManagerAtom
 
       if (isDebugEnabled()) {
         this.log.info('Service', 'Chapter download completed successfully', {
@@ -1463,15 +1441,7 @@ class DownloadManagerService implements DownloadManager {
           progress.totalImages
         );
 
-        // Emit progress event
-        downloadEventEmitter.emitProgress(
-          progress.mangaId,
-          progress.chapterNumber,
-          downloadId,
-          progress.progress,
-          progress.estimatedTimeRemaining,
-          progress.downloadSpeed
-        );
+        // Progress is now tracked via downloadManagerAtom
 
         // Notify progress listeners
         this.notifyProgressListeners(
@@ -1707,13 +1677,7 @@ class DownloadManagerService implements DownloadManager {
     }
 
     if (context) {
-      const progress = this.activeDownloads.get(downloadId);
-      downloadEventEmitter.emitPaused(
-        context.mangaId,
-        context.chapterNumber,
-        downloadId,
-        progress?.progress
-      );
+      // Pause state is now tracked via downloadManagerAtom
     }
 
     void this.persistPausedDownloads();

@@ -3,11 +3,11 @@ import { Animated } from 'react-native';
 import { act, render } from '@testing-library/react-native';
 import { usePathname } from 'expo-router';
 
-import { useOffline } from '@/contexts/OfflineContext';
+import { useOffline } from '@/hooks/useOffline';
 import { OfflineIndicator } from '../OfflineIndicator';
 
 // Mock dependencies
-jest.mock('@/contexts/OfflineContext', () => ({
+jest.mock('@/hooks/useOffline', () => ({
   useOffline: jest.fn(),
 }));
 

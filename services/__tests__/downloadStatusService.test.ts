@@ -10,36 +10,6 @@ jest.mock('@/utils/logger', () => ({
   }),
 }));
 
-jest.mock('@/utils/downloadEventEmitter', () => {
-  const listeners = new Map<string, Set<Function>>();
-  let globalListener: Function | null = null;
-
-  return {
-    downloadEventEmitter: {
-      subscribeGlobal: jest.fn((callback: Function) => {
-        globalListener = callback;
-        return () => {
-          globalListener = null;
-        };
-      }),
-      subscribe: jest.fn((mangaId: string, chapterNumber: string, callback: Function) => {
-        const key = `${mangaId}_${chapterNumber}`;
-        if (!listeners.has(key)) {
-          listeners.set(key, new Set());
-        }
-        listeners.get(key)?.add(callback);
-        return () => {
-          listeners.get(key)?.delete(callback);
-        };
-      }),
-      // Helper for tests to trigger events
-      _triggerGlobal: (event: any) => {
-        if (globalListener) globalListener(event);
-      },
-    },
-  };
-});
-
 jest.mock('../downloadManager', () => ({
   downloadManagerService: {
     getDownloadProgress: jest.fn(),
@@ -243,9 +213,14 @@ describe('downloadStatusService', () => {
 
   describe('getDownloadedChapters', () => {
     it('returns downloaded chapters from storage', async () => {
-      mockChapterStorage.getDownloadedChapters.mockResolvedValue(['1', '2', '3']);
+      mockChapterStorage.getDownloadedChapters.mockResolvedValue([
+        '1',
+        '2',
+        '3',
+      ]);
 
-      const chapters = await downloadStatusService.getDownloadedChapters('manga-1');
+      const chapters =
+        await downloadStatusService.getDownloadedChapters('manga-1');
 
       expect(chapters).toEqual(['1', '2', '3']);
       expect(mockChapterStorage.getDownloadedChapters).toHaveBeenCalledWith(
@@ -258,7 +233,8 @@ describe('downloadStatusService', () => {
         new Error('Error')
       );
 
-      const chapters = await downloadStatusService.getDownloadedChapters('manga-1');
+      const chapters =
+        await downloadStatusService.getDownloadedChapters('manga-1');
 
       expect(chapters).toEqual([]);
     });
@@ -270,7 +246,8 @@ describe('downloadStatusService', () => {
         { mangaId: 'manga-1', chapterNumber: '1' } as any,
       ]);
 
-      const result = await downloadStatusService.isDownloadingChapters('manga-1');
+      const result =
+        await downloadStatusService.isDownloadingChapters('manga-1');
 
       expect(result).toBe(true);
     });
@@ -278,7 +255,8 @@ describe('downloadStatusService', () => {
     it('returns false when no chapters downloading', async () => {
       mockDownloadManager.getActiveDownloads.mockResolvedValue([]);
 
-      const result = await downloadStatusService.isDownloadingChapters('manga-1');
+      const result =
+        await downloadStatusService.isDownloadingChapters('manga-1');
 
       expect(result).toBe(false);
     });
@@ -315,7 +293,10 @@ describe('downloadStatusService', () => {
     it('returns true for downloaded chapters', async () => {
       mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
 
-      const result = await downloadStatusService.isChapterDownloaded('manga-1', '1');
+      const result = await downloadStatusService.isChapterDownloaded(
+        'manga-1',
+        '1'
+      );
 
       expect(result).toBe(true);
     });
@@ -323,7 +304,10 @@ describe('downloadStatusService', () => {
     it('returns false for non-downloaded chapters', async () => {
       mockChapterStorage.isChapterDownloaded.mockResolvedValue(false);
 
-      const result = await downloadStatusService.isChapterDownloaded('manga-1', '1');
+      const result = await downloadStatusService.isChapterDownloaded(
+        'manga-1',
+        '1'
+      );
 
       expect(result).toBe(false);
     });
@@ -336,7 +320,10 @@ describe('downloadStatusService', () => {
         status: DownloadStatus.DOWNLOADING,
       } as any);
 
-      const result = await downloadStatusService.isChapterDownloading('manga-1', '1');
+      const result = await downloadStatusService.isChapterDownloading(
+        'manga-1',
+        '1'
+      );
 
       expect(result).toBe(true);
     });
@@ -344,7 +331,10 @@ describe('downloadStatusService', () => {
     it('returns false when chapter is not downloading', async () => {
       mockDownloadQueue.getDownloadById.mockResolvedValue(null);
 
-      const result = await downloadStatusService.isChapterDownloading('manga-1', '1');
+      const result = await downloadStatusService.isChapterDownloading(
+        'manga-1',
+        '1'
+      );
 
       expect(result).toBe(false);
     });
@@ -354,7 +344,10 @@ describe('downloadStatusService', () => {
     it('returns the status enum value', async () => {
       mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
 
-      const status = await downloadStatusService.getSimpleStatus('manga-1', '1');
+      const status = await downloadStatusService.getSimpleStatus(
+        'manga-1',
+        '1'
+      );
 
       expect(status).toBe(DownloadStatus.COMPLETED);
     });
@@ -365,7 +358,10 @@ describe('downloadStatusService', () => {
         status: DownloadStatus.QUEUED,
       } as any);
 
-      const status = await downloadStatusService.getSimpleStatus('manga-1', '1');
+      const status = await downloadStatusService.getSimpleStatus(
+        'manga-1',
+        '1'
+      );
 
       expect(status).toBe(DownloadStatus.QUEUED);
     });
@@ -380,7 +376,10 @@ describe('downloadStatusService', () => {
         estimatedTimeRemaining: 15,
       });
 
-      const progress = downloadStatusService.getDownloadProgress('manga-1', '1');
+      const progress = downloadStatusService.getDownloadProgress(
+        'manga-1',
+        '1'
+      );
 
       expect(progress).toEqual({
         status: DownloadStatus.DOWNLOADING,
@@ -393,7 +392,10 @@ describe('downloadStatusService', () => {
     it('returns null when no progress available', () => {
       mockDownloadManager.getDownloadProgress.mockReturnValue(null);
 
-      const progress = downloadStatusService.getDownloadProgress('manga-1', '1');
+      const progress = downloadStatusService.getDownloadProgress(
+        'manga-1',
+        '1'
+      );
 
       expect(progress).toBeNull();
     });
@@ -439,7 +441,8 @@ describe('downloadStatusService', () => {
         new Error('Service error')
       );
 
-      const result = await downloadStatusService.isDownloadingChapters('manga-1');
+      const result =
+        await downloadStatusService.isDownloadingChapters('manga-1');
 
       expect(result).toBe(false);
     });
@@ -510,117 +513,26 @@ describe('downloadStatusService', () => {
     });
   });
 
-  describe('event handling', () => {
-    it('invalidates cache on download events', async () => {
-      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
-
+  describe('invalidateCache', () => {
+    it('invalidates cache for a specific chapter', async () => {
       mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
 
       // Populate cache
       await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
       expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(1);
 
-      // Trigger download_started event
-      downloadEventEmitter._triggerGlobal({
-        type: 'download_started',
-        mangaId: 'manga-1',
-        chapterNumber: '1',
-      });
+      // Invalidate cache via public method
+      downloadStatusService.invalidateCache('manga-1', '1');
 
-      // Cache should be invalidated
+      // Should fetch again
       await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
       expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
     });
+  });
 
-    it('invalidates cache on download_completed event', async () => {
-      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
-
-      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-
-      downloadEventEmitter._triggerGlobal({
-        type: 'download_completed',
-        mangaId: 'manga-1',
-        chapterNumber: '1',
-      });
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
-    });
-
-    it('invalidates cache on download_failed event', async () => {
-      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
-
-      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-
-      downloadEventEmitter._triggerGlobal({
-        type: 'download_failed',
-        mangaId: 'manga-1',
-        chapterNumber: '1',
-      });
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
-    });
-
-    it('invalidates cache on download_deleted event', async () => {
-      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
-
-      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-
-      downloadEventEmitter._triggerGlobal({
-        type: 'download_deleted',
-        mangaId: 'manga-1',
-        chapterNumber: '1',
-      });
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
-    });
-
-    it('invalidates cache on download_paused event', async () => {
-      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
-
-      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-
-      downloadEventEmitter._triggerGlobal({
-        type: 'download_paused',
-        mangaId: 'manga-1',
-        chapterNumber: '1',
-      });
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
-    });
-
-    it('invalidates cache on download_resumed event', async () => {
-      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
-
-      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-
-      downloadEventEmitter._triggerGlobal({
-        type: 'download_resumed',
-        mangaId: 'manga-1',
-        chapterNumber: '1',
-      });
-
-      await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
-      expect(mockChapterStorage.isChapterDownloaded).toHaveBeenCalledTimes(2);
-    });
-
-    it('updates cached progress on download_progress event', async () => {
-      const { downloadEventEmitter } = require('@/utils/downloadEventEmitter');
-
-      // First, cache a downloading status
+  describe('updateCachedProgress', () => {
+    it('updates cached progress for a downloading chapter', async () => {
+      // Cache a downloading status first
       mockDownloadQueue.getDownloadById.mockResolvedValue({
         id: 'manga-1_1',
         status: DownloadStatus.DOWNLOADING,
@@ -633,18 +545,18 @@ describe('downloadStatusService', () => {
 
       await downloadStatusService.getChapterDownloadStatus('manga-1', '1');
 
-      // Trigger progress event
-      downloadEventEmitter._triggerGlobal({
-        type: 'download_progress',
-        mangaId: 'manga-1',
-        chapterNumber: '1',
-        progress: 75,
-        estimatedTimeRemaining: 10,
-        downloadSpeed: 2048,
-      });
+      // Update cached progress
+      downloadStatusService.updateCachedProgress('manga-1', '1', 75, 10, 2048);
 
-      // Get cached status - should reflect updated progress
-      // Note: Cache may be updated in place based on implementation
+      // Get cached status - should reflect updated progress without re-fetching
+      const status = await downloadStatusService.getChapterDownloadStatus(
+        'manga-1',
+        '1'
+      );
+      expect(status.progress).toBe(75);
+      expect(status.estimatedTimeRemaining).toBe(10);
+      expect(status.downloadSpeed).toBe(2048);
+      expect(status.isDownloading).toBe(true);
     });
   });
 });

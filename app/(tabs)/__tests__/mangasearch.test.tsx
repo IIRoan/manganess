@@ -25,7 +25,7 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-jest.mock('@/constants/ThemeContext', () => ({
+jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ actualTheme: 'light' }),
 }));
 
@@ -62,9 +62,9 @@ jest.mock('@/services/offlineCacheService', () => ({
   },
 }));
 
-// Mock offline context
+// Mock offline hook
 let mockIsOffline = false;
-jest.mock('@/contexts/OfflineContext', () => ({
+jest.mock('@/hooks/useOffline', () => ({
   useOffline: () => ({ isOffline: mockIsOffline }),
 }));
 
@@ -107,7 +107,10 @@ jest.mock('@/components/MangaCard', () => {
   return function MockMangaCard({ title, onPress, mangaId }: any) {
     return (
       <View testID={`manga-card-${mangaId}`}>
-        <TouchableOpacity testID={`manga-card-press-${mangaId}`} onPress={onPress}>
+        <TouchableOpacity
+          testID={`manga-card-press-${mangaId}`}
+          onPress={onPress}
+        >
           <Text>{title}</Text>
         </TouchableOpacity>
       </View>
@@ -154,7 +157,9 @@ describe('MangaSearchScreen', () => {
     (addSearchHistoryItem as jest.Mock).mockResolvedValue(undefined);
     (removeSearchHistoryItem as jest.Mock).mockResolvedValue(undefined);
     (clearSearchHistory as jest.Mock).mockResolvedValue(undefined);
-    (offlineCacheService.cacheSearchResults as jest.Mock).mockResolvedValue(undefined);
+    (offlineCacheService.cacheSearchResults as jest.Mock).mockResolvedValue(
+      undefined
+    );
   });
 
   afterEach(() => {
@@ -190,7 +195,9 @@ describe('MangaSearchScreen', () => {
       expect(getByText('Discover Manga')).toBeTruthy();
     });
 
-    expect(getByText('Find your next favorite series by searching above')).toBeTruthy();
+    expect(
+      getByText('Find your next favorite series by searching above')
+    ).toBeTruthy();
   });
 
   it('shows search history when available', async () => {
@@ -281,7 +288,11 @@ describe('MangaSearchScreen', () => {
       expect(getByText('Offline Mode')).toBeTruthy();
     });
 
-    expect(getByText("You're currently offline. Check your bookmarks for downloaded content.")).toBeTruthy();
+    expect(
+      getByText(
+        "You're currently offline. Check your bookmarks for downloaded content."
+      )
+    ).toBeTruthy();
     expect(getByText('Go to Bookmarks')).toBeTruthy();
   });
 

@@ -1,3 +1,22 @@
+/**
+ * @deprecated FULLY DEPRECATED - Part of Zedux state migration Phase 7 cleanup.
+ * This service is no longer maintained and will be removed once all consumers are migrated.
+ *
+ * Migration status:
+ * - Bookmark list management → atoms/bookmarkListAtom.ts + hooks/useBookmarks.ts
+ * - Individual manga data → atoms/bookmarkAtomFamily.ts + hooks/useMangaData.ts
+ * - Bookmark selectors → atoms/selectors/bookmarkSelectors.ts
+ *
+ * Functions still in use during migration:
+ * - saveBookmark (contains AniList sync + Alert dialog logic)
+ * - removeBookmark (contains AniList sync logic)
+ * - getBookmarkPopupConfig (pure UI config function)
+ * - getChapterLongPressAlertConfig (pure UI config function)
+ * - getMangaData / setMangaData (used by readChapterService, mangaFireService, chapter reader)
+ * - Download-related functions (updateDownloadStatus, etc.)
+ *
+ * These remaining functions will be migrated in subsequent phases.
+ */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';

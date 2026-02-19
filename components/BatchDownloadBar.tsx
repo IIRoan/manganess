@@ -8,8 +8,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, type ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
-import { useToast } from '@/contexts/ToastContext';
+import { useTheme } from '@/hooks/useTheme';
+import { useToast } from '@/hooks/useToast';
 import { useBatchDownload } from '@/hooks/useBatchDownload';
 import BatchDownloadPlannerModal from '@/components/BatchDownloadPlannerModal';
 import type { Chapter } from '@/types';

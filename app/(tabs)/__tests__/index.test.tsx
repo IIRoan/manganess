@@ -5,7 +5,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from '../index';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import { getRecentlyReadManga } from '@/services/readChapterService';
-import { parseMostViewedManga, parseNewReleases } from '@/services/mangaFireService';
+import {
+  parseMostViewedManga,
+  parseNewReleases,
+} from '@/services/mangaFireService';
 import axios from 'axios';
 
 // Mock router
@@ -21,7 +24,7 @@ jest.mock('@react-navigation/native', () => ({
   }),
 }));
 
-jest.mock('@/constants/ThemeContext', () => ({
+jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({
     actualTheme: 'light',
     accentColor: '#007AFF',
@@ -55,10 +58,35 @@ jest.mock('@/hooks/useCloudflareDetection', () => ({
   }),
 }));
 
-// Mock offline context
+// Mock offline hook
 let mockIsOffline = false;
-jest.mock('@/contexts/OfflineContext', () => ({
+jest.mock('@/hooks/useOffline', () => ({
   useOffline: () => ({ isOffline: mockIsOffline }),
+}));
+
+// Mock useCachedData hook
+const mockGetCachedHomeData = jest.fn();
+const mockCacheHomeData = jest.fn();
+jest.mock('@/hooks/useCachedData', () => ({
+  useCachedData: () => ({
+    getCachedHomeData: mockGetCachedHomeData,
+    cacheHomeData: mockCacheHomeData,
+    cacheMangaDetails: jest.fn(),
+    getCachedMangaDetails: jest.fn(() => null),
+    cacheSearchResults: jest.fn(),
+    getCachedSearchResults: jest.fn(() => null),
+    updateMangaBookmarkStatus: jest.fn(),
+    removeMangaFromCache: jest.fn(),
+    getBookmarkedMangaDetails: jest.fn(() => []),
+    clearAllCache: jest.fn(),
+    getCacheStats: jest.fn(() => ({
+      mangaCount: 0,
+      bookmarkedCount: 0,
+      searchQueriesCount: 0,
+      hasHomeData: false,
+    })),
+    cleanExpiredEntries: jest.fn(),
+  }),
 }));
 
 jest.mock('axios');
@@ -99,7 +127,10 @@ jest.mock('@/components/MangaCard', () => {
   return function MockMangaCard({ title, onPress, mangaId }: any) {
     return (
       <View testID={`manga-card-${mangaId}`}>
-        <TouchableOpacity testID={`manga-card-press-${mangaId}`} onPress={onPress}>
+        <TouchableOpacity
+          testID={`manga-card-press-${mangaId}`}
+          onPress={onPress}
+        >
           <Text>{title}</Text>
         </TouchableOpacity>
       </View>
@@ -147,9 +178,15 @@ describe('HomeScreen', () => {
     mockRouterNavigate.mockClear();
     mockCheckForCloudflare.mockClear();
     mockResetCloudflareDetection.mockClear();
+    mockGetCachedHomeData.mockReturnValue(null);
+    mockCacheHomeData.mockResolvedValue(undefined);
 
-    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(null);
-    (offlineCacheService.cacheHomeData as jest.Mock).mockResolvedValue(undefined);
+    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(
+      null
+    );
+    (offlineCacheService.cacheHomeData as jest.Mock).mockResolvedValue(
+      undefined
+    );
     (getRecentlyReadManga as jest.Mock).mockResolvedValue([]);
     mockedAxios.get.mockResolvedValue({ data: '<html></html>' });
   });
@@ -170,7 +207,9 @@ describe('HomeScreen', () => {
 
   it('renders sections after loading', async () => {
     (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue({
-      mostViewed: [{ id: '1', title: 'Test Manga', imageUrl: 'test.jpg', rank: 1 }],
+      mostViewed: [
+        { id: '1', title: 'Test Manga', imageUrl: 'test.jpg', rank: 1 },
+      ],
       newReleases: [{ id: '2', title: 'New Manga', imageUrl: 'new.jpg' }],
       featuredManga: { id: '1', title: 'Test Manga', imageUrl: 'test.jpg' },
     });
@@ -194,7 +233,9 @@ describe('HomeScreen', () => {
       expect(queryByText("You're Offline")).toBeTruthy();
     });
 
-    expect(getByText('Connect to internet or view your saved manga')).toBeTruthy();
+    expect(
+      getByText('Connect to internet or view your saved manga')
+    ).toBeTruthy();
     expect(getByText('View Saved Manga')).toBeTruthy();
   });
 
@@ -214,14 +255,18 @@ describe('HomeScreen', () => {
 
   it('shows error state on fetch failure', async () => {
     mockedAxios.get.mockRejectedValue(new Error('Network error'));
-    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(null);
+    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(
+      null
+    );
 
     const { queryByText } = renderScreen();
 
     await waitFor(
       () => {
         expect(
-          queryByText('An error occurred while fetching manga data. Please try again.')
+          queryByText(
+            'An error occurred while fetching manga data. Please try again.'
+          )
         ).toBeTruthy();
       },
       { timeout: 3000 }
@@ -234,7 +279,9 @@ describe('HomeScreen', () => {
 
   it('retries fetch when retry button is pressed', async () => {
     mockedAxios.get.mockRejectedValueOnce(new Error('Network error'));
-    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(null);
+    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(
+      null
+    );
 
     const { queryByText } = renderScreen();
 
@@ -268,7 +315,9 @@ describe('HomeScreen', () => {
 
     await waitFor(
       () => {
-        expect(queryByText("Manga you're reading will appear here")).toBeTruthy();
+        expect(
+          queryByText("Manga you're reading will appear here")
+        ).toBeTruthy();
       },
       { timeout: 3000 }
     );
@@ -315,7 +364,9 @@ describe('HomeScreen', () => {
       expect(queryByText('Explore by Genre')).toBeTruthy();
     });
 
-    expect(getByText('Discover manga by your favorite categories')).toBeTruthy();
+    expect(
+      getByText('Discover manga by your favorite categories')
+    ).toBeTruthy();
   });
 
   it('navigates to genres when browse genres card is pressed', async () => {
@@ -338,17 +389,20 @@ describe('HomeScreen', () => {
 
   it('loads and displays cached data on mount', async () => {
     const cachedData = {
-      mostViewed: [{ id: '1', title: 'Cached Manga', imageUrl: 'cached.jpg', rank: 1 }],
+      mostViewed: [
+        { id: '1', title: 'Cached Manga', imageUrl: 'cached.jpg', rank: 1 },
+      ],
       newReleases: [{ id: '2', title: 'Cached New', imageUrl: 'new.jpg' }],
       featuredManga: { id: '1', title: 'Cached Manga', imageUrl: 'cached.jpg' },
+      cachedAt: Date.now(),
     };
 
-    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(cachedData);
+    mockGetCachedHomeData.mockReturnValue(cachedData);
 
     renderScreen();
 
     await waitFor(() => {
-      expect(offlineCacheService.getCachedHomeData).toHaveBeenCalled();
+      expect(mockGetCachedHomeData).toHaveBeenCalled();
     });
   });
 
@@ -360,7 +414,12 @@ describe('HomeScreen', () => {
     });
 
     (getRecentlyReadManga as jest.Mock).mockResolvedValue([
-      { id: 'recent-1', title: 'Recent Manga', bannerImage: 'recent.jpg', lastReadChapter: 5 },
+      {
+        id: 'recent-1',
+        title: 'Recent Manga',
+        bannerImage: 'recent.jpg',
+        lastReadChapter: 5,
+      },
     ]);
 
     const { queryByText } = renderScreen();
@@ -372,7 +431,9 @@ describe('HomeScreen', () => {
 
   it('shows offline error message when offline and no cache', async () => {
     mockIsOffline = true;
-    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(null);
+    (offlineCacheService.getCachedHomeData as jest.Mock).mockResolvedValue(
+      null
+    );
 
     const { queryByText } = renderScreen();
 
@@ -382,14 +443,19 @@ describe('HomeScreen', () => {
   });
 
   it('handles getMangaData error gracefully', async () => {
-    (getRecentlyReadManga as jest.Mock).mockRejectedValue(new Error('Fetch error'));
+    (getRecentlyReadManga as jest.Mock).mockRejectedValue(
+      new Error('Fetch error')
+    );
 
     const { queryByText } = renderScreen();
 
     // Should not crash - wait a bit for async operations
-    await waitFor(() => {
-      expect(queryByText('Loading...')).toBeNull();
-    }, { timeout: 2000 });
+    await waitFor(
+      () => {
+        expect(queryByText('Loading...')).toBeNull();
+      },
+      { timeout: 2000 }
+    );
   });
 
   it('renders section titles with icons', async () => {
@@ -410,15 +476,19 @@ describe('HomeScreen', () => {
   });
 
   it('caches fresh data after successful fetch', async () => {
-    (parseMostViewedManga as jest.Mock).mockReturnValue([{ id: '1', title: 'Fresh', imageUrl: 'fresh.jpg' }]);
-    (parseNewReleases as jest.Mock).mockReturnValue([{ id: '2', title: 'Fresh New', imageUrl: 'new.jpg' }]);
+    (parseMostViewedManga as jest.Mock).mockReturnValue([
+      { id: '1', title: 'Fresh', imageUrl: 'fresh.jpg' },
+    ]);
+    (parseNewReleases as jest.Mock).mockReturnValue([
+      { id: '2', title: 'Fresh New', imageUrl: 'new.jpg' },
+    ]);
 
     mockedAxios.get.mockResolvedValue({ data: '<html>valid</html>' });
 
     renderScreen();
 
     await waitFor(() => {
-      expect(offlineCacheService.cacheHomeData).toHaveBeenCalled();
+      expect(mockCacheHomeData).toHaveBeenCalled();
     });
   });
 });
