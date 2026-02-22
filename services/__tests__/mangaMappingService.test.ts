@@ -57,4 +57,58 @@ describe('mangaMappingService', () => {
     await clearAllMappings();
     expect(await getMangaMapping('d')).toBeNull();
   });
+
+  describe('error handling', () => {
+    it('returns empty object when getMangaMappings fails', async () => {
+      jest
+        .spyOn(AsyncStorage, 'getAllKeys')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await getMangaMappings();
+      expect(result).toEqual({});
+    });
+
+    it('handles saveMangaMapping errors gracefully', async () => {
+      jest
+        .spyOn(AsyncStorage, 'setItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      // Should not throw
+      await expect(
+        saveMangaMapping('error-test', 999, 'Error Test')
+      ).resolves.not.toThrow();
+    });
+
+    it('returns null when getMangaMapping fails', async () => {
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await getMangaMapping('test-id');
+      expect(result).toBeNull();
+    });
+
+    it('handles removeMangaMapping errors gracefully', async () => {
+      jest
+        .spyOn(AsyncStorage, 'removeItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      // Should not throw
+      await expect(removeMangaMapping('test-id')).resolves.not.toThrow();
+    });
+
+    it('handles clearAllMappings errors gracefully', async () => {
+      jest
+        .spyOn(AsyncStorage, 'getAllKeys')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      // Should not throw
+      await expect(clearAllMappings()).resolves.not.toThrow();
+    });
+
+    it('returns null when getAnilistIdFromInternalId has no mapping', async () => {
+      const result = await getAnilistIdFromInternalId('nonexistent');
+      expect(result).toBeNull();
+    });
+  });
 });

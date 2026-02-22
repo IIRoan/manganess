@@ -15,4 +15,22 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/'],
+
+  // Coverage configuration
+  collectCoverageFrom: [
+    'app/**/*.{ts,tsx}',
+    'components/**/*.{ts,tsx}',
+    'hooks/**/*.{ts,tsx}',
+    'services/**/*.{ts,tsx}',
+    'utils/**/*.{ts,tsx}',
+    'constants/**/*.{ts,tsx}',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+    '!**/__tests__/**',
+    '!**/__mocks__/**',
+    '!**/coverage/**',
+    '!app/**/_layout.tsx',
+  ],
+  coverageReporters: ['text', 'text-summary', 'lcov', 'json-summary', 'html'],
+  coverageDirectory: '<rootDir>/coverage',
 };

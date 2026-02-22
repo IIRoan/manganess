@@ -5,7 +5,7 @@ import { render, fireEvent } from '@testing-library/react-native';
 import ErrorBoundary from '../ErrorBoundary';
 
 // Mock dependencies
-jest.mock('@/constants/ThemeContext', () => ({
+jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ actualTheme: 'light' }),
 }));
 
@@ -14,7 +14,9 @@ jest.mock('@expo/vector-icons', () => ({
 }));
 
 // Component that throws an error
-const ThrowError: React.FC<{ shouldThrow?: boolean }> = ({ shouldThrow = true }) => {
+const ThrowError: React.FC<{ shouldThrow?: boolean }> = ({
+  shouldThrow = true,
+}) => {
   if (shouldThrow) {
     throw new Error('Test error message');
   }
@@ -22,7 +24,9 @@ const ThrowError: React.FC<{ shouldThrow?: boolean }> = ({ shouldThrow = true })
 };
 
 // Component that throws after update
-const ThrowOnUpdate: React.FC<{ throwOnRender: boolean }> = ({ throwOnRender }) => {
+const ThrowOnUpdate: React.FC<{ throwOnRender: boolean }> = ({
+  throwOnRender,
+}) => {
   if (throwOnRender) {
     throw new Error('Error on update');
   }
@@ -159,10 +163,10 @@ describe('ErrorBoundary', () => {
 
   describe('Custom fallback', () => {
     it('renders custom fallback component', () => {
-      const CustomFallback: React.FC<{ error?: Error; resetError: () => void }> = ({
-        error,
-        resetError,
-      }) => (
+      const CustomFallback: React.FC<{
+        error?: Error;
+        resetError: () => void;
+      }> = ({ error, resetError }) => (
         <View testID="custom-fallback">
           <Text testID="custom-error">{error?.message}</Text>
           <Text testID="reset-btn" onPress={resetError}>
@@ -178,14 +182,17 @@ describe('ErrorBoundary', () => {
       );
 
       expect(getByTestId('custom-fallback')).toBeTruthy();
-      expect(getByTestId('custom-error').props.children).toBe('Test error message');
+      expect(getByTestId('custom-error').props.children).toBe(
+        'Test error message'
+      );
       expect(queryByText('Something went wrong')).toBeNull(); // Default fallback not shown
     });
 
     it('passes resetError function to custom fallback', () => {
-      const CustomFallback: React.FC<{ error?: Error; resetError: () => void }> = ({
-        resetError,
-      }) => (
+      const CustomFallback: React.FC<{
+        error?: Error;
+        resetError: () => void;
+      }> = ({ resetError }) => (
         <Text testID="reset" onPress={resetError}>
           Custom Reset
         </Text>
@@ -209,9 +216,10 @@ describe('ErrorBoundary', () => {
         throw undefined;
       };
 
-      const CustomFallback: React.FC<{ error?: Error; resetError: () => void }> = ({
-        error,
-      }) => <Text testID="error-type">{String(error)}</Text>;
+      const CustomFallback: React.FC<{
+        error?: Error;
+        resetError: () => void;
+      }> = ({ error }) => <Text testID="error-type">{String(error)}</Text>;
 
       const { getByTestId } = render(
         <ErrorBoundary fallback={CustomFallback}>

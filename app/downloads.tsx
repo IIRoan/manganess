@@ -11,8 +11,8 @@ import {
   TextInput,
 } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
-import { useToast } from '@/contexts/ToastContext';
+import { useTheme } from '@/hooks/useTheme';
+import { useToast } from '@/hooks/useToast';
 import { Ionicons } from '@expo/vector-icons';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { imageCache } from '@/services/CacheImages';
@@ -142,7 +142,9 @@ export default function DownloadsScreen() {
             try {
               setDeletingManga((prev) => new Set(prev).add(mangaId));
 
-              const mangaToDelete = mangaDownloads.find((m) => m.mangaId === mangaId);
+              const mangaToDelete = mangaDownloads.find(
+                (m) => m.mangaId === mangaId
+              );
               const chapterCount = mangaToDelete?.chapterCount || 0;
 
               if (mangaToDelete) {

@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {

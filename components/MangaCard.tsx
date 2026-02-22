@@ -13,13 +13,13 @@ import Reanimated, {
   withSpring,
 } from 'react-native-reanimated';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import {
   useImageCache,
   useMangaImageCache,
   type CacheContext,
 } from '@/services/CacheImages';
-import { useOffline } from '@/contexts/OfflineContext';
+import { useOffline } from '@/hooks/useOffline';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
 import { useRouter } from 'expo-router';
@@ -31,7 +31,7 @@ import {
   removeBookmark,
 } from '@/services/bookmarkService';
 import { Ionicons } from '@expo/vector-icons';
-import { useToast } from '@/contexts/ToastContext';
+import { useToast } from '@/hooks/useToast';
 
 interface EnhancedMangaCardProps extends MangaCardProps {
   context?: CacheContext;
@@ -182,13 +182,20 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
       );
 
       // Show success toast
-      const statusIcons: Record<BookmarkStatus, 'book-outline' | 'book' | 'pause-circle-outline' | 'checkmark-circle-outline'> = {
+      const statusIcons: Record<
+        BookmarkStatus,
+        | 'book-outline'
+        | 'book'
+        | 'pause-circle-outline'
+        | 'checkmark-circle-outline'
+      > = {
         'To Read': 'book-outline',
-        'Reading': 'book',
+        Reading: 'book',
         'On Hold': 'pause-circle-outline',
-        'Read': 'checkmark-circle-outline',
+        Read: 'checkmark-circle-outline',
       };
-      const shortTitle = title.length > 20 ? title.substring(0, 20) + '…' : title;
+      const shortTitle =
+        title.length > 20 ? title.substring(0, 20) + '…' : title;
       showToast({
         message: previousStatus
           ? `${shortTitle} → ${status}`
@@ -228,7 +235,8 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
       );
 
       // Show success toast
-      const shortTitle = title.length > 20 ? title.substring(0, 20) + '…' : title;
+      const shortTitle =
+        title.length > 20 ? title.substring(0, 20) + '…' : title;
       showToast({
         message: `${shortTitle} removed from bookmarks`,
         icon: 'trash-outline',

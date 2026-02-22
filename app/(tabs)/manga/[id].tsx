@@ -27,7 +27,7 @@ import Reanimated, {
 import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors, type ColorScheme } from '@/constants/Colors';
 import ExpandableText from '@/components/ExpandableText';
 import AlertComponent from '@/components/Alert';
@@ -56,11 +56,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import LastReadChapterBar from '@/components/LastReadChapterBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '@/utils/haptics';
-import { useToast } from '@/contexts/ToastContext';
+import { useToast } from '@/hooks/useToast';
 import getStyles from './[id].styles';
 import { logger } from '@/utils/logger';
 import { useMangaImageCache } from '@/services/CacheImages';
-import { useOffline } from '@/contexts/OfflineContext';
+import { useOffline } from '@/hooks/useOffline';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import type {
   AlertConfig,
@@ -72,7 +72,6 @@ import type {
 import BatchDownloadBar from '@/components/BatchDownloadBar';
 import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
-import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import { DownloadStatus } from '@/types/download';
 import { useParallaxScroll } from '@/components/ParallaxLayout';
 
@@ -166,6 +165,18 @@ export default function MangaDetailScreen() {
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
   const [currentlyOpenSwipeable, setCurrentlyOpenSwipeable] =
     useState<Swipeable | null>(null);
+  const currentlyOpenSwipeableRef = useRef<Swipeable | null>(null);
+  const setCurrentlyOpenSwipeableStable = useCallback(
+    (swipeable: Swipeable | null) => {
+      currentlyOpenSwipeableRef.current = swipeable;
+      setCurrentlyOpenSwipeable(swipeable);
+    },
+    []
+  );
+  const getCurrentlyOpenSwipeable = useCallback(
+    () => currentlyOpenSwipeableRef.current,
+    []
+  );
   const [downloadedChapters, setDownloadedChapters] = useState<string[]>([]);
   const [downloadingChapters, setDownloadingChapters] = useState<string[]>([]);
   const downloadedChaptersRef = useRef<string[]>([]);
@@ -188,6 +199,7 @@ export default function MangaDetailScreen() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('down');
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [hasJumpedToLatestRead, setHasJumpedToLatestRead] = useState(false);
 
   // Animated value for the scroll button opacity
   const scrollButtonOpacity = useSharedValue(0);
@@ -459,6 +471,29 @@ export default function MangaDetailScreen() {
     }, [id, refreshDownloadedChapters, refreshDownloadingChapters, isOffline])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      let isCancelled = false;
+
+      const syncDownloadState = () => {
+        if (isCancelled) {
+          return;
+        }
+        refreshDownloadedChapters().catch(() => {});
+        refreshDownloadingChapters().catch(() => {});
+      };
+
+      // Immediate sync on focus, then periodic sync while focused.
+      syncDownloadState();
+      const intervalId = setInterval(syncDownloadState, 2000);
+
+      return () => {
+        isCancelled = true;
+        clearInterval(intervalId);
+      };
+    }, [refreshDownloadedChapters, refreshDownloadingChapters])
+  );
+
   const handleSaveBookmark = useCallback(
     async (status: BookmarkStatus) => {
       if (!mangaDetails) return;
@@ -475,15 +510,22 @@ export default function MangaDetailScreen() {
         );
 
         // Show success toast
-        const statusIcons: Record<BookmarkStatus, 'book-outline' | 'book' | 'pause-circle-outline' | 'checkmark-circle-outline'> = {
+        const statusIcons: Record<
+          BookmarkStatus,
+          | 'book-outline'
+          | 'book'
+          | 'pause-circle-outline'
+          | 'checkmark-circle-outline'
+        > = {
           'To Read': 'book-outline',
-          'Reading': 'book',
+          Reading: 'book',
           'On Hold': 'pause-circle-outline',
-          'Read': 'checkmark-circle-outline',
+          Read: 'checkmark-circle-outline',
         };
-        const shortTitle = mangaDetails.title.length > 20
-          ? mangaDetails.title.substring(0, 20) + '…'
-          : mangaDetails.title;
+        const shortTitle =
+          mangaDetails.title.length > 20
+            ? mangaDetails.title.substring(0, 20) + '…'
+            : mangaDetails.title;
         showToast({
           message: previousStatus
             ? `${shortTitle} → ${status}`
@@ -651,12 +693,11 @@ export default function MangaDetailScreen() {
 
       try {
         await chapterStorageService.deleteChapter(id as string, chapterNumber);
-
-        // Emit download deleted event
-        downloadEventEmitter.emitDeleted(
-          id as string,
-          chapterNumber,
-          `${id as string}_${chapterNumber}`
+        setDownloadedChapters((prev) =>
+          prev.filter((item) => item !== chapterNumber)
+        );
+        setDownloadingChapters((prev) =>
+          prev.filter((item) => item !== chapterNumber)
         );
 
         await refreshDownloadedChapters();
@@ -709,6 +750,17 @@ export default function MangaDetailScreen() {
       handleChapterPress(chapterNumber);
     }
   }, [lastReadChapter, mangaDetails, handleChapterPress]);
+
+  // O(1) lookup set for read chapters — avoids O(n) includes() per item in the list
+  const readChaptersSet = useMemo(() => new Set(readChapters), [readChapters]);
+  const downloadedChaptersSet = useMemo(
+    () => new Set(downloadedChapters),
+    [downloadedChapters]
+  );
+  const downloadingChaptersSet = useMemo(
+    () => new Set(downloadingChapters),
+    [downloadingChapters]
+  );
 
   const readingProgress = useMemo(() => {
     if (
@@ -788,14 +840,79 @@ export default function MangaDetailScreen() {
     };
   });
 
+  const latestReadChapterIndex = useMemo(() => {
+    const normalizedLastReadChapter = lastReadChapter
+      ?.replace('Chapter ', '')
+      .trim();
+    const parsedLastReadChapter = normalizedLastReadChapter
+      ? Number.parseFloat(normalizedLastReadChapter)
+      : Number.NaN;
+
+    if (!mangaDetails?.chapters?.length || !normalizedLastReadChapter) {
+      return -1;
+    }
+
+    return mangaDetails.chapters.findIndex(
+      (chapter) =>
+        chapter.number === normalizedLastReadChapter ||
+        (Number.isFinite(parsedLastReadChapter) &&
+          Number.parseFloat(chapter.number) === parsedLastReadChapter)
+    );
+  }, [lastReadChapter, mangaDetails?.chapters]);
+
+  const shouldUseDownAction =
+    scrollDirection === 'down' && scrollProgress < 0.95;
+
+  useEffect(() => {
+    setHasJumpedToLatestRead(false);
+  }, [id, lastReadChapter]);
+
+  const handleSmartScrollPress = useCallback(() => {
+    haptics.onSelection();
+
+    if (!shouldUseDownAction) {
+      setHasJumpedToLatestRead(false);
+      flashListRef.current?.scrollToOffset({
+        offset: 0,
+        animated: true,
+      });
+      return;
+    }
+
+    if (latestReadChapterIndex >= 0 && !hasJumpedToLatestRead) {
+      setHasJumpedToLatestRead(true);
+      flashListRef.current?.scrollToIndex({
+        index: latestReadChapterIndex,
+        animated: true,
+        viewPosition: 0.5,
+      });
+      return;
+    }
+
+    if (latestReadChapterIndex >= 0) {
+      flashListRef.current?.scrollToEnd({ animated: true });
+      return;
+    }
+
+    flashListRef.current?.scrollToEnd({ animated: true });
+  }, [
+    haptics,
+    shouldUseDownAction,
+    latestReadChapterIndex,
+    hasJumpedToLatestRead,
+    setHasJumpedToLatestRead,
+  ]);
+
   const renderChapterItem = useCallback(
     ({ item: chapter, index }: { item: Chapter; index: number }) => {
       if (!mangaDetails) return null;
 
-      const isRead = readChapters.includes(chapter.number);
+      const isRead = readChaptersSet.has(chapter.number);
       const isLastItem = index === mangaDetails.chapters.length - 1;
       const isCurrentlyLastRead =
         lastReadChapter === `Chapter ${chapter.number}`;
+      const isDownloaded = downloadedChaptersSet.has(chapter.number);
+      const isDownloading = downloadingChaptersSet.has(chapter.number);
 
       return (
         <SwipeableChapterItem
@@ -803,13 +920,16 @@ export default function MangaDetailScreen() {
           isRead={isRead}
           isLastItem={isLastItem}
           isCurrentlyLastRead={isCurrentlyLastRead}
+          useParentDownloadState={true}
+          isDownloaded={isDownloaded}
+          isDownloading={isDownloading}
           onPress={() => handleChapterPress(chapter.number)}
           onLongPress={() => handleChapterLongPress(chapter.number)}
           onUnread={() => handleMarkAsUnread(chapter.number)}
           colors={colors}
           styles={styles}
-          currentlyOpenSwipeable={currentlyOpenSwipeable}
-          setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeable}
+          getCurrentlyOpenSwipeable={getCurrentlyOpenSwipeable}
+          setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeableStable}
           mangaId={id as string}
           showDownloadButton={true}
           onDownloadStart={() => {
@@ -819,6 +939,9 @@ export default function MangaDetailScreen() {
             refreshDownloadingChapters().catch(() => {});
           }}
           onDownloadComplete={() => {
+            setDownloadedChapters((prev) =>
+              prev.includes(chapter.number) ? prev : [...prev, chapter.number]
+            );
             setDownloadingChapters((prev) =>
               prev.filter((item) => item !== chapter.number)
             );
@@ -839,15 +962,17 @@ export default function MangaDetailScreen() {
     },
     [
       mangaDetails,
-      readChapters,
+      readChaptersSet,
+      downloadedChaptersSet,
+      downloadingChaptersSet,
       lastReadChapter,
       handleChapterPress,
       handleChapterLongPress,
       handleMarkAsUnread,
       colors,
       styles,
-      currentlyOpenSwipeable,
-      setCurrentlyOpenSwipeable,
+      getCurrentlyOpenSwipeable,
+      setCurrentlyOpenSwipeableStable,
       id,
       refreshDownloadingChapters,
       refreshDownloadedChapters,
@@ -1078,7 +1203,8 @@ export default function MangaDetailScreen() {
             <AnimatedFlashList
               ref={flashListRef}
               removeClippedSubviews={true}
-              drawDistance={100}
+              drawDistance={250}
+              estimatedItemSize={65}
               ListHeaderComponent={ListHeader}
               data={mangaDetails.chapters}
               extraData={[
@@ -1091,7 +1217,9 @@ export default function MangaDetailScreen() {
                 `chapter-${item.number}-${index}`
               }
               renderItem={renderChapterItem}
-              ListFooterComponent={<View style={{ height: 120, backgroundColor: colors.card }} />}
+              ListFooterComponent={
+                <View style={{ height: 120, backgroundColor: colors.card }} />
+              }
               onScroll={scrollHandler}
               scrollEventThrottle={16}
               bounces={false}
@@ -1110,22 +1238,16 @@ export default function MangaDetailScreen() {
               pointerEvents={showScrollButton ? 'auto' : 'none'}
             >
               <TouchableOpacity
-                onPress={() => {
-                  haptics.onSelection();
-                  if (scrollDirection === 'down' && scrollProgress < 0.95) {
-                    flashListRef.current?.scrollToEnd({ animated: true });
-                  } else {
-                    flashListRef.current?.scrollToOffset({
-                      offset: 0,
-                      animated: true,
-                    });
-                  }
-                }}
+                onPress={handleSmartScrollPress}
                 style={styles.smartScrollButtonTouchable}
                 accessibilityRole="button"
                 accessibilityLabel={
-                  scrollDirection === 'down'
-                    ? 'Scroll to bottom'
+                  shouldUseDownAction
+                    ? latestReadChapterIndex >= 0
+                      ? hasJumpedToLatestRead
+                        ? 'Scroll to bottom'
+                        : 'Scroll to latest read chapter'
+                      : 'Scroll to bottom'
                     : 'Scroll to top'
                 }
               >

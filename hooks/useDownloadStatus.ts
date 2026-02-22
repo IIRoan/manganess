@@ -1,13 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useAtomValue } from '@zedux/react';
+import { downloadManagerAtom } from '@/atoms/downloadManagerAtom';
+import { downloadQueueAtom } from '@/atoms/downloadQueueAtom';
 import { downloadManagerService } from '@/services/downloadManager';
 import { chapterStorageService } from '@/services/chapterStorageService';
-import { downloadQueueService } from '@/services/downloadQueue';
-import { DownloadStatus } from '@/types/download';
+import { DownloadStatus, DownloadProgress } from '@/types/download';
 import { logger } from '@/utils/logger';
-import {
-  downloadEventEmitter,
-  type DownloadStatusEvent,
-} from '@/utils/downloadEventEmitter';
 
 export interface DownloadStatusInfo {
   status: DownloadStatus;
@@ -31,302 +29,265 @@ export const useDownloadStatus = ({
   chapterNumber,
 }: UseDownloadStatusOptions) => {
   const log = logger();
-  const [statusInfo, setStatusInfo] = useState<DownloadStatusInfo>({
-    status: DownloadStatus.QUEUED,
-    isDownloaded: false,
-    isDownloading: false,
-    isQueued: true,
-    isFailed: false,
-    isPaused: false,
-    progress: 0,
-  });
-
-  const [isLoading, setIsLoading] = useState(true);
-  const progressListenerRef = useRef<(() => void) | null>(null);
-  const mountedRef = useRef(true);
-
   const downloadId = `${mangaId}_${chapterNumber}`;
 
-  const updateStatusInfo = useCallback(async () => {
-    if (!mountedRef.current) return;
+  // Subscribe to atom state for reactive updates
+  const dmState = useAtomValue(downloadManagerAtom);
+  const queueState = useAtomValue(downloadQueueAtom);
 
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [serviceProgress, setServiceProgress] =
+    useState<DownloadProgress | null>(null);
+  const mountedRef = useRef(true);
+  const previousActiveInSystemRef = useRef(false);
+
+  // Derive whether this chapter is active in the download system from atoms (synchronous, cheap)
+  const isActiveInSystem = useMemo(() => {
+    if (dmState.activeDownloads.has(downloadId)) return true;
+    if (dmState.pausedDownloads.has(downloadId)) return true;
+    if (queueState.activeDownloadIds.has(downloadId)) return true;
+    if (
+      queueState.queue.some(
+        (item) =>
+          item.mangaId === mangaId && item.chapterNumber === chapterNumber
+      )
+    )
+      return true;
+    return false;
+  }, [
+    dmState.activeDownloads,
+    dmState.pausedDownloads,
+    queueState,
+    downloadId,
+    mangaId,
+    chapterNumber,
+  ]);
+
+  // Check if chapter is downloaded on disk (async check)
+  const checkDownloaded = useCallback(async () => {
     try {
-      setIsLoading(true);
-
-      // Check if chapter is downloaded first (fastest check)
-      const isDownloaded = await chapterStorageService.isChapterDownloaded(
+      const downloaded = await chapterStorageService.isChapterDownloaded(
         mangaId,
         chapterNumber
       );
-
-      if (isDownloaded) {
-        if (mountedRef.current) {
-          setStatusInfo({
-            status: DownloadStatus.COMPLETED,
-            isDownloaded: true,
-            isDownloading: false,
-            isQueued: false,
-            isFailed: false,
-            isPaused: false,
-            progress: 100,
-          });
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      // Check download queue status
-      const queueItem = await downloadQueueService.getDownloadById(downloadId);
-      if (queueItem) {
-        const queueStatus = queueItem.status;
-
-        // Get progress if downloading
-        let progress: number = 0;
-        let estimatedTimeRemaining: number | undefined;
-        let downloadSpeed: number | undefined;
-
-        if (queueStatus === DownloadStatus.DOWNLOADING) {
-          const progressData =
-            downloadManagerService.getDownloadProgress(downloadId);
-          if (progressData) {
-            progress = progressData.progress || 0;
-            estimatedTimeRemaining = progressData.estimatedTimeRemaining;
-            downloadSpeed = progressData.downloadSpeed;
-          }
-        }
-
-        if (mountedRef.current) {
-          setStatusInfo({
-            status: queueStatus,
-            isDownloaded: false,
-            isDownloading: queueStatus === DownloadStatus.DOWNLOADING,
-            isQueued: queueStatus === DownloadStatus.QUEUED,
-            isFailed: queueStatus === DownloadStatus.FAILED,
-            isPaused: queueStatus === DownloadStatus.PAUSED,
-            progress,
-            estimatedTimeRemaining,
-            downloadSpeed,
-          });
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      // Check if actively downloading (might not be in queue yet)
-      const activeDownloads = await downloadManagerService.getActiveDownloads();
-      const activeDownload = activeDownloads.find((d) =>
-        d.id.includes(downloadId)
-      );
-
-      if (activeDownload) {
-        const progressData =
-          downloadManagerService.getDownloadProgress(downloadId);
-
-        if (mountedRef.current) {
-          setStatusInfo({
-            status: DownloadStatus.DOWNLOADING,
-            isDownloaded: false,
-            isDownloading: true,
-            isQueued: false,
-            isFailed: false,
-            isPaused: false,
-            progress: progressData?.progress || 0,
-            estimatedTimeRemaining: progressData?.estimatedTimeRemaining,
-            downloadSpeed: progressData?.downloadSpeed,
-          });
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      // Check for any download containing the mangaId and chapterNumber in different formats
-      const alternativeActiveDownload = activeDownloads.find(
-        (d) => d.mangaId === mangaId && d.chapterNumber === chapterNumber
-      );
-
-      if (alternativeActiveDownload) {
-        const progressData = downloadManagerService.getDownloadProgress(
-          alternativeActiveDownload.id
-        );
-
-        if (mountedRef.current) {
-          setStatusInfo({
-            status: DownloadStatus.DOWNLOADING,
-            isDownloaded: false,
-            isDownloading: true,
-            isQueued: false,
-            isFailed: false,
-            isPaused: false,
-            progress: progressData?.progress || 0,
-            estimatedTimeRemaining: progressData?.estimatedTimeRemaining,
-            downloadSpeed: progressData?.downloadSpeed,
-          });
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      // Default to queued status
       if (mountedRef.current) {
-        setStatusInfo({
-          status: DownloadStatus.QUEUED,
-          isDownloaded: false,
-          isDownloading: false,
-          isQueued: true,
-          isFailed: false,
-          isPaused: false,
-          progress: 0,
-        });
+        setIsDownloaded(downloaded);
         setIsLoading(false);
       }
     } catch (error) {
-      log.error('UI', 'Error updating download status', {
+      log.error('UI', 'Error checking download status', {
         mangaId,
         chapterNumber,
         error: error instanceof Error ? error.message : String(error),
       });
-
       if (mountedRef.current) {
-        setStatusInfo({
-          status: DownloadStatus.FAILED,
-          isDownloaded: false,
-          isDownloading: false,
-          isQueued: false,
-          isFailed: true,
-          isPaused: false,
-          progress: 0,
-        });
         setIsLoading(false);
       }
     }
-  }, [mangaId, chapterNumber, downloadId, log]);
+  }, [mangaId, chapterNumber, log]);
 
-  const setupEventListeners = useCallback(() => {
-    // Clean up existing listener
-    if (progressListenerRef.current) {
-      progressListenerRef.current();
-      progressListenerRef.current = null;
+  useEffect(() => {
+    mountedRef.current = true;
+    // Stagger the async checks to avoid flooding the storage on mount
+    const timeoutId = setTimeout(() => checkDownloaded(), 100);
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(timeoutId);
+    };
+  }, [checkDownloaded]);
+
+  // When a chapter leaves the active/queued system, re-check disk status.
+  // This covers completion races where atom state clears before storage settles.
+  useEffect(() => {
+    const wasActive = previousActiveInSystemRef.current;
+    previousActiveInSystemRef.current = isActiveInSystem;
+
+    if (!wasActive || isActiveInSystem || isDownloaded) {
+      return;
     }
 
-    // Subscribe to download events
-    const unsubscribe = downloadEventEmitter.subscribe(
-      mangaId,
-      chapterNumber,
-      (event: DownloadStatusEvent) => {
-        if (!mountedRef.current) return;
+    let cancelled = false;
+    const timeoutIds: ReturnType<typeof setTimeout>[] = [];
 
-        setStatusInfo((prev) => {
-          switch (event.type) {
-            case 'download_started':
-            case 'download_resumed':
-              return {
-                status: DownloadStatus.DOWNLOADING,
-                isDownloaded: false,
-                isDownloading: true,
-                isQueued: false,
-                isFailed: false,
-                isPaused: event.type === 'download_resumed',
-                progress: event.progress || 0,
-                estimatedTimeRemaining: event.estimatedTimeRemaining,
-                downloadSpeed: event.downloadSpeed,
-              };
-            case 'download_progress':
-              return {
-                status: DownloadStatus.DOWNLOADING,
-                isDownloaded: false,
-                isDownloading: true,
-                isQueued: false,
-                isFailed: false,
-                isPaused: false,
-                progress: event.progress || 0,
-                estimatedTimeRemaining: event.estimatedTimeRemaining,
-                downloadSpeed: event.downloadSpeed,
-              };
-            case 'download_completed':
-              return {
-                status: DownloadStatus.COMPLETED,
-                isDownloaded: true,
-                isDownloading: false,
-                isQueued: false,
-                isFailed: false,
-                isPaused: false,
-                progress: 100,
-              };
-            case 'download_failed':
-              return {
-                status: DownloadStatus.FAILED,
-                isDownloaded: false,
-                isDownloading: false,
-                isQueued: false,
-                isFailed: true,
-                isPaused: false,
-                progress: 0,
-              };
-            case 'download_paused':
-              return {
-                status: DownloadStatus.PAUSED,
-                isDownloaded: false,
-                isDownloading: false,
-                isQueued: false,
-                isFailed: false,
-                isPaused: true,
-                progress: event.progress || 0,
-              };
-            case 'download_deleted':
-              return {
-                status: DownloadStatus.QUEUED,
-                isDownloaded: false,
-                isDownloading: false,
-                isQueued: true,
-                isFailed: false,
-                isPaused: false,
-                progress: 0,
-              };
-            default:
+    const scheduleRecheck = (delayMs: number) => {
+      const timeoutId = setTimeout(() => {
+        if (cancelled || !mountedRef.current) {
+          return;
+        }
+        checkDownloaded().catch(() => {});
+      }, delayMs);
+      timeoutIds.push(timeoutId);
+    };
+
+    // Immediate + delayed retries to catch eventual file writes.
+    scheduleRecheck(0);
+    scheduleRecheck(300);
+    scheduleRecheck(1000);
+
+    return () => {
+      cancelled = true;
+      timeoutIds.forEach((id) => clearTimeout(id));
+    };
+  }, [isActiveInSystem, isDownloaded, checkDownloaded]);
+
+  // Only set up expensive polling and listeners when the chapter is actively in the download system
+  useEffect(() => {
+    if (!isActiveInSystem) {
+      // Not downloading — skip polling entirely
+      setServiceProgress(null);
+      return;
+    }
+
+    // Sync once immediately
+    const syncServiceStatus = () => {
+      try {
+        const progress = downloadManagerService.getDownloadProgress(downloadId);
+        if (mountedRef.current) {
+          setServiceProgress((prev) => {
+            if (
+              prev?.status === progress?.status &&
+              prev?.progress === progress?.progress &&
+              prev?.estimatedTimeRemaining ===
+                progress?.estimatedTimeRemaining &&
+              prev?.downloadSpeed === progress?.downloadSpeed
+            ) {
               return prev;
-          }
+            }
+            return progress;
+          });
+        }
+      } catch (error) {
+        log.warn('Service', 'Failed to sync download manager service status', {
+          downloadId,
+          error: error instanceof Error ? error.message : String(error),
         });
+      }
+    };
 
-        setIsLoading(false);
+    syncServiceStatus();
+
+    const unsubscribe = downloadManagerService.addProgressListener(
+      downloadId,
+      (progress) => {
+        if (!mountedRef.current) return;
+        setServiceProgress(progress);
+        if (progress.status === DownloadStatus.COMPLETED) {
+          checkDownloaded();
+        }
       }
     );
 
-    progressListenerRef.current = unsubscribe;
-  }, [mangaId, chapterNumber]);
-
-  const refresh = useCallback(() => {
-    updateStatusInfo();
-  }, [updateStatusInfo]);
-
-  // Initial load and setup
-  useEffect(() => {
-    mountedRef.current = true;
-
-    const loadData = async () => {
-      await updateStatusInfo();
-      setupEventListeners();
-    };
-
-    loadData();
+    const intervalId = setInterval(syncServiceStatus, 1000);
 
     return () => {
-      mountedRef.current = false;
-      if (progressListenerRef.current) {
-        progressListenerRef.current();
-        progressListenerRef.current = null;
-      }
+      unsubscribe();
+      clearInterval(intervalId);
     };
-  }, [updateStatusInfo, setupEventListeners]);
+  }, [isActiveInSystem, downloadId, checkDownloaded, log]);
 
-  // Re-setup listeners when mangaId or chapterNumber changes
-  useEffect(() => {
-    setupEventListeners();
-  }, [mangaId, chapterNumber, setupEventListeners]);
+  // Derive status from atom state reactively
+  const statusInfo: DownloadStatusInfo = (() => {
+    // If downloaded on disk, that takes priority
+    if (isDownloaded) {
+      return {
+        status: DownloadStatus.COMPLETED,
+        isDownloaded: true,
+        isDownloading: false,
+        isQueued: false,
+        isFailed: false,
+        isPaused: false,
+        progress: 100,
+      };
+    }
+
+    // Check active downloads in the download manager atom
+    const activeProgress = dmState.activeDownloads.get(downloadId);
+    if (activeProgress) {
+      const hasError = !!activeProgress.error;
+      return {
+        status: hasError ? DownloadStatus.FAILED : DownloadStatus.DOWNLOADING,
+        isDownloaded: false,
+        isDownloading: !hasError,
+        isQueued: false,
+        isFailed: hasError,
+        isPaused: false,
+        progress: activeProgress.progress,
+        estimatedTimeRemaining: activeProgress.estimatedTimeRemaining,
+        downloadSpeed: activeProgress.downloadSpeed,
+      };
+    }
+
+    // Check paused downloads
+    const pausedInfo = dmState.pausedDownloads.get(downloadId);
+    if (pausedInfo) {
+      return {
+        status: DownloadStatus.PAUSED,
+        isDownloaded: false,
+        isDownloading: false,
+        isQueued: false,
+        isFailed: false,
+        isPaused: true,
+        progress: pausedInfo.progress?.progress ?? 0,
+      };
+    }
+
+    // Fall back to the legacy download manager service
+    if (serviceProgress) {
+      const isFailed = serviceProgress.status === DownloadStatus.FAILED;
+      const isPaused = serviceProgress.status === DownloadStatus.PAUSED;
+
+      return {
+        status: isFailed
+          ? DownloadStatus.FAILED
+          : isPaused
+            ? DownloadStatus.PAUSED
+            : DownloadStatus.DOWNLOADING,
+        isDownloaded: false,
+        isDownloading: !isFailed && !isPaused,
+        isQueued: false,
+        isFailed,
+        isPaused,
+        progress: serviceProgress.progress,
+        estimatedTimeRemaining: serviceProgress.estimatedTimeRemaining,
+        downloadSpeed: serviceProgress.downloadSpeed,
+      };
+    }
+
+    // Check if in the download queue
+    const inQueue = queueState.queue.some(
+      (item) => item.mangaId === mangaId && item.chapterNumber === chapterNumber
+    );
+    const isActive = queueState.activeDownloadIds.has(downloadId);
+
+    if (inQueue || isActive) {
+      return {
+        status: isActive ? DownloadStatus.DOWNLOADING : DownloadStatus.QUEUED,
+        isDownloaded: false,
+        isDownloading: isActive,
+        isQueued: inQueue,
+        isFailed: false,
+        isPaused: false,
+        progress: 0,
+      };
+    }
+
+    // Default: not downloaded, not in queue
+    return {
+      status: DownloadStatus.QUEUED,
+      isDownloaded: false,
+      isDownloading: false,
+      isQueued: false,
+      isFailed: false,
+      isPaused: false,
+      progress: 0,
+    };
+  })();
 
   return {
     ...statusInfo,
     isLoading,
-    refresh,
+    refresh: checkDownloaded,
     downloadId,
   };
 };

@@ -8,14 +8,12 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
-import { ThemeProvider, useTheme } from '../constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import ErrorBoundary from '../components/ErrorBoundary';
 import BatchDownloadHost from '@/components/BatchDownloadHost';
-import { OfflineProvider } from '@/contexts/OfflineContext';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
-import { ToastProvider } from '@/contexts/ToastContext';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
@@ -23,6 +21,7 @@ import { useNavigationPerf } from '@/hooks/useNavigationPerf';
 import { logger } from '@/utils/logger';
 import Constants from 'expo-constants';
 import { downloadManagerService } from '@/services/downloadManager';
+import { createEcosystem, EcosystemProvider } from '@zedux/react';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -79,6 +78,16 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  // Create Zedux ecosystem with DevTools enabled in debug mode
+  const ecosystem = useMemo(
+    () =>
+      createEcosystem({
+        id: 'manganess',
+        flags: isDebugEnabled() ? ['@@devtools'] : [],
+      }),
+    []
+  );
+
   useEffect(() => {
     if (!isDebugEnabled()) return;
     enableAsyncStorageLogging();
@@ -121,14 +130,10 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
-      <ThemeProvider>
-        <OfflineProvider>
-          <ToastProvider>
-            <RootLayoutNav />
-            <OfflineIndicator />
-          </ToastProvider>
-        </OfflineProvider>
-      </ThemeProvider>
+      <EcosystemProvider ecosystem={ecosystem}>
+        <RootLayoutNav />
+        <OfflineIndicator />
+      </EcosystemProvider>
     </GestureHandlerRootView>
   );
 }

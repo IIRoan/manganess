@@ -3,7 +3,6 @@ import { downloadQueueService } from './downloadQueue';
 import { logger } from '@/utils/logger';
 import type { Chapter } from '@/types';
 import { sortChaptersByNumber } from '@/utils/chapterOrdering';
-import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 
 type BatchStatus =
   | 'idle'
@@ -41,7 +40,7 @@ export interface BatchDownloadState {
 export interface UseBatchDownloadOptions {
   maxRetries?: number;
   throttleDelayMs?: number;
-  onChapterDownloaded?: (chapter: BatchChapter) => void;
+  onChapterDownloaded?: (chapterNumber: string) => void;
   onBatchFinished?: (payload: {
     status: BatchStatus;
     failedChapters: BatchFailure[];
@@ -73,8 +72,8 @@ class BatchDownloadOrchestrator {
   private log = logger();
 
   private constructor() {
-    // Listen to global download events to update session states
-    this.setupGlobalListeners();
+    // Global listeners are now handled via atom subscriptions.
+    // Use handleDownloadEvent() to notify the orchestrator of download events.
   }
 
   static getInstance(): BatchDownloadOrchestrator {
@@ -84,36 +83,41 @@ class BatchDownloadOrchestrator {
     return BatchDownloadOrchestrator.instance;
   }
 
-  private setupGlobalListeners() {
-    downloadEventEmitter.subscribeGlobal((event) => {
-      // Find if we have a session for this manga
-      const session = this.sessions.get(event.mangaId);
-      if (!session) return;
+  /**
+   * Handle a download event from atom subscriptions.
+   * Replaces the previous downloadEventEmitter.subscribeGlobal approach.
+   */
+  handleDownloadEvent(event: {
+    type: 'download_completed' | 'download_failed' | 'download_progress';
+    mangaId: string;
+    chapterNumber: string;
+    error?: string;
+  }) {
+    const session = this.sessions.get(event.mangaId);
+    if (!session) return;
 
-      if (
-        session.state.status !== 'downloading' &&
-        session.state.status !== 'preparing'
-      ) {
-        // If we aren't actively tracking a batch, ignore (or maybe we should auto-start tracking?)
-        return;
-      }
+    if (
+      session.state.status !== 'downloading' &&
+      session.state.status !== 'preparing'
+    ) {
+      return;
+    }
 
-      switch (event.type) {
-        case 'download_completed':
-          this.handleChapterSuccess(session, event.chapterNumber);
-          break;
-        case 'download_failed':
-          this.handleChapterFailure(
-            session,
-            event.chapterNumber,
-            event.error || 'Unknown error'
-          );
-          break;
-        case 'download_progress':
-          // Optional: Update progress message?
-          break;
-      }
-    });
+    switch (event.type) {
+      case 'download_completed':
+        this.handleChapterSuccess(session, event.chapterNumber);
+        break;
+      case 'download_failed':
+        this.handleChapterFailure(
+          session,
+          event.chapterNumber,
+          event.error || 'Unknown error'
+        );
+        break;
+      case 'download_progress':
+        // Optional: Update progress message
+        break;
+    }
   }
 
   private getDefaultState(): BatchDownloadState {
@@ -321,6 +325,8 @@ class BatchDownloadOrchestrator {
     if (newProcessed >= session.state.totalChapters) {
       this.finalize(session, 'completed', 'All chapters downloaded');
     }
+
+    session.options?.onChapterDownloaded?.(chapterNumber);
   }
 
   private handleChapterFailure(
@@ -367,12 +373,22 @@ class BatchDownloadOrchestrator {
       status,
       isCancelling: false,
       message: message ?? null,
-      progress: 100, // Ensure we show full bar
+      progress: status === 'completed' ? 100 : session.state.progress,
     });
 
-    if (session.options.onBatchFinished) {
-      // Call callback (if needed)
+    if (session.options?.onBatchFinished) {
+      session.options.onBatchFinished({
+        status,
+        failedChapters: session.state.failedChapters,
+      });
     }
+
+    // Reset to idle after a short delay so the UI can show the final state
+    setTimeout(() => {
+      if (session.state.status === status) {
+        this.updateState(session, this.getDefaultState());
+      }
+    }, 3000);
   }
 
   private updateState(session: Session, partial: Partial<BatchDownloadState>) {
