@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Dimensions,
   Animated,
   ActivityIndicator,
+  InteractionManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -27,12 +28,15 @@ interface SwipeableChapterItemProps {
   isRead: boolean;
   isLastItem: boolean;
   isCurrentlyLastRead: boolean;
+  useParentDownloadState?: boolean;
+  isDownloaded?: boolean;
+  isDownloading?: boolean;
   onPress: () => void;
   onLongPress: () => void;
   onUnread: () => void;
   colors: any;
   styles: any;
-  currentlyOpenSwipeable: Swipeable | null;
+  getCurrentlyOpenSwipeable: () => Swipeable | null;
   setCurrentlyOpenSwipeable: (swipeable: Swipeable | null) => void;
   mangaId?: string;
   showDownloadButton?: boolean;
@@ -47,12 +51,15 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   isRead,
   isLastItem,
   isCurrentlyLastRead,
+  useParentDownloadState = false,
+  isDownloaded = false,
+  isDownloading = false,
   onPress,
   onLongPress,
   onUnread,
   colors,
   styles,
-  currentlyOpenSwipeable,
+  getCurrentlyOpenSwipeable,
   setCurrentlyOpenSwipeable,
   mangaId,
   showDownloadButton = false,
@@ -63,21 +70,58 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
 }) => {
   const swipeableRef = useRef<Swipeable>(null);
   const isSwipingRef = useRef(false);
+  const [isStartingDownload, setIsStartingDownload] = useState(false);
 
   // Get unified download status
   const downloadStatus = useDownloadStatus({
     mangaId: mangaId || '',
     chapterNumber: chapter.number,
   });
+  const resolvedIsDownloaded = useParentDownloadState
+    ? isDownloaded
+    : isDownloaded || downloadStatus.isDownloaded;
+  const resolvedIsDownloading =
+    !resolvedIsDownloaded &&
+    (useParentDownloadState
+      ? isDownloading
+      : isDownloading || downloadStatus.isDownloading);
+  const showTopDownloading =
+    !resolvedIsDownloaded && (isStartingDownload || resolvedIsDownloading);
+
+  useEffect(() => {
+    if (resolvedIsDownloaded) {
+      setIsStartingDownload(false);
+    }
+  }, [resolvedIsDownloaded]);
+
+  const runAfterSwipeClose = useCallback(
+    (callback: () => void) => {
+      if (getCurrentlyOpenSwipeable() === swipeableRef.current) {
+        setCurrentlyOpenSwipeable(null);
+      }
+      isSwipingRef.current = false;
+      swipeableRef.current?.close();
+      InteractionManager.runAfterInteractions(callback);
+    },
+    [getCurrentlyOpenSwipeable, setCurrentlyOpenSwipeable]
+  );
+
+  const closeSwipeableSafely = useCallback(() => {
+    if (getCurrentlyOpenSwipeable() === swipeableRef.current) {
+      setCurrentlyOpenSwipeable(null);
+    }
+    isSwipingRef.current = false;
+    swipeableRef.current?.close();
+  }, [getCurrentlyOpenSwipeable, setCurrentlyOpenSwipeable]);
 
   const renderRightActions = (
     _progress: Animated.AnimatedAddition<number>,
     dragX: Animated.AnimatedAddition<number>
   ) => {
     const showDownloadAction =
-      showDownloadButton && mangaId && !downloadStatus.isDownloaded;
+      showDownloadButton && mangaId && !resolvedIsDownloaded;
     const showDeleteAction =
-      downloadStatus.isDownloaded && typeof onDeleteDownload === 'function';
+      resolvedIsDownloaded && typeof onDeleteDownload === 'function';
 
     const actionCount =
       (showDownloadAction ? 1 : 0) +
@@ -127,19 +171,24 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 variant="full"
                 appearance="swipe"
                 disabled={
-                  downloadStatus.isDownloaded || downloadStatus.isDownloading
+                  resolvedIsDownloaded || resolvedIsDownloading
                 }
                 onDownloadStart={() => {
+                  setIsStartingDownload(true);
+                  closeSwipeableSafely();
                   onDownloadStart?.();
-                  swipeableRef.current?.close();
                 }}
                 onDownloadComplete={() => {
-                  onDownloadComplete?.();
-                  swipeableRef.current?.close();
+                  setIsStartingDownload(false);
+                  runAfterSwipeClose(() => {
+                    onDownloadComplete?.();
+                  });
                 }}
                 onDownloadError={(error) => {
-                  onDownloadError?.(error);
-                  swipeableRef.current?.close();
+                  setIsStartingDownload(false);
+                  runAfterSwipeClose(() => {
+                    onDownloadError?.(error);
+                  });
                 }}
                 style={styles.swipeDownloadButton}
               />
@@ -155,9 +204,10 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 },
               ]}
               onPress={() => {
-                onDeleteDownload?.();
-                downloadStatus.refresh();
-                swipeableRef.current?.close();
+                runAfterSwipeClose(() => {
+                  onDeleteDownload?.();
+                  downloadStatus.refresh().catch(() => {});
+                });
               }}
               activeOpacity={0.7}
             >
@@ -176,8 +226,8 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 },
               ]}
               onPress={() => {
+                closeSwipeableSafely();
                 onUnread();
-                swipeableRef.current?.close();
               }}
               activeOpacity={0.7}
             >
@@ -198,12 +248,13 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
       onSwipeableWillOpen={() => {
         isSwipingRef.current = true;
       }}
+      onSwipeableWillClose={() => {
+        isSwipingRef.current = false;
+      }}
       onSwipeableOpen={(direction) => {
         if (direction === 'right') {
-          if (
-            currentlyOpenSwipeable &&
-            currentlyOpenSwipeable !== swipeableRef.current
-          ) {
+          const currentlyOpenSwipeable = getCurrentlyOpenSwipeable();
+          if (currentlyOpenSwipeable && currentlyOpenSwipeable !== swipeableRef.current) {
             currentlyOpenSwipeable.close();
           }
           setCurrentlyOpenSwipeable(swipeableRef.current);
@@ -211,7 +262,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
       }}
       onSwipeableClose={() => {
         isSwipingRef.current = false;
-        if (currentlyOpenSwipeable === swipeableRef.current) {
+        if (getCurrentlyOpenSwipeable() === swipeableRef.current) {
           setCurrentlyOpenSwipeable(null);
         }
       }}
@@ -225,7 +276,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
           isLastItem && styles.lastChapterItem,
         ]}
         onPress={() => {
-          // Prevent navigation if currently swiping or if another swipeable is open
+          const currentlyOpenSwipeable = getCurrentlyOpenSwipeable();
           if (isSwipingRef.current || currentlyOpenSwipeable) {
             if (currentlyOpenSwipeable) {
               currentlyOpenSwipeable.close();
@@ -235,7 +286,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
           onPress();
         }}
         onLongPress={() => {
-          // Prevent long press if currently swiping or if another swipeable is open
+          const currentlyOpenSwipeable = getCurrentlyOpenSwipeable();
           if (isSwipingRef.current || currentlyOpenSwipeable) {
             if (currentlyOpenSwipeable) {
               currentlyOpenSwipeable.close();
@@ -257,27 +308,18 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
             <Text style={styles.chapterDate}>{chapter.date}</Text>
           </View>
           <View style={styles.chapterActions}>
-            {downloadStatus.isDownloading ? (
-              <View style={styles.downloadingWrapper}>
-                <ActivityIndicator
-                  size="small"
-                  color={colors.primary}
-                  style={styles.downloadingIndicator}
-                />
-                <Text style={styles.downloadingText}>
-                  {downloadStatus.progress
-                    ? `${downloadStatus.progress}%`
-                    : 'Downloading…'}
-                </Text>
+            {showTopDownloading || resolvedIsDownloaded ? (
+              <View style={styles.downloadStatusSlot}>
+                {showTopDownloading ? (
+                  <ActivityIndicator size={16} color={colors.primary} />
+                ) : (
+                  <Ionicons
+                    name="cloud-done-outline"
+                    size={18}
+                    color={colors.primary}
+                  />
+                )}
               </View>
-            ) : null}
-            {downloadStatus.isDownloaded ? (
-              <Ionicons
-                name="cloud-done-outline"
-                size={18}
-                color={colors.primary}
-                style={styles.downloadedIndicator}
-              />
             ) : null}
             {isRead && (
               <Ionicons
@@ -286,7 +328,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
                 color={colors.primary}
                 style={[
                   styles.readIndicator,
-                  downloadStatus.isDownloaded
+                  showTopDownloading || resolvedIsDownloaded
                     ? styles.readIndicatorOffset
                     : undefined,
                 ]}
@@ -299,4 +341,18 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   );
 };
 
-export default SwipeableChapterItem;
+export default React.memo(SwipeableChapterItem, (prevProps, nextProps) => {
+  return (
+    prevProps.chapter.number === nextProps.chapter.number &&
+    prevProps.isRead === nextProps.isRead &&
+    prevProps.isLastItem === nextProps.isLastItem &&
+    prevProps.isCurrentlyLastRead === nextProps.isCurrentlyLastRead &&
+    prevProps.useParentDownloadState === nextProps.useParentDownloadState &&
+    prevProps.isDownloaded === nextProps.isDownloaded &&
+    prevProps.isDownloading === nextProps.isDownloading &&
+    prevProps.getCurrentlyOpenSwipeable === nextProps.getCurrentlyOpenSwipeable &&
+    prevProps.mangaId === nextProps.mangaId &&
+    prevProps.colors === nextProps.colors
+  );
+});
+

@@ -329,6 +329,12 @@ const getStyles = (colors: typeof Colors.light) =>
       fontSize: 12,
       color: colors.tabIconDefault,
     },
+    downloadStatusSlot: {
+      width: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 6,
+    },
     downloadedIndicator: {
       marginRight: 6,
     },

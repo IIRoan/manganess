@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAtomValue } from '@zedux/react';
 import { downloadManagerAtom } from '@/atoms/downloadManagerAtom';
 import { downloadQueueAtom } from '@/atoms/downloadQueueAtom';
@@ -40,6 +40,29 @@ export const useDownloadStatus = ({
   const [serviceProgress, setServiceProgress] =
     useState<DownloadProgress | null>(null);
   const mountedRef = useRef(true);
+  const previousActiveInSystemRef = useRef(false);
+
+  // Derive whether this chapter is active in the download system from atoms (synchronous, cheap)
+  const isActiveInSystem = useMemo(() => {
+    if (dmState.activeDownloads.has(downloadId)) return true;
+    if (dmState.pausedDownloads.has(downloadId)) return true;
+    if (queueState.activeDownloadIds.has(downloadId)) return true;
+    if (
+      queueState.queue.some(
+        (item) =>
+          item.mangaId === mangaId && item.chapterNumber === chapterNumber
+      )
+    )
+      return true;
+    return false;
+  }, [
+    dmState.activeDownloads,
+    dmState.pausedDownloads,
+    queueState,
+    downloadId,
+    mangaId,
+    chapterNumber,
+  ]);
 
   // Check if chapter is downloaded on disk (async check)
   const checkDownloaded = useCallback(async () => {
@@ -66,6 +89,7 @@ export const useDownloadStatus = ({
 
   useEffect(() => {
     mountedRef.current = true;
+    // Stagger the async checks to avoid flooding the storage on mount
     const timeoutId = setTimeout(() => checkDownloaded(), 100);
     return () => {
       mountedRef.current = false;
@@ -73,41 +97,81 @@ export const useDownloadStatus = ({
     };
   }, [checkDownloaded]);
 
-  const syncServiceStatus = useCallback(() => {
-    try {
-      const progress = downloadManagerService.getDownloadProgress(downloadId);
+  // When a chapter leaves the active/queued system, re-check disk status.
+  // This covers completion races where atom state clears before storage settles.
+  useEffect(() => {
+    const wasActive = previousActiveInSystemRef.current;
+    previousActiveInSystemRef.current = isActiveInSystem;
 
-      if (mountedRef.current) {
-        setServiceProgress((prev) => {
-          if (
-            prev?.status === progress?.status &&
-            prev?.progress === progress?.progress &&
-            prev?.estimatedTimeRemaining === progress?.estimatedTimeRemaining &&
-            prev?.downloadSpeed === progress?.downloadSpeed
-          ) {
-            return prev;
-          }
-          return progress;
+    if (!wasActive || isActiveInSystem || isDownloaded) {
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutIds: ReturnType<typeof setTimeout>[] = [];
+
+    const scheduleRecheck = (delayMs: number) => {
+      const timeoutId = setTimeout(() => {
+        if (cancelled || !mountedRef.current) {
+          return;
+        }
+        checkDownloaded().catch(() => {});
+      }, delayMs);
+      timeoutIds.push(timeoutId);
+    };
+
+    // Immediate + delayed retries to catch eventual file writes.
+    scheduleRecheck(0);
+    scheduleRecheck(300);
+    scheduleRecheck(1000);
+
+    return () => {
+      cancelled = true;
+      timeoutIds.forEach((id) => clearTimeout(id));
+    };
+  }, [isActiveInSystem, isDownloaded, checkDownloaded]);
+
+  // Only set up expensive polling and listeners when the chapter is actively in the download system
+  useEffect(() => {
+    if (!isActiveInSystem) {
+      // Not downloading — skip polling entirely
+      setServiceProgress(null);
+      return;
+    }
+
+    // Sync once immediately
+    const syncServiceStatus = () => {
+      try {
+        const progress = downloadManagerService.getDownloadProgress(downloadId);
+        if (mountedRef.current) {
+          setServiceProgress((prev) => {
+            if (
+              prev?.status === progress?.status &&
+              prev?.progress === progress?.progress &&
+              prev?.estimatedTimeRemaining ===
+                progress?.estimatedTimeRemaining &&
+              prev?.downloadSpeed === progress?.downloadSpeed
+            ) {
+              return prev;
+            }
+            return progress;
+          });
+        }
+      } catch (error) {
+        log.warn('Service', 'Failed to sync download manager service status', {
+          downloadId,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
-    } catch (error) {
-      log.warn('Service', 'Failed to sync download manager service status', {
-        downloadId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }, [downloadId, log]);
+    };
 
-  useEffect(() => {
     syncServiceStatus();
 
     const unsubscribe = downloadManagerService.addProgressListener(
       downloadId,
       (progress) => {
         if (!mountedRef.current) return;
-
         setServiceProgress(progress);
-
         if (progress.status === DownloadStatus.COMPLETED) {
           checkDownloaded();
         }
@@ -120,7 +184,7 @@ export const useDownloadStatus = ({
       unsubscribe();
       clearInterval(intervalId);
     };
-  }, [downloadId, checkDownloaded, syncServiceStatus]);
+  }, [isActiveInSystem, downloadId, checkDownloaded, log]);
 
   // Derive status from atom state reactively
   const statusInfo: DownloadStatusInfo = (() => {
