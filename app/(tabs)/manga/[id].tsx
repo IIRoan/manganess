@@ -165,6 +165,18 @@ export default function MangaDetailScreen() {
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
   const [currentlyOpenSwipeable, setCurrentlyOpenSwipeable] =
     useState<Swipeable | null>(null);
+  const currentlyOpenSwipeableRef = useRef<Swipeable | null>(null);
+  const setCurrentlyOpenSwipeableStable = useCallback(
+    (swipeable: Swipeable | null) => {
+      currentlyOpenSwipeableRef.current = swipeable;
+      setCurrentlyOpenSwipeable(swipeable);
+    },
+    []
+  );
+  const getCurrentlyOpenSwipeable = useCallback(
+    () => currentlyOpenSwipeableRef.current,
+    []
+  );
   const [downloadedChapters, setDownloadedChapters] = useState<string[]>([]);
   const [downloadingChapters, setDownloadingChapters] = useState<string[]>([]);
   const downloadedChaptersRef = useRef<string[]>([]);
@@ -459,6 +471,29 @@ export default function MangaDetailScreen() {
     }, [id, refreshDownloadedChapters, refreshDownloadingChapters, isOffline])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      let isCancelled = false;
+
+      const syncDownloadState = () => {
+        if (isCancelled) {
+          return;
+        }
+        refreshDownloadedChapters().catch(() => {});
+        refreshDownloadingChapters().catch(() => {});
+      };
+
+      // Immediate sync on focus, then periodic sync while focused.
+      syncDownloadState();
+      const intervalId = setInterval(syncDownloadState, 2000);
+
+      return () => {
+        isCancelled = true;
+        clearInterval(intervalId);
+      };
+    }, [refreshDownloadedChapters, refreshDownloadingChapters])
+  );
+
   const handleSaveBookmark = useCallback(
     async (status: BookmarkStatus) => {
       if (!mangaDetails) return;
@@ -658,6 +693,12 @@ export default function MangaDetailScreen() {
 
       try {
         await chapterStorageService.deleteChapter(id as string, chapterNumber);
+        setDownloadedChapters((prev) =>
+          prev.filter((item) => item !== chapterNumber)
+        );
+        setDownloadingChapters((prev) =>
+          prev.filter((item) => item !== chapterNumber)
+        );
 
         await refreshDownloadedChapters();
 
@@ -709,6 +750,17 @@ export default function MangaDetailScreen() {
       handleChapterPress(chapterNumber);
     }
   }, [lastReadChapter, mangaDetails, handleChapterPress]);
+
+  // O(1) lookup set for read chapters — avoids O(n) includes() per item in the list
+  const readChaptersSet = useMemo(() => new Set(readChapters), [readChapters]);
+  const downloadedChaptersSet = useMemo(
+    () => new Set(downloadedChapters),
+    [downloadedChapters]
+  );
+  const downloadingChaptersSet = useMemo(
+    () => new Set(downloadingChapters),
+    [downloadingChapters]
+  );
 
   const readingProgress = useMemo(() => {
     if (
@@ -855,10 +907,12 @@ export default function MangaDetailScreen() {
     ({ item: chapter, index }: { item: Chapter; index: number }) => {
       if (!mangaDetails) return null;
 
-      const isRead = readChapters.includes(chapter.number);
+      const isRead = readChaptersSet.has(chapter.number);
       const isLastItem = index === mangaDetails.chapters.length - 1;
       const isCurrentlyLastRead =
         lastReadChapter === `Chapter ${chapter.number}`;
+      const isDownloaded = downloadedChaptersSet.has(chapter.number);
+      const isDownloading = downloadingChaptersSet.has(chapter.number);
 
       return (
         <SwipeableChapterItem
@@ -866,13 +920,16 @@ export default function MangaDetailScreen() {
           isRead={isRead}
           isLastItem={isLastItem}
           isCurrentlyLastRead={isCurrentlyLastRead}
+          useParentDownloadState={true}
+          isDownloaded={isDownloaded}
+          isDownloading={isDownloading}
           onPress={() => handleChapterPress(chapter.number)}
           onLongPress={() => handleChapterLongPress(chapter.number)}
           onUnread={() => handleMarkAsUnread(chapter.number)}
           colors={colors}
           styles={styles}
-          currentlyOpenSwipeable={currentlyOpenSwipeable}
-          setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeable}
+          getCurrentlyOpenSwipeable={getCurrentlyOpenSwipeable}
+          setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeableStable}
           mangaId={id as string}
           showDownloadButton={true}
           onDownloadStart={() => {
@@ -882,6 +939,9 @@ export default function MangaDetailScreen() {
             refreshDownloadingChapters().catch(() => {});
           }}
           onDownloadComplete={() => {
+            setDownloadedChapters((prev) =>
+              prev.includes(chapter.number) ? prev : [...prev, chapter.number]
+            );
             setDownloadingChapters((prev) =>
               prev.filter((item) => item !== chapter.number)
             );
@@ -902,15 +962,17 @@ export default function MangaDetailScreen() {
     },
     [
       mangaDetails,
-      readChapters,
+      readChaptersSet,
+      downloadedChaptersSet,
+      downloadingChaptersSet,
       lastReadChapter,
       handleChapterPress,
       handleChapterLongPress,
       handleMarkAsUnread,
       colors,
       styles,
-      currentlyOpenSwipeable,
-      setCurrentlyOpenSwipeable,
+      getCurrentlyOpenSwipeable,
+      setCurrentlyOpenSwipeableStable,
       id,
       refreshDownloadingChapters,
       refreshDownloadedChapters,
@@ -1141,7 +1203,8 @@ export default function MangaDetailScreen() {
             <AnimatedFlashList
               ref={flashListRef}
               removeClippedSubviews={true}
-              drawDistance={100}
+              drawDistance={250}
+              estimatedItemSize={65}
               ListHeaderComponent={ListHeader}
               data={mangaDetails.chapters}
               extraData={[

@@ -252,7 +252,61 @@ describe('useDownloadStatus', () => {
       expect(result.current.isDownloading).toBe(true);
     });
 
+    it('re-checks storage when chapter leaves active system', async () => {
+      jest.useFakeTimers();
+
+      mockDmState.activeDownloads = new Map([
+        [
+          'manga-1_1',
+          {
+            downloadId: 'manga-1_1',
+            mangaId: 'manga-1',
+            mangaTitle: 'Test',
+            chapterNumber: '1',
+            totalImages: 10,
+            downloadedImages: 9,
+            failedImages: 0,
+            progress: 90,
+            startTime: Date.now(),
+            lastUpdateTime: Date.now(),
+            totalBytes: 1000,
+            downloadedBytes: 900,
+          },
+        ],
+      ]);
+
+      const { result, rerender } = renderHook(() =>
+        useDownloadStatus(defaultOptions)
+      );
+
+      await act(async () => {
+        jest.advanceTimersByTime(110);
+      });
+
+      await waitFor(() => {
+        expect(result.current.status).toBe(DownloadStatus.DOWNLOADING);
+      });
+
+      mockChapterStorage.isChapterDownloaded.mockResolvedValue(true);
+      mockDmState.activeDownloads = new Map();
+
+      rerender({});
+
+      await act(async () => {
+        jest.advanceTimersByTime(10);
+      });
+
+      await waitFor(() => {
+        expect(result.current.isDownloaded).toBe(true);
+        expect(result.current.status).toBe(DownloadStatus.COMPLETED);
+      });
+
+      jest.useRealTimers();
+    });
+
     it('falls back to service progress when atom state is empty', async () => {
+      mockQueueState.activeDownloadIds = new Set(['manga-1_1']);
+
       mockDownloadManager.getDownloadProgress.mockReturnValue({
         status: DownloadStatus.DOWNLOADING,
         progress: 42,
@@ -272,7 +326,14 @@ describe('useDownloadStatus', () => {
     });
 
     it('falls back to service paused state when atom state is empty', async () => {
+      // The chapter must be active in the system for the hook to poll the service.
+      mockQueueState.activeDownloadIds = new Set(['manga-1_1']);
+
       mockDownloadManager.isDownloadPaused.mockReturnValue(true);
+      mockDownloadManager.getDownloadProgress.mockReturnValue({
+        status: DownloadStatus.PAUSED,
+        progress: 0,
+      });
 
       const { result } = renderHook(() => useDownloadStatus(defaultOptions));
 
