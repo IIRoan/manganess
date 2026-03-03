@@ -24,7 +24,6 @@ import Reanimated, {
   Extrapolation,
   runOnJS,
 } from 'react-native-reanimated';
-import type Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
@@ -32,6 +31,7 @@ import { Colors, type ColorScheme } from '@/constants/Colors';
 import ExpandableText from '@/components/ExpandableText';
 import AlertComponent from '@/components/Alert';
 import SwipeableChapterItem from '@/components/SwipeChapterItem';
+import type { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import BottomPopup from '@/components/BottomPopup';
 
 import { FlashList } from '@shopify/flash-list';
@@ -164,10 +164,10 @@ export default function MangaDetailScreen() {
   const [readChapters, setReadChapters] = useState<string[]>([]);
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
   const [currentlyOpenSwipeable, setCurrentlyOpenSwipeable] =
-    useState<Swipeable | null>(null);
-  const currentlyOpenSwipeableRef = useRef<Swipeable | null>(null);
+    useState<SwipeableMethods | null>(null);
+  const currentlyOpenSwipeableRef = useRef<SwipeableMethods | null>(null);
   const setCurrentlyOpenSwipeableStable = useCallback(
-    (swipeable: Swipeable | null) => {
+    (swipeable: SwipeableMethods | null) => {
       currentlyOpenSwipeableRef.current = swipeable;
       setCurrentlyOpenSwipeable(swipeable);
     },
