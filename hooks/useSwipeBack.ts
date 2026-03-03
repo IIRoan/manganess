@@ -32,6 +32,10 @@ export const useSwipeBack = ({
   const swipeProgress = useRef(new Animated.Value(0)).current;
   const swipeOpacity = useRef(new Animated.Value(0)).current;
 
+  // Use refs to avoid stale closures in PanResponder callbacks
+  const isSwipingBackRef = useRef(isSwipingBack);
+  const handleSwipeBackRef = useRef<() => void>(() => {});
+
   const gestureConfig = {
     ...DEFAULT_CONFIG,
     ...config,
@@ -50,6 +54,10 @@ export const useSwipeBack = ({
       await handleBackPress('swipe');
     }
   }, [customOnSwipeBack, handleBackPress]);
+
+  // Keep refs in sync with current values
+  isSwipingBackRef.current = isSwipingBack;
+  handleSwipeBackRef.current = handleSwipeBack;
 
   const resetSwipeState = useCallback(() => {
     setIsSwipingBack(false);
@@ -96,6 +104,7 @@ export const useSwipeBack = ({
       },
       onPanResponderGrant: () => {
         setIsSwipingBack(true);
+        isSwipingBackRef.current = true; // Immediately update ref
         setSwipeDirection('back');
         swipeProgress.setValue(0);
 
@@ -106,7 +115,7 @@ export const useSwipeBack = ({
         }).start();
       },
       onPanResponderMove: (_, gestureState) => {
-        if (!isSwipingBack) return;
+        if (!isSwipingBackRef.current) return;
 
         const progress = Math.max(
           0,
@@ -119,7 +128,7 @@ export const useSwipeBack = ({
         swipeOpacity.setValue(opacity);
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (!isSwipingBack) return;
+        if (!isSwipingBackRef.current) return;
 
         const { dx, vx } = gestureState;
         const shouldTriggerSwipe =
@@ -140,7 +149,7 @@ export const useSwipeBack = ({
               useNativeDriver: false,
             }),
           ]).start(() => {
-            handleSwipeBack();
+            handleSwipeBackRef.current();
             setTimeout(resetSwipeState, 100);
           });
         } else {

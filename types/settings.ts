@@ -5,7 +5,7 @@ export interface AppSettings {
   theme: ThemeType;
   enableDebugTab: boolean;
   onboardingCompleted: boolean;
-  accentColor?: string;
+  accentColor?: string | undefined;
   downloadSettings?: DownloadSettings;
 }
 

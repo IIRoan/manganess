@@ -18,7 +18,7 @@ import Animated, {
   Extrapolation,
 } from 'react-native-reanimated';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { CustomAlertProps } from '@/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -78,7 +78,15 @@ const Alert: React.FC<CustomAlertProps> = ({
       });
       scale.value = withTiming(0.95, { duration: 200 });
     }
-  }, [visible, isMounted, translateY, opacity, backdropOpacity, scale, handleUnmount]);
+  }, [
+    visible,
+    isMounted,
+    translateY,
+    opacity,
+    backdropOpacity,
+    scale,
+    handleUnmount,
+  ]);
 
   const handleDismiss = useCallback(() => {
     Haptics.selectionAsync();
@@ -98,10 +106,7 @@ const Alert: React.FC<CustomAlertProps> = ({
   );
 
   const sheetAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
     opacity: opacity.value,
   }));
 
@@ -162,7 +167,8 @@ const Alert: React.FC<CustomAlertProps> = ({
             const isCancel = label.trim().toLowerCase() === 'cancel';
             const isPrimary =
               !isCancel &&
-              (index === actionOptions.length - 1 || actionOptions.length === 1);
+              (index === actionOptions.length - 1 ||
+                actionOptions.length === 1);
 
             return (
               <Pressable
@@ -173,7 +179,10 @@ const Alert: React.FC<CustomAlertProps> = ({
                   index > 0 && styles.optionSpacing,
                   isCancel && styles.cancelButton,
                   isPrimary && styles.primaryButton,
-                  pressed && (isPrimary ? styles.primaryButtonPressed : styles.optionButtonPressed),
+                  pressed &&
+                    (isPrimary
+                      ? styles.primaryButtonPressed
+                      : styles.optionButtonPressed),
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel={label}

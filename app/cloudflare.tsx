@@ -8,7 +8,7 @@ import {
   Platform,
   useColorScheme,
 } from 'react-native';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useRouter } from 'expo-router';
 import { MANGA_API_URL } from '@/constants/Config';

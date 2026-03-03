@@ -9,12 +9,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { useHapticFeedback } from '@/utils/haptics';
-import { useToast } from '@/contexts/ToastContext';
+import { useToast } from '@/hooks/useToast';
+import { useAtomValue } from '@zedux/react';
+import { downloadManagerAtom } from '@/atoms/downloadManagerAtom';
 import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
-import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import {
   DownloadStatus,
   DownloadProgress,
@@ -73,6 +74,9 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
+  // Subscribe to download manager atom for reactive updates
+  const dmState = useAtomValue(downloadManagerAtom);
+
   const loadDownloadStatus = React.useCallback(async () => {
     try {
       setIsLoading(true);
@@ -112,13 +116,6 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
           icon: 'download',
           duration: 2500,
         });
-
-        // Emit download completion event
-        downloadEventEmitter.emitCompleted(
-          mangaId,
-          chapterNumber,
-          generateDownloadId(mangaId, chapterNumber)
-        );
       } else if (progressUpdate.status === DownloadStatus.FAILED) {
         setDownloadStatus(DownloadStatus.FAILED);
         onDownloadError?.('Download failed');
@@ -128,17 +125,9 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
           icon: 'close-circle',
           duration: 3000,
         });
-
-        // Emit download failed event
-        downloadEventEmitter.emitFailed(
-          mangaId,
-          chapterNumber,
-          generateDownloadId(mangaId, chapterNumber),
-          'Download failed'
-        );
       }
     },
-    [mangaId, chapterNumber, onDownloadComplete, onDownloadError, showToast]
+    [chapterNumber, onDownloadComplete, onDownloadError, showToast]
   );
 
   // Load initial download status with throttling
@@ -172,71 +161,32 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   }, [downloadStatus, mangaId, chapterNumber, handleProgressUpdate]);
 
   useEffect(() => {
-    const unsubscribe = downloadEventEmitter.subscribe(
-      mangaId,
-      chapterNumber,
-      (event) => {
-        if (event.type === 'download_paused') {
-          setDownloadStatus(DownloadStatus.PAUSED);
-          if (typeof event.progress === 'number') {
-            setProgress(event.progress);
-          }
-        }
+    const downloadId = generateDownloadId(mangaId, chapterNumber);
 
-        if (event.type === 'download_resumed') {
-          setDownloadStatus(DownloadStatus.DOWNLOADING);
-          if (typeof event.progress === 'number') {
-            setProgress(event.progress);
-          }
-          if (event.estimatedTimeRemaining !== undefined) {
-            setEstimatedTime(event.estimatedTimeRemaining);
-          }
-        }
-
-        if (event.type === 'download_started') {
-          setDownloadStatus(DownloadStatus.DOWNLOADING);
-          setProgress(0);
-        }
-
-        if (event.type === 'download_completed') {
-          setDownloadStatus(DownloadStatus.COMPLETED);
-          setProgress(100);
-          onDownloadComplete?.();
-        }
-
-        if (event.type === 'download_failed') {
-          setDownloadStatus(DownloadStatus.FAILED);
-          onDownloadError?.(event.error || 'Download failed');
-        }
-
-        if (event.type === 'download_deleted') {
-          setDownloadStatus(DownloadStatus.QUEUED);
-          setProgress(0);
-          setEstimatedTime(undefined);
-        }
-
-        if (event.type === 'download_progress') {
-          if (downloadStatus !== DownloadStatus.DOWNLOADING) {
-            setDownloadStatus(DownloadStatus.DOWNLOADING);
-          }
-          if (typeof event.progress === 'number') {
-            setProgress(event.progress);
-          }
-          if (event.estimatedTimeRemaining !== undefined) {
-            setEstimatedTime(event.estimatedTimeRemaining);
-          }
-        }
+    // Derive status from atom state
+    const activeProgress = dmState.activeDownloads.get(downloadId);
+    if (activeProgress) {
+      if (activeProgress.error) {
+        setDownloadStatus(DownloadStatus.FAILED);
+        onDownloadError?.(activeProgress.error.message);
+      } else {
+        setDownloadStatus(DownloadStatus.DOWNLOADING);
+        setProgress(activeProgress.progress);
+        setEstimatedTime(activeProgress.estimatedTimeRemaining);
       }
-    );
+      return;
+    }
 
-    return unsubscribe;
-  }, [
-    mangaId,
-    chapterNumber,
-    downloadStatus,
-    onDownloadComplete,
-    onDownloadError,
-  ]);
+    const pausedInfo = dmState.pausedDownloads.get(downloadId);
+    if (pausedInfo) {
+      setDownloadStatus(DownloadStatus.PAUSED);
+      setProgress(pausedInfo.progress?.progress ?? 0);
+      return;
+    }
+
+    // If we were downloading but now the download is gone from both maps,
+    // it likely completed or was removed. Don't override completed/queued status.
+  }, [dmState, mangaId, chapterNumber, onDownloadError]);
 
   // Animate progress changes
   useEffect(() => {

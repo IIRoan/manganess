@@ -19,11 +19,118 @@ afterAll(() => {
 });
 
 jest.mock('react-native-reanimated', () => {
-  const Reanimated = require('react-native-reanimated/mock');
-  Reanimated.default.call = () => {};
-  Reanimated.runOnJS = () => () => {};
-  Reanimated.useDerivedValue = () => {};
-  return Reanimated;
+  const ReactNative = require('react-native');
+  const ID = <T>(value: T) => value;
+  const NOOP = () => {};
+  const animationBuilder = {
+    delay: () => animationBuilder,
+    duration: () => animationBuilder,
+    springify: () => animationBuilder,
+    damping: () => animationBuilder,
+    stiffness: () => animationBuilder,
+    mass: () => animationBuilder,
+    overshootClamping: () => animationBuilder,
+    withCallback: () => animationBuilder,
+    withInitialValues: () => animationBuilder,
+    easing: () => animationBuilder,
+    reduceMotion: () => animationBuilder,
+  };
+
+  const Easing = {
+    linear: ID,
+    ease: ID,
+    out: ID,
+    in: ID,
+    inOut: ID,
+    bezier: () => ID,
+  };
+
+  return {
+    __esModule: true,
+    default: {
+      View: ReactNative.View,
+      Text: ReactNative.Text,
+      Image: ReactNative.Image,
+      ScrollView: ReactNative.ScrollView,
+      FlatList: ReactNative.FlatList,
+      createAnimatedComponent: ID,
+      addWhitelistedUIProps: NOOP,
+      addWhitelistedNativeProps: NOOP,
+      call: NOOP,
+    },
+    runOnJS: (fn: (...args: any[]) => any) => fn,
+    runOnUI: (fn: (...args: any[]) => any) => fn,
+    createWorkletRuntime: NOOP,
+    runOnRuntime: NOOP,
+    makeMutable: ID,
+    createSerializable: ID,
+    isReanimated3: () => false,
+    enableLayoutAnimations: NOOP,
+    useAnimatedStyle: (updater: () => any) => updater(),
+    useAnimatedProps: (updater: () => any) => updater(),
+    useAnimatedReaction: NOOP,
+    useAnimatedRef: () => ({ current: null }),
+    useAnimatedScrollHandler: () => NOOP,
+    useDerivedValue: () => ({ value: undefined }),
+    useEvent: () => NOOP,
+    useSharedValue: (value: any) => ({ value }),
+    useAnimatedSensor: () => ({
+      sensor: { value: { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 } },
+      unregister: NOOP,
+      isAvailable: false,
+      config: { interval: 0 },
+    }),
+    useAnimatedKeyboard: () => ({ height: 0, state: 0 }),
+    useScrollViewOffset: () => ({ value: 0 }),
+    useScrollOffset: () => ({ value: 0 }),
+    withDecay: (_config: any, callback?: (finished: boolean) => void) => {
+      callback?.(true);
+      return 0;
+    },
+    withDelay: (_delay: number, nextAnimation: any) => nextAnimation,
+    withRepeat: ID,
+    withSequence: (...animations: any[]) => animations[animations.length - 1],
+    withSpring: (
+      toValue: any,
+      _config?: any,
+      callback?: (finished: boolean) => void
+    ) => {
+      callback?.(true);
+      return toValue;
+    },
+    withTiming: (
+      toValue: any,
+      _config?: any,
+      callback?: (finished: boolean) => void
+    ) => {
+      callback?.(true);
+      return toValue;
+    },
+    cancelAnimation: NOOP,
+    measure: () => ({ x: 0, y: 0, width: 0, height: 0, pageX: 0, pageY: 0 }),
+    scrollTo: NOOP,
+    Easing,
+    Extrapolation: {
+      CLAMP: 'clamp',
+      EXTEND: 'extend',
+      IDENTITY: 'identity',
+    },
+    Extrapolate: {
+      CLAMP: 'clamp',
+      EXTEND: 'extend',
+      IDENTITY: 'identity',
+    },
+    interpolate: NOOP,
+    interpolateColor: NOOP,
+    clamp: NOOP,
+    processColor: ReactNative.processColor,
+    FadeIn: animationBuilder,
+    FadeInDown: animationBuilder,
+    FadeOut: animationBuilder,
+    FadeOutDown: animationBuilder,
+    SlideInRight: animationBuilder,
+    SlideOutLeft: animationBuilder,
+  };
 });
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -246,4 +353,19 @@ jest.mock('expo-constants', () => {
 
 jest.mock('expo-web-browser', () => ({
   openBrowserAsync: jest.fn(),
+}));
+
+jest.mock('expo-font', () => ({
+  loadAsync: jest.fn(() => Promise.resolve()),
+  isLoaded: jest.fn(() => true),
+  isLoading: jest.fn(() => false),
+}));
+
+jest.mock('expo-asset', () => ({
+  Asset: {
+    fromModule: jest.fn(() => ({
+      downloadAsync: jest.fn(() => Promise.resolve()),
+    })),
+    loadAsync: jest.fn(() => Promise.resolve()),
+  },
 }));

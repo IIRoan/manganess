@@ -41,4 +41,4 @@ jobs:
         run: bun install
 
       - name: Publish update
-        run: eas update --auto --branch preview
+        run: eas update --auto --branch preview --environment preview

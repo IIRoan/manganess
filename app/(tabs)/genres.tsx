@@ -9,7 +9,7 @@ import {
   FlatList,
   Dimensions,
 } from 'react-native';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -106,10 +106,14 @@ export default function GenresScreen() {
         const html = response.data as string;
         const mangaItems = parseGenreManga(html);
         setMangaList(mangaItems);
+      } else {
+        setMangaList([]);
       }
     } catch (error) {
       logger().error('Service', 'Error fetching genre manga', { error });
       setMangaList([]);
+    } finally {
+      setLoading(false);
     }
   };
 

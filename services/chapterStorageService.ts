@@ -15,7 +15,6 @@ import {
 import { ChapterStorageService } from '@/types/downloadInterfaces';
 import { isDebugEnabled } from '@/constants/env';
 import { logger } from '@/utils/logger';
-import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 
 // Storage configuration
 const BASE_DOWNLOAD_DIR = new FSDirectory(Paths.cache, 'downloads');
@@ -959,12 +958,7 @@ class ChapterStorage implements ChapterStorageService {
         this.scheduleSaveUsageStats();
       }
 
-      // Emit download deleted event
-      downloadEventEmitter.emitDeleted(
-        mangaId,
-        chapterNumber,
-        `${mangaId}_${chapterNumber}`
-      );
+      // Download deletion is now tracked via atom state changes
 
       if (isDebugEnabled()) {
         this.log.info('Storage', 'Deleted chapter', {
