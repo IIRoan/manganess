@@ -247,3 +247,18 @@ jest.mock('expo-constants', () => {
 jest.mock('expo-web-browser', () => ({
   openBrowserAsync: jest.fn(),
 }));
+
+jest.mock('expo-font', () => ({
+  loadAsync: jest.fn(() => Promise.resolve()),
+  isLoaded: jest.fn(() => true),
+  isLoading: jest.fn(() => false),
+}));
+
+jest.mock('expo-asset', () => ({
+  Asset: {
+    fromModule: jest.fn(() => ({
+      downloadAsync: jest.fn(() => Promise.resolve()),
+    })),
+    loadAsync: jest.fn(() => Promise.resolve()),
+  },
+}));
