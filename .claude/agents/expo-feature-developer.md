@@ -32,7 +32,7 @@ Every component MUST follow this exact structure:
 // 1. Imports (grouped: React → React Native → Third-party → Internal)
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 import { logger } from '@/utils/logger';
 
@@ -80,7 +80,9 @@ export async function fetchFeatureData(): Promise<FeatureData> {
     return data;
   } catch (error) {
     log.error('Failed to fetch feature data', { error });
-    throw new MangaNetworkError('Failed to fetch feature data', { cause: error });
+    throw new MangaNetworkError('Failed to fetch feature data', {
+      cause: error,
+    });
   }
 }
 ```
@@ -102,6 +104,7 @@ export async function fetchFeatureData(): Promise<FeatureData> {
 ### Navigation Integration
 
 For new screens:
+
 1. Create file in appropriate location under `/app/`
 2. Follow Expo Router conventions
 3. Use proper layout integration
@@ -111,6 +114,7 @@ For new screens:
 ### Data Persistence
 
 For features requiring storage:
+
 1. Use AsyncStorage via existing service patterns
 2. Define clear storage keys in constants
 3. Implement migration logic if modifying existing data structures

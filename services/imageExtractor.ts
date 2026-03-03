@@ -442,6 +442,10 @@ export class ImageExtractorService implements ImageExtractor {
       'favicon',
       'ads',
       'advertisement',
+      'button',
+      'sprite',
+      'loading',
+      'background',
     ];
 
     for (const pattern of excludePatterns) {
@@ -522,6 +526,18 @@ export class ImageExtractorService implements ImageExtractor {
     try {
       // Decode HTML entities
       const decodedUrl = decode(url);
+
+      // Handle protocol-relative URLs (e.g., //example.com/image.jpg)
+      if (decodedUrl.startsWith('//')) {
+        // Validate by adding a protocol temporarily
+        new URL(`https:${decodedUrl}`);
+        return decodedUrl;
+      }
+
+      // Handle data URLs
+      if (decodedUrl.startsWith('data:')) {
+        return decodedUrl;
+      }
 
       // Basic URL validation
       new URL(decodedUrl);
@@ -777,14 +793,24 @@ export class ImageExtractorService implements ImageExtractor {
 
       const images: ChapterImage[] = messageData.images
         .map((img: any) => {
-          if (!img.pageNumber || typeof img.pageNumber !== 'number') {
+          if (!img.pageNumber) {
+            return null;
+          }
+
+          // Handle both number and string page numbers
+          const pageNumber =
+            typeof img.pageNumber === 'number'
+              ? img.pageNumber
+              : parseInt(String(img.pageNumber), 10);
+
+          if (isNaN(pageNumber)) {
             return null;
           }
 
           const validatedUrl = this.validateImageUrl(img.originalUrl || '');
 
           return {
-            pageNumber: img.pageNumber,
+            pageNumber,
             originalUrl: validatedUrl,
             downloadStatus: ImageDownloadStatus.PENDING,
           };

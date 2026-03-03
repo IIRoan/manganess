@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+} from 'react';
 import {
   View,
   TextInput,
@@ -16,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import SearchSkeleton from '@/components/SearchSkeleton';
 import { Colors } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { MANGA_API_URL } from '@/constants/Config';
 import CustomWebView from '@/components/CustomWebView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,7 +43,7 @@ import {
 import { useDebounce } from '@/hooks/useDebounce';
 import { logger } from '@/utils/logger';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
-import { useOffline } from '@/contexts/OfflineContext';
+import { useOffline } from '@/hooks/useOffline';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import { getDefaultLayout } from '@/services/settingsService';
 import { hapticFeedback } from '@/utils/haptics';
@@ -86,7 +92,9 @@ export default function MangaSearchScreen() {
   const vrfTokenQueryRef = useRef<string | null>(null);
   const vrfRetryCountRef = useRef<Map<string, number>>(new Map());
   const MAX_VRF_RETRIES = 2;
-  const [lastCompletedQuery, setLastCompletedQuery] = useState<string | null>(null);
+  const [lastCompletedQuery, setLastCompletedQuery] = useState<string | null>(
+    null
+  );
 
   // Layout State
   const [layoutMode, setLayoutMode] = useState<'grid' | 'list'>('list');
@@ -220,9 +228,10 @@ export default function MangaSearchScreen() {
           if (inFlightSeqRef.current !== seq) return; // ignore stale
 
           // Check if it's a 403 error (stale VRF token)
-          const is403 = err?.response?.status === 403 ||
-                        err?.message?.includes('403') ||
-                        err?.message?.includes('Request failed with status code 403');
+          const is403 =
+            err?.response?.status === 403 ||
+            err?.message?.includes('403') ||
+            err?.message?.includes('Request failed with status code 403');
 
           if (is403) {
             const key = debouncedSearchQuery.trim().toLowerCase();
@@ -240,18 +249,22 @@ export default function MangaSearchScreen() {
               vrfTokenQueryRef.current = null;
               setVrfWebViewKey((k) => k + 1);
 
-              logger().warn('Service', 'VRF token expired, fetching fresh token', {
-                query: debouncedSearchQuery,
-                retryAttempt: retryCount + 1,
-                maxRetries: MAX_VRF_RETRIES
-              });
+              logger().warn(
+                'Service',
+                'VRF token expired, fetching fresh token',
+                {
+                  query: debouncedSearchQuery,
+                  retryAttempt: retryCount + 1,
+                  maxRetries: MAX_VRF_RETRIES,
+                }
+              );
               return; // Don't set error - will retry with fresh token
             } else {
               // Max retries reached, show error
               vrfRetryCountRef.current.delete(key);
               logger().error('Service', 'Max VRF retries reached', {
                 query: debouncedSearchQuery,
-                retries: retryCount
+                retries: retryCount,
               });
               setTokenError(true);
               setIsLoading(false);
@@ -299,11 +312,14 @@ export default function MangaSearchScreen() {
   }, []);
 
   // Handle history item delete
-  const handleHistoryItemDelete = useCallback(async (query: string) => {
-    hapticFeedback.onPress();
-    await removeSearchHistoryItem(query);
-    await loadSearchHistory();
-  }, [loadSearchHistory]);
+  const handleHistoryItemDelete = useCallback(
+    async (query: string) => {
+      hapticFeedback.onPress();
+      await removeSearchHistoryItem(query);
+      await loadSearchHistory();
+    },
+    [loadSearchHistory]
+  );
 
   // Handle clear all history
   const handleClearAllHistory = useCallback(async () => {
@@ -534,11 +550,7 @@ export default function MangaSearchScreen() {
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={styles.historyDeleteButton}
         >
-          <Ionicons
-            name="close"
-            size={18}
-            color={colors.tabIconDefault}
-          />
+          <Ionicons name="close" size={18} color={colors.tabIconDefault} />
         </TouchableOpacity>
       </Pressable>
     ),
@@ -625,7 +637,11 @@ export default function MangaSearchScreen() {
     const currentQueryNormalized = searchQuery.trim().toLowerCase();
     const searchCompleted = lastCompletedQuery === currentQueryNormalized;
 
-    if (searchCompleted && searchResults.length === 0 && currentQueryNormalized.length > 2) {
+    if (
+      searchCompleted &&
+      searchResults.length === 0 &&
+      currentQueryNormalized.length > 2
+    ) {
       return (
         <View style={styles.emptyStateContainer}>
           <View style={styles.emptyStateIcon}>
@@ -637,14 +653,16 @@ export default function MangaSearchScreen() {
           </View>
           <Text style={styles.emptyStateTitle}>No Results Found</Text>
           <Text style={styles.emptyStateText}>
-            We couldn&apos;t find any manga matching &quot;{searchQuery.trim()}&quot;.
-            Try a different title or check your spelling.
+            We couldn&apos;t find any manga matching &quot;{searchQuery.trim()}
+            &quot;. Try a different title or check your spelling.
           </Text>
           <TouchableOpacity
             style={[styles.clearSearchButton, { borderColor: colors.primary }]}
             onPress={clearSearch}
           >
-            <Text style={[styles.clearSearchButtonText, { color: colors.primary }]}>
+            <Text
+              style={[styles.clearSearchButtonText, { color: colors.primary }]}
+            >
               Clear Search
             </Text>
           </TouchableOpacity>

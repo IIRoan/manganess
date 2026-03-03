@@ -9,7 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useDownloadNavigation } from '@/utils/downloadNavigation';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { downloadManagerService } from '@/services/downloadManager';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { DownloadStatus } from '@/types/download';

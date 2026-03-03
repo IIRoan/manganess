@@ -13,6 +13,27 @@ module.exports = {
   moduleNameMapper: {
     ...(preset.moduleNameMapper || {}),
     '^@/(.*)$': '<rootDir>/$1',
+    // Mock binary assets
+    '\\.(ttf|otf|eot|woff|woff2)$': '<rootDir>/__mocks__/fileMock.js',
+    '\\.(jpg|jpeg|png|gif|svg|webp)$': '<rootDir>/__mocks__/fileMock.js',
   },
   testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/'],
+
+  // Coverage configuration
+  collectCoverageFrom: [
+    'app/**/*.{ts,tsx}',
+    'components/**/*.{ts,tsx}',
+    'hooks/**/*.{ts,tsx}',
+    'services/**/*.{ts,tsx}',
+    'utils/**/*.{ts,tsx}',
+    'constants/**/*.{ts,tsx}',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+    '!**/__tests__/**',
+    '!**/__mocks__/**',
+    '!**/coverage/**',
+    '!app/**/_layout.tsx',
+  ],
+  coverageReporters: ['text', 'text-summary', 'lcov', 'json-summary', 'html'],
+  coverageDirectory: '<rootDir>/coverage',
 };

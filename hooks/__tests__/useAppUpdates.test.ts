@@ -414,4 +414,132 @@ describe('useAppUpdates', () => {
       expect(result.current.lastResult).toBeNull();
     });
   });
+
+  describe('refreshUpdateInfo', () => {
+    it('refreshes update info from service', () => {
+      const { result } = renderHook(() => useAppUpdates());
+
+      // Change the mock return value
+      updateService.getUpdateInfo.mockReturnValue({
+        channel: 'production',
+        runtimeVersion: '2.0.0',
+        updateId: 'new-update-id',
+        createdAt: new Date('2024-06-01'),
+        isEmbeddedLaunch: false,
+        isEmergencyLaunch: false,
+        checkAutomatically: 'ON_LOAD',
+      });
+
+      act(() => {
+        result.current.refreshUpdateInfo();
+      });
+
+      expect(updateService.getUpdateInfo).toHaveBeenCalled();
+    });
+  });
+
+  describe('updates unavailable scenarios', () => {
+    it('returns failure in checkForUpdate when updates unavailable', async () => {
+      updateService.areUpdatesAvailable.mockReturnValue(false);
+      updateService.getUnavailableReason.mockReturnValue('Development build');
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      await act(async () => {
+        const response = await result.current.checkForUpdate();
+        expect(response.success).toBe(false);
+        expect(response.message).toBe('Development build');
+      });
+    });
+
+    it('uses default message when unavailable reason is null', async () => {
+      updateService.areUpdatesAvailable.mockReturnValue(false);
+      updateService.getUnavailableReason.mockReturnValue(null);
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      await act(async () => {
+        const response = await result.current.checkForUpdate();
+        expect(response.success).toBe(false);
+        expect(response.message).toBe('Updates not available');
+      });
+    });
+
+    it('returns failure in checkAndDownload when updates unavailable', async () => {
+      updateService.areUpdatesAvailable.mockReturnValue(false);
+      updateService.getUnavailableReason.mockReturnValue('Simulator detected');
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      await act(async () => {
+        const response = await result.current.checkAndDownload();
+        expect(response.success).toBe(false);
+        expect(response.message).toBe('Simulator detected');
+      });
+
+      // Should not call the update flow
+      expect(updateService.performFullUpdateFlow).not.toHaveBeenCalled();
+    });
+
+    it('returns failure in updateAndReload when updates unavailable', async () => {
+      updateService.areUpdatesAvailable.mockReturnValue(false);
+      updateService.getUnavailableReason.mockReturnValue('Expo Go');
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      await act(async () => {
+        const response = await result.current.updateAndReload();
+        expect(response.success).toBe(false);
+        expect(response.message).toBe('Expo Go');
+      });
+
+      // Should not call the update flow
+      expect(updateService.checkDownloadAndApplyUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update locked scenarios', () => {
+    it('returns failure in checkForUpdate when update is locked', async () => {
+      updateService.areUpdatesAvailable.mockReturnValue(true);
+      updateService.isUpdateLocked.mockReturnValue(true);
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      await act(async () => {
+        const response = await result.current.checkForUpdate();
+        expect(response.success).toBe(false);
+        expect(response.message).toBe('Update check already in progress');
+      });
+
+      // Should not proceed to check
+      expect(updateService.checkForUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('areUpdatesAvailable and unavailableReason', () => {
+    it('exposes areUpdatesAvailable computed property', () => {
+      updateService.areUpdatesAvailable.mockReturnValue(true);
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      expect(result.current.areUpdatesAvailable).toBe(true);
+    });
+
+    it('exposes unavailableReason computed property', () => {
+      updateService.getUnavailableReason.mockReturnValue('Test reason');
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      expect(result.current.unavailableReason).toBe('Test reason');
+    });
+
+    it('returns null for unavailableReason when updates available', () => {
+      updateService.areUpdatesAvailable.mockReturnValue(true);
+      updateService.getUnavailableReason.mockReturnValue(null);
+
+      const { result } = renderHook(() => useAppUpdates());
+
+      expect(result.current.unavailableReason).toBeNull();
+    });
+  });
 });

@@ -3,10 +3,6 @@ import { chapterStorageService } from './chapterStorageService';
 import { downloadQueueService } from './downloadQueue';
 import { DownloadStatus, DownloadProgress } from '@/types/download';
 import { logger } from '@/utils/logger';
-import {
-  downloadEventEmitter,
-  DownloadStatusEvent,
-} from '@/utils/downloadEventEmitter';
 
 export interface ChapterDownloadStatus {
   mangaId: string;
@@ -60,38 +56,39 @@ class DownloadStatusService {
   }
 
   private setupEventListeners() {
-    // Listen for global download events to invalidate cache
-    downloadEventEmitter.subscribeGlobal((event: DownloadStatusEvent) => {
-      const key = this.getCacheKey(event.mangaId, event.chapterNumber);
+    // Event listeners removed - cache invalidation now happens via
+    // invalidateCache() calls from atom subscriptions or direct callers.
+  }
 
-      // Invalidate cache on status changing events
-      switch (event.type) {
-        case 'download_started':
-        case 'download_completed':
-        case 'download_failed':
-        case 'download_deleted':
-        case 'download_paused':
-        case 'download_resumed':
-          this.clearCache(key);
-          break;
-        case 'download_progress':
-          // Optionally update cache directly instead of clearing
-          // For now, let's keep it simple and not clear on progress to avoid thrashing
-          // But we might want to update the cached progress if it exists
-          const cached = this.getFromCache(key);
-          if (cached) {
-            cached.progress = event.progress || cached.progress;
-            cached.status = DownloadStatus.DOWNLOADING;
-            cached.isDownloading = true;
-            if (event.estimatedTimeRemaining)
-              cached.estimatedTimeRemaining = event.estimatedTimeRemaining;
-            if (event.downloadSpeed) cached.downloadSpeed = event.downloadSpeed;
-            // Update expiry
-            this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
-          }
-          break;
-      }
-    });
+  /**
+   * Invalidate cache for a specific chapter. Called when download state changes.
+   */
+  invalidateCache(mangaId: string, chapterNumber: string): void {
+    const key = this.getCacheKey(mangaId, chapterNumber);
+    this.clearCache(key);
+  }
+
+  /**
+   * Update cached progress for a downloading chapter.
+   */
+  updateCachedProgress(
+    mangaId: string,
+    chapterNumber: string,
+    progress: number,
+    estimatedTimeRemaining?: number,
+    downloadSpeed?: number
+  ): void {
+    const key = this.getCacheKey(mangaId, chapterNumber);
+    const cached = this.getFromCache(key);
+    if (cached) {
+      cached.progress = progress;
+      cached.status = DownloadStatus.DOWNLOADING;
+      cached.isDownloading = true;
+      if (estimatedTimeRemaining !== undefined)
+        cached.estimatedTimeRemaining = estimatedTimeRemaining;
+      if (downloadSpeed !== undefined) cached.downloadSpeed = downloadSpeed;
+      this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
+    }
   }
 
   private getCacheKey(mangaId: string, chapterNumber: string): string {

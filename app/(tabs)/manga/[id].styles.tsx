@@ -184,38 +184,15 @@ const getStyles = (colors: typeof Colors.light) =>
       backgroundColor: colors.card,
     },
 
-    chapterItem: {
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      backgroundColor: colors.card,
-      borderBottomWidth: 0.5,
-      borderBottomColor: colors.border + '50',
-    },
-    lastChapterItem: {
-      borderBottomWidth: 0,
-    },
-    chapterInfo: {
-      flex: 1,
-    },
-    chapterTitle: {
-      fontSize: 16,
-      fontWeight: '500',
-      color: colors.text,
-      lineHeight: 20,
-    },
-    chapterDate: {
-      fontSize: 13,
-      color: colors.tabIconDefault,
-      marginTop: 4,
-      opacity: 0.8,
-    },
-    chapterStatus: {
-      marginLeft: 10,
-    },
-    readChapterTitle: {
-      color: colors.primary,
-      fontWeight: '500',
-    },
+    // Chapter item visual styles are now self-contained in SwipeChapterItem
+    // These are kept as pass-through for backward compat (component ignores them)
+    chapterItem: {},
+    lastChapterItem: {},
+    chapterInfo: {},
+    chapterTitle: {},
+    chapterDate: {},
+    chapterStatus: {},
+    readChapterTitle: {},
     smartScrollButton: {
       position: 'absolute',
       right: 20,
@@ -297,84 +274,20 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.tabIconDefault,
     },
 
-    // Chapter item styles for SwipeableChapterItem
-    readChapterItem: {
-      opacity: 0.6,
-    },
-    currentlyLastReadItem: {
-      backgroundColor: colors.primary + '05',
-      borderLeftWidth: 3,
-      borderLeftColor: colors.primary,
-    },
-    chapterContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      flex: 1,
-    },
-    chapterActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginLeft: 12,
-    },
-    downloadingWrapper: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginRight: 6,
-    },
-    downloadingIndicator: {
-      marginRight: 6,
-    },
-    downloadingText: {
-      fontSize: 12,
-      color: colors.tabIconDefault,
-    },
-    downloadedIndicator: {
-      marginRight: 6,
-    },
-    readIndicator: {
-      marginLeft: 0,
-    },
-    readIndicatorOffset: {
-      marginLeft: 8,
-    },
+    // Chapter item status styles are now self-contained in SwipeChapterItem
+    readChapterItem: {},
+    currentlyLastReadItem: {},
+    chapterContent: {},
+    chapterActions: {},
+    downloadingWrapper: {},
+    downloadingIndicator: {},
+    downloadingText: {},
+    downloadStatusSlot: {},
+    downloadedIndicator: {},
+    readIndicator: {},
+    readIndicatorOffset: {},
 
-    rightAction: {
-      alignItems: 'stretch',
-      justifyContent: 'center',
-      paddingRight: 0,
-      height: '100%',
-    },
-    actionContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'stretch',
-      height: '100%',
-    },
-    actionButton: {
-      flex: 1,
-      height: '100%',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 0,
-    },
-    swipeDownloadWrapper: {
-      flex: 1,
-      height: '100%',
-      paddingHorizontal: 0,
-      paddingVertical: 0,
-    },
-    swipeDownloadButton: {
-      width: '100%',
-      height: '100%',
-    },
-    actionText: {
-      color: 'white',
-      fontSize: 11,
-      fontWeight: '600',
-      marginTop: 2,
-    },
+    // Swipe action styles are now internal to SwipeChapterItem
   });
 
 export default getStyles;

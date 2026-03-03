@@ -8,25 +8,6 @@ jest.mock('@/utils/logger', () => ({
   }),
 }));
 
-jest.mock('@/utils/downloadEventEmitter', () => {
-  let globalCallback: Function | null = null;
-
-  return {
-    downloadEventEmitter: {
-      subscribeGlobal: jest.fn((callback: Function) => {
-        globalCallback = callback;
-        return () => {
-          globalCallback = null;
-        };
-      }),
-      // Test helper
-      __triggerEvent: (event: any) => {
-        if (globalCallback) globalCallback(event);
-      },
-    },
-  };
-});
-
 jest.mock('../downloadQueue', () => ({
   downloadQueueService: {
     addToQueue: jest.fn().mockResolvedValue(undefined),
@@ -38,7 +19,6 @@ jest.mock('../downloadQueue', () => ({
 import { batchDownloadOrchestrator } from '../batchDownloadOrchestrator';
 import { chapterStorageService } from '../chapterStorageService';
 import { downloadQueueService } from '../downloadQueue';
-import { downloadEventEmitter } from '@/utils/downloadEventEmitter';
 import type { Chapter } from '@/types';
 
 const mockChapterStorage = chapterStorageService as jest.Mocked<
@@ -112,7 +92,6 @@ describe('batchDownloadOrchestrator', () => {
         mockChapters
       );
 
-      // State should still be idle, but session exists
       const state = batchDownloadOrchestrator.getState(mockMangaId);
       expect(state.status).toBe('idle');
     });
@@ -143,7 +122,6 @@ describe('batchDownloadOrchestrator', () => {
 
       await batchDownloadOrchestrator.startBatchDownload(mockMangaId);
 
-      // Should have transitioned to downloading
       const finalCall = listener.mock.calls[listener.mock.calls.length - 1][0];
       expect(finalCall.status).toBe('downloading');
       expect(finalCall.totalChapters).toBe(3);
@@ -151,9 +129,9 @@ describe('batchDownloadOrchestrator', () => {
 
     it('skips already downloaded chapters', async () => {
       mockChapterStorage.isChapterDownloaded
-        .mockResolvedValueOnce(true) // Ch 1 downloaded
-        .mockResolvedValueOnce(false) // Ch 2 not downloaded
-        .mockResolvedValueOnce(false); // Ch 3 not downloaded
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(false);
 
       batchDownloadOrchestrator.updateSessionMetadata(
         'manga-skip-1',
@@ -163,7 +141,6 @@ describe('batchDownloadOrchestrator', () => {
 
       await batchDownloadOrchestrator.startBatchDownload('manga-skip-1');
 
-      // Should only add 2 chapters to queue
       expect(mockDownloadQueue.addToQueue).toHaveBeenCalledTimes(2);
     });
 
@@ -211,7 +188,10 @@ describe('batchDownloadOrchestrator', () => {
       );
 
       const selected = mockChapters.slice(0, 2);
-      await batchDownloadOrchestrator.startBatchDownload('manga-select', selected);
+      await batchDownloadOrchestrator.startBatchDownload(
+        'manga-select',
+        selected
+      );
 
       expect(mockDownloadQueue.addToQueue).toHaveBeenCalledTimes(2);
     });
@@ -251,7 +231,6 @@ describe('batchDownloadOrchestrator', () => {
 
       batchDownloadOrchestrator.cancelBatchDownload('manga-cancel-2');
 
-      // Wait for async queue cleanup
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(mockDownloadQueue.removeFromQueue).toHaveBeenCalledWith(
@@ -267,37 +246,31 @@ describe('batchDownloadOrchestrator', () => {
 
   describe('retryFailedChapters', () => {
     it('re-adds failed chapters to queue', async () => {
-      // Set up a session with failed chapters
       batchDownloadOrchestrator.updateSessionMetadata(
         'manga-retry',
         mockMangaTitle,
         mockChapters
       );
 
-      // Start download
       await batchDownloadOrchestrator.startBatchDownload('manga-retry');
 
-      // Simulate failures via event
-      const triggerEvent = (downloadEventEmitter as any).__triggerEvent;
-
-      triggerEvent({
+      // Simulate failures via handleDownloadEvent
+      batchDownloadOrchestrator.handleDownloadEvent({
         type: 'download_failed',
         mangaId: 'manga-retry',
         chapterNumber: '1',
         error: 'Network error',
       });
 
-      triggerEvent({
+      batchDownloadOrchestrator.handleDownloadEvent({
         type: 'download_failed',
         mangaId: 'manga-retry',
         chapterNumber: '2',
         error: 'Timeout',
       });
 
-      // Clear previous queue calls
       mockDownloadQueue.addToQueue.mockClear();
 
-      // Retry failed chapters
       batchDownloadOrchestrator.retryFailedChapters('manga-retry');
 
       expect(mockDownloadQueue.addToQueue).toHaveBeenCalledTimes(2);
@@ -318,7 +291,7 @@ describe('batchDownloadOrchestrator', () => {
     });
   });
 
-  describe('event handling', () => {
+  describe('event handling via handleDownloadEvent', () => {
     it('updates state on download_completed event', async () => {
       batchDownloadOrchestrator.updateSessionMetadata(
         'manga-events',
@@ -331,8 +304,7 @@ describe('batchDownloadOrchestrator', () => {
       const listener = jest.fn();
       batchDownloadOrchestrator.subscribeState('manga-events', listener);
 
-      const triggerEvent = (downloadEventEmitter as any).__triggerEvent;
-      triggerEvent({
+      batchDownloadOrchestrator.handleDownloadEvent({
         type: 'download_completed',
         mangaId: 'manga-events',
         chapterNumber: '1',
@@ -354,8 +326,7 @@ describe('batchDownloadOrchestrator', () => {
       const listener = jest.fn();
       batchDownloadOrchestrator.subscribeState('manga-events-fail', listener);
 
-      const triggerEvent = (downloadEventEmitter as any).__triggerEvent;
-      triggerEvent({
+      batchDownloadOrchestrator.handleDownloadEvent({
         type: 'download_failed',
         mangaId: 'manga-events-fail',
         chapterNumber: '1',
@@ -374,28 +345,22 @@ describe('batchDownloadOrchestrator', () => {
         mockChapters
       );
 
-      // Don't start download - session is idle
-
       const listener = jest.fn();
       batchDownloadOrchestrator.subscribeState('manga-idle', listener);
       listener.mockClear();
 
-      const triggerEvent = (downloadEventEmitter as any).__triggerEvent;
-      triggerEvent({
+      batchDownloadOrchestrator.handleDownloadEvent({
         type: 'download_completed',
         mangaId: 'manga-idle',
         chapterNumber: '1',
       });
 
-      // Listener should not be called for idle session events
       expect(listener).not.toHaveBeenCalled();
     });
 
     it('ignores events for unknown manga', () => {
-      const triggerEvent = (downloadEventEmitter as any).__triggerEvent;
-
       // Should not throw
-      triggerEvent({
+      batchDownloadOrchestrator.handleDownloadEvent({
         type: 'download_completed',
         mangaId: 'unknown-manga',
         chapterNumber: '1',
@@ -406,7 +371,7 @@ describe('batchDownloadOrchestrator', () => {
       batchDownloadOrchestrator.updateSessionMetadata(
         'manga-complete',
         mockMangaTitle,
-        mockChapters.slice(0, 1) // Only 1 chapter
+        mockChapters.slice(0, 1)
       );
 
       await batchDownloadOrchestrator.startBatchDownload('manga-complete');
@@ -414,8 +379,7 @@ describe('batchDownloadOrchestrator', () => {
       const listener = jest.fn();
       batchDownloadOrchestrator.subscribeState('manga-complete', listener);
 
-      const triggerEvent = (downloadEventEmitter as any).__triggerEvent;
-      triggerEvent({
+      batchDownloadOrchestrator.handleDownloadEvent({
         type: 'download_completed',
         mangaId: 'manga-complete',
         chapterNumber: '1',

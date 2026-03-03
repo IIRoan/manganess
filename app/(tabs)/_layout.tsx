@@ -16,7 +16,7 @@ import {
   getDebugTabEnabled,
   isOnboardingCompleted as checkOnboarding,
 } from '@/services/settingsService';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import OnboardingScreen from '../onboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

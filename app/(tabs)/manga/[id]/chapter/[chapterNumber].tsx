@@ -44,9 +44,9 @@ import type { MangaDetails as MangaDetailsType } from '@/types';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import { ChapterImage } from '@/types/download';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors, ColorScheme } from '@/constants/Colors';
-import { useOffline } from '@/contexts/OfflineContext';
+import { useOffline } from '@/hooks/useOffline';
 import CustomWebView from '@/components/CustomWebView';
 import {
   ChapterGuideOverlay,

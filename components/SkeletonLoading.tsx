@@ -6,7 +6,7 @@ import {
   Dimensions,
   ViewStyle,
 } from 'react-native';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 import { ShimmerEffect, ShimmerCard } from './ShimmerEffect';
 

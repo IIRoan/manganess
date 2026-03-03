@@ -1,3 +1,15 @@
+/**
+ * @deprecated FULLY DEPRECATED - Part of Zedux state migration Phase 7 cleanup.
+ * This service is no longer maintained and will be removed once all consumers are migrated.
+ *
+ * Use the Zedux-based offline cache atom and hooks instead:
+ * - `atoms/offlineCacheAtom.ts` for the atom definition
+ * - `atoms/selectors/cacheSelectors.ts` for derived cache selectors
+ * - `hooks/useCachedData.ts` for React hook access
+ *
+ * @see atoms/offlineCacheAtom.ts
+ * @see hooks/useCachedData.ts
+ */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MangaDetails, MangaItem } from '@/types';
 import { logger } from '@/utils/logger';
@@ -26,6 +38,7 @@ export interface CachedHomeData {
   cachedAt: number;
 }
 
+/** @deprecated Use `offlineCacheAtom` and `useCachedData` hook instead. */
 class OfflineCacheService {
   private static instance: OfflineCacheService;
 

@@ -84,4 +84,47 @@ describe('anilistAuthService', () => {
 
     expect(await isAuthenticated()).toBe(false);
   });
+
+  describe('error handling', () => {
+    it('throws error when saveAuthData fails', async () => {
+      jest
+        .spyOn(AsyncStorage, 'setItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      await expect(
+        saveAuthData({ accessToken: 'test', expiresAt: Date.now() + 1000 })
+      ).rejects.toThrow('Storage error');
+    });
+
+    it('returns null when getAuthData fails', async () => {
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await getAuthData();
+      expect(result).toBeNull();
+    });
+
+    it('throws error when clearAuthData fails', async () => {
+      jest
+        .spyOn(AsyncStorage, 'removeItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      await expect(clearAuthData()).rejects.toThrow('Storage error');
+    });
+
+    it('returns false when isAuthenticated encounters an error', async () => {
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
+
+      const result = await isAuthenticated();
+      expect(result).toBe(false);
+    });
+
+    it('returns null when no auth data exists', async () => {
+      const result = await getAuthData();
+      expect(result).toBeNull();
+    });
+  });
 });

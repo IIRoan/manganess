@@ -8,7 +8,10 @@ import {
 } from '@/types/download';
 import { DownloadQueue } from '@/types/downloadInterfaces';
 import { isDebugEnabled } from '@/constants/env';
-import { downloadManagerService } from './downloadManager';
+
+// Lazy import to avoid circular dependency with batchDownloadOrchestrator
+const getOrchestrator = () =>
+  require('./batchDownloadOrchestrator').batchDownloadOrchestrator;
 
 // Queue configuration
 const QUEUE_STORAGE_KEY = 'download_queue';
@@ -55,6 +58,12 @@ class DownloadQueueService implements DownloadQueue {
 
   // Event listeners for queue updates
   private listeners: Set<(status: QueueStatus) => void> = new Set();
+
+  private getDownloadManagerService() {
+    const { downloadManagerService } =
+      require('./downloadManager') as typeof import('./downloadManager');
+    return downloadManagerService;
+  }
 
   private constructor() {
     this.state = {
@@ -303,6 +312,7 @@ class DownloadQueueService implements DownloadQueue {
     // If it's active, we try to cancel it
     const targetId = `${mangaId}_${chapterNumber}`;
     if (this.state.activeDownloads.has(targetId)) {
+      const downloadManagerService = this.getDownloadManagerService();
       await downloadManagerService.cancelDownload(targetId);
       // The cancellation will eventually trigger cleanup, but we can force remove from our map
       this.state.activeDownloads.delete(targetId);
@@ -360,10 +370,24 @@ class DownloadQueueService implements DownloadQueue {
 
     try {
       await this.executeDownload(item);
+
+      // Notify batch orchestrator of successful download
+      getOrchestrator().handleDownloadEvent({
+        type: 'download_completed',
+        mangaId: item.mangaId,
+        chapterNumber: item.chapterNumber,
+      });
     } catch (error) {
       console.error(`Download failed for ${item.id}`, error);
       this.state.activeDownloads.delete(item.id);
-      // Optional: Retry logic? For now, just drop it or maybe add to back with lower priority
+
+      // Notify batch orchestrator of failed download
+      getOrchestrator().handleDownloadEvent({
+        type: 'download_failed',
+        mangaId: item.mangaId,
+        chapterNumber: item.chapterNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       this.state.activeDownloads.delete(item.id);
       this.scheduleSave();
@@ -379,6 +403,7 @@ class DownloadQueueService implements DownloadQueue {
   private async executeDownload(item: DownloadQueueItem): Promise<void> {
     // 1. Request WebView Interception
     const tokens = await this.requestWebViewTokens(item);
+    const downloadManagerService = this.getDownloadManagerService();
 
     // 2. Call DownloadManager
     const result =
@@ -492,14 +517,17 @@ class DownloadQueueService implements DownloadQueue {
     // Or just pausing the whole queue.
     // Current implementation in Manager pauses logic, but here we just update state.
     // Simplest:
+    const downloadManagerService = this.getDownloadManagerService();
     await downloadManagerService.pauseDownload(downloadId);
   }
 
   async resumeDownload(downloadId: string): Promise<void> {
+    const downloadManagerService = this.getDownloadManagerService();
     await downloadManagerService.resumeDownload(downloadId);
   }
 
   async cancelDownload(downloadId: string): Promise<void> {
+    const downloadManagerService = this.getDownloadManagerService();
     await downloadManagerService.cancelDownload(downloadId);
     // Also remove from items if present
     this.state.items = this.state.items.filter((i) => i.id !== downloadId);

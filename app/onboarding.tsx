@@ -10,7 +10,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import { useTheme, Theme } from '@/constants/ThemeContext';
+import { useTheme, Theme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { setOnboardingCompleted } from '@/services/settingsService';

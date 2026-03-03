@@ -7,7 +7,7 @@ import Reanimated, {
   withTiming,
   interpolate,
 } from 'react-native-reanimated';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 
 interface SearchSkeletonProps {
@@ -25,11 +25,7 @@ const SkeletonItem = ({
   const shimmer = useSharedValue(0);
 
   useEffect(() => {
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: 1200 }),
-      -1,
-      false
-    );
+    shimmer.value = withRepeat(withTiming(1, { duration: 1200 }), -1, false);
   }, [shimmer]);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -60,10 +56,7 @@ const SkeletonItem = ({
             ]}
           />
           <View
-            style={[
-              styles.listBadge,
-              { backgroundColor: colors.border },
-            ]}
+            style={[styles.listBadge, { backgroundColor: colors.border }]}
           />
         </View>
       </Reanimated.View>
@@ -72,17 +65,11 @@ const SkeletonItem = ({
 
   return (
     <Reanimated.View
-      style={[
-        styles.gridItem,
-        { backgroundColor: colors.card },
-        animatedStyle,
-      ]}
+      style={[styles.gridItem, { backgroundColor: colors.card }, animatedStyle]}
     >
       <View style={[styles.gridImage, { backgroundColor: colors.border }]} />
       <View style={styles.gridContent}>
-        <View
-          style={[styles.gridTitle, { backgroundColor: colors.border }]}
-        />
+        <View style={[styles.gridTitle, { backgroundColor: colors.border }]} />
         <View
           style={[
             styles.gridTitle,
@@ -107,11 +94,7 @@ export default function SearchSkeleton({
     return (
       <View style={styles.listContainer}>
         {items.map((i) => (
-          <SkeletonItem
-            key={i}
-            layoutMode={layoutMode}
-            colors={colors}
-          />
+          <SkeletonItem key={i} layoutMode={layoutMode} colors={colors} />
         ))}
       </View>
     );
@@ -120,11 +103,7 @@ export default function SearchSkeleton({
   return (
     <View style={styles.gridContainer}>
       {items.map((i) => (
-        <SkeletonItem
-          key={i}
-          layoutMode={layoutMode}
-          colors={colors}
-        />
+        <SkeletonItem key={i} layoutMode={layoutMode} colors={colors} />
       ))}
     </View>
   );

@@ -19,16 +19,16 @@ import {
   ListRenderItemInfo,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getMangaData } from '@/services/bookmarkService';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useTheme } from '@/constants/ThemeContext';
+import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useOffline } from '@/contexts/OfflineContext';
+import { useOffline } from '@/hooks/useOffline';
 import { chapterStorageService } from '@/services/chapterStorageService';
+import { useBookmarks } from '@/hooks/useBookmarks';
 import { BookmarkItem, BookmarkStatus } from '@/types';
 import Animated, {
   useSharedValue,
@@ -76,8 +76,11 @@ const ImagePreloader = ({ urls }: { urls: string[] }) => {
 };
 
 export default function BookmarksScreen() {
-  // Offline context
+  // Offline state from Zedux atom
   const { isOffline } = useOffline();
+
+  // Bookmark state from Zedux atom
+  const { bookmarks: atomBookmarks, refreshBookmarks } = useBookmarks();
 
   // State
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
@@ -200,51 +203,57 @@ export default function BookmarksScreen() {
     []
   );
 
-  // Fetch bookmarks from storage
+  // Fetch bookmarks from atom state, filtering for offline if needed
   const fetchBookmarks = useCallback(async () => {
     setIsLoading(true);
     try {
-      const raw = await AsyncStorage.getItem('bookmarkKeys');
-      const keys = raw ? JSON.parse(raw) : [];
-      const arr = await Promise.all(
-        keys.map(async (key: string) => {
-          const id = key.split('_')[1];
-          if (!id) return null;
-          const d = await getMangaData(id);
-          if (!d) return null;
-
-          // If offline, only show manga that have downloaded chapters
-          if (isOffline) {
-            try {
-              const downloadedChapters =
-                await chapterStorageService.getDownloadedChapters(id);
-              if (downloadedChapters.length === 0) {
-                return null; // Skip manga with no downloaded chapters when offline
-              }
-            } catch {
-              return null; // Skip if we can't check downloaded chapters
-            }
-          }
-
-          return {
-            id: d.id,
-            title: d.title,
-            status: (d.bookmarkStatus as BookmarkStatus) || 'Reading',
-            lastReadChapter: d.lastReadChapter
-              ? `Chapter ${d.lastReadChapter}`
-              : 'Not started',
-            imageUrl: d.bannerImage || '',
-            lastUpdated: d.lastUpdated ?? 0,
-          } as BookmarkItem;
-        })
-      );
-      setBookmarks(arr.filter((x): x is BookmarkItem => x != null));
+      // Refresh from storage to ensure we have latest data
+      await refreshBookmarks();
     } catch (e) {
       console.error('Failed to fetch bookmarks:', e);
     } finally {
       setIsLoading(false);
     }
-  }, [isOffline]);
+  }, [refreshBookmarks]);
+
+  // Convert atom bookmarks to BookmarkItem format, filtering for offline
+  useEffect(() => {
+    const convertBookmarks = async () => {
+      let items = atomBookmarks;
+
+      // If offline, filter to only manga with downloaded chapters
+      if (isOffline) {
+        const filtered = await Promise.all(
+          items.map(async (d) => {
+            try {
+              const downloadedChapters =
+                await chapterStorageService.getDownloadedChapters(d.id);
+              if (downloadedChapters.length === 0) return null;
+            } catch {
+              return null;
+            }
+            return d;
+          })
+        );
+        items = filtered.filter((x): x is (typeof items)[number] => x !== null);
+      }
+
+      const bookmarkItems: BookmarkItem[] = items.map((d) => ({
+        id: d.id,
+        title: d.title,
+        status: (d.bookmarkStatus as BookmarkStatus) || 'Reading',
+        lastReadChapter: d.lastReadChapter
+          ? `Chapter ${d.lastReadChapter}`
+          : 'Not started',
+        imageUrl: d.bannerImage || '',
+        lastUpdated: d.lastUpdated ?? 0,
+      }));
+
+      setBookmarks(bookmarkItems);
+    };
+
+    convertBookmarks();
+  }, [atomBookmarks, isOffline]);
 
   // Refresh bookmarks when offline status changes
   React.useEffect(() => {
@@ -262,13 +271,13 @@ export default function BookmarksScreen() {
       const checkForChanges = async () => {
         const changed = await AsyncStorage.getItem('bookmarkChanged');
         if (changed === 'true') {
-          await fetchBookmarks();
+          await refreshBookmarks();
           await AsyncStorage.setItem('bookmarkChanged', 'false');
         }
       };
 
       checkForChanges();
-    }, [fetchBookmarks])
+    }, [refreshBookmarks])
   );
 
   // Animated styles
