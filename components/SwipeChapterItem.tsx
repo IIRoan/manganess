@@ -1,21 +1,40 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  Dimensions,
-  Animated,
   ActivityIndicator,
-  InteractionManager,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Swipeable } from 'react-native-gesture-handler';
+import Swipeable, {
+  type SwipeableMethods,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Reanimated, {
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation,
+  type SharedValue,
+} from 'react-native-reanimated';
 import DownloadButton from './DownloadButton';
 import { useDownloadStatus } from '@/hooks/useDownloadStatus';
+import { stripChapterPrefix } from '@/utils/stripChapterPrefix';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SWIPE_ACTION_WIDTH = SCREEN_WIDTH * 0.3; // 30% of screen width
+// Constants
+const SWIPE_ACTION_WIDTH = 80;
+const SWIPE_THRESHOLD = 20; // Lower threshold for easier opening
+const SWIPE_FRICTION = 2; // Higher friction for smoother feel
+const SWIPE_OVERSHOOT_FRICTION = 8;
 
+/**
+ * Chapter data structure
+ */
 interface Chapter {
   number: string;
   title: string;
@@ -23,6 +42,9 @@ interface Chapter {
   url: string;
 }
 
+/**
+ * Props for SwipeableChapterItem component
+ */
 interface SwipeableChapterItemProps {
   chapter: Chapter;
   isRead: boolean;
@@ -36,8 +58,8 @@ interface SwipeableChapterItemProps {
   onUnread: () => void;
   colors: any;
   styles: any;
-  getCurrentlyOpenSwipeable: () => Swipeable | null;
-  setCurrentlyOpenSwipeable: (swipeable: Swipeable | null) => void;
+  getCurrentlyOpenSwipeable: () => SwipeableMethods | null;
+  setCurrentlyOpenSwipeable: (swipeable: SwipeableMethods | null) => void;
   mangaId?: string;
   showDownloadButton?: boolean;
   onDownloadStart?: () => void;
@@ -46,6 +68,139 @@ interface SwipeableChapterItemProps {
   onDeleteDownload?: () => void;
 }
 
+/**
+ * Animated swipe action button component
+ * Slides in from the right when swiping
+ */
+const SwipeActionButton = React.memo(
+  ({
+    progress,
+    backgroundColor,
+    buttonWidth,
+    onPress,
+    icon,
+    label,
+  }: {
+    progress: SharedValue<number>;
+    backgroundColor: string;
+    buttonWidth: number;
+    onPress: () => void;
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+  }) => {
+    const animStyle = useAnimatedStyle(() => ({
+      transform: [
+        {
+          translateX: interpolate(
+            progress.value,
+            [0, 1],
+            [buttonWidth, 0],
+            Extrapolation.CLAMP
+          ),
+        },
+      ],
+    }));
+
+    return (
+      <Reanimated.View style={animStyle}>
+        <TouchableOpacity
+          onPress={onPress}
+          activeOpacity={0.7}
+          style={[actionBtn.touchable, { backgroundColor, width: buttonWidth }]}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+        >
+          <Ionicons name={icon} size={22} color="#fff" />
+        </TouchableOpacity>
+      </Reanimated.View>
+    );
+  }
+);
+SwipeActionButton.displayName = 'SwipeActionButton';
+
+/**
+ * Animated download action button component
+ * Wraps DownloadButton with swipe animation
+ */
+const DownloadActionButton = React.memo(
+  ({
+    progress,
+    backgroundColor,
+    buttonWidth,
+    mangaId,
+    chapter,
+    disabled,
+    onDownloadStart,
+    onDownloadComplete,
+    onDownloadError,
+  }: {
+    progress: SharedValue<number>;
+    backgroundColor: string;
+    buttonWidth: number;
+    mangaId: string;
+    chapter: Chapter;
+    disabled: boolean;
+    onDownloadStart: () => void;
+    onDownloadComplete: () => void;
+    onDownloadError: (error: string) => void;
+  }) => {
+    const animStyle = useAnimatedStyle(() => ({
+      transform: [
+        {
+          translateX: interpolate(
+            progress.value,
+            [0, 1],
+            [buttonWidth, 0],
+            Extrapolation.CLAMP
+          ),
+        },
+      ],
+    }));
+
+    return (
+      <Reanimated.View style={animStyle}>
+        <View
+          style={[actionBtn.touchable, { backgroundColor, width: buttonWidth }]}
+        >
+          <DownloadButton
+            mangaId={mangaId}
+            chapterNumber={chapter.number}
+            chapterUrl={chapter.url}
+            size="medium"
+            variant="icon"
+            appearance="swipe"
+            disabled={disabled}
+            onDownloadStart={onDownloadStart}
+            onDownloadComplete={onDownloadComplete}
+            onDownloadError={onDownloadError}
+            style={{ width: '100%', height: '100%' }}
+          />
+        </View>
+      </Reanimated.View>
+    );
+  }
+);
+DownloadActionButton.displayName = 'DownloadActionButton';
+
+const actionBtn = StyleSheet.create({
+  touchable: {
+    minHeight: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+});
+
+/**
+ * SwipeableChapterItem - A chapter list item with swipe actions
+ *
+ * Features:
+ * - Swipe right to reveal actions (download, delete, mark unread)
+ * - Visual indicators for read status, download status, and last read
+ * - Smooth animations and haptic feedback
+ * - Accessibility support
+ * - Optimized with React.memo for performance
+ */
 const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   chapter,
   isRead,
@@ -58,7 +213,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   onLongPress,
   onUnread,
   colors,
-  styles,
+  styles: _parentStyles,
   getCurrentlyOpenSwipeable,
   setCurrentlyOpenSwipeable,
   mangaId,
@@ -68,11 +223,10 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   onDownloadError,
   onDeleteDownload,
 }) => {
-  const swipeableRef = useRef<Swipeable>(null);
+  const swipeableRef = useRef<SwipeableMethods | null>(null);
   const isSwipingRef = useRef(false);
   const [isStartingDownload, setIsStartingDownload] = useState(false);
 
-  // Get unified download status
   const downloadStatus = useDownloadStatus({
     mangaId: mangaId || '',
     chapterNumber: chapter.number,
@@ -89,176 +243,213 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     !resolvedIsDownloaded && (isStartingDownload || resolvedIsDownloading);
 
   useEffect(() => {
-    if (resolvedIsDownloaded) {
-      setIsStartingDownload(false);
-    }
+    if (resolvedIsDownloaded) setIsStartingDownload(false);
   }, [resolvedIsDownloaded]);
 
-  const runAfterSwipeClose = useCallback(
-    (callback: () => void) => {
-      if (getCurrentlyOpenSwipeable() === swipeableRef.current) {
-        setCurrentlyOpenSwipeable(null);
-      }
-      isSwipingRef.current = false;
-      swipeableRef.current?.close();
-      InteractionManager.runAfterInteractions(callback);
-    },
-    [getCurrentlyOpenSwipeable, setCurrentlyOpenSwipeable]
-  );
-
-  const closeSwipeableSafely = useCallback(() => {
-    if (getCurrentlyOpenSwipeable() === swipeableRef.current) {
+  const closeSelf = useCallback(() => {
+    const current = getCurrentlyOpenSwipeable();
+    if (current === swipeableRef.current) {
       setCurrentlyOpenSwipeable(null);
     }
     isSwipingRef.current = false;
     swipeableRef.current?.close();
   }, [getCurrentlyOpenSwipeable, setCurrentlyOpenSwipeable]);
 
-  const renderRightActions = (
-    _progress: Animated.AnimatedAddition<number>,
-    dragX: Animated.AnimatedAddition<number>
-  ) => {
-    const showDownloadAction =
-      showDownloadButton && mangaId && !resolvedIsDownloaded;
-    const showDeleteAction =
-      resolvedIsDownloaded && typeof onDeleteDownload === 'function';
+  const renderRightActions = useCallback(
+    (progress: SharedValue<number>, _drag: SharedValue<number>) => {
+      const canDownload =
+        showDownloadButton && mangaId && !resolvedIsDownloaded;
+      const canDelete =
+        resolvedIsDownloaded && typeof onDeleteDownload === 'function';
+      const canMarkUnread = isRead;
+      const count =
+        (canDownload ? 1 : 0) + (canDelete ? 1 : 0) + (canMarkUnread ? 1 : 0);
 
-    const actionCount =
-      (showDownloadAction ? 1 : 0) +
-      (showDeleteAction ? 1 : 0) +
-      (isRead ? 1 : 0);
+      if (count === 0) return null;
 
-    if (actionCount === 0) {
-      return null;
-    }
+      const buttonWidth = SWIPE_ACTION_WIDTH;
 
-    const actionWidth = Math.max(
-      actionCount * SWIPE_ACTION_WIDTH,
-      SWIPE_ACTION_WIDTH
-    );
-
-    const trans = dragX.interpolate({
-      inputRange: [-actionWidth, 0],
-      outputRange: [0, actionWidth],
-      extrapolate: 'clamp',
-    });
-
-    return (
-      <View style={[styles.rightAction, { width: actionWidth }]}>
-        <Animated.View
-          style={[
-            styles.actionContainer,
-            {
-              transform: [{ translateX: trans }],
-              width: actionWidth,
-              flexDirection: 'row',
-            },
-          ]}
-        >
-          {showDownloadAction ? (
-            <View
-              style={[
-                styles.actionButton,
-                styles.swipeDownloadWrapper,
-                { backgroundColor: colors.primary },
-              ]}
-            >
-              <DownloadButton
-                mangaId={mangaId}
-                chapterNumber={chapter.number}
-                chapterUrl={chapter.url}
-                size="medium"
-                variant="full"
-                appearance="swipe"
-                disabled={
-                  resolvedIsDownloaded || resolvedIsDownloading
-                }
-                onDownloadStart={() => {
-                  setIsStartingDownload(true);
-                  closeSwipeableSafely();
-                  onDownloadStart?.();
-                }}
-                onDownloadComplete={() => {
-                  setIsStartingDownload(false);
-                  runAfterSwipeClose(() => {
-                    onDownloadComplete?.();
-                  });
-                }}
-                onDownloadError={(error) => {
-                  setIsStartingDownload(false);
-                  runAfterSwipeClose(() => {
-                    onDownloadError?.(error);
-                  });
-                }}
-                style={styles.swipeDownloadButton}
-              />
-            </View>
-          ) : null}
-
-          {showDeleteAction ? (
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                {
-                  backgroundColor: colors.error,
-                },
-              ]}
-              onPress={() => {
-                runAfterSwipeClose(() => {
-                  onDeleteDownload?.();
-                  downloadStatus.refresh().catch(() => {});
-                });
+      return (
+        <View style={s.actionsRow}>
+          {canDownload && (
+            <DownloadActionButton
+              progress={progress}
+              backgroundColor={colors.primary}
+              mangaId={mangaId!}
+              chapter={chapter}
+              disabled={resolvedIsDownloaded || resolvedIsDownloading}
+              buttonWidth={buttonWidth}
+              onDownloadStart={() => {
+                setIsStartingDownload(true);
+                closeSelf();
+                onDownloadStart?.();
               }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={18} color="white" />
-              <Text style={styles.actionText}>Delete</Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {/* Unread Action */}
-          {isRead && (
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                {
-                  backgroundColor: colors.notification,
-                },
-              ]}
+              onDownloadComplete={() => {
+                setIsStartingDownload(false);
+                closeSelf();
+                onDownloadComplete?.();
+              }}
+              onDownloadError={(error) => {
+                setIsStartingDownload(false);
+                closeSelf();
+                onDownloadError?.(error);
+              }}
+            />
+          )}
+          {canDelete && (
+            <SwipeActionButton
+              progress={progress}
+              backgroundColor={colors.error}
+              buttonWidth={buttonWidth}
               onPress={() => {
-                closeSwipeableSafely();
+                closeSelf();
+                onDeleteDownload?.();
+                downloadStatus.refresh().catch(() => {});
+              }}
+              icon="trash-outline"
+              label="Delete"
+            />
+          )}
+          {canMarkUnread && (
+            <SwipeActionButton
+              progress={progress}
+              backgroundColor={colors.notification}
+              buttonWidth={buttonWidth}
+              onPress={() => {
+                closeSelf();
                 onUnread();
               }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="refresh" size={18} color="white" />
-              <Text style={styles.actionText}>Unread</Text>
-            </TouchableOpacity>
+              icon="eye-off-outline"
+              label="Mark as unread"
+            />
           )}
-        </Animated.View>
-      </View>
-    );
-  };
+        </View>
+      );
+    },
+    [
+      showDownloadButton,
+      mangaId,
+      resolvedIsDownloaded,
+      resolvedIsDownloading,
+      onDeleteDownload,
+      isRead,
+      colors.primary,
+      colors.error,
+      colors.notification,
+      chapter,
+      closeSelf,
+      onDownloadStart,
+      onDownloadComplete,
+      onDownloadError,
+      onUnread,
+      downloadStatus,
+    ]
+  );
+
+  const handlePress = useCallback(() => {
+    const current = getCurrentlyOpenSwipeable();
+    if (current) {
+      // If there's an open swipeable, close it but don't navigate
+      current.close();
+      setCurrentlyOpenSwipeable(null);
+      return;
+    }
+    // Only navigate if nothing is open and we're not swiping
+    if (!isSwipingRef.current) {
+      onPress();
+    }
+  }, [getCurrentlyOpenSwipeable, setCurrentlyOpenSwipeable, onPress]);
+
+  const handleLongPress = useCallback(() => {
+    const current = getCurrentlyOpenSwipeable();
+    if (current) {
+      // If there's an open swipeable, close it but don't trigger long press
+      current.close();
+      setCurrentlyOpenSwipeable(null);
+      return;
+    }
+    // Only trigger long press if nothing is open and we're not swiping
+    if (!isSwipingRef.current) {
+      onLongPress();
+    }
+  }, [getCurrentlyOpenSwipeable, setCurrentlyOpenSwipeable, onLongPress]);
+
+  const chapterNum = chapter.number;
+  const displayTitle = useMemo(
+    () => stripChapterPrefix(chapter.title, chapterNum),
+    [chapter.title, chapterNum]
+  );
+
+  const statusIcons = useMemo(() => {
+    const icons: React.ReactNode[] = [];
+
+    if (showTopDownloading) {
+      icons.push(
+        <View
+          key="downloading"
+          style={[s.statusChip, { backgroundColor: colors.primary + '18' }]}
+        >
+          <ActivityIndicator size={12} color={colors.primary} />
+        </View>
+      );
+    } else if (resolvedIsDownloaded) {
+      icons.push(
+        <View
+          key="downloaded"
+          style={[s.statusChip, { backgroundColor: colors.primary + '18' }]}
+        >
+          <Ionicons name="cloud-done" size={13} color={colors.primary} />
+        </View>
+      );
+    }
+
+    if (isRead) {
+      icons.push(
+        <View
+          key="read"
+          style={[s.statusChip, { backgroundColor: colors.primary + '15' }]}
+        >
+          <Ionicons name="checkmark" size={13} color={colors.primary} />
+        </View>
+      );
+    }
+
+    return icons;
+  }, [showTopDownloading, resolvedIsDownloaded, isRead, colors.primary]);
 
   return (
     <Swipeable
+      ref={swipeableRef}
       renderRightActions={renderRightActions}
-      rightThreshold={showDownloadButton && mangaId ? 60 : 40}
-      friction={2}
+      rightThreshold={SWIPE_THRESHOLD}
+      friction={SWIPE_FRICTION}
+      overshootFriction={SWIPE_OVERSHOOT_FRICTION}
+      overshootRight={false}
+      overshootLeft={false}
+      enableTrackpadTwoFingerGesture={false}
+      activeOffsetX={[-10, 10]}
+      failOffsetY={[-5, 5]}
+      containerStyle={[
+        s.swipeContainer,
+        {
+          borderBottomColor: colors.border + '30',
+          backgroundColor: colors.background,
+        },
+        isLastItem && s.lastItem,
+      ]}
+      childrenContainerStyle={s.childrenContainer}
       onSwipeableWillOpen={() => {
         isSwipingRef.current = true;
+        const current = getCurrentlyOpenSwipeable();
+        if (current && current !== swipeableRef.current) {
+          current.close();
+        }
+      }}
+      onSwipeableOpen={() => {
+        setCurrentlyOpenSwipeable(swipeableRef.current);
       }}
       onSwipeableWillClose={() => {
         isSwipingRef.current = false;
-      }}
-      onSwipeableOpen={(direction) => {
-        if (direction === 'right') {
-          const currentlyOpenSwipeable = getCurrentlyOpenSwipeable();
-          if (currentlyOpenSwipeable && currentlyOpenSwipeable !== swipeableRef.current) {
-            currentlyOpenSwipeable.close();
-          }
-          setCurrentlyOpenSwipeable(swipeableRef.current);
-        }
       }}
       onSwipeableClose={() => {
         isSwipingRef.current = false;
@@ -266,93 +457,195 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
           setCurrentlyOpenSwipeable(null);
         }
       }}
-      ref={swipeableRef}
     >
-      <TouchableOpacity
-        style={[
-          styles.chapterItem,
-          isRead && styles.readChapterItem,
-          isCurrentlyLastRead && styles.currentlyLastReadItem,
-          isLastItem && styles.lastChapterItem,
-        ]}
-        onPress={() => {
-          const currentlyOpenSwipeable = getCurrentlyOpenSwipeable();
-          if (isSwipingRef.current || currentlyOpenSwipeable) {
-            if (currentlyOpenSwipeable) {
-              currentlyOpenSwipeable.close();
-            }
-            return;
+      <View style={[s.cardContent, { backgroundColor: colors.card }]}>
+        <TouchableOpacity
+          onPress={handlePress}
+          onLongPress={handleLongPress}
+          activeOpacity={0.65}
+          style={[s.card, { backgroundColor: colors.card }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Chapter ${chapterNum}${displayTitle ? `: ${displayTitle}` : ''}`}
+          accessibilityHint={
+            isRead
+              ? 'Read chapter. Long press for options'
+              : 'Unread chapter. Tap to read, long press for options'
           }
-          onPress();
-        }}
-        onLongPress={() => {
-          const currentlyOpenSwipeable = getCurrentlyOpenSwipeable();
-          if (isSwipingRef.current || currentlyOpenSwipeable) {
-            if (currentlyOpenSwipeable) {
-              currentlyOpenSwipeable.close();
-            }
-            return;
-          }
-          onLongPress();
-        }}
-        activeOpacity={0.7}
-      >
-        <View style={styles.chapterContent}>
-          <View style={styles.chapterInfo}>
+          accessibilityState={{
+            selected: isCurrentlyLastRead,
+            disabled: false,
+          }}
+        >
+          {/* Last read indicator - subtle dot */}
+          {isCurrentlyLastRead && (
+            <View
+              style={[s.lastReadDot, { backgroundColor: colors.primary }]}
+            />
+          )}
+
+          {/* Chapter number as leading text */}
+          <View style={s.chapterNumberContainer}>
             <Text
-              style={[styles.chapterTitle, isRead && styles.readChapterTitle]}
+              style={[
+                s.chapterNumber,
+                {
+                  color: isCurrentlyLastRead
+                    ? colors.primary
+                    : isRead
+                      ? colors.tabIconDefault
+                      : colors.text,
+                },
+              ]}
               numberOfLines={1}
             >
-              {chapter.title}
+              #{chapterNum}
             </Text>
-            <Text style={styles.chapterDate}>{chapter.date}</Text>
           </View>
-          <View style={styles.chapterActions}>
-            {showTopDownloading || resolvedIsDownloaded ? (
-              <View style={styles.downloadStatusSlot}>
-                {showTopDownloading ? (
-                  <ActivityIndicator size={16} color={colors.primary} />
-                ) : (
-                  <Ionicons
-                    name="cloud-done-outline"
-                    size={18}
-                    color={colors.primary}
-                  />
-                )}
-              </View>
-            ) : null}
-            {isRead && (
-              <Ionicons
-                name="checkmark-circle"
-                size={20}
-                color={colors.primary}
-                style={[
-                  styles.readIndicator,
-                  showTopDownloading || resolvedIsDownloaded
-                    ? styles.readIndicatorOffset
-                    : undefined,
-                ]}
-              />
+
+          <View style={s.textBlock}>
+            {displayTitle != null ? (
+              <>
+                <Text
+                  style={[
+                    s.title,
+                    { color: isRead ? colors.tabIconDefault : colors.text },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {displayTitle}
+                </Text>
+                <Text style={[s.date, { color: colors.tabIconDefault }]}>
+                  {chapter.date}
+                </Text>
+              </>
+            ) : (
+              <Text style={[s.date, { color: colors.tabIconDefault }]}>
+                {chapter.date}
+              </Text>
             )}
           </View>
-        </View>
-      </TouchableOpacity>
+
+          {/* Status icons - always visible */}
+          {statusIcons.length > 0 && (
+            <View style={s.statusRow}>{statusIcons}</View>
+          )}
+
+          {/* Chevron indicator */}
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={colors.tabIconDefault}
+            style={s.chevron}
+          />
+        </TouchableOpacity>
+      </View>
     </Swipeable>
   );
 };
 
-export default React.memo(SwipeableChapterItem, (prevProps, nextProps) => {
-  return (
-    prevProps.chapter.number === nextProps.chapter.number &&
-    prevProps.isRead === nextProps.isRead &&
-    prevProps.isLastItem === nextProps.isLastItem &&
-    prevProps.isCurrentlyLastRead === nextProps.isCurrentlyLastRead &&
-    prevProps.useParentDownloadState === nextProps.useParentDownloadState &&
-    prevProps.isDownloaded === nextProps.isDownloaded &&
-    prevProps.isDownloading === nextProps.isDownloading &&
-    prevProps.getCurrentlyOpenSwipeable === nextProps.getCurrentlyOpenSwipeable &&
-    prevProps.mangaId === nextProps.mangaId &&
-    prevProps.colors === nextProps.colors
-  );
+// ─── Styles ──────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  swipeContainer: {
+    marginHorizontal: 14,
+    marginVertical: 0,
+    borderBottomWidth: 1,
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
+  },
+  lastItem: {
+    marginBottom: 8,
+    borderBottomWidth: 0,
+  },
+  childrenContainer: {
+    overflow: 'hidden',
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 64,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 0,
+    gap: 12,
+    position: 'relative',
+    flex: 1,
+  },
+  lastReadDot: {
+    position: 'absolute',
+    left: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  chapterNumberContainer: {
+    flexShrink: 0,
+    minWidth: 50,
+  },
+  chapterNumber: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'],
+  },
+  textBlock: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    minWidth: 0,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+    marginBottom: 2,
+  },
+  date: {
+    fontSize: 12,
+    opacity: 0.7,
+    lineHeight: 16,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  statusChip: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chevron: {
+    opacity: 0.4,
+    flexShrink: 0,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    height: '100%',
+    overflow: 'hidden',
+  },
 });
 
+export default React.memo(
+  SwipeableChapterItem,
+  (prev, next) =>
+    prev.chapter.number === next.chapter.number &&
+    prev.isRead === next.isRead &&
+    prev.isLastItem === next.isLastItem &&
+    prev.isCurrentlyLastRead === next.isCurrentlyLastRead &&
+    prev.useParentDownloadState === next.useParentDownloadState &&
+    prev.isDownloaded === next.isDownloaded &&
+    prev.isDownloading === next.isDownloading &&
+    prev.getCurrentlyOpenSwipeable === next.getCurrentlyOpenSwipeable &&
+    prev.mangaId === next.mangaId &&
+    prev.colors === next.colors
+);

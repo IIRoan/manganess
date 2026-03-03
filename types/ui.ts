@@ -5,11 +5,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TextStyle, ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { ThemeType, BookmarkStatus } from './';
 
 // Define a comprehensive type for all icon names based on Ionicons
 export type IconName = keyof typeof Ionicons.glyphMap;
+
+// Minimal interface for swipeable ref control
+export interface SwipeableRef {
+  close: () => void;
+}
 
 // Make sure Option and AlertOption are consistent
 export interface Option {
@@ -93,8 +97,8 @@ export interface SwipeableChapterItemProps {
   onUnread: () => void;
   colors: any;
   styles: any;
-  currentlyOpenSwipeable: Swipeable | null;
-  setCurrentlyOpenSwipeable: (swipeable: Swipeable | null) => void;
+  currentlyOpenSwipeable: SwipeableRef | null;
+  setCurrentlyOpenSwipeable: (swipeable: SwipeableRef | null) => void;
 }
 
 export interface CustomAlertProps {
