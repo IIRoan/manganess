@@ -82,25 +82,6 @@ jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
 }));
 
-jest.mock('react-native-reanimated', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { View, FlatList } = require('react-native');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Reanimated = require('react-native-reanimated/mock');
-
-  Reanimated.default.View = View;
-  Reanimated.default.FlatList = FlatList;
-
-  return {
-    ...Reanimated,
-    FadeInDown: {
-      delay: () => ({
-        springify: () => ({}),
-      }),
-    },
-  };
-});
-
 jest.mock('@/components/MangaCard', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { TouchableOpacity, Text, View } = require('react-native');

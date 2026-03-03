@@ -3,13 +3,6 @@ import { render, fireEvent } from '@testing-library/react-native';
 import SwipeableChapterItem from '../SwipeChapterItem';
 import { Colors } from '@/constants/Colors';
 
-// Mock Reanimated
-jest.mock('react-native-reanimated', () => {
-  const Reanimated = require('react-native-reanimated/mock');
-  Reanimated.default.call = () => {};
-  return Reanimated;
-});
-
 // Mock gesture handler
 jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
   const { View } = require('react-native');
