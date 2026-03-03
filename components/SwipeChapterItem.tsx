@@ -427,8 +427,6 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
       overshootRight={false}
       overshootLeft={false}
       enableTrackpadTwoFingerGesture={false}
-      activeOffsetX={[-10, 10]}
-      failOffsetY={[-5, 5]}
       containerStyle={[
         s.swipeContainer,
         {
