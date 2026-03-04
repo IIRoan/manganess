@@ -69,6 +69,9 @@ import type {
   BookmarkStatus,
   Chapter,
 } from '@/types';
+import ChapterListSkeleton, {
+  ChapterItemPlaceholder,
+} from '@/components/ChapterListSkeleton';
 import BatchDownloadBar from '@/components/BatchDownloadBar';
 import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
@@ -1200,31 +1203,57 @@ export default function MangaDetailScreen() {
                 />
               </TouchableOpacity>
             </View>
-            <AnimatedFlashList
-              ref={flashListRef}
-              removeClippedSubviews={true}
-              drawDistance={250}
-              estimatedItemSize={65}
-              ListHeaderComponent={ListHeader}
-              data={mangaDetails.chapters}
-              extraData={[
-                readChapters,
-                lastReadChapter,
-                downloadedChapters,
-                downloadingChapters,
-              ]}
-              keyExtractor={(item: any, index: number) =>
-                `chapter-${item.number}-${index}`
-              }
-              renderItem={renderChapterItem}
-              ListFooterComponent={
-                <View style={{ height: 120, backgroundColor: colors.card }} />
-              }
-              onScroll={scrollHandler}
-              scrollEventThrottle={16}
-              bounces={false}
-              overScrollMode="never"
-            />
+            <View style={{ flex: 1 }}>
+              {/* Skeleton background layer - visible through blank FlashList cells during fast scroll */}
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: colors.card,
+                }}
+              >
+                <ChapterListSkeleton count={20} />
+              </View>
+
+              <AnimatedFlashList
+                ref={flashListRef}
+                drawDistance={2000}
+                estimatedItemSize={65}
+                overrideItemLayout={(layout: any) => {
+                  layout.size = 65;
+                }}
+                getItemType={() => 'chapter'}
+                ListHeaderComponent={ListHeader}
+                data={mangaDetails.chapters}
+                extraData={[
+                  readChapters,
+                  lastReadChapter,
+                  downloadedChapters,
+                  downloadingChapters,
+                ]}
+                keyExtractor={(item: any, index: number) =>
+                  `chapter-${item.number}-${index}`
+                }
+                renderItem={
+                  mangaDetails.chapters.length === 0
+                    ? () => <ChapterItemPlaceholder colors={colors} />
+                    : renderChapterItem
+                }
+                ListEmptyComponent={<ChapterListSkeleton count={15} />}
+                ListFooterComponent={
+                  <View
+                    style={{ height: 120, backgroundColor: colors.card }}
+                  />
+                }
+                onScroll={scrollHandler}
+                scrollEventThrottle={16}
+                bounces={false}
+                overScrollMode="never"
+              />
+            </View>
 
             {/* Smart Scroll FAB */}
             <Reanimated.View
