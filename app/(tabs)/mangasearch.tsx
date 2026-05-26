@@ -17,8 +17,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
-import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import {
+  Stack,
+  useLocalSearchParams,
+  useRouter,
+  useFocusEffect,
+} from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AlertComponent from '@/components/Alert';
 import MangaCard from '@/components/MangaCard';
 import SearchSkeleton from '@/components/SearchSkeleton';
 import { Colors } from '@/constants/Colors';
@@ -45,8 +51,10 @@ import { logger } from '@/utils/logger';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import { useOffline } from '@/hooks/useOffline';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import { replaceBookmark } from '@/services/bookmarkService';
 import { getDefaultLayout } from '@/services/settingsService';
 import { hapticFeedback } from '@/utils/haptics';
+import { useToast } from '@/hooks/useToast';
 import type { WebViewMessageEvent } from 'react-native-webview';
 
 /* Type Definitions */
@@ -68,6 +76,15 @@ export default function MangaSearchScreen() {
   );
   const insets = useSafeAreaInsets();
   const { isOffline } = useOffline();
+  const {
+    query: initialQueryParam,
+    replacementSourceId,
+    replacementSourceTitle,
+  } = useLocalSearchParams<{
+    query?: string;
+    replacementSourceId?: string;
+    replacementSourceTitle?: string;
+  }>();
 
   // Router and Input Ref
   const router = useRouter();
@@ -104,6 +121,16 @@ export default function MangaSearchScreen() {
   const [showHistory, setShowHistory] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const hasLoadedHistoryRef = useRef(false);
+  const [replacementCandidate, setReplacementCandidate] =
+    useState<MangaItem | null>(null);
+  const [isReplacementAlertVisible, setIsReplacementAlertVisible] =
+    useState(false);
+  const { showToast } = useToast();
+  const normalizedReplacementSourceId =
+    typeof replacementSourceId === 'string' ? replacementSourceId : '';
+  const normalizedReplacementSourceTitle =
+    typeof replacementSourceTitle === 'string' ? replacementSourceTitle : '';
+  const isReplacementMode = normalizedReplacementSourceId.length > 0;
 
   // Load layout setting and search history on mount (not on focus to avoid re-animations)
   useEffect(() => {
@@ -120,6 +147,20 @@ export default function MangaSearchScreen() {
     };
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    const initialQuery =
+      typeof initialQueryParam === 'string' ? initialQueryParam.trim() : '';
+
+    if (!initialQuery) {
+      return;
+    }
+
+    setSearchQuery((current) =>
+      current === initialQuery ? current : initialQuery
+    );
+    setShowHistory(false);
+  }, [initialQueryParam]);
 
   // Refresh layout on focus (but not history to avoid re-animation)
   useFocusEffect(
@@ -296,13 +337,74 @@ export default function MangaSearchScreen() {
   // Handle manga item press
   const handleMangaPress = useCallback(
     (item: MangaItem) => {
+      if (isReplacementMode) {
+        setReplacementCandidate(item);
+        setIsReplacementAlertVisible(true);
+        return;
+      }
+
       router.navigate({
         pathname: '/manga/[id]',
         params: { id: item.id, title: item.title, bannerImage: item.banner },
       });
     },
-    [router]
+    [isReplacementMode, router]
   );
+
+  const handleConfirmReplacement = useCallback(async () => {
+    if (!replacementCandidate || !normalizedReplacementSourceId) {
+      return;
+    }
+
+    try {
+      await replaceBookmark(normalizedReplacementSourceId, {
+        id: replacementCandidate.id,
+        title: replacementCandidate.title,
+        bannerImage: replacementCandidate.banner,
+      });
+
+      const shortSourceTitle =
+        normalizedReplacementSourceTitle.length > 24
+          ? normalizedReplacementSourceTitle.slice(0, 24) + '...'
+          : normalizedReplacementSourceTitle;
+
+      showToast({
+        message: shortSourceTitle
+          ? `${shortSourceTitle} replaced successfully`
+          : 'Bookmark replaced successfully',
+        icon: 'swap-horizontal',
+        type: 'success',
+      });
+
+      router.navigate({
+        pathname: '/manga/[id]',
+        params: {
+          id: replacementCandidate.id,
+          title: replacementCandidate.title,
+          bannerImage: replacementCandidate.banner,
+        },
+      });
+    } catch (error) {
+      logger().error('Storage', 'Failed to replace missing bookmark', {
+        sourceId: normalizedReplacementSourceId,
+        replacementId: replacementCandidate.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      showToast({
+        message: 'Failed to replace bookmark',
+        type: 'error',
+      });
+    } finally {
+      setIsReplacementAlertVisible(false);
+      setReplacementCandidate(null);
+    }
+  }, [
+    normalizedReplacementSourceId,
+    normalizedReplacementSourceTitle,
+    replacementCandidate,
+    router,
+    showToast,
+  ]);
 
   // Handle history item press
   const handleHistoryItemPress = useCallback((query: string) => {
@@ -788,6 +890,19 @@ export default function MangaSearchScreen() {
               </TouchableOpacity>
             )}
           </View>
+          {isReplacementMode ? (
+            <View style={styles.replacementBanner}>
+              <Ionicons
+                name="refresh-circle-outline"
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={styles.replacementBannerText}>
+                Replacing &quot;{normalizedReplacementSourceTitle}&quot;.
+                Select the correct result to move its bookmark progress over.
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -826,6 +941,37 @@ export default function MangaSearchScreen() {
           />
         )}
       </View>
+
+      <AlertComponent
+        visible={isReplacementAlertVisible}
+        title="Replace missing bookmark"
+        onClose={() => {
+          setIsReplacementAlertVisible(false);
+          setReplacementCandidate(null);
+        }}
+        {...(replacementCandidate
+          ? {
+              message: `Replace "${normalizedReplacementSourceTitle}" with "${replacementCandidate.title}" and move the saved bookmark progress over?`,
+            }
+          : {})}
+        options={[
+          {
+            text: 'Cancel',
+            onPress: () => {
+              setIsReplacementAlertVisible(false);
+              setReplacementCandidate(null);
+            },
+          },
+          {
+            text: 'Replace Bookmark',
+            icon: 'swap-horizontal',
+            onPress: () => {
+              handleConfirmReplacement().catch(() => {});
+            },
+          },
+        ]}
+        type="confirm"
+      />
     </SafeAreaView>
   );
 }
@@ -892,6 +1038,25 @@ const getStyles = (
     },
     searchLoader: {
       marginRight: 4,
+    },
+    replacementBanner: {
+      marginTop: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: colors.primary + '12',
+      borderWidth: 1,
+      borderColor: colors.primary + '26',
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+    },
+    replacementBannerText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.text,
+      fontWeight: '500',
     },
     loadingContainer: {
       flex: 1,

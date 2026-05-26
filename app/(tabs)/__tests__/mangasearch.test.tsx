@@ -16,9 +16,12 @@ import { offlineCacheService } from '@/services/offlineCacheService';
 
 // Mock router
 const mockRouterNavigate = jest.fn();
+const mockShowToast = jest.fn();
+let mockSearchParams: Record<string, string> = {};
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockRouterNavigate }),
+  useLocalSearchParams: () => mockSearchParams,
   Stack: { Screen: () => null },
   useFocusEffect: jest.fn((cb) => {
     cb();
@@ -62,6 +65,10 @@ jest.mock('@/services/offlineCacheService', () => ({
   },
 }));
 
+jest.mock('@/services/bookmarkService', () => ({
+  replaceBookmark: jest.fn(),
+}));
+
 // Mock offline hook
 let mockIsOffline = false;
 jest.mock('@/hooks/useOffline', () => ({
@@ -103,11 +110,41 @@ jest.mock('@/components/SearchSkeleton', () => 'SearchSkeleton');
 
 jest.mock('@/components/CustomWebView', () => 'CustomWebView');
 
+jest.mock('@/components/Alert', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { View, Text, TouchableOpacity } = require('react-native');
+  return function MockAlert({ visible, title, message, options = [] }: any) {
+    if (!visible) return null;
+    return (
+      <View testID="search-replacement-alert">
+        <Text>{title}</Text>
+        {message ? <Text>{message}</Text> : null}
+        {options.map((option: any, index: number) => (
+          <TouchableOpacity
+            key={`${option.text}-${index}`}
+            onPress={option.onPress}
+          >
+            <Text>{option.text}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+});
+
 jest.mock('@/utils/haptics', () => ({
   hapticFeedback: {
     onSelection: jest.fn(),
     onPress: jest.fn(),
   },
+}));
+
+jest.mock('@/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: mockShowToast,
+    isVisible: false,
+    config: null,
+  }),
 }));
 
 jest.mock('@/utils/logger', () => ({
@@ -129,7 +166,9 @@ describe('MangaSearchScreen', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     mockIsOffline = false;
+    mockSearchParams = {};
     mockRouterNavigate.mockClear();
+    mockShowToast.mockClear();
 
     (getSearchHistory as jest.Mock).mockResolvedValue([]);
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
@@ -163,6 +202,28 @@ describe('MangaSearchScreen', () => {
     });
 
     expect(getByPlaceholderText('Search by title, author...')).toBeTruthy();
+  });
+
+  it('preloads the query and shows replacement guidance when opened from a missing bookmark', async () => {
+    mockSearchParams = {
+      query: 'Removed Manga',
+      replacementSourceId: 'old-id',
+      replacementSourceTitle: 'Removed Manga',
+    };
+
+    const { getByPlaceholderText, getByText } = renderScreen();
+
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    await waitFor(() => {
+      expect(getByText('Replacing "Removed Manga". Select the correct result to move its bookmark progress over.')).toBeTruthy();
+    });
+
+    expect(getByPlaceholderText('Search by title, author...').props.value).toBe(
+      'Removed Manga'
+    );
   });
 
   it('shows empty state when no search query', async () => {

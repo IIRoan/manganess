@@ -26,6 +26,8 @@ import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
 import { isExpoGo, isDevelopment } from '@/services/updateService';
+import { setMangaData } from '@/services/bookmarkService';
+import type { MangaData } from '@/types';
 
 // Environment detection helpers
 const getExecutionEnvironment = (): string => {
@@ -683,6 +685,28 @@ export default function DebugScreen() {
     });
   };
 
+  const addMissingSoloLevelingBookmark = async () => {
+    const debugBookmark: MangaData = {
+      id: 'solo-leveling-missing-debug',
+      title: 'Solo Leveling',
+      bannerImage: '',
+      bookmarkStatus: 'Reading',
+      readChapters: ['1', '2'],
+      lastReadChapter: '2',
+      lastNotifiedChapter: '2',
+      lastUpdated: Date.now(),
+    };
+
+    await setMangaData(debugBookmark);
+
+    showAlertWithConfig({
+      title: 'Test Bookmark Added',
+      message:
+        'A missing "Solo Leveling" bookmark was added to your library with sample reading progress so you can test the replacement flow from Bookmarks.',
+      options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -1122,6 +1146,16 @@ export default function DebugScreen() {
           <TouchableOpacity style={styles.option} onPress={showOnboarding}>
             <Ionicons name="play-outline" size={24} color={colors.text} />
             <Text style={styles.optionText}>Show Onboarding</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.option}
+            onPress={addMissingSoloLevelingBookmark}
+          >
+            <Ionicons name="bug-outline" size={24} color={colors.text} />
+            <Text style={styles.optionText}>
+              Add Missing Solo Leveling Bookmark
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.option} onPress={resetChapterGuide}>

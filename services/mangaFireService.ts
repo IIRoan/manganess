@@ -78,6 +78,31 @@ const USER_AGENT =
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
 
+const MISSING_PAGE_PATTERNS = [
+  /<title>\s*(404|page not found|not found)/i,
+  /status\s*code\s*404/i,
+  /page\s+not\s+found/i,
+  /the\s+page\s+you\s+requested\s+cannot\s+be\s+found/i,
+  /this\s+page\s+(does\s+not\s+exist|was\s+removed|could\s+not\s+be\s+found)/i,
+  /we\s+couldn(?:'|’)t\s+find\s+that\s+page/i,
+];
+
+const hasStrongMangaDetailsMarkers = (html: string): boolean => {
+  if (!html) {
+    return false;
+  }
+
+  const details = parseMangaDetails(html);
+  return (
+    details.title !== 'Unknown Title' ||
+    details.chapters.length > 0 ||
+    details.bannerImage.length > 0
+  );
+};
+
+const isMissingPageHtml = (html: string): boolean =>
+  MISSING_PAGE_PATTERNS.some((pattern) => pattern.test(html));
+
 export const normalizeChapterNumber = (
   value: string | null | undefined
 ): string => {
@@ -308,6 +333,63 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
       chapterCount: details.chapters?.length ?? 0,
     });
   return details;
+};
+
+export type MangaAvailabilityStatus = 'exists' | 'missing' | 'unknown';
+
+export const checkMangaAvailability = async (
+  id: string
+): Promise<MangaAvailabilityStatus> => {
+  if (!id || id.trim().length === 0) {
+    throw new Error('Manga ID is required');
+  }
+
+  const normalizedId = id.trim();
+  const log = logger();
+
+  try {
+    const response = await axios.get(`${MANGA_API_URL}/manga/${normalizedId}`, {
+      headers: {
+        'User-Agent': USER_AGENT,
+      },
+      timeout: 12000,
+      validateStatus: (status) => (status >= 200 && status < 300) || status === 404,
+    });
+
+    if (response.status === 404) {
+      return 'missing';
+    }
+
+    if (!response.data || typeof response.data !== 'string') {
+      return 'unknown';
+    }
+
+    const html = response.data as string;
+    if (isCloudflareHtml(html)) {
+      return 'unknown';
+    }
+
+    if (hasStrongMangaDetailsMarkers(html)) {
+      return 'exists';
+    }
+
+    const responseUrl = response.request?.responseURL;
+    const redirectedAway =
+      typeof responseUrl === 'string' &&
+      !responseUrl.toLowerCase().includes(`/manga/${normalizedId.toLowerCase()}`);
+
+    if (isMissingPageHtml(html) || redirectedAway) {
+      return 'missing';
+    }
+
+    return 'unknown';
+  } catch (error) {
+    log.warn('Network', 'Failed to validate manga availability', {
+      mangaId: normalizedId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 'unknown';
+  }
 };
 
 const parseMangaDetails = (html: string): MangaDetails => {
