@@ -10,6 +10,7 @@ import { chapterStorageService } from '@/services/chapterStorageService';
 
 // Mock router with trackable push function
 const mockRouterPush = jest.fn();
+const mockCheckMangaAvailability = jest.fn().mockResolvedValue('exists');
 
 // Mock all dependencies
 jest.mock('@react-navigation/native', () => ({
@@ -27,6 +28,10 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
 }));
 
+jest.mock('@/services/mangaFireService', () => ({
+  checkMangaAvailability: (...args: any[]) => mockCheckMangaAvailability(...args),
+}));
+
 jest.mock('@/services/chapterStorageService', () => ({
   chapterStorageService: {
     getDownloadedChapters: jest.fn(),
@@ -41,6 +46,28 @@ jest.mock('@/services/settingsService', () => ({
 jest.mock('@/services/CacheImages', () => ({
   imageCache: { getCachedImagePath: jest.fn() },
 }));
+
+jest.mock('@/components/Alert', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { View, Text, TouchableOpacity } = require('react-native');
+  return function MockAlert({ visible, title, message, options = [] }: any) {
+    if (!visible) return null;
+    return (
+      <View testID="bookmark-missing-alert">
+        <Text>{title}</Text>
+        {message ? <Text>{message}</Text> : null}
+        {options.map((option: any, index: number) => (
+          <TouchableOpacity
+            key={`${option.text}-${index}`}
+            onPress={option.onPress}
+          >
+            <Text>{option.text}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+});
 
 // Mock offline hook with controllable state
 let mockIsOffline = false;
@@ -116,6 +143,7 @@ describe('BookmarksScreen', () => {
     jest.useFakeTimers();
     mockIsOffline = false;
     mockRouterPush.mockClear();
+    mockCheckMangaAvailability.mockResolvedValue('exists');
 
     // Default mock setup - provide bookmark data via atom mock
     mockAtomBookmarks = [
@@ -1167,6 +1195,61 @@ describe('BookmarksScreen', () => {
     });
 
     expect(mockRouterPush).toHaveBeenCalledWith('/manga/1');
+  });
+
+  it('shows a missing overlay for bookmarks that no longer exist', async () => {
+    mockCheckMangaAvailability.mockResolvedValue('missing');
+
+    const { getByTestId, queryByText } = renderScreen();
+
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    await waitFor(() => {
+      expect(queryByText('Loading...')).toBeNull();
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('missing-bookmark-overlay-1')).toBeTruthy();
+    });
+  });
+
+  it('opens replacement search for missing bookmarks instead of navigating directly', async () => {
+    mockAtomBookmarks = [
+      {
+        id: 'old-id',
+        title: 'Removed Manga',
+        bookmarkStatus: 'Reading',
+        lastReadChapter: '5',
+        bannerImage: 'removed.jpg',
+        lastUpdated: 100,
+        readChapters: [],
+      },
+    ];
+    mockCheckMangaAvailability.mockResolvedValue('missing');
+
+    const { getAllByTestId, getByText, queryByText } = renderScreen();
+
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    await waitFor(() => {
+      expect(queryByText('Loading...')).toBeNull();
+    });
+
+    fireEvent.press(getAllByTestId('manga-card-press-old-id')[0]);
+
+    await waitFor(() => {
+      expect(getByText('Bookmark source missing')).toBeTruthy();
+    });
+
+    fireEvent.press(getByText('Search & Replace'));
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      '/mangasearch?query=Removed%20Manga&replacementSourceId=old-id&replacementSourceTitle=Removed%20Manga'
+    );
   });
 
   it('renders list view correctly and verifies manga card exists', async () => {

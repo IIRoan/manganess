@@ -8,6 +8,7 @@ import {
   CloudflareDetectedError,
   normalizeChapterNumber,
   fetchMangaDetails,
+  checkMangaAvailability,
   getChapterUrl,
   markChapterAsRead,
   getBookmarkStatus,
@@ -322,6 +323,44 @@ describe('mangaFireService', () => {
       expect(details.title).toBe('Unknown Title');
       expect(details.description).toBe('No description available');
       expect(details.chapters).toEqual([]);
+    });
+  });
+
+  describe('checkMangaAvailability', () => {
+    it('returns missing when the source responds with 404', async () => {
+      mockedAxios.get.mockResolvedValue({
+        status: 404,
+        data: '<html><title>404</title></html>',
+      });
+
+      await expect(checkMangaAvailability('missing-manga')).resolves.toBe(
+        'missing'
+      );
+    });
+
+    it('returns exists when the page contains manga detail markers', async () => {
+      mockedAxios.get.mockResolvedValue({
+        status: 200,
+        data: `
+          <h1 itemprop="name">Existing Manga</h1>
+          <div class="poster"><img src="https://image.jpg" itemprop="image"></div>
+        `,
+        request: {
+          responseURL: 'https://mangafire.to/manga/existing-manga',
+        },
+      });
+
+      await expect(checkMangaAvailability('existing-manga')).resolves.toBe(
+        'exists'
+      );
+    });
+
+    it('returns unknown for transient request failures', async () => {
+      mockedAxios.get.mockRejectedValue(new Error('Network timeout'));
+
+      await expect(checkMangaAvailability('maybe-manga')).resolves.toBe(
+        'unknown'
+      );
     });
   });
 

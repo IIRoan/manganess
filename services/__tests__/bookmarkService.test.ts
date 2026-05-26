@@ -6,6 +6,7 @@ import {
   fetchBookmarkStatus,
   saveBookmark,
   removeBookmark,
+  replaceBookmark,
   getBookmarkPopupConfig,
   getChapterLongPressAlertConfig,
   updateDownloadStatus,
@@ -135,6 +136,55 @@ describe('bookmarkService', () => {
 
       const status = await fetchBookmarkStatus('noStatus');
       expect(status).toBeNull();
+    });
+  });
+
+  describe('replaceBookmark', () => {
+    it('moves bookmark progress and status to the replacement manga', async () => {
+      await AsyncStorage.setItem(
+        'manga_old-id',
+        JSON.stringify({
+          id: 'old-id',
+          title: 'Old Manga',
+          bannerImage: 'old.jpg',
+          bookmarkStatus: 'Reading',
+          readChapters: ['1', '2', '3'],
+          lastReadChapter: '3',
+          lastNotifiedChapter: '3',
+          lastUpdated: 100,
+          totalChapters: 20,
+        })
+      );
+      await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(['bookmark_old-id']));
+
+      const replaced = await replaceBookmark('old-id', {
+        id: 'new-id',
+        title: 'New Manga',
+        bannerImage: 'new.jpg',
+        totalChapters: 40,
+      });
+
+      expect(replaced).toMatchObject({
+        id: 'new-id',
+        title: 'New Manga',
+        bannerImage: 'new.jpg',
+        bookmarkStatus: 'Reading',
+        readChapters: ['1', '2', '3'],
+        lastReadChapter: '3',
+        lastNotifiedChapter: '3',
+        totalChapters: 40,
+      });
+      expect(await AsyncStorage.getItem('manga_old-id')).toBeNull();
+      expect(JSON.parse((await AsyncStorage.getItem('manga_new-id')) || '{}')).toMatchObject({
+        id: 'new-id',
+        bookmarkStatus: 'Reading',
+        readChapters: ['1', '2', '3'],
+        lastReadChapter: '3',
+      });
+      expect(JSON.parse((await AsyncStorage.getItem('bookmarkKeys')) || '[]')).toEqual([
+        'bookmark_new-id',
+      ]);
+      expect(await AsyncStorage.getItem('bookmarkChanged')).toBe('true');
     });
   });
 

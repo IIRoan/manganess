@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'html-entities';
 import { Alert } from 'react-native';
 import { offlineCacheService } from './offlineCacheService';
+import { logger } from '@/utils/logger';
 import {
   BookmarkStatus,
   MangaData,
@@ -33,6 +34,60 @@ const MANGA_STORAGE_PREFIX = 'manga_';
 
 const getAniListService = () =>
   require('./anilistService') as typeof import('./anilistService');
+
+const BOOKMARK_KEYS_KEY = 'bookmarkKeys';
+const BOOKMARK_CHANGED_KEY = 'bookmarkChanged';
+
+const getNumericChapterValue = (chapter?: string): number | null => {
+  if (!chapter) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(String(chapter));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveLastReadChapter = (
+  sourceLastReadChapter?: string,
+  targetLastReadChapter?: string,
+  readChapters: string[] = []
+): string | undefined => {
+  const explicitChapters = [sourceLastReadChapter, targetLastReadChapter].filter(
+    (chapter): chapter is string => Boolean(chapter)
+  );
+
+  const explicitValues = explicitChapters
+    .map((chapter) => ({
+      chapter,
+      value: getNumericChapterValue(chapter),
+    }))
+    .filter(
+      (entry): entry is { chapter: string; value: number } =>
+        entry.value !== null
+    );
+
+  if (explicitValues.length > 0) {
+    explicitValues.sort((left, right) => right.value - left.value);
+    return explicitValues[0]?.chapter;
+  }
+
+  if (explicitChapters.length > 0) {
+    return explicitChapters[0];
+  }
+
+  const chapterValues = readChapters
+    .map((chapter) => ({
+      chapter,
+      value: getNumericChapterValue(chapter),
+    }))
+    .filter(
+      (entry): entry is { chapter: string; value: number } =>
+        entry.value !== null
+    )
+    .sort((left, right) => right.value - left.value);
+
+  return chapterValues[0]?.chapter;
+};
 
 const updateAniListStatusForBookmark = async (
   mangaTitle: string,
@@ -61,14 +116,14 @@ export const setMangaData = async (data: MangaData): Promise<void> => {
       JSON.stringify(data)
     );
     // Update bookmarkKeys for backwards compatibility and listing
-    const keys = await AsyncStorage.getItem('bookmarkKeys');
+    const keys = await AsyncStorage.getItem(BOOKMARK_KEYS_KEY);
     const bookmarkKeys = keys ? JSON.parse(keys) : [];
     if (data.bookmarkStatus && !bookmarkKeys.includes(`bookmark_${data.id}`)) {
       bookmarkKeys.push(`bookmark_${data.id}`);
-      await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(bookmarkKeys));
+      await AsyncStorage.setItem(BOOKMARK_KEYS_KEY, JSON.stringify(bookmarkKeys));
     }
     // Set the bookmark changed flag
-    await AsyncStorage.setItem('bookmarkChanged', 'true');
+    await AsyncStorage.setItem(BOOKMARK_CHANGED_KEY, 'true');
   } catch (e) {
     console.error('Error saving manga data:', e);
   }
@@ -222,13 +277,13 @@ export const removeBookmark = async (
   try {
     await AsyncStorage.removeItem(`${MANGA_STORAGE_PREFIX}${id}`);
 
-    const keys = await AsyncStorage.getItem('bookmarkKeys');
+    const keys = await AsyncStorage.getItem(BOOKMARK_KEYS_KEY);
     if (keys) {
       const bookmarkKeys = JSON.parse(keys);
       const updatedKeys = bookmarkKeys.filter(
         (key: string) => key !== `bookmark_${id}`
       );
-      await AsyncStorage.setItem('bookmarkKeys', JSON.stringify(updatedKeys));
+      await AsyncStorage.setItem(BOOKMARK_KEYS_KEY, JSON.stringify(updatedKeys));
     }
 
     // Update offline cache to mark as not bookmarked
@@ -236,10 +291,110 @@ export const removeBookmark = async (
 
     setBookmarkStatus(null);
     setIsAlertVisible(false);
-    await AsyncStorage.setItem('bookmarkChanged', 'true');
+    await AsyncStorage.setItem(BOOKMARK_CHANGED_KEY, 'true');
   } catch (error) {
     console.error('Error removing bookmark:', error);
   }
+};
+
+export const replaceBookmark = async (
+  sourceId: string,
+  replacement: {
+    id: string;
+    title: string;
+    bannerImage: string;
+    totalChapters?: number;
+  }
+): Promise<MangaData> => {
+  if (!sourceId || !replacement.id) {
+    throw new Error('Both source and replacement manga IDs are required');
+  }
+
+  const log = logger();
+  const normalizedSourceId = sourceId.trim();
+  const normalizedTargetId = replacement.id.trim();
+
+  const [sourceManga, targetManga, rawKeys] = await Promise.all([
+    getMangaData(normalizedSourceId),
+    getMangaData(normalizedTargetId),
+    AsyncStorage.getItem(BOOKMARK_KEYS_KEY),
+  ]);
+
+  if (!sourceManga) {
+    throw new Error('Original bookmark could not be found');
+  }
+
+  const mergedReadChapters = Array.from(
+    new Set([...(targetManga?.readChapters ?? []), ...(sourceManga.readChapters ?? [])])
+  );
+  const nextLastReadChapter = resolveLastReadChapter(
+    sourceManga.lastReadChapter,
+    targetManga?.lastReadChapter,
+    mergedReadChapters
+  );
+  const nextLastNotifiedChapter =
+    sourceManga.lastNotifiedChapter ?? targetManga?.lastNotifiedChapter;
+  const nextTotalChapters =
+    replacement.totalChapters ??
+    targetManga?.totalChapters ??
+    sourceManga.totalChapters;
+
+  const nextBookmark: MangaData = {
+    ...targetManga,
+    id: normalizedTargetId,
+    title: replacement.title,
+    bannerImage:
+      replacement.bannerImage ||
+      targetManga?.bannerImage ||
+      sourceManga.bannerImage ||
+      '',
+    bookmarkStatus:
+      sourceManga.bookmarkStatus ?? targetManga?.bookmarkStatus ?? null,
+    readChapters: mergedReadChapters,
+    lastUpdated: Date.now(),
+    ...(nextLastReadChapter ? { lastReadChapter: nextLastReadChapter } : {}),
+    ...(nextLastNotifiedChapter
+      ? { lastNotifiedChapter: nextLastNotifiedChapter }
+      : {}),
+    ...(nextTotalChapters !== undefined
+      ? { totalChapters: nextTotalChapters }
+      : {}),
+  };
+
+  await AsyncStorage.setItem(
+    `${MANGA_STORAGE_PREFIX}${normalizedTargetId}`,
+    JSON.stringify(nextBookmark)
+  );
+
+  if (normalizedSourceId !== normalizedTargetId) {
+    await AsyncStorage.removeItem(`${MANGA_STORAGE_PREFIX}${normalizedSourceId}`);
+  }
+
+  const existingKeys: string[] = rawKeys ? JSON.parse(rawKeys) : [];
+  const updatedKeys = Array.from(
+    new Set([
+      ...existingKeys.filter((key) => key !== `bookmark_${normalizedSourceId}`),
+      `bookmark_${normalizedTargetId}`,
+    ])
+  );
+
+  await AsyncStorage.setItem(BOOKMARK_KEYS_KEY, JSON.stringify(updatedKeys));
+  await AsyncStorage.setItem(BOOKMARK_CHANGED_KEY, 'true');
+
+  try {
+    if (normalizedSourceId !== normalizedTargetId) {
+      await offlineCacheService.updateMangaBookmarkStatus(normalizedSourceId, false);
+    }
+    await offlineCacheService.updateMangaBookmarkStatus(normalizedTargetId, true);
+  } catch (error) {
+    log.warn('Storage', 'Failed to sync offline bookmark cache during replacement', {
+      sourceId: normalizedSourceId,
+      targetId: normalizedTargetId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return nextBookmark;
 };
 
 export const getBookmarkPopupConfig = (
