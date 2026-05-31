@@ -78,12 +78,17 @@ const ImagePreloader = ({ urls }: { urls: string[] }) => {
   return null;
 };
 
+const AVAILABILITY_CHECK_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 export default function BookmarksScreen() {
   // Offline state from Zedux atom
   const { isOffline } = useOffline();
 
   // Bookmark state from Zedux atom
   const { bookmarks: atomBookmarks, refreshBookmarks } = useBookmarks();
+
+  // Tracks when bookmarks were last validated so we don't hammer the network on every focus
+  const lastAvailabilityCheckRef = useRef<number>(0);
 
   // State
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
@@ -266,7 +271,9 @@ export default function BookmarksScreen() {
   }, [atomBookmarks, isOffline]);
 
   useEffect(() => {
-    const activeBookmarkIds = new Set(atomBookmarks.map((bookmark) => bookmark.id));
+    const activeBookmarkIds = new Set(
+      atomBookmarks.map((bookmark) => bookmark.id)
+    );
     setBookmarkAvailability((previous) =>
       Object.fromEntries(
         Object.entries(previous).filter(([bookmarkId]) =>
@@ -309,6 +316,15 @@ export default function BookmarksScreen() {
         if (isOffline || atomBookmarks.length === 0) {
           return;
         }
+
+        const now = Date.now();
+        if (
+          now - lastAvailabilityCheckRef.current <
+          AVAILABILITY_CHECK_TTL_MS
+        ) {
+          return;
+        }
+        lastAvailabilityCheckRef.current = now;
 
         const results = await Promise.all(
           atomBookmarks.map(async (bookmark) => ({
@@ -625,7 +641,9 @@ export default function BookmarksScreen() {
                     size={22}
                     color={colors.card}
                   />
-                  <Text style={styles.missingOverlayTitle}>Listing missing</Text>
+                  <Text style={styles.missingOverlayTitle}>
+                    Listing missing
+                  </Text>
                   <Text style={styles.missingOverlaySubtitle}>
                     Tap to search and replace
                   </Text>
