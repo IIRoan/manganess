@@ -30,7 +30,6 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "expo-image",
       "expo-sharing"
     ],
     "experiments": {
