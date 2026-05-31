@@ -58,7 +58,7 @@ export async function getAppSettings(): Promise<AppSettings> {
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
-      defaultLayout: 'grid',
+      defaultLayout: 'list',
       downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
     };
   } catch (error) {
@@ -68,7 +68,7 @@ export async function getAppSettings(): Promise<AppSettings> {
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
-      defaultLayout: 'grid',
+      defaultLayout: 'list',
       downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
     };
   }
