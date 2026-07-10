@@ -14,6 +14,23 @@ const getStyles = (colors: typeof Colors.light) =>
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: colors.card,
+      paddingHorizontal: 24,
+    },
+    migrationStatusContainer: {
+      marginTop: 20,
+      gap: 8,
+    },
+    migrationStatusTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.text,
+      textAlign: 'center',
+    },
+    migrationStatusMessage: {
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.secondaryText,
+      textAlign: 'center',
     },
     errorContainer: {
       flex: 1,

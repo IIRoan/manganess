@@ -14,8 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MangaItem } from '@/services/mangaFireService';
-import { MANGA_API_URL } from '@/constants/Config';
-import axios from 'axios';
+import { fetchTitlesByGenre } from '@/services/mangaFireApi';
 import { router } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
 import { logger } from '@/utils/logger';
@@ -94,51 +93,14 @@ export default function GenresScreen() {
   const fetchGenreManga = async (genre: Genre, isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const response = await axios.get(`${MANGA_API_URL}/genre/${genre.slug}`, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
-        },
-        timeout: 10000,
-      });
-
-      if (response.data && typeof response.data === 'string') {
-        const html = response.data as string;
-        const mangaItems = parseGenreManga(html);
-        setMangaList(mangaItems);
-      } else {
-        setMangaList([]);
-      }
+      const mangaItems = await fetchTitlesByGenre(genre.slug);
+      setMangaList(mangaItems);
     } catch (error) {
       logger().error('Service', 'Error fetching genre manga', { error });
       setMangaList([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const parseGenreManga = (html: string): MangaItem[] => {
-    const mangaRegex =
-      /<div class="unit item-\d+">.*?<a href="(\/manga\/[^"]+)".*?<img src="([^"]+)".*?<span class="type">([^<]+)<\/span>.*?<a href="\/manga\/[^"]+">([^<]+)<\/a>/gs;
-    const matches = [...html.matchAll(mangaRegex)];
-
-    return matches
-      .map((match) => {
-        const link = match[1];
-        const id = link?.split('/').pop() || '';
-        const imageUrl = match[2];
-
-        return {
-          id,
-          link: `${MANGA_API_URL}${link}`,
-          title: match[4]?.trim() || '',
-          banner: imageUrl || '',
-          imageUrl: imageUrl || '',
-          type: match[3]?.trim() || '',
-        };
-      })
-      .filter((item) => item.id && item.title)
-      .slice(0, 20);
   };
 
   const handleGenreSelect = (genre: Genre) => {

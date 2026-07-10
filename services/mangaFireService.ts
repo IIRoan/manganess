@@ -2,6 +2,17 @@ import axios from 'axios';
 import { decode } from 'html-entities';
 import { MANGA_API_URL } from '@/constants/Config';
 import {
+  searchTitles,
+  fetchTitleDetails,
+  fetchTitleChapters,
+  mapApiTitleToMangaDetails,
+  fetchChapterPageUrls,
+  resolveChapterApiId,
+  extractChapterIdFromUrl,
+  parseLegacyChapterUrl,
+  titleExists,
+} from '@/services/mangaFireApi';
+import {
   searchAnilistMangaByName,
   updateMangaStatus,
   isLoggedInToAniList,
@@ -11,6 +22,8 @@ import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
+import type { Chapter } from '@/types/manga';
+import { ChapterImage, ImageDownloadStatus } from '@/types/download';
 
 export class CloudflareDetectedError extends Error {
   html: string;
@@ -19,18 +32,6 @@ export class CloudflareDetectedError extends Error {
     this.name = 'CloudflareDetectedError';
     this.html = html;
   }
-}
-
-function isCloudflareHtml(html: string): boolean {
-  if (!html) return false;
-  const lowered = html.toLowerCase();
-  // Be strict: only treat as Cloudflare challenge when known markers are present
-  return (
-    lowered.includes('cf-browser-verification') ||
-    lowered.includes('cf_captcha_kind') ||
-    lowered.includes('attention required') ||
-    /\bjust a moment\b/.test(lowered)
-  );
 }
 
 /**
@@ -59,6 +60,7 @@ export interface MangaItem {
 }
 
 export interface MangaDetails {
+  id?: string;
   title: string;
   alternativeTitle: string;
   status: string;
@@ -77,31 +79,6 @@ const USER_AGENT =
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
-
-const MISSING_PAGE_PATTERNS = [
-  /<title>\s*(404|page not found|not found)/i,
-  /status\s*code\s*404/i,
-  /page\s+not\s+found/i,
-  /the\s+page\s+you\s+requested\s+cannot\s+be\s+found/i,
-  /this\s+page\s+(does\s+not\s+exist|was\s+removed|could\s+not\s+be\s+found)/i,
-  /we\s+couldn(?:'|’)t\s+find\s+that\s+page/i,
-];
-
-const hasStrongMangaDetailsMarkers = (html: string): boolean => {
-  if (!html) {
-    return false;
-  }
-
-  const details = parseMangaDetails(html);
-  return (
-    details.title !== 'Unknown Title' ||
-    details.chapters.length > 0 ||
-    details.bannerImage.length > 0
-  );
-};
-
-const isMissingPageHtml = (html: string): boolean =>
-  MISSING_PAGE_PATTERNS.some((pattern) => pattern.test(html));
 
 export const normalizeChapterNumber = (
   value: string | null | undefined
@@ -143,15 +120,17 @@ async function retryApiCall<T>(
     } catch (error: any) {
       lastError = error as Error;
 
-      // Don't retry on 403 errors - these indicate stale VRF token
-      // Let the UI handle refreshing the token
-      const is403 = error?.response?.status === 403 ||
-                    error?.message?.includes('403');
-      if (is403) {
-        log.warn('Network', 'Request failed with 403 - VRF token may be stale', {
-          attempt,
-          error: error instanceof Error ? error.message : String(error),
-        });
+      // Don't retry permanent client errors
+      const status = error?.response?.status;
+      const is403 = status === 403 || error?.message?.includes('403');
+      const is404 = status === 404 || error?.message?.includes('404');
+      if (is403 || is404) {
+        if (is403) {
+          log.warn('Network', 'Request failed with 403 - VRF token may be stale', {
+            attempt,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         throw lastError;
       }
 
@@ -190,9 +169,11 @@ export function getVrfToken(): string | null {
   return sessionVrfToken;
 }
 
+export { fetchHomeMangaData, extractChapterIdFromUrl } from '@/services/mangaFireApi';
+
 export const searchManga = async (
   keyword: string,
-  vrfToken?: string
+  _vrfToken?: string
 ): Promise<MangaItem[]> => {
   if (!keyword || keyword.trim().length === 0) {
     throw new Error('Search keyword is required');
@@ -203,47 +184,13 @@ export const searchManga = async (
 
   const result = await performanceMonitor.measureAsync(
     `searchManga:${keyword}`,
-    () =>
-      retryApiCall(async () => {
-        let searchUrl = `${MANGA_API_URL}/filter?keyword=${encodeURIComponent(keyword.trim())}`;
-
-        // Add VRF token if provided or from session store
-        const tokenToUse = vrfToken || sessionVrfToken || '';
-        if (tokenToUse) {
-          searchUrl += `&vrf=${encodeURIComponent(tokenToUse)}`;
-        }
-
-        if (!validateUrl(searchUrl)) {
-          throw new Error('Invalid search URL');
-        }
-
-        const response = await axios.get(searchUrl, {
-          headers: {
-            'User-Agent': USER_AGENT,
-            Accept:
-              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            Referer: MANGA_API_URL,
-          },
-          timeout: 20000,
-        });
-
-        if (!response.data || typeof response.data !== 'string') {
-          throw new Error('Invalid response data');
-        }
-
-        const html = response.data as string;
-        if (isCloudflareHtml(html)) {
-          throw new CloudflareDetectedError(html);
-        }
-        const items = parseSearchResults(html);
-        if (isDebugEnabled())
-          log.info('Service', 'searchManga:parsed', { count: items.length });
-        return items;
-      })
+    () => retryApiCall(() => searchTitles(keyword))
   );
-  if (isDebugEnabled())
+
+  if (isDebugEnabled()) {
     log.info('Service', 'searchManga:done', { keyword, count: result.length });
+  }
+
   return result;
 };
 
@@ -300,38 +247,30 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
   }
 
   const log = logger();
-  if (isDebugEnabled()) log.info('Service', 'fetchMangaDetails:start', { id });
+  const normalizedId = id.trim();
+  if (isDebugEnabled()) {
+    log.info('Service', 'fetchMangaDetails:start', { id: normalizedId });
+  }
+
   const details = await performanceMonitor.measureAsync(
-    `fetchMangaDetails:${id}`,
+    `fetchMangaDetails:${normalizedId}`,
     () =>
       retryApiCall(async () => {
-        const detailsUrl = `${MANGA_API_URL}/manga/${id.trim()}`;
-
-        if (!validateUrl(detailsUrl)) {
-          throw new Error('Invalid manga details URL');
-        }
-
-        const response = await axios.get(detailsUrl, {
-          headers: {
-            'User-Agent': USER_AGENT,
-          },
-          timeout: 15000, // Longer timeout for details page
-        });
-
-        if (!response.data || typeof response.data !== 'string') {
-          throw new Error('Invalid response data');
-        }
-
-        const html = response.data as string;
-        const details = parseMangaDetails(html);
-        return { ...details, id: id.trim() };
+        const [title, chapters] = await Promise.all([
+          fetchTitleDetails(normalizedId),
+          fetchTitleChapters(normalizedId),
+        ]);
+        return mapApiTitleToMangaDetails(title, chapters);
       })
   );
-  if (isDebugEnabled())
+
+  if (isDebugEnabled()) {
     log.info('Service', 'fetchMangaDetails:done', {
-      id,
+      id: normalizedId,
       chapterCount: details.chapters?.length ?? 0,
     });
+  }
+
   return details;
 };
 
@@ -348,41 +287,8 @@ export const checkMangaAvailability = async (
   const log = logger();
 
   try {
-    const response = await axios.get(`${MANGA_API_URL}/manga/${normalizedId}`, {
-      headers: {
-        'User-Agent': USER_AGENT,
-      },
-      timeout: 12000,
-      validateStatus: (status) => (status >= 200 && status < 300) || status === 404,
-    });
-
-    if (response.status === 404) {
-      return 'missing';
-    }
-
-    if (!response.data || typeof response.data !== 'string') {
-      return 'unknown';
-    }
-
-    const html = response.data as string;
-    if (isCloudflareHtml(html)) {
-      return 'unknown';
-    }
-
-    if (hasStrongMangaDetailsMarkers(html)) {
-      return 'exists';
-    }
-
-    const responseUrl = response.request?.responseURL;
-    const redirectedAway =
-      typeof responseUrl === 'string' &&
-      !responseUrl.toLowerCase().includes(`/manga/${normalizedId.toLowerCase()}`);
-
-    if (isMissingPageHtml(html) || redirectedAway) {
-      return 'missing';
-    }
-
-    return 'unknown';
+    const exists = await titleExists(normalizedId);
+    return exists ? 'exists' : 'missing';
   } catch (error) {
     log.warn('Network', 'Failed to validate manga availability', {
       mangaId: normalizedId,
@@ -392,7 +298,7 @@ export const checkMangaAvailability = async (
   }
 };
 
-const parseMangaDetails = (html: string): MangaDetails => {
+export const parseMangaDetails = (html: string): MangaDetails => {
   const title = decode(
     html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title'
   );
@@ -538,9 +444,65 @@ const parseMangaDetails = (html: string): MangaDetails => {
 export const getChapterUrl = (id: string, chapterNumber: string): string => {
   const rawChapter = String(chapterNumber ?? '').trim();
   const normalizedNumber = normalizeChapterNumber(rawChapter) || rawChapter;
-  // Website expects chapter URLs with dots preserved (e.g., chapter-1.1, chapter-20.2)
+  // Legacy read URL kept for compatibility; prefer loadOnlineChapterImages for reading.
   return `${MANGA_API_URL}/read/${id}/en/chapter-${normalizedNumber}`;
 };
+
+export function getChapterApiIdFromList(
+  chapters: Chapter[] | undefined,
+  chapterNumber: string
+): string | null {
+  const normalized = normalizeChapterNumber(chapterNumber);
+  if (!normalized || !chapters?.length) {
+    return null;
+  }
+
+  for (const chapter of chapters) {
+    if (normalizeChapterNumber(chapter.number) !== normalized) {
+      continue;
+    }
+
+    const chapterApiId = extractChapterIdFromUrl(chapter.url);
+    if (chapterApiId) {
+      return chapterApiId;
+    }
+  }
+
+  return null;
+}
+
+export async function loadOnlineChapterImages(
+  mangaId: string,
+  chapterNumber: string,
+  chapters?: Chapter[]
+): Promise<ChapterImage[]> {
+  const normalized =
+    normalizeChapterNumber(chapterNumber) || String(chapterNumber ?? '').trim();
+  if (!normalized) {
+    throw new Error('Chapter number is required');
+  }
+
+  let chapterApiId = getChapterApiIdFromList(chapters, normalized);
+  if (!chapterApiId) {
+    chapterApiId = await resolveChapterApiId(mangaId.trim(), normalized);
+  }
+
+  if (!chapterApiId) {
+    throw new Error(`Chapter ${normalized} not found`);
+  }
+
+  const pageUrls = await fetchChapterPageUrls(chapterApiId);
+  if (!pageUrls.length) {
+    throw new Error(`No pages found for chapter ${normalized}`);
+  }
+
+  return pageUrls.map((url, index) => ({
+    pageNumber: index + 1,
+    originalUrl: url,
+    localPath: url,
+    downloadStatus: ImageDownloadStatus.COMPLETED,
+  }));
+}
 export const markChapterAsRead = async (
   id: string,
   chapterNumber: string,
@@ -785,39 +747,33 @@ export const getVrfTokenFromChapterPage = async (
 // Function to fetch chapter images by loading the chapter page in background and then calling the API
 export const fetchChapterImagesFromUrl = async (
   chapterUrl: string,
-  vrfToken?: string
+  _vrfToken?: string
 ): Promise<{ images: string[][]; status: number }> => {
   if (!chapterUrl || chapterUrl.trim().length === 0) {
     throw new Error('Chapter URL is required');
   }
 
   const log = logger();
-  if (isDebugEnabled())
+  if (isDebugEnabled()) {
     log.info('Service', 'fetchChapterImagesFromUrl:start', { chapterUrl });
+  }
 
   try {
-    // Step 1: Get VRF token if not provided
-    let finalVrfToken = vrfToken || sessionVrfToken;
+    let chapterId = extractChapterIdFromUrl(chapterUrl);
 
-    if (!finalVrfToken) {
-      if (isDebugEnabled()) {
-        log.info(
-          'Service',
-          'No VRF token provided, extracting from chapter page',
-          {
-            chapterUrl,
-          }
+    if (!chapterId) {
+      const legacy = parseLegacyChapterUrl(chapterUrl);
+      if (legacy) {
+        chapterId = await resolveChapterApiId(
+          legacy.titleKey,
+          legacy.chapterNumber
         );
-      }
-      finalVrfToken = await getVrfTokenFromChapterPage(chapterUrl);
-
-      if (finalVrfToken) {
-        setVrfToken(finalVrfToken); // Store for future use
       }
     }
 
-    // Step 2: Load the chapter page to get the chapter ID
-    const chapterId = await getChapterIdFromPage(chapterUrl);
+    if (!chapterId) {
+      chapterId = await getChapterIdFromPage(chapterUrl);
+    }
 
     if (!chapterId) {
       throw new Error(
@@ -825,26 +781,13 @@ export const fetchChapterImagesFromUrl = async (
       );
     }
 
-    if (isDebugEnabled()) {
-      log.info('Service', 'Successfully extracted chapter ID', {
-        chapterId,
-        chapterUrl,
-      });
-    }
-
-    // Step 3: Now call the API with the extracted chapter ID and VRF token
-    const result = await fetchChapterImages(
-      chapterId,
-      finalVrfToken || undefined,
-      chapterUrl
-    );
+    const result = await fetchChapterImages(chapterId, undefined, chapterUrl);
 
     if (isDebugEnabled()) {
       log.info('Service', 'fetchChapterImagesFromUrl:success', {
         chapterUrl,
         chapterId,
         imageCount: result.images.length,
-        hasVrfToken: !!finalVrfToken,
       });
     }
 
@@ -861,116 +804,26 @@ export const fetchChapterImagesFromUrl = async (
 // New function to fetch chapter images using the MangaFire API
 export const fetchChapterImages = async (
   chapterId: string,
-  vrfToken?: string,
-  refererUrl?: string
+  _vrfToken?: string,
+  _refererUrl?: string
 ): Promise<{ images: string[][]; status: number }> => {
   if (!chapterId || chapterId.trim().length === 0) {
     throw new Error('Chapter ID is required');
   }
 
   const log = logger();
-  if (isDebugEnabled())
+  if (isDebugEnabled()) {
     log.info('Service', 'fetchChapterImages:start', { chapterId });
+  }
 
   const result = await performanceMonitor.measureAsync(
     `fetchChapterImages:${chapterId}`,
     () =>
       retryApiCall(async () => {
-        let apiUrl = `${MANGA_API_URL}/ajax/read/chapter/${chapterId.trim()}`;
-
-        // Add VRF token if provided or from session store
-        const tokenToUse = vrfToken || sessionVrfToken || '';
-        if (tokenToUse) {
-          apiUrl += `?vrf=${encodeURIComponent(tokenToUse)}`;
-        }
-
-        if (isDebugEnabled()) {
-          log.info('Service', 'Making chapter API request', {
-            chapterId,
-            apiUrl,
-            hasVrfToken: !!tokenToUse,
-          });
-        }
-
-        if (!validateUrl(apiUrl)) {
-          throw new Error('Invalid chapter API URL');
-        }
-
-        const response = await axios.get(apiUrl, {
-          headers: {
-            Accept: 'application/json, text/javascript, */*; q=0.01',
-            'Accept-Language': 'en-US,en;q=0.9',
-            Priority: 'u=1, i',
-            Referer: refererUrl
-              ? `${MANGA_API_URL}${refererUrl}`
-              : MANGA_API_URL,
-            'Sec-Ch-Ua':
-              '"Microsoft Edge";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': '"Windows"',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-            'User-Agent': USER_AGENT,
-            'X-Requested-With': 'XMLHttpRequest',
-          },
-          timeout: 20000,
-        });
-
-        if (isDebugEnabled()) {
-          log.info('Service', 'Chapter API response metadata', {
-            status: response.status,
-            dataType: typeof response.data,
-          });
-        }
-
-        if (!response.data) {
-          throw new Error('Invalid response data');
-        }
-
-        const data = response.data;
-
-        if (isDebugEnabled()) {
-          log.info('Service', 'Chapter API response structure', {
-            hasStatus: 'status' in data,
-            status: data.status,
-            hasResult: 'result' in data,
-            hasImages: data.result && 'images' in data.result,
-            imageCount: data.result?.images?.length || 0,
-          });
-        }
-
-        if (data.status !== 200) {
-          throw new Error(
-            `API returned status ${data.status}. Response: ${JSON.stringify(data)}`
-          );
-        }
-
-        if (
-          !data.result ||
-          !data.result.images ||
-          !Array.isArray(data.result.images)
-        ) {
-          throw new Error(
-            `Invalid image data in response. Structure: ${JSON.stringify(data)}`
-          );
-        }
-
-        if (data.result.images.length === 0) {
-          throw new Error('No images found in API response');
-        }
-
-        if (isDebugEnabled()) {
-          log.info('Service', 'fetchChapterImages:success', {
-            chapterId,
-            imageCount: data.result.images.length,
-            firstImageSample: data.result.images[0],
-          });
-        }
-
+        const pageUrls = await fetchChapterPageUrls(chapterId.trim());
         return {
-          images: data.result.images,
-          status: data.status,
+          images: pageUrls.map((url) => [url]),
+          status: 200,
         };
       })
   );
@@ -1022,32 +875,6 @@ export const fetchChapterImagesFromInterceptedRequest = async (
       error: error instanceof Error ? error.message : String(error),
     });
     throw error;
-  }
-};
-
-// Helper function to extract chapter ID from chapter URL
-export const extractChapterIdFromUrl = (chapterUrl: string): string | null => {
-  const log = logger();
-  try {
-    // Extract chapter ID from URLs like: /read/manga-id/en/chapter-123
-    // The chapter ID should be extracted from the actual chapter page HTML or API
-    // For now, we'll need to make a request to get the chapter ID
-    const urlParts = chapterUrl.split('/');
-    const chapterPart = urlParts[urlParts.length - 1]; // e.g., "chapter-123"
-
-    if (chapterPart && chapterPart.startsWith('chapter-')) {
-      // This is a simplified approach - in reality, we need to get the actual chapter ID
-      // from the chapter page HTML or through another API call
-      return null; // Will need to be implemented based on actual chapter page structure
-    }
-
-    return null;
-  } catch (error) {
-    log.error('Service', 'Error extracting chapter ID from URL', {
-      chapterUrl,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
   }
 };
 
@@ -1122,6 +949,26 @@ export const getChapterIdFromPage = async (
 ): Promise<string | null> => {
   const log = logger();
   try {
+    const directId = extractChapterIdFromUrl(chapterUrl);
+    if (directId) {
+      return directId;
+    }
+
+    const legacy = parseLegacyChapterUrl(
+      chapterUrl.startsWith('http')
+        ? chapterUrl.replace(MANGA_API_URL, '')
+        : chapterUrl
+    );
+    if (legacy) {
+      const resolvedChapterId = await resolveChapterApiId(
+        legacy.titleKey,
+        legacy.chapterNumber
+      );
+      if (resolvedChapterId) {
+        return resolvedChapterId;
+      }
+    }
+
     const fullUrl = chapterUrl.startsWith('http')
       ? chapterUrl
       : `${MANGA_API_URL}${chapterUrl}`;

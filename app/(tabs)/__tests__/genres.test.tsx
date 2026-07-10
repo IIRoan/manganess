@@ -62,29 +62,35 @@ const initialMetrics = {
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
 };
 
-// Sample HTML response for genre manga
-const sampleGenreHtml = `
-<div class="unit item-1">
-  <a href="/manga/one-piece.123">
-    <img src="https://example.com/one-piece.jpg" alt="One Piece">
-    <span class="type">Manga</span>
-    <a href="/manga/one-piece.123">One Piece</a>
-  </a>
-</div>
-<div class="unit item-2">
-  <a href="/manga/naruto.456">
-    <img src="https://example.com/naruto.jpg" alt="Naruto">
-    <span class="type">Manga</span>
-    <a href="/manga/naruto.456">Naruto</a>
-  </a>
-</div>
-`;
+// Sample API response for genre manga
+const sampleGenreApiResponse = {
+  items: [
+    {
+      id: 1,
+      hid: '123',
+      slug: 'one-piece',
+      title: 'One Piece',
+      type: 'manga',
+      poster: { medium: 'https://example.com/one-piece.jpg' },
+      url: '/title/one-piece.123',
+    },
+    {
+      id: 2,
+      hid: '456',
+      slug: 'naruto',
+      title: 'Naruto',
+      type: 'manga',
+      poster: { medium: 'https://example.com/naruto.jpg' },
+      url: '/title/naruto.456',
+    },
+  ],
+};
 
 describe('GenresScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockedAxios.get.mockResolvedValue({ data: sampleGenreHtml });
+    mockedAxios.get.mockResolvedValue({ data: sampleGenreApiResponse });
   });
 
   const renderScreen = () =>
@@ -151,8 +157,13 @@ describe('GenresScreen', () => {
 
     await waitFor(() => {
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        expect.stringContaining('/genre/action'),
-        expect.any(Object)
+        'https://mangafire.to/api/titles',
+        expect.objectContaining({
+          params: expect.objectContaining({
+            genres: ['action'],
+            limit: 40,
+          }),
+        })
       );
     });
   });
@@ -218,12 +229,12 @@ describe('GenresScreen', () => {
 
     // Resolve the promise
     await act(async () => {
-      resolvePromise!({ data: sampleGenreHtml });
+      resolvePromise!({ data: sampleGenreApiResponse });
     });
   });
 
   it('shows empty state when no manga found', async () => {
-    mockedAxios.get.mockResolvedValue({ data: '<html></html>' });
+    mockedAxios.get.mockResolvedValue({ data: { items: [] } });
 
     const { getByText } = renderScreen();
 
@@ -293,7 +304,7 @@ describe('GenresScreen', () => {
   });
 
   it('navigates to manga detail when manga card is pressed', async () => {
-    mockedAxios.get.mockResolvedValue({ data: sampleGenreHtml });
+    mockedAxios.get.mockResolvedValue({ data: sampleGenreApiResponse });
 
     const { getByText } = renderScreen();
 

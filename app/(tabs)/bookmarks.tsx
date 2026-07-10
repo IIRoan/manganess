@@ -30,6 +30,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOffline } from '@/hooks/useOffline';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { useBookmarks } from '@/hooks/useBookmarks';
+import { useLibraryRefresh } from '@/hooks/useLibraryRefresh';
 import { BookmarkItem, BookmarkStatus } from '@/types';
 import Animated, {
   useSharedValue,
@@ -300,6 +301,10 @@ export default function BookmarksScreen() {
       checkForChanges();
     }, [refreshBookmarks])
   );
+
+  useLibraryRefresh(() => {
+    void refreshBookmarks();
+  });
 
   useFocusEffect(
     useCallback(() => {

@@ -16,7 +16,6 @@ import { useTheme } from '@/hooks/useTheme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MANGA_API_URL } from '@/constants/Config';
 import MangaCard from '@/components/MangaCard';
 import {
   RecentlyReadSkeleton,
@@ -25,18 +24,15 @@ import {
   FeaturedMangaSkeleton,
 } from '@/components/SkeletonLoading';
 import { PageTransition } from '@/components/PageTransition';
-import {
-  parseMostViewedManga,
-  parseNewReleases,
-} from '@/services/mangaFireService';
+import { fetchHomeMangaData } from '@/services/mangaFireService';
 import { logger } from '@/utils/logger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
-import axios from 'axios';
 import { MangaItem, RecentMangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
 import { useOffline } from '@/hooks/useOffline';
 import { useCachedData } from '@/hooks/useCachedData';
+import { useLibraryRefresh } from '@/hooks/useLibraryRefresh';
 import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -105,36 +101,16 @@ export default function HomeScreen() {
       }
 
       // 2. Fetch fresh data in background
-      const response = await axios.get(`${MANGA_API_URL}/home`, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
-          Accept:
-            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          Referer: MANGA_API_URL,
-        },
-        timeout: 20000,
-      });
-
-      const html = response.data as string;
-
-      if (checkForCloudflare(html, '/(tabs)')) {
-        return;
-      }
-
-      const parsedMostViewed = parseMostViewedManga(html);
-      const parsedNewReleases = parseNewReleases(html);
-      const newFeatured =
-        parsedMostViewed.length > 0 ? parsedMostViewed[0] || null : null;
+      const { mostViewed, newReleases, featuredManga: newFeatured } =
+        await fetchHomeMangaData();
 
       // Update state with fresh data
-      setMostViewedManga(parsedMostViewed);
-      setNewReleases(parsedNewReleases);
+      setMostViewedManga(mostViewed);
+      setNewReleases(newReleases);
       setFeaturedManga(newFeatured);
 
       // Cache the fresh data
-      await cacheHomeData(parsedMostViewed, parsedNewReleases, newFeatured);
+      await cacheHomeData(mostViewed, newReleases, newFeatured);
     } catch (error) {
       logger().error('Service', 'Error fetching manga data', { error });
 
@@ -190,6 +166,10 @@ export default function HomeScreen() {
       fetchRecentlyReadManga(false);
     }, [fetchRecentlyReadManga])
   );
+
+  useLibraryRefresh(() => {
+    void fetchRecentlyReadManga(false);
+  });
 
   const renderSectionTitle = useCallback(
     (title: string, iconName: keyof typeof Ionicons.glyphMap) => (
