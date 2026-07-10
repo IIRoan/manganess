@@ -47,6 +47,20 @@ const DEFAULT_MANGA_COVER =
 
 export default function HomeScreen() {
   const router = useRouter();
+  const openMangaDetails = useCallback(
+    (item: Pick<MangaItem, 'id' | 'title' | 'imageUrl' | 'banner'>) => {
+      router.navigate({
+        pathname: '/(tabs)/manga/[id]',
+        params: {
+          id: item.id,
+          title: item.title,
+          imageUrl: item.imageUrl || item.banner || '',
+          previewId: item.id,
+        },
+      });
+    },
+    [router]
+  );
   const { actualTheme, accentColor } = useTheme();
   const colors = Colors[actualTheme];
   const themeColors = useMemo(
@@ -203,7 +217,7 @@ export default function HomeScreen() {
       <View style={{ marginRight: 15 }}>
         <TouchableOpacity
           style={styles.trendingItem}
-          onPress={() => router.navigate(`/manga/${item.id}`)}
+          onPress={() => openMangaDetails(item)}
           activeOpacity={0.7}
           accessibilityRole="button"
           accessibilityLabel={`View ${item.title}`}
@@ -258,7 +272,7 @@ export default function HomeScreen() {
           <MangaCard
             title={item.title}
             imageUrl={item.bannerImage}
-            onPress={() => router.navigate(`/manga/${item.id}`)}
+            onPress={() => openMangaDetails(item)}
             lastReadChapter={lastReadChapter}
             style={styles.recentlyReadCard}
             context="manga"
@@ -282,14 +296,14 @@ export default function HomeScreen() {
         {newReleases.map((item) => (
           <View key={item.id} style={styles.newReleaseWrapper}>
             <TouchableOpacity
-              onPress={() => router.navigate(`/manga/${item.id}`)}
+              onPress={() => openMangaDetails(item)}
               activeOpacity={0.7}
               style={styles.newReleaseCard}
             >
               <MangaCard
                 title={item.title}
                 imageUrl={item.imageUrl}
-                onPress={() => router.navigate(`/manga/${item.id}`)}
+                onPress={() => openMangaDetails(item)}
                 lastReadChapter={null}
                 style={styles.card}
                 context="manga"
@@ -378,7 +392,7 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={[styles.featuredContainer, { marginTop: insets.top + 16 }]}
-        onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
+        onPress={() => featuredManga && openMangaDetails(featuredManga)}
         activeOpacity={0.9}
       >
         <ParallaxImage
@@ -404,7 +418,7 @@ export default function HomeScreen() {
                 styles.readNowButton,
                 { backgroundColor: themeColors.primary },
               ]}
-              onPress={() => router.navigate(`/manga/${featuredManga.id}`)}
+              onPress={() => featuredManga && openMangaDetails(featuredManga)}
             >
               <Text style={styles.readNowText}>Read Now</Text>
             </TouchableOpacity>

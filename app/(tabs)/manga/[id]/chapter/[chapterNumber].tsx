@@ -16,13 +16,14 @@ import {
   StatusBar,
   TouchableWithoutFeedback,
   ScrollView,
-  Image,
   Dimensions,
   GestureResponderEvent,
   FlatList,
   Modal,
   PanResponder,
+  Image as RNImage,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 
@@ -51,6 +52,9 @@ import {
 import getStyles from './[chapterNumber].styles';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
+import {
+  hydrateMangaFromLocal,
+} from '@/utils/mangaOptimisticLoad';
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
@@ -66,39 +70,39 @@ const ManhwaImage = React.memo(
     image,
     onPress,
     colorScheme,
+    isOnline,
   }: {
     image: ChapterImage;
     onPress: (event: GestureResponderEvent) => void;
     colorScheme: ColorScheme;
+    isOnline?: boolean;
   }) => {
-    const [imageHeight, setImageHeight] = useState<number>(400); // Default height
+    const [imageHeight, setImageHeight] = useState<number>(400);
     const [isImageLoaded, setIsImageLoaded] = useState(false);
+    const imageUri = image.localPath || image.originalUrl;
 
     useEffect(() => {
-      const imageUri = image.localPath || image.originalUrl;
       if (imageUri) {
         const screenWidth = Dimensions.get('window').width;
-        Image.getSize(
+        RNImage.getSize(
           imageUri,
           (width, height) => {
-            // Calculate height based on aspect ratio to fit screen width
             const aspectRatio = height / width;
-            const calculatedHeight = screenWidth * aspectRatio;
-            setImageHeight(calculatedHeight);
+            setImageHeight(screenWidth * aspectRatio);
           },
           (error) => {
             logger().error('UI', 'Error getting image size', { error });
-            setImageHeight(400); // Fallback height
+            setImageHeight(400);
           }
         );
       }
-    }, [image.localPath, image.originalUrl]);
+    }, [imageUri]);
 
     return (
       <TouchableWithoutFeedback onPress={onPress}>
         <View style={getStyles(colorScheme).manhwaImageContainer}>
           <Image
-            source={{ uri: image.localPath || image.originalUrl }}
+            source={{ uri: imageUri }}
             style={[
               getStyles(colorScheme).manhwaImage,
               {
@@ -106,27 +110,19 @@ const ManhwaImage = React.memo(
                 width: Dimensions.get('window').width,
               },
             ]}
-            resizeMode="contain"
+            contentFit="contain"
+            cachePolicy={isOnline ? 'memory-disk' : 'disk'}
+            transition={200}
             onError={(error) => {
               logger().error('UI', 'Failed to load image', {
                 pageNumber: image.pageNumber,
                 error,
               });
-              setIsImageLoaded(true); // Stop loading state on error
-            }}
-            onLoad={(event) => {
               setIsImageLoaded(true);
-              if (isDebugEnabled()) {
-                const { width, height } = event.nativeEvent.source;
-                logger().debug('UI', 'Manhwa image loaded', {
-                  pageNumber: image.pageNumber,
-                  width,
-                  height,
-                  calculatedHeight: imageHeight,
-                });
-              }
             }}
-            onLoadStart={() => setIsImageLoaded(false)}
+            onLoad={() => {
+              setIsImageLoaded(true);
+            }}
           />
           {!isImageLoaded && (
             <View style={getStyles(colorScheme).manhwaImageLoader}>
@@ -153,7 +149,7 @@ export default function ReadChapterScreen() {
   const { handleBackPress: navigateBack } = useNavigationHistory();
   const { isOffline } = useOffline();
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingImages, setIsLoadingImages] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
   const [mangaDetails, setMangaDetails] = useState<MangaDetailsType | null>(
@@ -477,11 +473,44 @@ export default function ReadChapterScreen() {
     }
   }, [id, chapterNumber, normalizedChapterParam, isOffline]);
 
+  // Hydrate manga metadata instantly from bookmark/cache before network
+  useEffect(() => {
+    if (!id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const hydrateMetadata = async () => {
+      try {
+        const hydration = await hydrateMangaFromLocal(id as string);
+        if (cancelled) {
+          return;
+        }
+
+        if (hydration.details) {
+          setMangaDetails(hydration.details);
+          setMangaTitle(hydration.details.title);
+        }
+      } catch (hydrationError) {
+        logger().warn('Storage', 'Failed to hydrate chapter reader metadata', {
+          error: hydrationError,
+          mangaId: id,
+        });
+      }
+    };
+
+    hydrateMetadata();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   // Detect content type based on image dimensions
   const detectContentType = useCallback((images: ChapterImage[]) => {
-    if (!images || images.length === 0) return 'manga';
+    if (!images || images.length === 0) return Promise.resolve('manga' as const);
 
-    // Sample first few images to determine content type
     const sampleSize = Math.min(3, images.length);
     let tallImageCount = 0;
 
@@ -490,18 +519,16 @@ export default function ReadChapterScreen() {
 
       images.slice(0, sampleSize).forEach((image) => {
         const imageUri = image.localPath || image.originalUrl;
-        Image.getSize(
+        RNImage.getSize(
           imageUri || '',
           (width, height) => {
             const aspectRatio = height / width;
-            // If aspect ratio > 1.5, consider it a tall manhwa-style image
             if (aspectRatio > 1.5) {
               tallImageCount++;
             }
 
             loadedCount++;
             if (loadedCount === sampleSize) {
-              // If majority of sampled images are tall, it's manhwa
               const isManhwa = tallImageCount >= sampleSize / 2;
               resolve(isManhwa ? 'manhwa' : 'manga');
             }
@@ -514,12 +541,20 @@ export default function ReadChapterScreen() {
             );
             loadedCount++;
             if (loadedCount === sampleSize) {
-              // Default to manga if we can't determine
               resolve('manga');
             }
           }
         );
       });
+    });
+  }, []);
+
+  const prefetchChapterImages = useCallback((images: ChapterImage[]) => {
+    images.slice(0, 5).forEach((image) => {
+      const uri = image.originalUrl || image.localPath;
+      if (uri?.startsWith('http')) {
+        Image.prefetch(uri).catch(() => {});
+      }
     });
   }, []);
 
@@ -532,13 +567,13 @@ export default function ReadChapterScreen() {
       if (!id || !chapterNumber) {
         if (isActive()) {
           setError('Invalid chapter parameters');
-          setIsLoading(false);
+          setIsLoadingImages(false);
         }
         return;
       }
 
       if (isActive()) {
-        setIsLoading(true);
+        setIsLoadingImages(true);
         setError(null);
       }
 
@@ -634,6 +669,7 @@ export default function ReadChapterScreen() {
           setDownloadedImages(onlineImages);
           downloadedImagesRef.current = onlineImages;
           setCurrentPage(0);
+          prefetchChapterImages(onlineImages);
 
           try {
             const detectedType = await detectContentType(onlineImages);
@@ -686,7 +722,7 @@ export default function ReadChapterScreen() {
         }
       } finally {
         if (isActive()) {
-          setIsLoading(false);
+          setIsLoadingImages(false);
         }
       }
     };
@@ -696,7 +732,14 @@ export default function ReadChapterScreen() {
     return () => {
       activeToken = null;
     };
-  }, [id, chapterNumber, isOffline, detectContentType, mangaDetails?.chapters]);
+  }, [
+    id,
+    chapterNumber,
+    isOffline,
+    detectContentType,
+    mangaDetails?.chapters,
+    prefetchChapterImages,
+  ]);
 
   const fetchDetails = useCallback(async () => {
     if (!id) {
@@ -749,6 +792,37 @@ export default function ReadChapterScreen() {
           setMangaTitle((current) => current ?? fallbackDetails.title);
         }
 
+        return;
+      }
+
+      const cachedDetails =
+        await offlineCacheService.getCachedMangaDetails(mangaId);
+
+      if (cachedDetails) {
+        setMangaDetails(cachedDetails);
+        setMangaTitle((current) => current ?? cachedDetails.title);
+
+        try {
+          const freshDetails = await fetchMangaDetails(mangaId);
+          const typedDetails: MangaDetailsType = {
+            id: mangaId,
+            ...freshDetails,
+          };
+          setMangaDetails(typedDetails);
+
+          const mangaData = await getMangaData(mangaId);
+          const isBookmarked = !!mangaData?.bookmarkStatus;
+          await offlineCacheService.cacheMangaDetails(
+            mangaId,
+            typedDetails,
+            isBookmarked
+          );
+        } catch (refreshError) {
+          logger().warn('Service', 'Background manga details refresh failed', {
+            error: refreshError,
+            mangaId,
+          });
+        }
         return;
       }
 
@@ -1004,6 +1078,7 @@ export default function ReadChapterScreen() {
             image={image}
             onPress={handleDownloadedChapterTouch}
             colorScheme={colorScheme}
+            isOnline={isOnlineChapter}
           />
         ))}
         <View style={styles.chapterEndSpacer} />
@@ -1023,22 +1098,14 @@ export default function ReadChapterScreen() {
           <Image
             source={{ uri: item.localPath || item.originalUrl }}
             style={styles.mangaImage}
-            resizeMode="contain"
+            contentFit="contain"
+            cachePolicy={isOnlineChapter ? 'memory-disk' : 'disk'}
+            transition={200}
             onError={(error) => {
               logger().error('UI', 'Failed to load image', {
                 pageNumber: item.pageNumber,
                 error,
               });
-            }}
-            onLoad={(event) => {
-              if (isDebugEnabled()) {
-                const { width, height } = event.nativeEvent.source;
-                logger().debug('UI', 'Manga image loaded', {
-                  pageNumber: item.pageNumber,
-                  width,
-                  height,
-                });
-              }
             }}
           />
         </View>
@@ -1099,15 +1166,6 @@ export default function ReadChapterScreen() {
 
   return (
     <View style={styles.container}>
-      {isLoading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator
-            testID="loading-indicator"
-            size="large"
-            color={Colors[colorScheme].primary}
-          />
-        </View>
-      )}
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -1115,7 +1173,15 @@ export default function ReadChapterScreen() {
       ) : (
         <>
           <View style={styles.webViewContainer}>
-            {(isDownloaded || isOnlineChapter) && downloadedImages ? (
+            {isLoadingImages && !downloadedImages ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator
+                  testID="loading-indicator"
+                  size="large"
+                  color={Colors[colorScheme].primary}
+                />
+              </View>
+            ) : (isDownloaded || isOnlineChapter) && downloadedImages ? (
               renderDownloadedChapter()
             ) : (
               <View style={styles.errorContainer}>

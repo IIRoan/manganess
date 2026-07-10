@@ -186,9 +186,14 @@ function mockMangaApiGet(
   });
 }
 
+import {
+  resetMangaFireRequestHubForTests,
+} from '../mangaFireRequestHub';
+
 describe('mangaFireService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetMangaFireRequestHubForTests();
     setVrfToken('');
   });
 

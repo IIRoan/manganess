@@ -167,7 +167,7 @@ export async function refreshMangaImages(): Promise<{
 
       if (mangaData) {
         try {
-          const newMangaDetails = await fetchMangaDetails(mangaId);
+          const newMangaDetails = await fetchMangaDetails(mangaId, { force: true });
           if (newMangaDetails?.bannerImage) {
             await setMangaData({
               ...mangaData,

@@ -53,6 +53,7 @@ describe('offlineCacheService', () => {
 
   beforeEach(async () => {
     await AsyncStorage.clear();
+    offlineCacheService.invalidateMemoryCache();
     jest.clearAllMocks();
   });
 
@@ -77,6 +78,20 @@ describe('offlineCacheService', () => {
         await offlineCacheService.getCachedMangaDetails('non-existent');
 
       expect(cached).toBeNull();
+    });
+
+    it('reuses in-memory cache without re-reading AsyncStorage', async () => {
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        mockMangaDetails,
+        true
+      );
+
+      const first = await offlineCacheService.getCachedMangaDetails('manga-1');
+      const second = await offlineCacheService.getCachedMangaDetails('manga-1');
+
+      expect(first).toEqual(second);
+      expect(second?.title).toBe('Test Manga');
     });
 
     it('updates existing cached manga', async () => {

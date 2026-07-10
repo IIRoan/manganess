@@ -2,6 +2,12 @@ import axios, { type AxiosRequestConfig } from 'axios';
 import { MANGA_API_URL } from '@/constants/Config';
 import { logger } from '@/utils/logger';
 import { stripHtmlToText } from '@/utils/stripHtmlToText';
+import {
+  peekFreshCache,
+  REQUEST_HUB_TTLS,
+  scheduleMangaFireRequest,
+  withMangaFireRateLimit,
+} from '@/services/mangaFireRequestHub';
 import type { MangaItem } from '@/types/manga';
 import type { Chapter, MangaDetails } from '@/types/manga';
 
@@ -96,13 +102,15 @@ async function apiGet<T>(
   params?: Record<string, unknown>,
   config?: AxiosRequestConfig
 ): Promise<T> {
-  const response = await axios.get<T>(`${API_BASE}${path}`, {
-    headers: DEFAULT_HEADERS,
-    timeout: 20000,
-    params,
-    ...config,
+  return withMangaFireRateLimit(async () => {
+    const response = await axios.get<T>(`${API_BASE}${path}`, {
+      headers: DEFAULT_HEADERS,
+      timeout: 20000,
+      params,
+      ...config,
+    });
+    return response.data;
   });
-  return response.data;
 }
 
 function mapNames(
@@ -160,56 +168,87 @@ export async function fetchLatestTitles(limit = 30): Promise<MangaItem[]> {
 }
 
 export async function searchTitles(keyword: string, limit = 40): Promise<MangaItem[]> {
-  const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
-    keyword: keyword.trim(),
-    limit,
-  });
-  return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
+  const normalizedKeyword = keyword.trim().toLowerCase();
+  return scheduleMangaFireRequest(
+    `search:${normalizedKeyword}:${limit}`,
+    async () => {
+      const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
+        keyword: keyword.trim(),
+        limit,
+      });
+      return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
+    },
+    { ttlMs: REQUEST_HUB_TTLS.search }
+  );
 }
 
 export async function fetchTitlesByGenre(
   genreSlug: string,
   limit = 40
 ): Promise<MangaItem[]> {
-  const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
-    genres: [genreSlug],
-    limit,
-  });
-  return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
+  return scheduleMangaFireRequest(
+    `genre:${genreSlug}:${limit}`,
+    async () => {
+      const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
+        genres: [genreSlug],
+        limit,
+      });
+      return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
+    },
+    { ttlMs: REQUEST_HUB_TTLS.genre }
+  );
 }
 
 export async function fetchTitleDetails(hid: string): Promise<ApiTitleDetails> {
-  const data = await apiGet<{ data: ApiTitleDetails }>(`/titles/${hid.trim()}`);
-  return data.data;
+  const normalizedHid = hid.trim();
+  return scheduleMangaFireRequest(
+    `title:${normalizedHid}`,
+    async () => {
+      const data = await apiGet<{ data: ApiTitleDetails }>(
+        `/titles/${normalizedHid}`
+      );
+      return data.data;
+    },
+    { ttlMs: REQUEST_HUB_TTLS.mangaDetails }
+  );
 }
 
 export async function fetchTitleDetailsIfExists(
   hid: string
 ): Promise<ApiTitleDetails | null> {
-  try {
-    const response = await axios.get<{ data: ApiTitleDetails }>(
-      `${API_BASE}/titles/${hid.trim()}`,
-      {
-        headers: DEFAULT_HEADERS,
-        timeout: 20000,
-        validateStatus: (status) => status === 200 || status === 404,
+  const normalizedHid = hid.trim();
+  return scheduleMangaFireRequest(
+    `title-exists:${normalizedHid}`,
+    async () => {
+      try {
+        const response = await withMangaFireRateLimit(() =>
+          axios.get<{ data: ApiTitleDetails }>(
+            `${API_BASE}/titles/${normalizedHid}`,
+            {
+              headers: DEFAULT_HEADERS,
+              timeout: 20000,
+              validateStatus: (status) => status === 200 || status === 404,
+            }
+          )
+        );
+
+        if (response.status === 404) {
+          return null;
+        }
+
+        return response.data.data;
+      } catch (error: any) {
+        if (error?.response?.status === 404) {
+          return null;
+        }
+        throw error;
       }
-    );
-
-    if (response.status === 404) {
-      return null;
-    }
-
-    return response.data.data;
-  } catch (error: any) {
-    if (error?.response?.status === 404) {
-      return null;
-    }
-    throw error;
-  }
+    },
+    { ttlMs: REQUEST_HUB_TTLS.titleMeta }
+  );
 }
 
-export async function fetchTitleChapters(
+async function fetchTitleChaptersUncached(
   hid: string,
   language = 'en'
 ): Promise<ApiChapterSummary[]> {
@@ -236,6 +275,18 @@ export async function fetchTitleChapters(
   }
 
   return chapters;
+}
+
+export async function fetchTitleChapters(
+  hid: string,
+  language = 'en'
+): Promise<ApiChapterSummary[]> {
+  const normalizedHid = hid.trim();
+  return scheduleMangaFireRequest(
+    `chapters:${normalizedHid}:${language}`,
+    () => fetchTitleChaptersUncached(normalizedHid, language),
+    { ttlMs: REQUEST_HUB_TTLS.chapters }
+  );
 }
 
 export function mapApiTitleToMangaDetails(
@@ -282,16 +333,22 @@ export async function fetchHomeMangaData(): Promise<{
   newReleases: MangaItem[];
   featuredManga: MangaItem | null;
 }> {
-  const [mostViewed, newReleases] = await Promise.all([
-    fetchTrendingTitles(),
-    fetchLatestTitles(),
-  ]);
+  return scheduleMangaFireRequest(
+    'home',
+    async () => {
+      const [mostViewed, newReleases] = await Promise.all([
+        fetchTrendingTitles(),
+        fetchLatestTitles(),
+      ]);
 
-  return {
-    mostViewed,
-    newReleases,
-    featuredManga: mostViewed[0] || null,
-  };
+      return {
+        mostViewed,
+        newReleases,
+        featuredManga: mostViewed[0] || null,
+      };
+    },
+    { ttlMs: REQUEST_HUB_TTLS.home }
+  );
 }
 
 export async function resolveChapterApiId(
@@ -302,12 +359,26 @@ export async function resolveChapterApiId(
   const normalizedTarget = normalizeChapterNumber(chapterNumber);
   if (!normalizedTarget) return null;
 
+  const normalizedHid = titleHid.trim();
+  const cachedChapters = peekFreshCache<ApiChapterSummary[]>(
+    `chapters:${normalizedHid}:${language}`,
+    REQUEST_HUB_TTLS.chapters
+  );
+
+  if (cachedChapters !== undefined) {
+    const cachedMatch = cachedChapters.find(
+      (chapter) =>
+        normalizeChapterNumber(String(chapter.number)) === normalizedTarget
+    );
+    return cachedMatch ? String(cachedMatch.id) : null;
+  }
+
   let page = 1;
   let hasNext = true;
 
   while (hasNext) {
     const data = await apiGet<ApiPaginated<ApiChapterSummary>>(
-      `/titles/${titleHid.trim()}/chapters`,
+      `/titles/${normalizedHid}/chapters`,
       { language, page }
     );
 
@@ -330,16 +401,23 @@ export async function resolveChapterApiId(
 export async function fetchChapterPageUrls(
   chapterId: string
 ): Promise<string[]> {
-  const data = await apiGet<{
-    data?: { pages?: ApiChapterPage[] };
-  }>(`/chapters/${chapterId.trim()}`);
+  const normalizedChapterId = chapterId.trim();
+  return scheduleMangaFireRequest(
+    `chapter-pages:${normalizedChapterId}`,
+    async () => {
+      const data = await apiGet<{
+        data?: { pages?: ApiChapterPage[] };
+      }>(`/chapters/${normalizedChapterId}`);
 
-  const pages = data.data?.pages || [];
-  if (!pages.length) {
-    throw new Error(`No pages found for chapter ${chapterId}`);
-  }
+      const pages = data.data?.pages || [];
+      if (!pages.length) {
+        throw new Error(`No pages found for chapter ${normalizedChapterId}`);
+      }
 
-  return pages.map((page) => page.url).filter(Boolean);
+      return pages.map((page) => page.url).filter(Boolean);
+    },
+    { ttlMs: REQUEST_HUB_TTLS.chapterPages }
+  );
 }
 
 export async function titleExists(hid: string): Promise<boolean> {
