@@ -1,7 +1,7 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import { decode } from 'html-entities';
 import { MANGA_API_URL } from '@/constants/Config';
 import { logger } from '@/utils/logger';
+import { stripHtmlToText } from '@/utils/stripHtmlToText';
 import type { MangaItem } from '@/types/manga';
 import type { Chapter, MangaDetails } from '@/types/manga';
 
@@ -103,17 +103,6 @@ async function apiGet<T>(
     ...config,
   });
   return response.data;
-}
-
-function stripHtml(input: string): string {
-  return decode(
-    input
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/p>/gi, '\n\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-  );
 }
 
 function mapNames(
@@ -275,7 +264,7 @@ export function mapApiTitleToMangaDetails(
     alternativeTitle: (title.altTitles || []).join(', '),
     status: title.status || 'unknown',
     description: title.synopsisHtml
-      ? stripHtml(title.synopsisHtml)
+      ? stripHtmlToText(title.synopsisHtml)
       : 'No description available',
     author: mapNames(title.authors),
     published: title.year ? String(title.year) : 'Unknown',

@@ -22,6 +22,7 @@ import { setLastReadManga } from './readChapterService';
 import { performanceMonitor } from '@/utils/performance';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
+import { stripHtmlToText } from '@/utils/stripHtmlToText';
 import type { Chapter } from '@/types/manga';
 import { ChapterImage, ImageDownloadStatus } from '@/types/download';
 
@@ -32,22 +33,6 @@ export class CloudflareDetectedError extends Error {
     this.name = 'CloudflareDetectedError';
     this.html = html;
   }
-}
-
-/**
- * Safely strips all HTML tags by repeatedly applying the regex until no tags remain.
- * This prevents incomplete sanitization where nested/malformed tags like "<scr<script>ipt>"
- * could reassemble into dangerous tags after a single pass.
- */
-function stripHtmlTags(input: string): string {
-  const tagPattern = /<[^>]*>/g;
-  let result = input;
-  let previous: string;
-  do {
-    previous = result;
-    result = result.replace(tagPattern, '');
-  } while (result !== previous);
-  return result;
 }
 
 export interface MangaItem {
@@ -312,13 +297,7 @@ export const parseMangaDetails = (html: string): MangaDetails => {
     ? decode(descriptionMatch[1].trim()) || 'No description available'
     : 'No description available';
 
-  description = stripHtmlTags(
-    description
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<p>/gi, '')
-      .replace(/<\/p>/gi, '\n\n')
-  )
-    .trim();
+  description = stripHtmlToText(description);
 
   const authorMatch = html.match(
     /<span>Author:<\/span>.*?<span>(.*?)<\/span>/s
@@ -326,7 +305,7 @@ export const parseMangaDetails = (html: string): MangaDetails => {
   const authors = authorMatch?.[1]
     ? authorMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => stripHtmlTags(a)) || []
+        ?.map((a) => stripHtmlToText(a)) || []
     : [];
 
   const published =
@@ -339,7 +318,7 @@ export const parseMangaDetails = (html: string): MangaDetails => {
   const genres = genresMatch?.[1]
     ? genresMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
-        ?.map((a) => stripHtmlTags(a)) || []
+        ?.map((a) => stripHtmlToText(a)) || []
     : [];
 
   const rating =
@@ -1070,33 +1049,8 @@ export const getChapterIdFromPage = async (
       }
     }
 
-    // Fallback: look for script tags that might contain the chapter ID
-    const scriptMatches = html.match(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi);
-    if (scriptMatches) {
-      for (const script of scriptMatches) {
-        // Look for numeric IDs in script content
-        const scriptIdMatches = script.match(/\b(\d{6,8})\b/g);
-        if (scriptIdMatches) {
-          for (const id of scriptIdMatches) {
-            // Skip obviously wrong IDs (like timestamps, years, etc.)
-            const numId = parseInt(id);
-            if (numId > 1000000 && numId < 99999999) {
-              // Reasonable range for chapter IDs
-              if (isDebugEnabled()) {
-                log.info('Service', 'Using fallback chapter ID from script', {
-                  chapterId: id,
-                  chapterUrl,
-                });
-              }
-              return id;
-            }
-          }
-        }
-      }
-    }
-
-    // Last resort: look for any reasonable numeric ID in the HTML
-    const numericIds = html.match(/\b\d{6,8}\b/g); // Look for 6-8 digit numbers
+    // Fallback: search for numeric chapter IDs in page content.
+    const numericIds = html.match(/\b\d{6,8}\b/g);
     if (numericIds && numericIds.length > 0) {
       // Filter out common false positives
       const filteredIds = numericIds.filter((id) => {
