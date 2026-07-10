@@ -38,6 +38,11 @@ import { FlashList } from '@shopify/flash-list';
 import type { FlashListRef } from '@shopify/flash-list';
 import { fetchMangaDetails } from '@/services/mangaFireService';
 import {
+  attemptLegacyMangaMigration,
+  MIGRATION_MESSAGES,
+  type MigrationProgress,
+} from '@/services/mangaIdMigrationService';
+import {
   fetchBookmarkStatus,
   saveBookmark,
   removeBookmark,
@@ -69,6 +74,9 @@ import type {
   BookmarkStatus,
   Chapter,
 } from '@/types';
+import ChapterListSkeleton, {
+  ChapterItemPlaceholder,
+} from '@/components/ChapterListSkeleton';
 import BatchDownloadBar from '@/components/BatchDownloadBar';
 import { downloadManagerService } from '@/services/downloadManager';
 import { downloadStatusService } from '@/services/downloadStatusService';
@@ -185,6 +193,15 @@ export default function MangaDetailScreen() {
   const [isAlertVisible, setIsAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertConfig | null>(null);
 
+  const [migrationProgress, setMigrationProgress] =
+    useState<MigrationProgress | null>(null);
+  const [manualMigration, setManualMigration] = useState<{
+    legacyId: string;
+    hintTitle?: string;
+  } | null>(null);
+  const [isManualMigrationAlertVisible, setIsManualMigrationAlertVisible] =
+    useState(false);
+
   // State for the bookmark bottom popup
   const [isBookmarkPopupVisible, setIsBookmarkPopupVisible] = useState(false);
   const [bookmarkPopupConfig, setBookmarkPopupConfig] =
@@ -297,6 +314,23 @@ export default function MangaDetailScreen() {
     downloadedChaptersRef.current = downloadedChapters;
   }, [downloadedChapters]);
 
+  const handleManualMigrationSearch = useCallback(() => {
+    if (!manualMigration) {
+      return;
+    }
+
+    const searchTitle =
+      manualMigration.hintTitle || manualMigration.legacyId.replace(/-/g, ' ');
+    const query = encodeURIComponent(searchTitle);
+    const replacementId = encodeURIComponent(manualMigration.legacyId);
+    const replacementTitle = encodeURIComponent(searchTitle);
+
+    setIsManualMigrationAlertVisible(false);
+    router.push(
+      `/mangasearch?query=${query}&replacementSourceId=${replacementId}&replacementSourceTitle=${replacementTitle}`
+    );
+  }, [manualMigration, router]);
+
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
@@ -305,7 +339,45 @@ export default function MangaDetailScreen() {
         if (typeof id === 'string') {
           setIsLoading(true);
           setError(null);
+          setManualMigration(null);
+          setIsManualMigrationAlertVisible(false);
           try {
+            if (!isOffline) {
+              const migrationResult = await attemptLegacyMangaMigration(
+                id as string,
+                (progress) => {
+                  if (isMounted) {
+                    setMigrationProgress(progress);
+                  }
+                }
+              );
+
+              if (!isMounted) {
+                return;
+              }
+
+              if (migrationResult.outcome === 'migrated') {
+                setMigrationProgress(null);
+                router.replace(`/manga/${migrationResult.newId}`);
+                return;
+              }
+
+              if (migrationResult.outcome === 'manual') {
+                setMigrationProgress(null);
+                setManualMigration({
+                  legacyId: migrationResult.legacyId,
+                  ...(migrationResult.hintTitle
+                    ? { hintTitle: migrationResult.hintTitle }
+                    : {}),
+                });
+                setIsManualMigrationAlertVisible(true);
+                setIsLoading(false);
+                return;
+              }
+
+              setMigrationProgress(null);
+            }
+
             await log.measureAsync(
               `UI:MangaDetail:initialLoad:${id as string}`,
               'UI',
@@ -468,7 +540,13 @@ export default function MangaDetailScreen() {
       return () => {
         isMounted = false;
       };
-    }, [id, refreshDownloadedChapters, refreshDownloadingChapters, isOffline])
+    }, [
+      id,
+      refreshDownloadedChapters,
+      refreshDownloadingChapters,
+      isOffline,
+      router,
+    ])
   );
 
   useFocusEffect(
@@ -726,8 +804,20 @@ export default function MangaDetailScreen() {
 
   const handleChapterPress = useCallback(
     (chapterNumber: string | number) => {
+      if (typeof id !== 'string') {
+        return;
+      }
+
+      const normalizedChapter =
+        String(chapterNumber ?? '').trim().replace(/\s+/g, '') || String(chapterNumber);
+      if (!normalizedChapter) {
+        return;
+      }
+
       haptics.onSelection();
-      router.navigate(`/manga/${id}/chapter/${chapterNumber}`);
+      router.push(
+        `/manga/${id}/chapter/${encodeURIComponent(normalizedChapter)}`
+      );
     },
     [haptics, router, id]
   );
@@ -1133,16 +1223,45 @@ export default function MangaDetailScreen() {
   );
 
   // If we have absolutely no data (no params, no cache, no fetch yet), show a minimal loader or nothing
-  if (isLoading && !mangaDetails) {
+  if ((isLoading && !mangaDetails) || migrationProgress) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
+        {migrationProgress ? (
+          <View style={styles.migrationStatusContainer}>
+            <Text style={styles.migrationStatusTitle}>
+              {migrationProgress.title}
+            </Text>
+            <Text style={styles.migrationStatusMessage}>
+              {migrationProgress.message}
+            </Text>
+          </View>
+        ) : null}
       </View>
     );
   }
 
   return (
     <Reanimated.View entering={FadeIn.duration(300)} style={styles.container}>
+      {manualMigration ? (
+        <AlertComponent
+          visible={isManualMigrationAlertVisible}
+          onClose={() => setIsManualMigrationAlertVisible(false)}
+          type="confirm"
+          title={MIGRATION_MESSAGES.manual.title}
+          message={MIGRATION_MESSAGES.manual.message}
+          options={[
+            {
+              text: 'Search manually',
+              onPress: handleManualMigrationSearch,
+            },
+            {
+              text: 'Go back',
+              onPress: () => router.back(),
+            },
+          ]}
+        />
+      ) : null}
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
@@ -1200,31 +1319,57 @@ export default function MangaDetailScreen() {
                 />
               </TouchableOpacity>
             </View>
-            <AnimatedFlashList
-              ref={flashListRef}
-              removeClippedSubviews={true}
-              drawDistance={250}
-              estimatedItemSize={65}
-              ListHeaderComponent={ListHeader}
-              data={mangaDetails.chapters}
-              extraData={[
-                readChapters,
-                lastReadChapter,
-                downloadedChapters,
-                downloadingChapters,
-              ]}
-              keyExtractor={(item: any, index: number) =>
-                `chapter-${item.number}-${index}`
-              }
-              renderItem={renderChapterItem}
-              ListFooterComponent={
-                <View style={{ height: 120, backgroundColor: colors.card }} />
-              }
-              onScroll={scrollHandler}
-              scrollEventThrottle={16}
-              bounces={false}
-              overScrollMode="never"
-            />
+            <View style={{ flex: 1 }}>
+              {/* Skeleton background layer - visible through blank FlashList cells during fast scroll */}
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: colors.card,
+                }}
+              >
+                <ChapterListSkeleton count={20} />
+              </View>
+
+              <AnimatedFlashList
+                ref={flashListRef}
+                drawDistance={2000}
+                estimatedItemSize={65}
+                overrideItemLayout={(layout: any) => {
+                  layout.size = 65;
+                }}
+                getItemType={() => 'chapter'}
+                ListHeaderComponent={ListHeader}
+                data={mangaDetails.chapters}
+                extraData={[
+                  readChapters,
+                  lastReadChapter,
+                  downloadedChapters,
+                  downloadingChapters,
+                ]}
+                keyExtractor={(item: any, index: number) =>
+                  `chapter-${item.number}-${index}`
+                }
+                renderItem={
+                  mangaDetails.chapters.length === 0
+                    ? () => <ChapterItemPlaceholder colors={colors} />
+                    : renderChapterItem
+                }
+                ListEmptyComponent={<ChapterListSkeleton count={15} />}
+                ListFooterComponent={
+                  <View
+                    style={{ height: 120, backgroundColor: colors.card }}
+                  />
+                }
+                onScroll={scrollHandler}
+                scrollEventThrottle={16}
+                bounces={false}
+                overScrollMode="never"
+              />
+            </View>
 
             {/* Smart Scroll FAB */}
             <Reanimated.View

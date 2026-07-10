@@ -25,10 +25,12 @@ import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import MangaCard from '@/components/MangaCard';
+import AlertComponent from '@/components/Alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOffline } from '@/hooks/useOffline';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { useBookmarks } from '@/hooks/useBookmarks';
+import { useLibraryRefresh } from '@/hooks/useLibraryRefresh';
 import { BookmarkItem, BookmarkStatus } from '@/types';
 import Animated, {
   useSharedValue,
@@ -47,6 +49,7 @@ import {
 } from 'react-native-gesture-handler';
 import { imageCache } from '@/services/CacheImages';
 import { getDefaultLayout, setDefaultLayout } from '@/services/settingsService';
+import { checkMangaAvailability } from '@/services/mangaFireService';
 
 // Constants
 const SECTIONS: BookmarkStatus[] = ['Reading', 'To Read', 'On Hold', 'Read'];
@@ -61,6 +64,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Types
 type ViewMode = 'grid' | 'list';
+type BookmarkAvailabilityState = 'available' | 'missing' | 'unknown';
 
 // Animated Components
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -75,12 +79,17 @@ const ImagePreloader = ({ urls }: { urls: string[] }) => {
   return null;
 };
 
+const AVAILABILITY_CHECK_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 export default function BookmarksScreen() {
   // Offline state from Zedux atom
   const { isOffline } = useOffline();
 
   // Bookmark state from Zedux atom
   const { bookmarks: atomBookmarks, refreshBookmarks } = useBookmarks();
+
+  // Tracks when bookmarks were last validated so we don't hammer the network on every focus
+  const lastAvailabilityCheckRef = useRef<number>(0);
 
   // State
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
@@ -106,6 +115,13 @@ export default function BookmarksScreen() {
     { x: number; width: number }[]
   >([]);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [bookmarkAvailability, setBookmarkAvailability] = useState<
+    Record<string, BookmarkAvailabilityState>
+  >({});
+  const [selectedMissingBookmark, setSelectedMissingBookmark] =
+    useState<BookmarkItem | null>(null);
+  const [isMissingBookmarkAlertVisible, setIsMissingBookmarkAlertVisible] =
+    useState(false);
 
   // Animation values
   const translateX = useSharedValue(0);
@@ -255,6 +271,19 @@ export default function BookmarksScreen() {
     convertBookmarks();
   }, [atomBookmarks, isOffline]);
 
+  useEffect(() => {
+    const activeBookmarkIds = new Set(
+      atomBookmarks.map((bookmark) => bookmark.id)
+    );
+    setBookmarkAvailability((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).filter(([bookmarkId]) =>
+          activeBookmarkIds.has(bookmarkId)
+        )
+      )
+    );
+  }, [atomBookmarks]);
+
   // Refresh bookmarks when offline status changes
   React.useEffect(() => {
     fetchBookmarks();
@@ -278,6 +307,74 @@ export default function BookmarksScreen() {
 
       checkForChanges();
     }, [refreshBookmarks])
+  );
+
+  useLibraryRefresh(() => {
+    void refreshBookmarks();
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      let isCancelled = false;
+
+      const validateBookmarks = async () => {
+        if (isOffline || atomBookmarks.length === 0) {
+          return;
+        }
+
+        const now = Date.now();
+        if (
+          now - lastAvailabilityCheckRef.current <
+          AVAILABILITY_CHECK_TTL_MS
+        ) {
+          return;
+        }
+        lastAvailabilityCheckRef.current = now;
+
+        const results = await Promise.all(
+          atomBookmarks.map(async (bookmark) => ({
+            id: bookmark.id,
+            status: await checkMangaAvailability(bookmark.id),
+          }))
+        );
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBookmarkAvailability((previous) => {
+          const nextState: Record<string, BookmarkAvailabilityState> = {};
+
+          results.forEach(({ id, status }) => {
+            if (status === 'missing') {
+              nextState[id] = 'missing';
+              return;
+            }
+
+            if (status === 'exists') {
+              nextState[id] = 'available';
+              return;
+            }
+
+            nextState[id] = previous[id] === 'missing' ? 'missing' : 'unknown';
+          });
+
+          const previousIds = Object.keys(previous);
+          const nextIds = Object.keys(nextState);
+          const hasSameShape =
+            previousIds.length === nextIds.length &&
+            nextIds.every((id) => previous[id] === nextState[id]);
+
+          return hasSameShape ? previous : nextState;
+        });
+      };
+
+      validateBookmarks();
+
+      return () => {
+        isCancelled = true;
+      };
+    }, [atomBookmarks, isOffline])
   );
 
   // Animated styles
@@ -351,12 +448,37 @@ export default function BookmarksScreen() {
   }, [isSearchExpanded, searchExpandProgress, focusSearchInput]);
 
   // Event Handlers
+  const handleMissingBookmarkPress = useCallback((item: BookmarkItem) => {
+    setSelectedMissingBookmark(item);
+    setIsMissingBookmarkAlertVisible(true);
+  }, []);
+
   const handleBookmarkPress = useCallback(
-    (id: string) => {
-      router.push(`/manga/${id}`);
+    (item: BookmarkItem) => {
+      if (bookmarkAvailability[item.id] === 'missing') {
+        handleMissingBookmarkPress(item);
+        return;
+      }
+
+      router.push(`/manga/${item.id}`);
     },
-    [router]
+    [bookmarkAvailability, handleMissingBookmarkPress, router]
   );
+
+  const handleMissingBookmarkSearch = useCallback(() => {
+    if (!selectedMissingBookmark) {
+      return;
+    }
+
+    const query = encodeURIComponent(selectedMissingBookmark.title);
+    const replacementId = encodeURIComponent(selectedMissingBookmark.id);
+    const replacementTitle = encodeURIComponent(selectedMissingBookmark.title);
+
+    setIsMissingBookmarkAlertVisible(false);
+    router.push(
+      `/mangasearch?query=${query}&replacementSourceId=${replacementId}&replacementSourceTitle=${replacementTitle}`
+    );
+  }, [router, selectedMissingBookmark]);
 
   const handleClearSearch = useCallback(() => {
     setSearchQuery('');
@@ -489,6 +611,7 @@ export default function BookmarksScreen() {
   const renderBookmarkItem = useCallback(
     (info: ListRenderItemInfo<BookmarkItem>) => {
       const item = info.item;
+      const isMissing = bookmarkAvailability[item.id] === 'missing';
 
       if (viewMode === 'grid') {
         return (
@@ -496,21 +619,42 @@ export default function BookmarksScreen() {
             entering={FadeInDown.delay(info.index * 30).springify()}
             style={styles.bookmarkCardWrapper}
           >
-            <MangaCard
-              title={item.title}
-              imageUrl={item.imageUrl}
-              onPress={() => handleBookmarkPress(item.id)}
-              lastReadChapter={item.lastReadChapter}
-              context="bookmark"
-              mangaId={item.id}
-              onBookmarkChange={(_mangaId, newStatus) => {
-                if (newStatus === null) {
-                  fetchBookmarks();
-                } else {
-                  fetchBookmarks();
-                }
-              }}
-            />
+            <View style={styles.bookmarkCardContent}>
+              <MangaCard
+                title={item.title}
+                imageUrl={item.imageUrl}
+                onPress={() => handleBookmarkPress(item)}
+                lastReadChapter={item.lastReadChapter}
+                context="bookmark"
+                mangaId={item.id}
+                onBookmarkChange={(_mangaId, newStatus) => {
+                  if (newStatus === null) {
+                    fetchBookmarks();
+                  } else {
+                    fetchBookmarks();
+                  }
+                }}
+              />
+              {isMissing ? (
+                <View
+                  pointerEvents="none"
+                  style={styles.missingOverlay}
+                  testID={`missing-bookmark-overlay-${item.id}`}
+                >
+                  <Ionicons
+                    name="warning-outline"
+                    size={22}
+                    color={colors.card}
+                  />
+                  <Text style={styles.missingOverlayTitle}>
+                    Listing missing
+                  </Text>
+                  <Text style={styles.missingOverlaySubtitle}>
+                    Tap to search and replace
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </Animated.View>
         );
       }
@@ -519,7 +663,7 @@ export default function BookmarksScreen() {
         <Animated.View entering={FadeInDown.delay(info.index * 30).springify()}>
           <TouchableOpacity
             style={styles.listItem}
-            onPress={() => handleBookmarkPress(item.id)}
+            onPress={() => handleBookmarkPress(item)}
             activeOpacity={0.7}
           >
             <View style={styles.listItemImageContainer}>
@@ -551,15 +695,34 @@ export default function BookmarksScreen() {
               size={24}
               color={colors.tabIconDefault}
             />
+            {isMissing ? (
+              <View
+                pointerEvents="none"
+                style={styles.missingOverlay}
+                testID={`missing-bookmark-overlay-${item.id}`}
+              >
+                <Ionicons
+                  name="warning-outline"
+                  size={22}
+                  color={colors.card}
+                />
+                <Text style={styles.missingOverlayTitle}>Listing missing</Text>
+                <Text style={styles.missingOverlaySubtitle}>
+                  Tap to search and replace
+                </Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
         </Animated.View>
       );
     },
     [
+      bookmarkAvailability,
       viewMode,
       handleBookmarkPress,
       styles,
       colors.tabIconDefault,
+      colors.card,
       fetchBookmarks,
     ]
   );
@@ -861,6 +1024,29 @@ export default function BookmarksScreen() {
             </AnimatedView>
           </View>
         </GestureDetector>
+
+        <AlertComponent
+          visible={isMissingBookmarkAlertVisible}
+          title="Bookmark source missing"
+          onClose={() => setIsMissingBookmarkAlertVisible(false)}
+          {...(selectedMissingBookmark
+            ? {
+                message: `"${selectedMissingBookmark.title}" is no longer available at its saved source URL. This was not treated as a temporary loading issue, so you can search for the current listing and replace this bookmark while keeping its progress and status.`,
+              }
+            : {})}
+          options={[
+            {
+              text: 'Cancel',
+              onPress: () => setIsMissingBookmarkAlertVisible(false),
+            },
+            {
+              text: 'Search & Replace',
+              icon: 'search',
+              onPress: handleMissingBookmarkSearch,
+            },
+          ]}
+          type="confirm"
+        />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -1075,7 +1261,11 @@ const getStyles = (colors: typeof Colors.light) =>
       width: '48%',
       marginBottom: 15,
     },
+    bookmarkCardContent: {
+      position: 'relative',
+    },
     listItem: {
+      position: 'relative',
       flexDirection: 'row',
       backgroundColor: colors.card,
       borderRadius: 10,
@@ -1115,6 +1305,28 @@ const getStyles = (colors: typeof Colors.light) =>
     listItemChapter: {
       fontSize: 13,
       color: colors.tabIconDefault,
+    },
+    missingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0, 0, 0, 0.68)',
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+    },
+    missingOverlayTitle: {
+      marginTop: 8,
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.card,
+      textAlign: 'center',
+    },
+    missingOverlaySubtitle: {
+      marginTop: 4,
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.card + 'E6',
+      textAlign: 'center',
     },
     loadingContainer: {
       flex: 1,

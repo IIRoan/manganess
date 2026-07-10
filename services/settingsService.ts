@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setMangaData, getMangaData } from './bookmarkService';
+import { setMangaData, getMangaData, removeBookmarkKeyFromIndex } from './bookmarkService';
 import { fetchMangaDetails } from './mangaFireService';
+import { resolveStoredMangaId } from './mangaIdMigrationService';
 import { imageCache } from './CacheImages';
 import { logger } from '@/utils/logger';
 
@@ -198,66 +199,139 @@ export async function migrateToNewStorage(): Promise<{
   success: boolean;
   message: string;
 }> {
+  const log = logger();
+
   try {
-    // Get all keys
     const allKeys = await AsyncStorage.getAllKeys();
+    const bookmarkKeys = allKeys.filter(
+      (key) =>
+        key.startsWith('bookmark_') &&
+        key !== 'bookmarkKeys' &&
+        key !== 'bookmarkChanged'
+    );
 
-    // Get bookmark keys
-    const bookmarkKeys = allKeys.filter((key) => key.startsWith('bookmark_'));
-
-    // Clear image cache before migration
     await imageCache.clearCache();
 
-    // Process each bookmark
-    for (const bookmarkKey of bookmarkKeys) {
-      const id = bookmarkKey.replace('bookmark_', '');
+    let migratedCount = 0;
+    let remappedCount = 0;
+    let localOnlyCount = 0;
+    let failedCount = 0;
 
-      // Get all related data
-      const [bookmarkStatus, title, imageUrl, readChaptersStr] =
-        await AsyncStorage.multiGet([
+    for (const bookmarkKey of bookmarkKeys) {
+      const legacyId = bookmarkKey.replace('bookmark_', '');
+
+      try {
+        const [bookmarkStatus, title, imageUrl, readChaptersStr] =
+          await AsyncStorage.multiGet([
+            bookmarkKey,
+            `title_${legacyId}`,
+            `image_${legacyId}`,
+            `manga_${legacyId}_read_chapters`,
+          ]);
+
+        const readChapters = readChaptersStr?.[1]
+          ? JSON.parse(readChaptersStr[1])
+          : [];
+        const localTitle = title?.[1] || '';
+        const localImage = imageUrl?.[1] || '';
+
+        const resolution = await resolveStoredMangaId(
+          legacyId,
+          localTitle || undefined
+        );
+
+        let targetId = legacyId;
+        let mangaTitle = localTitle;
+        let bannerImage = localImage;
+
+        if (resolution.action === 'use_current') {
+          targetId = resolution.id;
+          mangaTitle = resolution.title || mangaTitle;
+          bannerImage = resolution.bannerImage || bannerImage;
+        } else if (resolution.action === 'remap') {
+          targetId = resolution.toId;
+          mangaTitle = resolution.title || mangaTitle;
+          bannerImage = resolution.bannerImage || bannerImage;
+          remappedCount++;
+        } else {
+          try {
+            const mangaDetails = await fetchMangaDetails(legacyId);
+            mangaTitle = mangaDetails?.title || mangaTitle;
+            bannerImage = mangaDetails?.bannerImage || bannerImage;
+          } catch (error) {
+            localOnlyCount++;
+            log.warn('Service', 'Using local bookmark data during migration', {
+              legacyId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        await setMangaData({
+          id: targetId,
+          title: mangaTitle,
+          bannerImage,
+          bookmarkStatus: (bookmarkStatus?.[1] as any) || null,
+          readChapters,
+          lastReadChapter:
+            readChapters.length > 0
+              ? readChapters[readChapters.length - 1]
+              : undefined,
+          lastUpdated: Date.now(),
+        });
+
+        if (targetId !== legacyId) {
+          await removeBookmarkKeyFromIndex(legacyId);
+        }
+
+        await AsyncStorage.multiRemove([
           bookmarkKey,
-          `title_${id}`,
-          `image_${id}`,
-          `manga_${id}_read_chapters`,
+          `title_${legacyId}`,
+          `image_${legacyId}`,
+          `manga_${legacyId}_read_chapters`,
         ]);
 
-      // Parse read chapters
-      const readChapters = readChaptersStr?.[1]
-        ? JSON.parse(readChaptersStr[1])
-        : [];
+        migratedCount++;
+      } catch (error) {
+        failedCount++;
+        log.error('Service', 'Failed to migrate legacy bookmark', {
+          legacyId,
+          error,
+        });
+      }
+    }
 
-      // Fetch latest manga details
-      const mangaDetails = await fetchMangaDetails(id);
+    if (migratedCount === 0 && failedCount > 0) {
+      return {
+        success: false,
+        message: `Migration failed for all ${failedCount} bookmark${
+          failedCount === 1 ? '' : 's'
+        }`,
+      };
+    }
 
-      // Create new manga data structure
-      await setMangaData({
-        id,
-        title: mangaDetails?.title || title?.[1] || '',
-        bannerImage: mangaDetails?.bannerImage || imageUrl?.[1] || '',
-        bookmarkStatus: (bookmarkStatus?.[1] as any) || null,
-        readChapters,
-        lastReadChapter:
-          readChapters.length > 0
-            ? readChapters[readChapters.length - 1]
-            : undefined,
-        lastUpdated: Date.now(),
-      });
+    const parts = [
+      `Migrated ${migratedCount} manga to the new storage format`,
+    ];
 
-      // Delete old data
-      await AsyncStorage.multiRemove([
-        bookmarkKey,
-        `title_${id}`,
-        `image_${id}`,
-        `manga_${id}_read_chapters`,
-      ]);
+    if (remappedCount > 0) {
+      parts.push(`${remappedCount} updated to new MangaFire links`);
+    }
+    if (localOnlyCount > 0) {
+      parts.push(
+        `${localOnlyCount} kept with saved title/image (could not verify online)`
+      );
+    }
+    if (failedCount > 0) {
+      parts.push(`${failedCount} failed`);
     }
 
     return {
       success: true,
-      message: `Successfully migrated ${bookmarkKeys.length} manga to new storage format`,
+      message: parts.join('. '),
     };
   } catch (error) {
-    logger().error('Service', 'Error during migration', { error });
+    log.error('Service', 'Error during migration', { error });
     return {
       success: false,
       message: `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,

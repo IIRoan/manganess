@@ -2,7 +2,7 @@
   "expo": {
     "name": "manganess",
     "slug": "manganess",
-    "version": "1.9",
+    "version": "1.10",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
@@ -27,11 +27,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#121212"
         }
-      ],
-      "expo-font",
-      "expo-web-browser",
-      "expo-image",
-      "expo-sharing"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -43,7 +39,7 @@
       }
     },
     "owner": "iroan",
-    "runtimeVersion": "1.9.0",
+    "runtimeVersion": "1.10.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,

@@ -17,20 +17,21 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Reanimated, { FadeInDown } from 'react-native-reanimated';
-import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import {
+  Stack,
+  useLocalSearchParams,
+  useRouter,
+  useFocusEffect,
+} from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AlertComponent from '@/components/Alert';
 import MangaCard from '@/components/MangaCard';
 import SearchSkeleton from '@/components/SearchSkeleton';
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
-import { MANGA_API_URL } from '@/constants/Config';
-import CustomWebView from '@/components/CustomWebView';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   type MangaItem,
-  CloudflareDetectedError,
   searchManga,
-  setVrfToken as setServiceVrfToken,
 } from '@/services/mangaFireService';
 import { getLastReadChapter } from '@/services/readChapterService';
 import {
@@ -42,12 +43,13 @@ import {
 } from '@/services/searchHistoryService';
 import { useDebounce } from '@/hooks/useDebounce';
 import { logger } from '@/utils/logger';
-import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOffline } from '@/hooks/useOffline';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import { replaceBookmark } from '@/services/bookmarkService';
 import { getDefaultLayout } from '@/services/settingsService';
 import { hapticFeedback } from '@/utils/haptics';
-import type { WebViewMessageEvent } from 'react-native-webview';
+import { useToast } from '@/hooks/useToast';
 
 /* Type Definitions */
 interface LastReadChapters {
@@ -68,6 +70,15 @@ export default function MangaSearchScreen() {
   );
   const insets = useSafeAreaInsets();
   const { isOffline } = useOffline();
+  const {
+    query: initialQueryParam,
+    replacementSourceId,
+    replacementSourceTitle,
+  } = useLocalSearchParams<{
+    query?: string;
+    replacementSourceId?: string;
+    replacementSourceTitle?: string;
+  }>();
 
   // Router and Input Ref
   const router = useRouter();
@@ -81,17 +92,11 @@ export default function MangaSearchScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [, /* error */ setError] = useState<string | null>(null);
   const inFlightSeqRef = useRef(0);
-  const vrfCacheRef = useRef<Map<string, string>>(new Map());
   const [lastReadChapters, setLastReadChapters] = useState<LastReadChapters>(
     {}
   );
-  const [vrfToken, setVrfToken] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState(false);
-  const [vrfWebViewKey, setVrfWebViewKey] = useState(0);
   const currentQueryRef = useRef<string | null>(null);
-  const vrfTokenQueryRef = useRef<string | null>(null);
-  const vrfRetryCountRef = useRef<Map<string, number>>(new Map());
-  const MAX_VRF_RETRIES = 2;
   const [lastCompletedQuery, setLastCompletedQuery] = useState<string | null>(
     null
   );
@@ -104,6 +109,16 @@ export default function MangaSearchScreen() {
   const [showHistory, setShowHistory] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const hasLoadedHistoryRef = useRef(false);
+  const [replacementCandidate, setReplacementCandidate] =
+    useState<MangaItem | null>(null);
+  const [isReplacementAlertVisible, setIsReplacementAlertVisible] =
+    useState(false);
+  const { showToast } = useToast();
+  const normalizedReplacementSourceId =
+    typeof replacementSourceId === 'string' ? replacementSourceId : '';
+  const normalizedReplacementSourceTitle =
+    typeof replacementSourceTitle === 'string' ? replacementSourceTitle : '';
+  const isReplacementMode = normalizedReplacementSourceId.length > 0;
 
   // Load layout setting and search history on mount (not on focus to avoid re-animations)
   useEffect(() => {
@@ -120,6 +135,20 @@ export default function MangaSearchScreen() {
     };
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    const initialQuery =
+      typeof initialQueryParam === 'string' ? initialQueryParam.trim() : '';
+
+    if (!initialQuery) {
+      return;
+    }
+
+    setSearchQuery((current) =>
+      current === initialQuery ? current : initialQuery
+    );
+    setShowHistory(false);
+  }, [initialQueryParam]);
 
   // Refresh layout on focus (but not history to avoid re-animation)
   useFocusEffect(
@@ -142,145 +171,57 @@ export default function MangaSearchScreen() {
     }, [searchQuery])
   );
 
-  const { checkForCloudflare } = useCloudflareDetection();
-
-  // For each query, derive VRF via WebView (or cache) then search
+  // Search when the debounced query changes
   useEffect(() => {
     const q = debouncedSearchQuery.trim();
-    if (q.length > 2) {
-      setIsLoading(true);
-      setError(null);
-      setShowHistory(false);
-      currentQueryRef.current = q;
 
-      // If offline, don't allow search
-      if (isOffline) {
-        setSearchResults([]);
-        setError('You are offline. Connect to internet to search for manga.');
-        setIsLoading(false);
-        return;
-      }
-
-      const key = q.toLowerCase();
-      const cached = vrfCacheRef.current.get(key);
-      if (cached) {
-        // Use cached VRF immediately
-        setVrfToken(cached);
-        vrfTokenQueryRef.current = q;
-      } else {
-        // Derive VRF via WebView
-        setVrfToken(null);
-        vrfTokenQueryRef.current = null;
-        setVrfWebViewKey((k) => k + 1);
-      }
-    } else if (q.length === 0) {
+    if (q.length === 0) {
       setSearchResults([]);
       setIsLoading(false);
       setShowHistory(true);
+      setLastCompletedQuery(null);
       currentQueryRef.current = null;
+      return;
     }
-  }, [debouncedSearchQuery, isOffline]);
 
-  useEffect(() => {
-    const performSearch = async () => {
-      const normalizedCurrent = (currentQueryRef.current || '')
-        .trim()
-        .toLowerCase();
-      const normalizedDebounced = (debouncedSearchQuery || '')
-        .trim()
-        .toLowerCase();
-      const normalizedTokenQuery = (vrfTokenQueryRef.current || '')
-        .trim()
-        .toLowerCase();
-      if (
-        vrfToken &&
-        normalizedCurrent &&
-        normalizedCurrent === normalizedDebounced &&
-        normalizedTokenQuery === normalizedDebounced
-      ) {
-        const seq = ++inFlightSeqRef.current;
-        try {
-          const items = await searchManga(debouncedSearchQuery, vrfToken);
-          if (inFlightSeqRef.current !== seq) return; // ignore stale
-          setSearchResults(items);
+    if (q.length <= 2) {
+      return;
+    }
 
-          // Mark this query as completed (for "no results" display)
-          setLastCompletedQuery(debouncedSearchQuery.trim().toLowerCase());
+    const seq = ++inFlightSeqRef.current;
+    currentQueryRef.current = q;
+    setIsLoading(true);
+    setError(null);
+    setTokenError(false);
+    setShowHistory(false);
 
-          // Reset retry count on success
-          const key = debouncedSearchQuery.trim().toLowerCase();
-          vrfRetryCountRef.current.delete(key);
+    if (isOffline) {
+      setSearchResults([]);
+      setError('You are offline. Connect to internet to search for manga.');
+      setIsLoading(false);
+      return;
+    }
 
-          // Add to search history on successful search
-          await addSearchHistoryItem(debouncedSearchQuery);
-          await loadSearchHistory();
-
-          // Cache search results for offline use
-          await offlineCacheService.cacheSearchResults(
-            debouncedSearchQuery,
-            items
-          );
-        } catch (err: any) {
-          if (err instanceof CloudflareDetectedError) {
-            checkForCloudflare(err.html, '/mangasearch');
-            return;
-          }
-          if (inFlightSeqRef.current !== seq) return; // ignore stale
-
-          // Check if it's a 403 error (stale VRF token)
-          const is403 =
-            err?.response?.status === 403 ||
-            err?.message?.includes('403') ||
-            err?.message?.includes('Request failed with status code 403');
-
-          if (is403) {
-            const key = debouncedSearchQuery.trim().toLowerCase();
-            const retryCount = vrfRetryCountRef.current.get(key) || 0;
-
-            if (retryCount < MAX_VRF_RETRIES) {
-              // Increment retry count
-              vrfRetryCountRef.current.set(key, retryCount + 1);
-
-              // Invalidate the cached VRF token for this query
-              vrfCacheRef.current.delete(key);
-
-              // Force a fresh VRF token fetch
-              setVrfToken(null);
-              vrfTokenQueryRef.current = null;
-              setVrfWebViewKey((k) => k + 1);
-
-              logger().warn(
-                'Service',
-                'VRF token expired, fetching fresh token',
-                {
-                  query: debouncedSearchQuery,
-                  retryAttempt: retryCount + 1,
-                  maxRetries: MAX_VRF_RETRIES,
-                }
-              );
-              return; // Don't set error - will retry with fresh token
-            } else {
-              // Max retries reached, show error
-              vrfRetryCountRef.current.delete(key);
-              logger().error('Service', 'Max VRF retries reached', {
-                query: debouncedSearchQuery,
-                retries: retryCount,
-              });
-              setTokenError(true);
-              setIsLoading(false);
-              return;
-            }
-          }
-
-          setError('Failed to fetch manga. Please try again.');
-          logger().error('Service', 'Failed to fetch manga', { error: err });
-        } finally {
-          if (inFlightSeqRef.current === seq) setIsLoading(false);
+    (async () => {
+      try {
+        const items = await searchManga(q);
+        if (inFlightSeqRef.current !== seq) return;
+        setSearchResults(items);
+        setLastCompletedQuery(q.toLowerCase());
+        await addSearchHistoryItem(q);
+        await loadSearchHistory();
+        await offlineCacheService.cacheSearchResults(q, items);
+      } catch (err) {
+        if (inFlightSeqRef.current !== seq) return;
+        setError('Failed to fetch manga. Please try again.');
+        logger().error('Service', 'Failed to fetch manga', { error: err });
+      } finally {
+        if (inFlightSeqRef.current === seq) {
+          setIsLoading(false);
         }
       }
-    };
-    performSearch();
-  }, [vrfToken, debouncedSearchQuery, checkForCloudflare, loadSearchHistory]);
+    })();
+  }, [debouncedSearchQuery, isOffline, loadSearchHistory]);
 
   // Clear search
   const clearSearch = useCallback(() => {
@@ -296,13 +237,74 @@ export default function MangaSearchScreen() {
   // Handle manga item press
   const handleMangaPress = useCallback(
     (item: MangaItem) => {
+      if (isReplacementMode) {
+        setReplacementCandidate(item);
+        setIsReplacementAlertVisible(true);
+        return;
+      }
+
       router.navigate({
         pathname: '/manga/[id]',
         params: { id: item.id, title: item.title, bannerImage: item.banner },
       });
     },
-    [router]
+    [isReplacementMode, router]
   );
+
+  const handleConfirmReplacement = useCallback(async () => {
+    if (!replacementCandidate || !normalizedReplacementSourceId) {
+      return;
+    }
+
+    try {
+      await replaceBookmark(normalizedReplacementSourceId, {
+        id: replacementCandidate.id,
+        title: replacementCandidate.title,
+        bannerImage: replacementCandidate.banner,
+      });
+
+      const shortSourceTitle =
+        normalizedReplacementSourceTitle.length > 24
+          ? normalizedReplacementSourceTitle.slice(0, 24) + '...'
+          : normalizedReplacementSourceTitle;
+
+      showToast({
+        message: shortSourceTitle
+          ? `${shortSourceTitle} replaced successfully`
+          : 'Bookmark replaced successfully',
+        icon: 'swap-horizontal',
+        type: 'success',
+      });
+
+      router.navigate({
+        pathname: '/manga/[id]',
+        params: {
+          id: replacementCandidate.id,
+          title: replacementCandidate.title,
+          bannerImage: replacementCandidate.banner,
+        },
+      });
+    } catch (error) {
+      logger().error('Storage', 'Failed to replace missing bookmark', {
+        sourceId: normalizedReplacementSourceId,
+        replacementId: replacementCandidate.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      showToast({
+        message: 'Failed to replace bookmark',
+        type: 'error',
+      });
+    } finally {
+      setIsReplacementAlertVisible(false);
+      setReplacementCandidate(null);
+    }
+  }, [
+    normalizedReplacementSourceId,
+    normalizedReplacementSourceTitle,
+    replacementCandidate,
+    router,
+    showToast,
+  ]);
 
   // Handle history item press
   const handleHistoryItemPress = useCallback((query: string) => {
@@ -436,94 +438,6 @@ export default function MangaSearchScreen() {
   // Key extractor for FlatList
   const keyExtractor = useCallback((item: MangaItem) => item.id, []);
 
-  // WebView message handler to get VRF token
-  const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === 'VRF_TOKEN' && data.token) {
-        const token: string = data.token;
-        const msgQuery: string = (data.query || '').trim();
-        const current = (currentQueryRef.current || '').trim();
-        // Ensure token belongs to the current query
-        if (!msgQuery || msgQuery.toLowerCase() !== current.toLowerCase())
-          return;
-        // Validate token format: must contain at least one hyphen and be reasonably long
-        const looksValid = /-/.test(token) && token.length >= 30;
-        if (!looksValid) return;
-        // Cache VRF for this query (simple LRU of size 15)
-        const key = msgQuery.toLowerCase();
-        const cache = vrfCacheRef.current;
-        cache.set(key, token);
-        if (cache.size > 15) {
-          const iter = cache.keys().next();
-          if (!iter.done && typeof iter.value === 'string') {
-            cache.delete(iter.value);
-          }
-        }
-        // Mark that VRF is ready and tie it to the originating query
-        setVrfToken(token);
-        vrfTokenQueryRef.current = msgQuery;
-        setServiceVrfToken(token);
-        setTokenError(false);
-      } else if (data.type === 'VRF_ERROR') {
-        // Ignore stale VRF_ERROR if query changed
-        const msgQuery: string = (data.query || '').trim();
-        const current = (currentQueryRef.current || '').trim();
-        if (msgQuery && msgQuery.toLowerCase() !== current.toLowerCase())
-          return;
-        setTokenError(true);
-        setIsLoading(false);
-      }
-    } catch {
-      // Ignore non-JSON messages
-    }
-  }, []);
-
-  // Build injected JS for a given query: set the keyword and wait until VRF hidden input stabilizes to a full token
-  const getVrfForQueryJs = (query: string) => `
-    (function(){
-      var TARGET = ${JSON.stringify(query)};
-      var last = '';
-      var stableCount = 0;
-      var attempts = 0;
-      function q(sel){ try { return document.querySelector(sel); } catch(e){ return null; } }
-      function get(){
-        var form = q('#nav-search form') || q('form[action="filter"]') || q('form[action*="/filter"]');
-        var kw = form ? form.querySelector('input[name="keyword"]') : q('input[name="keyword"]');
-        var vrf = form ? form.querySelector('input[name="vrf"]') : q('input[name="vrf"]');
-        return {kw:kw, vrf:vrf};
-      }
-      function tick(){
-        attempts++;
-        var els = get();
-        if(els.kw){
-          if(els.kw.value !== TARGET){
-            els.kw.value = TARGET;
-            ['input','keyup','change'].forEach(function(evt){ try{ els.kw.dispatchEvent(new Event(evt,{bubbles:true})) }catch(e){} });
-          }
-        }
-        var val = els.vrf && els.vrf.value ? String(els.vrf.value) : '';
-        // Require at least one hyphen and minimum length, and stability over two ticks
-        if(/-/.test(val) && val.length >= 30){
-          if(val === last){
-            stableCount++;
-          } else {
-            stableCount = 0;
-            last = val;
-          }
-          if(stableCount >= 2){
-            try{ window.ReactNativeWebView.postMessage(JSON.stringify({type:'VRF_TOKEN', token: val, query: TARGET})); }catch(e){}
-            return;
-          }
-        }
-        if(attempts < 120){ setTimeout(tick, 120); } else { try{ window.ReactNativeWebView.postMessage(JSON.stringify({type:'VRF_ERROR', query: TARGET})); }catch(e){} }
-      }
-      if(document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(tick, 80);
-      else { window.addEventListener('DOMContentLoaded', function(){ setTimeout(tick, 80); }); window.addEventListener('load', function(){ setTimeout(tick, 80); }); }
-      true;
-    })();
-  `;
-
   // Render search history item - memoized to prevent re-renders
   const renderHistoryItem = useCallback(
     (item: SearchHistoryItem) => (
@@ -589,15 +503,30 @@ export default function MangaSearchScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: colors.primary }]}
-            onPress={() => {
-              setVrfToken(null);
-              vrfTokenQueryRef.current = null;
-              currentQueryRef.current = searchQuery.trim();
-              if ((currentQueryRef.current || '').length > 2) {
-                setVrfWebViewKey((k) => k + 1);
-                setIsLoading(true);
-              } else {
+            onPress={async () => {
+              const q = searchQuery.trim();
+              if (q.length <= 2) {
                 setTokenError(false);
+                return;
+              }
+
+              setTokenError(false);
+              setIsLoading(true);
+              const seq = ++inFlightSeqRef.current;
+
+              try {
+                const items = await searchManga(q);
+                if (inFlightSeqRef.current !== seq) return;
+                setSearchResults(items);
+                setLastCompletedQuery(q.toLowerCase());
+              } catch (error) {
+                if (inFlightSeqRef.current !== seq) return;
+                setTokenError(true);
+                logger().error('Service', 'Search retry failed', { error });
+              } finally {
+                if (inFlightSeqRef.current === seq) {
+                  setIsLoading(false);
+                }
               }
             }}
           >
@@ -788,6 +717,19 @@ export default function MangaSearchScreen() {
               </TouchableOpacity>
             )}
           </View>
+          {isReplacementMode ? (
+            <View style={styles.replacementBanner}>
+              <Ionicons
+                name="refresh-circle-outline"
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={styles.replacementBannerText}>
+                Replacing &quot;{normalizedReplacementSourceTitle}&quot;. Select
+                the correct result to move its bookmark progress over.
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -810,22 +752,38 @@ export default function MangaSearchScreen() {
           overScrollMode="never"
         />
 
-        {/* Hidden WebView for per-query VRF token acquisition */}
-        {debouncedSearchQuery.length > 2 && !vrfToken && (
-          <CustomWebView
-            key={vrfWebViewKey}
-            source={{ uri: `${MANGA_API_URL}/filter` }}
-            style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
-            injectedJavaScript={getVrfForQueryJs(
-              (debouncedSearchQuery || '').trim()
-            )}
-            onMessage={handleWebViewMessage}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            allowedHosts={['mangafire.to']}
-          />
-        )}
       </View>
+
+      <AlertComponent
+        visible={isReplacementAlertVisible}
+        title="Replace missing bookmark"
+        onClose={() => {
+          setIsReplacementAlertVisible(false);
+          setReplacementCandidate(null);
+        }}
+        {...(replacementCandidate
+          ? {
+              message: `Replace "${normalizedReplacementSourceTitle}" with "${replacementCandidate.title}" and move the saved bookmark progress over?`,
+            }
+          : {})}
+        options={[
+          {
+            text: 'Cancel',
+            onPress: () => {
+              setIsReplacementAlertVisible(false);
+              setReplacementCandidate(null);
+            },
+          },
+          {
+            text: 'Replace Bookmark',
+            icon: 'swap-horizontal',
+            onPress: () => {
+              handleConfirmReplacement().catch(console.error);
+            },
+          },
+        ]}
+        type="confirm"
+      />
     </SafeAreaView>
   );
 }
@@ -892,6 +850,25 @@ const getStyles = (
     },
     searchLoader: {
       marginRight: 4,
+    },
+    replacementBanner: {
+      marginTop: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      backgroundColor: colors.primary + '12',
+      borderWidth: 1,
+      borderColor: colors.primary + '26',
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+    },
+    replacementBannerText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.text,
+      fontWeight: '500',
     },
     loadingContainer: {
       flex: 1,
