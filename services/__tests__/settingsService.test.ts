@@ -24,10 +24,15 @@ import {
 jest.mock('../bookmarkService', () => ({
   setMangaData: jest.fn(),
   getMangaData: jest.fn(),
+  removeBookmarkKeyFromIndex: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../mangaFireService', () => ({
   fetchMangaDetails: jest.fn(),
+}));
+
+jest.mock('../mangaIdMigrationService', () => ({
+  resolveStoredMangaId: jest.fn(),
 }));
 
 jest.mock('../CacheImages', () => ({
@@ -38,12 +43,19 @@ jest.mock('../CacheImages', () => ({
 
 const { setMangaData, getMangaData } = require('../bookmarkService');
 const { fetchMangaDetails } = require('../mangaFireService');
+const { resolveStoredMangaId } = require('../mangaIdMigrationService');
 const { imageCache } = require('../CacheImages');
 
 describe('settingsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
+    (resolveStoredMangaId as jest.Mock).mockImplementation(
+      async (id: string) => ({
+        action: 'local_only',
+        id,
+      })
+    );
   });
 
   it('returns default app settings when none stored', async () => {
@@ -152,7 +164,9 @@ describe('settingsService', () => {
       ['manga_1_read_chapters', JSON.stringify(['1'])],
     ]);
 
-    (fetchMangaDetails as jest.Mock).mockResolvedValue({
+    (resolveStoredMangaId as jest.Mock).mockResolvedValue({
+      action: 'use_current',
+      id: '1',
       title: 'New Title',
       bannerImage: 'new.png',
     });
@@ -160,6 +174,7 @@ describe('settingsService', () => {
     const result = await migrateToNewStorage();
 
     expect(imageCache.clearCache).toHaveBeenCalled();
+    expect(fetchMangaDetails).not.toHaveBeenCalled();
     expect(setMangaData).toHaveBeenCalledWith(
       expect.objectContaining({
         id: '1',
@@ -169,6 +184,7 @@ describe('settingsService', () => {
       })
     );
     expect(result.success).toBe(true);
+    expect(result.message).toContain('Migrated 1 manga');
     expect(await AsyncStorage.getItem('bookmark_1')).toBeNull();
   });
 
@@ -315,7 +331,7 @@ describe('settingsService', () => {
           theme: 'system',
           enableDebugTab: false,
           onboardingCompleted: false,
-          defaultLayout: 'list',
+          defaultLayout: 'grid',
         })
       );
       jest
@@ -473,7 +489,9 @@ describe('settingsService', () => {
     it('handles missing optional data', async () => {
       await AsyncStorage.setItem('bookmark_1', 'Reading');
 
-      (fetchMangaDetails as jest.Mock).mockResolvedValue({
+      (resolveStoredMangaId as jest.Mock).mockResolvedValue({
+        action: 'use_current',
+        id: '1',
         title: 'Fetched Title',
         bannerImage: 'fetched.jpg',
       });
@@ -498,17 +516,80 @@ describe('settingsService', () => {
         ['image_1', 'local.jpg'],
       ]);
 
-      (fetchMangaDetails as jest.Mock).mockResolvedValue(null);
+      (resolveStoredMangaId as jest.Mock).mockResolvedValue({
+        action: 'local_only',
+        id: '1',
+      });
+      (fetchMangaDetails as jest.Mock).mockRejectedValue(
+        new Error('Request failed with status code 404')
+      );
 
       const result = await migrateToNewStorage();
 
       expect(result.success).toBe(true);
+      expect(result.message).toContain('could not verify online');
       expect(setMangaData).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Local Title',
           bannerImage: 'local.jpg',
         })
       );
+    });
+
+    it('remaps composite legacy IDs to the new hid during migration', async () => {
+      await AsyncStorage.multiSet([
+        ['bookmark_tougen-ankii.37z1y', 'Reading'],
+        ['title_tougen-ankii.37z1y', 'Tougen Anki'],
+        ['image_tougen-ankii.37z1y', 'local.jpg'],
+      ]);
+
+      (resolveStoredMangaId as jest.Mock).mockResolvedValue({
+        action: 'remap',
+        fromId: 'tougen-ankii.37z1y',
+        toId: '37z1y',
+        title: 'Tougen Anki',
+        bannerImage: 'remote.jpg',
+      });
+
+      const result = await migrateToNewStorage();
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('updated to new MangaFire links');
+      expect(setMangaData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: '37z1y',
+          title: 'Tougen Anki',
+          bannerImage: 'remote.jpg',
+        })
+      );
+      expect(
+        await AsyncStorage.getItem('bookmark_tougen-ankii.37z1y')
+      ).toBeNull();
+    });
+
+    it('continues migrating other bookmarks when one bookmark fails', async () => {
+      await AsyncStorage.multiSet([
+        ['bookmark_bad-id', 'Reading'],
+        ['title_bad-id', 'Broken'],
+        ['bookmark_good-id', 'To Read'],
+        ['title_good-id', 'Good Manga'],
+      ]);
+
+      (resolveStoredMangaId as jest.Mock)
+        .mockRejectedValueOnce(new Error('Lookup failed'))
+        .mockResolvedValueOnce({
+          action: 'use_current',
+          id: 'good-id',
+          title: 'Good Manga',
+          bannerImage: 'good.jpg',
+        });
+
+      const result = await migrateToNewStorage();
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Migrated 1 manga');
+      expect(result.message).toContain('1 failed');
+      expect(setMangaData).toHaveBeenCalledTimes(1);
     });
 
     it('returns failure when migration throws', async () => {
@@ -529,7 +610,9 @@ describe('settingsService', () => {
         ['manga_1_read_chapters', JSON.stringify(['1', '2', '5'])],
       ]);
 
-      (fetchMangaDetails as jest.Mock).mockResolvedValue({
+      (resolveStoredMangaId as jest.Mock).mockResolvedValue({
+        action: 'use_current',
+        id: '1',
         title: 'Test Manga',
         bannerImage: 'test.jpg',
       });

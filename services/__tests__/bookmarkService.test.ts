@@ -6,6 +6,7 @@ import {
   fetchBookmarkStatus,
   saveBookmark,
   removeBookmark,
+  replaceBookmark,
   getBookmarkPopupConfig,
   getChapterLongPressAlertConfig,
   updateDownloadStatus,
@@ -78,7 +79,9 @@ describe('bookmarkService', () => {
     });
 
     it('handles storage errors gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       const result = await getMangaData('error-id');
       expect(result).toBeNull();
@@ -138,10 +141,69 @@ describe('bookmarkService', () => {
     });
   });
 
+  describe('replaceBookmark', () => {
+    it('moves bookmark progress and status to the replacement manga', async () => {
+      await AsyncStorage.setItem(
+        'manga_old-id',
+        JSON.stringify({
+          id: 'old-id',
+          title: 'Old Manga',
+          bannerImage: 'old.jpg',
+          bookmarkStatus: 'Reading',
+          readChapters: ['1', '2', '3'],
+          lastReadChapter: '3',
+          lastNotifiedChapter: '3',
+          lastUpdated: 100,
+          totalChapters: 20,
+        })
+      );
+      await AsyncStorage.setItem(
+        'bookmarkKeys',
+        JSON.stringify(['bookmark_old-id'])
+      );
+
+      const replaced = await replaceBookmark('old-id', {
+        id: 'new-id',
+        title: 'New Manga',
+        bannerImage: 'new.jpg',
+        totalChapters: 40,
+      });
+
+      expect(replaced).toMatchObject({
+        id: 'new-id',
+        title: 'New Manga',
+        bannerImage: 'new.jpg',
+        bookmarkStatus: 'Reading',
+        readChapters: ['1', '2', '3'],
+        lastReadChapter: '3',
+        lastNotifiedChapter: '3',
+        totalChapters: 40,
+      });
+      expect(await AsyncStorage.getItem('manga_old-id')).toBeNull();
+      expect(
+        JSON.parse((await AsyncStorage.getItem('manga_new-id')) || '{}')
+      ).toMatchObject({
+        id: 'new-id',
+        bookmarkStatus: 'Reading',
+        readChapters: ['1', '2', '3'],
+        lastReadChapter: '3',
+      });
+      expect(
+        JSON.parse((await AsyncStorage.getItem('bookmarkKeys')) || '[]')
+      ).toEqual(['bookmark_new-id']);
+      expect(await AsyncStorage.getItem('bookmarkChanged')).toBe('true');
+    });
+  });
+
   describe('getBookmarkPopupConfig', () => {
     it('builds popup configuration based on current status', () => {
       const handler = jest.fn();
-      const popup = getBookmarkPopupConfig('Reading', 'Title', handler, handler);
+      const popup = getBookmarkPopupConfig(
+        'Reading',
+        'Title',
+        handler,
+        handler
+      );
       expect(popup.options).toHaveLength(5);
       expect(popup.title).toContain('Update');
       expect(popup.title).toContain('Title');
@@ -165,7 +227,12 @@ describe('bookmarkService', () => {
 
     it('includes unbookmark option when already bookmarked', () => {
       const handler = jest.fn();
-      const popup = getBookmarkPopupConfig('Reading', 'Title', handler, handler);
+      const popup = getBookmarkPopupConfig(
+        'Reading',
+        'Title',
+        handler,
+        handler
+      );
 
       const optionTexts = popup.options.map((o: any) => o.text);
       expect(optionTexts).toContain('Unbookmark');
@@ -196,12 +263,8 @@ describe('bookmarkService', () => {
 
       expect(setBookmarkStatus).toHaveBeenCalledWith('Reading');
       expect(setIsAlertVisible).toHaveBeenCalledWith(false);
-      expect(updateAniListStatus).toHaveBeenCalledWith(
-        'Series',
-        'Reading',
-        ['1'],
-        1
-      );
+      // AniList sync is temporarily disabled
+      expect(updateAniListStatus).not.toHaveBeenCalled();
       expect(Alert.alert).not.toHaveBeenCalled();
     });
 
@@ -232,12 +295,8 @@ describe('bookmarkService', () => {
       expect(options).toHaveLength(2);
 
       await options[1].onPress();
-      expect(updateAniListStatus).toHaveBeenCalledWith(
-        'Series',
-        'Read',
-        ['1'],
-        2
-      );
+      // AniList sync is temporarily disabled
+      expect(updateAniListStatus).not.toHaveBeenCalled();
     });
 
     it('handles "No" response when marking as read', async () => {
@@ -266,7 +325,8 @@ describe('bookmarkService', () => {
 
       // Press "No"
       await options[0].onPress();
-      expect(updateAniListStatus).toHaveBeenCalled();
+      // AniList sync is temporarily disabled
+      expect(updateAniListStatus).not.toHaveBeenCalled();
     });
 
     it('skips AniList update for On Hold status', async () => {
@@ -394,9 +454,9 @@ describe('bookmarkService', () => {
       const args = (Alert.alert as jest.Mock).mock.calls[0];
       const options = args[2];
 
-      // Press "No" with empty readChapters - should still update AniList
+      // Press "No" with empty readChapters - AniList sync is temporarily disabled
       await options[0].onPress();
-      expect(updateAniListStatus).toHaveBeenCalledWith('Series', 'Read', [], 2);
+      expect(updateAniListStatus).not.toHaveBeenCalled();
     });
 
     it('handles To Read status correctly', async () => {
@@ -421,7 +481,8 @@ describe('bookmarkService', () => {
       );
 
       expect(setBookmarkStatus).toHaveBeenCalledWith('To Read');
-      expect(updateAniListStatus).toHaveBeenCalledWith('Series', 'To Read', [], 1);
+      // AniList sync is temporarily disabled
+      expect(updateAniListStatus).not.toHaveBeenCalled();
       expect(Alert.alert).not.toHaveBeenCalled(); // No prompt for To Read
     });
   });
@@ -537,7 +598,9 @@ describe('bookmarkService', () => {
 
       const stored = await AsyncStorage.getItem('manga_dl1');
       const parsed = JSON.parse(stored!);
-      expect(parsed.downloadStatus['5'].status).toBe(DownloadStatus.DOWNLOADING);
+      expect(parsed.downloadStatus['5'].status).toBe(
+        DownloadStatus.DOWNLOADING
+      );
       expect(parsed.downloadStatus['5'].progress).toBe(50);
     });
 
@@ -650,17 +713,16 @@ describe('bookmarkService', () => {
     });
 
     it('returns empty array when no downloaded chapters', async () => {
-      await AsyncStorage.setItem(
-        'manga_dch2',
-        JSON.stringify({ id: 'dch2' })
-      );
+      await AsyncStorage.setItem('manga_dch2', JSON.stringify({ id: 'dch2' }));
 
       const chapters = await getDownloadedChapters('dch2');
       expect(chapters).toEqual([]);
     });
 
     it('returns empty array on error', async () => {
-      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       const chapters = await getDownloadedChapters('error-id');
       expect(chapters).toEqual([]);
@@ -752,9 +814,9 @@ describe('bookmarkService', () => {
       const result = await getAllDownloadedManga();
 
       expect(result).toHaveLength(2);
-      expect(result.map(m => m.id)).toContain('all1');
-      expect(result.map(m => m.id)).toContain('all3');
-      expect(result.map(m => m.id)).not.toContain('all2');
+      expect(result.map((m) => m.id)).toContain('all1');
+      expect(result.map((m) => m.id)).toContain('all3');
+      expect(result.map((m) => m.id)).not.toContain('all2');
     });
 
     it('returns empty array when no manga with downloads', async () => {
@@ -797,7 +859,9 @@ describe('bookmarkService', () => {
     });
 
     it('returns 0 on error', async () => {
-      jest.spyOn(AsyncStorage, 'getAllKeys').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getAllKeys')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       const result = await getTotalDownloadSize();
       expect(result).toBe(0);
@@ -806,7 +870,9 @@ describe('bookmarkService', () => {
 
   describe('Error handling', () => {
     it('handles error in setMangaData gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'setItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'setItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       // Should not throw
       await expect(
@@ -822,7 +888,9 @@ describe('bookmarkService', () => {
     });
 
     it('handles error in removeBookmark gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'removeItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'removeItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       const setBookmarkStatus = jest.fn();
       const setIsAlertVisible = jest.fn();
@@ -834,7 +902,9 @@ describe('bookmarkService', () => {
     });
 
     it('handles error in removeDownloadStatus gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       // Should not throw
       await expect(
@@ -843,7 +913,9 @@ describe('bookmarkService', () => {
     });
 
     it('handles error in updateTotalDownloadSize gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       // Should not throw
       await expect(
@@ -852,21 +924,27 @@ describe('bookmarkService', () => {
     });
 
     it('handles error in getChapterDownloadStatus gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       const result = await getChapterDownloadStatus('error-id', '1');
       expect(result).toBeNull();
     });
 
     it('handles error in isChapterDownloaded gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       const result = await isChapterDownloaded('error-id', '1');
       expect(result).toBe(false);
     });
 
     it('handles error in getAllDownloadedManga gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'getAllKeys').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getAllKeys')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       const result = await getAllDownloadedManga();
       expect(result).toEqual([]);
@@ -876,7 +954,9 @@ describe('bookmarkService', () => {
       // Mock offlineCacheService to throw an error after setMangaData succeeds
       // This triggers the catch block in saveBookmark since setMangaData swallows its own errors
       const { offlineCacheService } = require('@/services/offlineCacheService');
-      offlineCacheService.cacheMangaDetails.mockRejectedValueOnce(new Error('Cache error'));
+      offlineCacheService.cacheMangaDetails.mockRejectedValueOnce(
+        new Error('Cache error')
+      );
 
       const setBookmarkStatus = jest.fn();
       const setIsAlertVisible = jest.fn();
@@ -897,11 +977,16 @@ describe('bookmarkService', () => {
     });
 
     it('handles updateDownloadStatus error gracefully', async () => {
-      jest.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('Storage error'));
+      jest
+        .spyOn(AsyncStorage, 'getItem')
+        .mockRejectedValueOnce(new Error('Storage error'));
 
       // Should not throw
       await expect(
-        updateDownloadStatus('error-id', '1', { status: DownloadStatus.DOWNLOADING, progress: 50 })
+        updateDownloadStatus('error-id', '1', {
+          status: DownloadStatus.DOWNLOADING,
+          progress: 50,
+        })
       ).resolves.not.toThrow();
     });
   });
@@ -919,7 +1004,11 @@ describe('bookmarkService', () => {
       // Set up valid manga data so getMangaData returns it
       await AsyncStorage.setItem(
         'manga_error-manga',
-        JSON.stringify({ id: 'error-manga', readChapters: [], lastReadChapter: '' })
+        JSON.stringify({
+          id: 'error-manga',
+          readChapters: [],
+          lastReadChapter: '',
+        })
       );
 
       const config = getChapterLongPressAlertConfig(
@@ -992,10 +1081,17 @@ describe('bookmarkService', () => {
 
     it('marks correct option as selected', () => {
       const handler = jest.fn();
-      const popup = getBookmarkPopupConfig('To Read', 'Title', handler, handler);
+      const popup = getBookmarkPopupConfig(
+        'To Read',
+        'Title',
+        handler,
+        handler
+      );
 
       const toReadOption = popup.options.find((o: any) => o.text === 'To Read');
-      const readingOption = popup.options.find((o: any) => o.text === 'Reading');
+      const readingOption = popup.options.find(
+        (o: any) => o.text === 'Reading'
+      );
 
       expect(toReadOption?.isSelected).toBe(true);
       expect(readingOption?.isSelected).toBe(false);
@@ -1004,14 +1100,21 @@ describe('bookmarkService', () => {
     it('option handlers trigger callbacks', () => {
       const handleSave = jest.fn();
       const handleRemove = jest.fn();
-      const popup = getBookmarkPopupConfig('Reading', 'Title', handleSave, handleRemove);
+      const popup = getBookmarkPopupConfig(
+        'Reading',
+        'Title',
+        handleSave,
+        handleRemove
+      );
 
       const toReadOption = popup.options.find((o: any) => o.text === 'To Read');
       toReadOption?.onPress();
 
       expect(handleSave).toHaveBeenCalledWith('To Read');
 
-      const unbookmarkOption = popup.options.find((o: any) => o.text === 'Unbookmark');
+      const unbookmarkOption = popup.options.find(
+        (o: any) => o.text === 'Unbookmark'
+      );
       unbookmarkOption?.onPress();
 
       expect(handleRemove).toHaveBeenCalled();
@@ -1020,10 +1123,17 @@ describe('bookmarkService', () => {
     it('triggers all status option handlers', () => {
       const handleSave = jest.fn();
       const handleRemove = jest.fn();
-      const popup = getBookmarkPopupConfig(null, 'Title', handleSave, handleRemove);
+      const popup = getBookmarkPopupConfig(
+        null,
+        'Title',
+        handleSave,
+        handleRemove
+      );
 
       // Trigger Reading option
-      const readingOption = popup.options.find((o: any) => o.text === 'Reading');
+      const readingOption = popup.options.find(
+        (o: any) => o.text === 'Reading'
+      );
       readingOption?.onPress();
       expect(handleSave).toHaveBeenCalledWith('Reading');
 
@@ -1040,7 +1150,12 @@ describe('bookmarkService', () => {
 
     it('marks On Hold as selected when current status', () => {
       const handler = jest.fn();
-      const popup = getBookmarkPopupConfig('On Hold', 'Title', handler, handler);
+      const popup = getBookmarkPopupConfig(
+        'On Hold',
+        'Title',
+        handler,
+        handler
+      );
 
       const onHoldOption = popup.options.find((o: any) => o.text === 'On Hold');
       expect(onHoldOption?.isSelected).toBe(true);

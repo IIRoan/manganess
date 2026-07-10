@@ -1,0 +1,7 @@
+/api/auth/forgot-password
+/api/auth/login
+/api/auth/logout
+/api/auth/register
+/api/auth/reset-password
+/api/me
+/api/user/reading

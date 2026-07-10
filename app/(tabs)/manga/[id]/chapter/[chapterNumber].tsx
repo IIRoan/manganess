@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   BackHandler,
-  Platform,
   useColorScheme,
   Animated,
   StatusBar,
@@ -27,18 +26,16 @@ import {
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
 
-import { WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 
 import { getMangaData } from '@/services/bookmarkService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  getChapterUrl,
   markChapterAsRead,
-  getInjectedJavaScript,
   fetchMangaDetails,
   normalizeChapterNumber,
+  loadOnlineChapterImages,
 } from '@/services/mangaFireService';
 import type { MangaDetails as MangaDetailsType } from '@/types';
 import { chapterStorageService } from '@/services/chapterStorageService';
@@ -47,7 +44,6 @@ import { ChapterImage } from '@/types/download';
 import { useTheme } from '@/hooks/useTheme';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useOffline } from '@/hooks/useOffline';
-import CustomWebView from '@/components/CustomWebView';
 import {
   ChapterGuideOverlay,
   hasSeenChapterGuide,
@@ -79,10 +75,11 @@ const ManhwaImage = React.memo(
     const [isImageLoaded, setIsImageLoaded] = useState(false);
 
     useEffect(() => {
-      if (image.localPath) {
+      const imageUri = image.localPath || image.originalUrl;
+      if (imageUri) {
         const screenWidth = Dimensions.get('window').width;
         Image.getSize(
-          image.localPath,
+          imageUri,
           (width, height) => {
             // Calculate height based on aspect ratio to fit screen width
             const aspectRatio = height / width;
@@ -95,13 +92,13 @@ const ManhwaImage = React.memo(
           }
         );
       }
-    }, [image.localPath]);
+    }, [image.localPath, image.originalUrl]);
 
     return (
       <TouchableWithoutFeedback onPress={onPress}>
         <View style={getStyles(colorScheme).manhwaImageContainer}>
           <Image
-            source={{ uri: image.localPath }}
+            source={{ uri: image.localPath || image.originalUrl }}
             style={[
               getStyles(colorScheme).manhwaImage,
               {
@@ -167,6 +164,7 @@ export default function ReadChapterScreen() {
   const [showGuide, setShowGuide] = useState(false);
   const [guideStep, setGuideStep] = useState(1);
   const [isDownloaded, setIsDownloaded] = useState(false);
+  const [isOnlineChapter, setIsOnlineChapter] = useState(false);
   const [downloadedImages, setDownloadedImages] = useState<
     ChapterImage[] | null
   >(null);
@@ -236,13 +234,6 @@ export default function ReadChapterScreen() {
     [chapterNumber]
   );
 
-  // Only create network-related variables when online
-  const chapterIdentifier = normalizedChapterParam || chapterNumber || '';
-  const chapterUrl = !isOffline ? getChapterUrl(id, chapterIdentifier) : '';
-  const webLoadStartRef = useRef<number>(
-    (globalThis as any).performance?.now?.() ?? Date.now()
-  );
-  const log = logger();
   const supportsWorklets =
     typeof (Animated as any).useWorkletCallback === 'function';
   const currentChapterIndex = useMemo(() => {
@@ -498,8 +489,9 @@ export default function ReadChapterScreen() {
       let loadedCount = 0;
 
       images.slice(0, sampleSize).forEach((image) => {
+        const imageUri = image.localPath || image.originalUrl;
         Image.getSize(
-          image.localPath || '',
+          imageUri || '',
           (width, height) => {
             const aspectRatio = height / width;
             // If aspect ratio > 1.5, consider it a tall manhwa-style image
@@ -532,18 +524,20 @@ export default function ReadChapterScreen() {
   }, []);
 
   useEffect(() => {
-    let isActive = true;
+    const loadToken = Symbol('chapter-load');
+    let activeToken: symbol | null = loadToken;
+    const isActive = () => activeToken === loadToken;
 
     const loadChapter = async () => {
       if (!id || !chapterNumber) {
-        if (isActive) {
+        if (isActive()) {
           setError('Invalid chapter parameters');
           setIsLoading(false);
         }
         return;
       }
 
-      if (isActive) {
+      if (isActive()) {
         setIsLoading(true);
         setError(null);
       }
@@ -554,7 +548,7 @@ export default function ReadChapterScreen() {
         const downloadedChapters =
           await chapterStorageService.getDownloadedChapters(mangaId);
 
-        if (!isActive) return;
+        if (!isActive()) return;
 
         let matchedChapter: string | null = null;
         if (downloadedChapters.includes(requestedChapter)) {
@@ -578,36 +572,37 @@ export default function ReadChapterScreen() {
           );
         }
 
-        if (!isActive) return;
+        if (!isActive()) return;
 
         if (images && images.length > 0) {
           setIsDownloaded(true);
+          setIsOnlineChapter(false);
           setDownloadedImages(images);
           downloadedImagesRef.current = images;
           setCurrentPage(0);
 
           try {
             const detectedType = await detectContentType(images);
-            if (isActive) {
+            if (isActive()) {
               setContentType(detectedType);
             }
           } catch (detectError) {
             logger().error('Service', 'Error detecting content type', {
               error: detectError,
             });
-            if (isActive) {
+            if (isActive()) {
               setContentType('manga');
             }
           }
 
           const mangaData = await getMangaData(mangaId);
-          if (!isActive) return;
+          if (!isActive()) return;
 
           let resolvedTitle = mangaData?.title;
           if (!resolvedTitle) {
             const cachedDetails =
               await offlineCacheService.getCachedMangaDetails(mangaId);
-            if (!isActive) return;
+            if (!isActive()) return;
             resolvedTitle = cachedDetails?.title;
           }
 
@@ -617,27 +612,71 @@ export default function ReadChapterScreen() {
               : `Chapter ${chapterNumber}`;
           }
 
-          if (isActive) {
+          if (isActive()) {
+            setMangaTitle(resolvedTitle);
+            setError(null);
+          }
+        } else if (!isOffline) {
+          const cachedDetails =
+            await offlineCacheService.getCachedMangaDetails(mangaId);
+          if (!isActive()) return;
+
+          const onlineImages = await loadOnlineChapterImages(
+            mangaId,
+            requestedChapter,
+            cachedDetails?.chapters ?? mangaDetails?.chapters
+          );
+
+          if (!isActive()) return;
+
+          setIsDownloaded(false);
+          setIsOnlineChapter(true);
+          setDownloadedImages(onlineImages);
+          downloadedImagesRef.current = onlineImages;
+          setCurrentPage(0);
+
+          try {
+            const detectedType = await detectContentType(onlineImages);
+            if (isActive()) {
+              setContentType(detectedType);
+            }
+          } catch (detectError) {
+            logger().error('Service', 'Error detecting online content type', {
+              error: detectError,
+            });
+            if (isActive()) {
+              setContentType('manga');
+            }
+          }
+
+          const mangaData = await getMangaData(mangaId);
+          if (!isActive()) return;
+
+          let resolvedTitle =
+            mangaData?.title ?? cachedDetails?.title ?? mangaDetails?.title;
+          if (!resolvedTitle) {
+            resolvedTitle = `Chapter ${chapterNumber}`;
+          }
+
+          if (isActive()) {
             setMangaTitle(resolvedTitle);
             setError(null);
           }
         } else {
-          if (isActive) {
+          if (isActive()) {
             setDownloadedImages(null);
             downloadedImagesRef.current = null;
             setContentType(null);
             setIsDownloaded(false);
+            setIsOnlineChapter(false);
             setCurrentPage(0);
-
-            if (isOffline) {
-              setError(
-                'This chapter is not downloaded. Please connect to internet or download it first.'
-              );
-            }
+            setError(
+              'This chapter is not downloaded. Please connect to internet or download it first.'
+            );
           }
         }
       } catch (error) {
-        if (isActive) {
+        if (isActive()) {
           logger().error('UI', 'Error loading chapter content', {
             error,
             mangaId: id,
@@ -646,7 +685,7 @@ export default function ReadChapterScreen() {
           setError('Failed to load chapter.');
         }
       } finally {
-        if (isActive) {
+        if (isActive()) {
           setIsLoading(false);
         }
       }
@@ -655,9 +694,9 @@ export default function ReadChapterScreen() {
     loadChapter();
 
     return () => {
-      isActive = false;
+      activeToken = null;
     };
-  }, [id, chapterNumber, isOffline, detectContentType]);
+  }, [id, chapterNumber, isOffline, detectContentType, mangaDetails?.chapters]);
 
   const fetchDetails = useCallback(async () => {
     if (!id) {
@@ -830,76 +869,21 @@ export default function ReadChapterScreen() {
     }, [navigateBack])
   );
 
-  const handleLoadEnd = () => {
-    setIsLoading(false);
-    if (isDebugEnabled()) {
-      const dur =
-        ((globalThis as any).performance?.now?.() ?? Date.now()) -
-        (webLoadStartRef.current ??
-          (globalThis as any).performance?.now?.() ??
-          Date.now());
-      log.info('UI', 'ChapterWebView load complete', {
-        id,
-        chapterNumber,
-        durationMs: Math.round(dur),
-      });
-    }
-  };
   const handleBackPress = () => navigateBack();
-  const handleError = () => {
-    setError('Failed to load chapter. Please try again.');
-    setIsLoading(false);
-  };
 
-  const handleNavigationStateChange = useCallback(
-    async (navState: WebViewNavigation) => {
-      if (navState.url !== chapterUrl) {
-        const newChapterMatch = navState.url.match(/\/chapter-([\w.\-]+)/i);
-        const matchedSegment = newChapterMatch?.[1];
-        const normalizedTarget = normalizeChapterNumber(matchedSegment);
-
-        if (normalizedTarget) {
-          // Add cooldown to prevent rapid redirects from the website
-          // (MangaFire redirects to chapter 1.1 about 1 second after page load)
-          const now = Date.now();
-          const timeSinceLastNav = now - navigationTimestampRef.current;
-          const cooldownPeriod = 3000; // 3 seconds
-
-          if (isDebugEnabled()) {
-            log.debug('UI', 'NavigationStateChange detected', {
-              target: normalizedTarget,
-              lastNavChapter: lastNavigatedChapterRef.current,
-              timeSinceLastNav,
-              cooldownActive: timeSinceLastNav < cooldownPeriod,
-            });
-          }
-
-          // If we're within cooldown and trying to navigate to a DIFFERENT chapter, ignore it
-          if (
-            timeSinceLastNav < cooldownPeriod &&
-            lastNavigatedChapterRef.current &&
-            normalizedTarget !== lastNavigatedChapterRef.current
-          ) {
-            log.warn('UI', 'Blocking rapid redirect (likely from website)', {
-              from: lastNavigatedChapterRef.current,
-              to: normalizedTarget,
-              timeSinceLastNav,
-            });
-            return; // Ignore this redirect
-          }
-
-          // Update navigation tracking
-          navigationTimestampRef.current = now;
-          lastNavigatedChapterRef.current = normalizedTarget;
-
-          if (mangaTitle && id) {
-            await markChapterAsRead(id, normalizedTarget, mangaTitle);
-          }
-          router.replace(`/manga/${id}/chapter/${normalizedTarget}`);
-        }
+  const navigateToChapter = useCallback(
+    (targetChapter: string) => {
+      if (!id || !targetChapter) {
+        return;
       }
+
+      navigationTimestampRef.current = Date.now();
+      lastNavigatedChapterRef.current = targetChapter;
+      router.push(
+        `/manga/${id}/chapter/${encodeURIComponent(targetChapter)}`
+      );
     },
-    [chapterUrl, id, mangaTitle, router, log]
+    [id, router]
   );
 
   const handleChapterPress = (chapterNum: string) => {
@@ -907,11 +891,8 @@ export default function ReadChapterScreen() {
     if (!targetChapter) {
       return;
     }
-    // Update navigation tracking for this intentional navigation
-    navigationTimestampRef.current = Date.now();
-    lastNavigatedChapterRef.current = targetChapter;
     closeChapterList();
-    router.navigate(`/manga/${id}/chapter/${targetChapter}`);
+    navigateToChapter(targetChapter);
   };
 
   const navigateChapter = (chapterOffset: number) => {
@@ -923,56 +904,18 @@ export default function ReadChapterScreen() {
       if (!targetChapter) {
         return;
       }
-      // Update navigation tracking for this intentional navigation
-      navigationTimestampRef.current = Date.now();
-      lastNavigatedChapterRef.current = targetChapter;
-      router.navigate(`/manga/${id}/chapter/${targetChapter}`);
+      navigateToChapter(targetChapter);
     }
   };
 
   const handleNextChapter = () => navigateChapter(-1);
   const handlePreviousChapter = () => navigateChapter(1);
 
-  const handleWebViewMessage = (event: any) => {
-    if (event.nativeEvent.data === 'toggleControls') {
-      toggleControls();
-    }
-  };
-
   const handleDismissGuide = () => {
     setShowGuide(false);
     // Ensure controls are visible after dismissing the guide
     showControls();
   };
-
-  const injectedJS = `
-  ${getInjectedJavaScript(Colors[colorScheme].card)}
-  (function() {
-    var tapThreshold = 60;
-    var windowWidth = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
-    var windowHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
-    var topControlThreshold = windowHeight * 0.4; // 40% of the screen height
-
-    document.addEventListener('click', function(e) {
-      var tapX = e.clientX || e.pageX;
-      var tapY = e.clientY || e.pageY;
-      var isRightEdgeTap = tapX > windowWidth - tapThreshold;
-      var isLeftEdgeTap = tapX < tapThreshold;
-      var isTopControlArea = tapY < topControlThreshold;
-
-      // Check if the click target is a navigation element (e.g., a link or button)
-      var isNavigationElement = e.target.tagName === 'A' || e.target.tagName === 'BUTTON';
-
-      if (isTopControlArea) {
-        window.ReactNativeWebView.postMessage('toggleControls');
-      } else if (!isLeftEdgeTap && !isNavigationElement && isRightEdgeTap) {
-        //Right edge tap on bottom 60% - No action needed here anymore
-      } else if (!isLeftEdgeTap && !isNavigationElement && !isRightEdgeTap) {
-        window.ReactNativeWebView.postMessage('toggleControls');
-      }
-    });
-  })();
-`;
 
   const enhancedBackButtonSize = ensureMinimumSize(40);
   const enhancedNavigationButtonSize = ensureMinimumSize(44);
@@ -1078,7 +1021,7 @@ export default function ReadChapterScreen() {
       <TouchableWithoutFeedback onPress={handleDownloadedChapterTouch}>
         <View style={styles.mangaPageContainer}>
           <Image
-            source={{ uri: item.localPath }}
+            source={{ uri: item.localPath || item.originalUrl }}
             style={styles.mangaImage}
             resizeMode="contain"
             onError={(error) => {
@@ -1172,32 +1115,14 @@ export default function ReadChapterScreen() {
       ) : (
         <>
           <View style={styles.webViewContainer}>
-            {isDownloaded && downloadedImages ? (
+            {(isDownloaded || isOnlineChapter) && downloadedImages ? (
               renderDownloadedChapter()
-            ) : isOffline ? (
+            ) : (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>
-                  Chapter not available offline. Please download this chapter
-                  first.
+                  {error || 'Chapter is not available.'}
                 </Text>
               </View>
-            ) : (
-              <CustomWebView
-                source={{ uri: chapterUrl }}
-                currentUrl={chapterUrl}
-                style={styles.webView}
-                onLoadEnd={handleLoadEnd}
-                onError={handleError}
-                testID="chapter-webview"
-                injectedJavaScript={injectedJS}
-                onNavigationStateChange={handleNavigationStateChange}
-                onMessage={handleWebViewMessage}
-                allowedHosts={['mangafire.to']}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                decelerationRate={Platform.OS === 'ios' ? 'normal' : 0.9}
-                nestedScrollEnabled={true}
-              />
             )}
           </View>
 

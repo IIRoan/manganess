@@ -5,9 +5,9 @@ import {
   searchManga,
   setVrfToken,
   getVrfToken,
-  CloudflareDetectedError,
   normalizeChapterNumber,
   fetchMangaDetails,
+  checkMangaAvailability,
   getChapterUrl,
   markChapterAsRead,
   getBookmarkStatus,
@@ -25,6 +25,8 @@ import {
   batchFetchChapterImages,
   getVrfTokenFromChapterPage,
   fetchChapterImagesFromInterceptedRequest,
+  loadOnlineChapterImages,
+  getChapterApiIdFromList,
 } from '../mangaFireService';
 
 jest.mock('axios');
@@ -69,6 +71,120 @@ const {
   updateMangaStatus,
   isLoggedInToAniList,
 } = require('@/services/anilistService');
+
+const sampleApiTitle = {
+  id: 1,
+  hid: 'test-manga',
+  slug: 'test-manga',
+  title: 'Test Manga',
+  type: 'manga',
+  status: 'ongoing',
+  synopsisHtml: 'This is the description.',
+  altTitles: ['Alternative Title'],
+  authors: [{ name: 'Author Name' }],
+  genres: [{ name: 'Action' }, { name: 'Comedy' }],
+  rating: 8.5,
+  ratingCount: 100,
+  year: 2023,
+  poster: { large: 'https://image.jpg' },
+  url: '/title/test-manga.test',
+};
+
+const sampleApiTitleSummary = {
+  id: 1,
+  hid: 'abc12',
+  slug: 'query-result',
+  title: 'Title',
+  type: 'manga',
+  poster: { medium: 'https://image/1.jpg' },
+  url: '/title/query-result.abc12',
+};
+
+const sampleApiChapters: {
+  items: Array<{
+    id: number;
+    number: number | string;
+    name?: string;
+    createdAt: number;
+  }>;
+  meta: { hasNext: boolean };
+} = {
+  items: [
+    {
+      id: 5438730,
+      number: 1,
+      createdAt: 1704067200,
+    },
+  ],
+  meta: { hasNext: false },
+};
+
+function mockLegacyChapterHtmlPage(html: string) {
+  mockedAxios.get.mockImplementation((url: string) => {
+    if (url.includes('/api/titles/') && url.includes('/chapters')) {
+      return Promise.resolve({
+        data: { items: [], meta: { hasNext: false } },
+      });
+    }
+
+    return Promise.resolve({ data: html });
+  });
+}
+
+const legacyChapterUrl = '/read/one-piece.en/en/chapter-1';
+
+const sampleChapterPages = {
+  data: {
+    pages: [{ url: 'https://img1.jpg' }, { url: 'https://img2.jpg' }],
+  },
+};
+
+function mockMangaApiGet(
+  overrides: {
+    title?: Partial<typeof sampleApiTitle>;
+    chapters?: typeof sampleApiChapters;
+    searchItems?: typeof sampleApiTitleSummary[];
+    chapterPages?: typeof sampleChapterPages;
+    onRequest?: (url: string) => void;
+  } = {}
+) {
+  mockedAxios.get.mockImplementation((url: string) => {
+    overrides.onRequest?.(url);
+
+    if (url.includes('/chapters/')) {
+      return Promise.resolve({
+        data: overrides.chapterPages ?? sampleChapterPages,
+      });
+    }
+
+    if (url.includes('/titles/') && url.includes('/chapters')) {
+      return Promise.resolve({
+        data: overrides.chapters ?? sampleApiChapters,
+      });
+    }
+
+    if (url.includes('/titles/')) {
+      return Promise.resolve({
+        data: {
+          data: {
+            ...sampleApiTitle,
+            ...overrides.title,
+          },
+        },
+      });
+    }
+
+    if (url.includes('/titles')) {
+      return Promise.resolve({
+        data: {
+          items: overrides.searchItems ?? [sampleApiTitleSummary],
+        },
+      });
+    }
+
+    return Promise.resolve({ data: {} });
+  });
+}
 
 describe('mangaFireService', () => {
   beforeEach(() => {
@@ -154,72 +270,38 @@ describe('mangaFireService', () => {
       );
     });
 
-    it('searches manga and appends VRF token when present', async () => {
-      setVrfToken('vrf123');
-      mockedAxios.get.mockResolvedValue({ data: '<div></div>' });
+    it('searches manga through the JSON API', async () => {
+      mockMangaApiGet();
 
       const results = await searchManga('query');
+
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        expect.stringContaining('keyword=query&vrf=vrf123'),
-        expect.any(Object)
+        'https://mangafire.to/api/titles',
+        expect.objectContaining({
+          params: expect.objectContaining({ keyword: 'query' }),
+        })
       );
-      expect(Array.isArray(results)).toBe(true);
+      expect(results).toEqual([
+        expect.objectContaining({
+          id: 'abc12',
+          title: 'Title',
+        }),
+      ]);
     });
 
-    it('throws CloudflareDetectedError when challenge HTML detected', async () => {
+    it('propagates API errors from search', async () => {
       jest.useFakeTimers();
-      mockedAxios.get.mockResolvedValue({
-        data: '<html>cf-browser-verification</html>',
+      mockedAxios.get.mockRejectedValue(new Error('Network error'));
+
+      let thrownError: Error | undefined;
+      const promise = searchManga('test').catch((error) => {
+        thrownError = error;
       });
 
-      let thrownError: Error | undefined;
-      const promise = searchManga('test').catch(e => { thrownError = e; });
-
       await jest.runAllTimersAsync();
       await promise;
 
       expect(thrownError).toBeDefined();
-      expect(thrownError).toBeInstanceOf(CloudflareDetectedError);
-      expect((thrownError as CloudflareDetectedError).message).toContain(
-        'Cloudflare verification detected'
-      );
-      jest.useRealTimers();
-    });
-
-    it('detects Cloudflare with various markers', async () => {
-      jest.useFakeTimers();
-      const markers = [
-        'cf_captcha_kind',
-        'attention required',
-        'just a moment',
-      ];
-
-      for (const marker of markers) {
-        mockedAxios.get.mockResolvedValue({
-          data: `<html>${marker}</html>`,
-        });
-
-        let thrownError: Error | undefined;
-        const promise = searchManga('test').catch(e => { thrownError = e; });
-        await jest.runAllTimersAsync();
-        await promise;
-
-        expect(thrownError).toBeInstanceOf(CloudflareDetectedError);
-      }
-      jest.useRealTimers();
-    });
-
-    it('throws error on invalid response data', async () => {
-      jest.useFakeTimers();
-      mockedAxios.get.mockResolvedValue({ data: null });
-
-      let thrownError: Error | undefined;
-      const promise = searchManga('test').catch(e => { thrownError = e; });
-      await jest.runAllTimersAsync();
-      await promise;
-
-      expect(thrownError).toBeDefined();
-      expect(thrownError?.message).toContain('Invalid response data');
       jest.useRealTimers();
     });
   });
@@ -272,38 +354,14 @@ describe('mangaFireService', () => {
       await expect(fetchMangaDetails('  ')).rejects.toThrow('Manga ID is required');
     });
 
-    it('parses manga details from HTML', async () => {
-      const html = `
-        <h1 itemprop="name">Test Manga</h1>
-        <h6>Alternative Title</h6>
-        <p>Ongoing</p>
-        <div class="modal fade" id="synopsis">
-          <div class="modal-content p-4">
-            <div class="modal-close"></div>
-            This is the description.
-          </div>
-        </div>
-        <span>Author:</span><span><a href="#">Author Name</a></span>
-        <span>Published:</span><span>2023</span>
-        <span>Genres:</span><span><a href="#">Action</a><a href="#">Comedy</a></span>
-        <span class="live-score" itemprop="ratingValue">8.5</span>
-        <span itemprop="reviewCount">100</span>
-        <div class="poster"><img src="https://image.jpg" itemprop="image"></div>
-        <li class="item">
-          <a href="/read/test/en/chapter-1">
-            <span>Chapter 1</span>
-            <span>Jan 1, 2024</span>
-          </a>
-        </li>
-      `;
-
-      mockedAxios.get.mockResolvedValue({ data: html });
+    it('parses manga details from the JSON API', async () => {
+      mockMangaApiGet();
 
       const details = await fetchMangaDetails('test-manga');
 
       expect(details.title).toBe('Test Manga');
       expect(details.alternativeTitle).toBe('Alternative Title');
-      expect(details.status).toBe('Ongoing');
+      expect(details.status).toBe('ongoing');
       expect(details.description).toContain('This is the description');
       expect(details.author).toContain('Author Name');
       expect(details.genres).toContain('Action');
@@ -311,17 +369,57 @@ describe('mangaFireService', () => {
       expect(details.rating).toBe('8.5');
       expect(details.reviewCount).toBe('100');
       expect(details.bannerImage).toBe('https://image.jpg');
+      expect(details.chapters[0]?.url).toBe('/chapter/5438730');
     });
 
     it('handles missing fields gracefully', async () => {
-      const html = '<html><body></body></html>';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockMangaApiGet({
+        title: {
+          title: 'Minimal Title',
+          synopsisHtml: '',
+          altTitles: [],
+          authors: [],
+          genres: [],
+          rating: 0,
+          ratingCount: 0,
+          poster: { large: '' },
+          status: 'unknown',
+          year: 0,
+        },
+        chapters: { items: [], meta: { hasNext: false } },
+      });
 
       const details = await fetchMangaDetails('test-manga');
 
-      expect(details.title).toBe('Unknown Title');
+      expect(details.title).toBe('Minimal Title');
       expect(details.description).toBe('No description available');
       expect(details.chapters).toEqual([]);
+    });
+  });
+
+  describe('checkMangaAvailability', () => {
+    it('returns missing when the source responds with 404', async () => {
+      mockedAxios.get.mockRejectedValue({ response: { status: 404 } });
+
+      await expect(checkMangaAvailability('missing-manga')).resolves.toBe(
+        'missing'
+      );
+    });
+
+    it('returns exists when the title API responds successfully', async () => {
+      mockMangaApiGet();
+
+      await expect(checkMangaAvailability('existing-manga')).resolves.toBe(
+        'exists'
+      );
+    });
+
+    it('returns unknown for transient request failures', async () => {
+      mockedAxios.get.mockRejectedValue(new Error('Network timeout'));
+
+      await expect(checkMangaAvailability('maybe-manga')).resolves.toBe(
+        'unknown'
+      );
     });
   });
 
@@ -519,75 +617,48 @@ describe('mangaFireService', () => {
     });
 
     it('fetches chapter images from API', async () => {
-      mockedAxios.get.mockResolvedValue({
-        data: {
-          status: 200,
-          result: {
-            images: [['https://img1.jpg'], ['https://img2.jpg']],
-          },
-        },
-      });
+      mockMangaApiGet();
 
       const result = await fetchChapterImages('12345');
 
       expect(result.status).toBe(200);
       expect(result.images).toHaveLength(2);
+      expect(result.images[0]?.[0]).toBe('https://img1.jpg');
     });
 
-    it('throws error on invalid API status', async () => {
+    it('throws error when chapter pages are missing', async () => {
       jest.useFakeTimers();
-      mockedAxios.get.mockResolvedValue({
-        data: {
-          status: 500,
-          result: null,
-        },
+      mockMangaApiGet({
+        chapterPages: { data: { pages: [] } },
       });
 
       let thrownError: Error | undefined;
-      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
+      const promise = fetchChapterImages('12345').catch((error) => {
+        thrownError = error;
+      });
       await jest.runAllTimersAsync();
       await promise;
 
       expect(thrownError).toBeDefined();
-      expect(thrownError?.message).toContain('API returned status 500');
+      expect(thrownError?.message).toContain('No pages found for chapter 12345');
       jest.useRealTimers();
     });
 
-    it('throws error on missing images in response', async () => {
+    it('throws error on empty pages array', async () => {
       jest.useFakeTimers();
-      mockedAxios.get.mockResolvedValue({
-        data: {
-          status: 200,
-          result: {},
-        },
+      mockMangaApiGet({
+        chapterPages: { data: { pages: [] } },
       });
 
       let thrownError: Error | undefined;
-      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
+      const promise = fetchChapterImages('12345').catch((error) => {
+        thrownError = error;
+      });
       await jest.runAllTimersAsync();
       await promise;
 
       expect(thrownError).toBeDefined();
-      expect(thrownError?.message).toContain('Invalid image data');
-      jest.useRealTimers();
-    });
-
-    it('throws error on empty images array', async () => {
-      jest.useFakeTimers();
-      mockedAxios.get.mockResolvedValue({
-        data: {
-          status: 200,
-          result: { images: [] },
-        },
-      });
-
-      let thrownError: Error | undefined;
-      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
-      await jest.runAllTimersAsync();
-      await promise;
-
-      expect(thrownError).toBeDefined();
-      expect(thrownError?.message).toContain('No images found');
+      expect(thrownError?.message).toContain('No pages found');
       jest.useRealTimers();
     });
   });
@@ -620,7 +691,12 @@ describe('mangaFireService', () => {
   });
 
   describe('extractChapterIdFromUrl', () => {
-    it('returns null for chapter URLs (needs page load)', () => {
+    it('extracts chapter ID from API-style chapter URLs', () => {
+      const id = extractChapterIdFromUrl('/chapter/5438730');
+      expect(id).toBe('5438730');
+    });
+
+    it('returns null for legacy read URLs', () => {
       const id = extractChapterIdFromUrl('/read/manga-id/en/chapter-5');
       expect(id).toBeNull();
     });
@@ -685,37 +761,49 @@ describe('mangaFireService', () => {
   });
 
   describe('getChapterIdFromPage', () => {
-    it('extracts chapter ID from page HTML', async () => {
+    it('returns chapter ID directly from API chapter URLs', async () => {
+      const id = await getChapterIdFromPage('/chapter/1234567');
+      expect(id).toBe('1234567');
+    });
+
+    it('extracts chapter ID from legacy page HTML', async () => {
       const html = `
         <script>
           var chapterId = 1234567;
         </script>
       `;
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage(html);
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('1234567');
     });
 
     it('extracts chapter ID from ajax URL pattern', async () => {
-      const html = 'ajax/read/chapter/9876543';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('ajax/read/chapter/9876543');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('9876543');
     });
 
     it('returns null when no chapter ID found', async () => {
-      mockedAxios.get.mockResolvedValue({ data: '<html></html>' });
+      mockLegacyChapterHtmlPage('<html></html>');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBeNull();
     });
 
     it('returns null on network error', async () => {
-      mockedAxios.get.mockRejectedValue(new Error('Network error'));
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('/api/titles/') && url.includes('/chapters')) {
+          return Promise.resolve({
+            data: { items: [], meta: { hasNext: false } },
+          });
+        }
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+        return Promise.reject(new Error('Network error'));
+      });
+
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBeNull();
     });
   });
@@ -727,32 +815,18 @@ describe('mangaFireService', () => {
       );
     });
 
-    it('fetches images by extracting chapter ID from page', async () => {
-      // First call: getVrfTokenFromChapterPage
-      mockedAxios.get.mockResolvedValueOnce({
-        data: '<html>some page content</html>',
-      });
-      // Second call: getChapterIdFromPage - gets the page with chapter ID
-      mockedAxios.get.mockResolvedValueOnce({
-        data: 'var chapterId = 1234567;',
-      });
-      // Third call: fetchChapterImages - gets the images
-      mockedAxios.get.mockResolvedValueOnce({
-        data: {
-          status: 200,
-          result: { images: [['https://img.jpg']] },
-        },
-      });
+    it('fetches images by extracting chapter ID from API chapter URL', async () => {
+      mockMangaApiGet();
 
-      const result = await fetchChapterImagesFromUrl('/read/manga/en/chapter-1');
-      expect(result.images).toHaveLength(1);
+      const result = await fetchChapterImagesFromUrl('/chapter/1234567');
+      expect(result.images).toHaveLength(2);
     });
 
     it('throws error when chapter ID cannot be extracted', async () => {
-      mockedAxios.get.mockResolvedValue({ data: '<html></html>' });
+      mockLegacyChapterHtmlPage('<html></html>');
 
       await expect(
-        fetchChapterImagesFromUrl('/read/manga/en/chapter-1')
+        fetchChapterImagesFromUrl(legacyChapterUrl)
       ).rejects.toThrow('Could not extract chapter ID');
     });
   });
@@ -760,34 +834,9 @@ describe('mangaFireService', () => {
   describe('batchFetchChapterImages', () => {
     it('fetches multiple chapters in batches', async () => {
       jest.useFakeTimers();
-      // Track call count to return different responses
-      let callCount = 0;
-      mockedAxios.get.mockImplementation((_url) => {
-        callCount++;
-        // Each chapter URL requires 3 calls: VRF token, chapter ID, then images
-        // Calls 1, 4 = VRF token fetch (returns HTML)
-        // Calls 2, 5 = Chapter ID fetch (returns HTML with chapterId)
-        // Calls 3, 6 = Images fetch (returns JSON)
-        const callInCycle = ((callCount - 1) % 3) + 1;
+      mockMangaApiGet();
 
-        if (callInCycle === 1) {
-          // VRF token page
-          return Promise.resolve({ data: '<html>some content</html>' });
-        } else if (callInCycle === 2) {
-          // Chapter ID page
-          return Promise.resolve({ data: 'var chapterId = 1234567;' });
-        } else {
-          // Images API
-          return Promise.resolve({
-            data: {
-              status: 200,
-              result: { images: [['https://img.jpg']] },
-            },
-          });
-        }
-      });
-
-      const urls = ['/read/manga/en/chapter-1', '/read/manga/en/chapter-2'];
+      const urls = ['/chapter/111', '/chapter/222'];
       const onProgress = jest.fn();
       const onError = jest.fn();
 
@@ -827,22 +876,9 @@ describe('mangaFireService', () => {
 
     it('adds delay between batches when configured', async () => {
       jest.useFakeTimers();
-      let callCount = 0;
-      mockedAxios.get.mockImplementation(() => {
-        callCount++;
-        const callInCycle = ((callCount - 1) % 3) + 1;
-        if (callInCycle === 1) {
-          return Promise.resolve({ data: '<html>content</html>' });
-        } else if (callInCycle === 2) {
-          return Promise.resolve({ data: 'var chapterId = 1234567;' });
-        } else {
-          return Promise.resolve({
-            data: { status: 200, result: { images: [['https://img.jpg']] } },
-          });
-        }
-      });
+      mockMangaApiGet();
 
-      const urls = ['/read/manga/en/chapter-1', '/read/manga/en/chapter-2', '/read/manga/en/chapter-3'];
+      const urls = ['/chapter/111', '/chapter/222', '/chapter/333'];
       const resultsPromise = batchFetchChapterImages(urls, {
         maxConcurrent: 1,
         delayBetweenRequests: 500,
@@ -909,17 +945,12 @@ describe('mangaFireService', () => {
 
   describe('fetchChapterImagesFromInterceptedRequest', () => {
     it('fetches images using intercepted VRF token', async () => {
-      mockedAxios.get.mockResolvedValue({
-        data: {
-          status: 200,
-          result: { images: [['https://img1.jpg'], ['https://img2.jpg']] },
-        },
-      });
+      mockMangaApiGet();
 
       const result = await fetchChapterImagesFromInterceptedRequest(
         '12345',
         'intercepted-vrf-token-123456789',
-        '/read/manga/en/chapter-1'
+        '/chapter/12345'
       );
 
       expect(result.images).toHaveLength(2);
@@ -995,111 +1026,111 @@ describe('mangaFireService', () => {
 
   describe('getChapterIdFromPage edge cases', () => {
     it('extracts chapter ID from data-chapter-id attribute', async () => {
-      const html = '<div data-chapter-id="7654321"></div>';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('<div data-chapter-id="7654321"></div>');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('7654321');
     });
 
     it('extracts chapter ID from JSON chapterId format', async () => {
-      const html = '{"chapterId": 8765432}';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('{"chapterId": 8765432}');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('8765432');
     });
 
     it('extracts chapter ID from chapter_id JSON format', async () => {
-      const html = '{"chapter_id": 9876543}';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('{"chapter_id": 9876543}');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('9876543');
     });
 
     it('extracts chapter ID from URL pattern in script', async () => {
-      const html = 'url: "/ajax/read/chapter/5432198"';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('url: "/ajax/read/chapter/5432198"');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('5432198');
     });
 
     it('extracts chapter ID from script tag with 6+ digit number', async () => {
-      const html = '<script>var someVar = 1987654;</script>';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('<script>var someVar = 1987654;</script>');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('1987654');
     });
 
     it('filters out year-like numbers starting with 20', async () => {
-      const html = '<script>var year = 20231225; var chapterId = 1234567;</script>';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage(
+        '<script>var year = 20231225; var chapterId = 1234567;</script>'
+      );
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('1234567');
     });
 
     it('handles full URL input', async () => {
-      mockedAxios.get.mockResolvedValue({ data: 'var chapterId = 1111111;' });
+      mockLegacyChapterHtmlPage('var chapterId = 1111111;');
 
-      await getChapterIdFromPage('https://mangafire.to/read/manga/en/chapter-1');
+      await getChapterIdFromPage(
+        `https://mangafire.to${legacyChapterUrl}`
+      );
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://mangafire.to/read/manga/en/chapter-1',
+        `https://mangafire.to${legacyChapterUrl}`,
         expect.any(Object)
       );
     });
 
     it('extracts and stores VRF token when found', async () => {
-      const html = 'const vrf = "VRFTOKENFROMCHAPTER123456789012345678901234567890"; var chapterId = 1234567;';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage(
+        'const vrf = "VRFTOKENFROMCHAPTER123456789012345678901234567890"; var chapterId = 1234567;'
+      );
 
-      await getChapterIdFromPage('/read/manga/en/chapter-1');
+      await getChapterIdFromPage(legacyChapterUrl);
 
-      // VRF token should be stored
-      expect(getVrfToken()).toBe('VRFTOKENFROMCHAPTER123456789012345678901234567890');
+      expect(getVrfToken()).toBe(
+        'VRFTOKENFROMCHAPTER123456789012345678901234567890'
+      );
     });
 
-    it('throws error on invalid response data', async () => {
-      mockedAxios.get.mockResolvedValue({ data: null });
+    it('returns null on invalid response data', async () => {
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('/api/titles/') && url.includes('/chapters')) {
+          return Promise.resolve({
+            data: { items: [], meta: { hasNext: false } },
+          });
+        }
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+        return Promise.resolve({ data: null });
+      });
+
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBeNull();
     });
 
     it('extracts chapter ID using let chapterId pattern', async () => {
-      const html = 'let chapterId = 3456789;';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('let chapterId = 3456789;');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('3456789');
     });
 
     it('extracts chapter ID using const chapterId pattern', async () => {
-      const html = 'const chapterId = 4567890;';
-      mockedAxios.get.mockResolvedValue({ data: html });
+      mockLegacyChapterHtmlPage('const chapterId = 4567890;');
 
-      const id = await getChapterIdFromPage('/read/manga/en/chapter-1');
+      const id = await getChapterIdFromPage(legacyChapterUrl);
       expect(id).toBe('4567890');
     });
   });
 
   describe('fetchMangaDetails chapter parsing edge cases', () => {
-    it('extracts chapter number from URL when heading extraction fails', async () => {
-      const html = `
-        <h1 itemprop="name">Test Manga</h1>
-        <h6></h6>
-        <p>Ongoing</p>
-        <li class="item">
-          <a href="/read/test/en/chapter-15.5">
-            <span></span>
-            <span>Jan 1, 2024</span>
-          </a>
-        </li>
-      `;
-      mockedAxios.get.mockResolvedValue({ data: html });
+    it('maps decimal chapter numbers from the API', async () => {
+      mockMangaApiGet({
+        chapters: {
+          items: [{ id: 1, number: '15.5', createdAt: 1704067200 }],
+          meta: { hasNext: false },
+        },
+      });
 
       const details = await fetchMangaDetails('test-manga');
 
@@ -1107,43 +1138,37 @@ describe('mangaFireService', () => {
       expect(details.chapters[0]!.number).toBe('15.5');
     });
 
-    it('handles chapter with extra title after colon', async () => {
-      const html = `
-        <h1 itemprop="name">Test Manga</h1>
-        <li class="item">
-          <a href="/read/test/en/chapter-10">
-            <span>Chapter 10: The Beginning</span>
-            <span>Jan 1, 2024</span>
-          </a>
-        </li>
-      `;
-      mockedAxios.get.mockResolvedValue({ data: html });
+    it('uses chapter names from the API when available', async () => {
+      mockMangaApiGet({
+        chapters: {
+          items: [
+            {
+              id: 2,
+              number: 10,
+              name: 'The Beginning',
+              createdAt: 1704067200,
+            },
+          ],
+          meta: { hasNext: false },
+        },
+      });
 
       const details = await fetchMangaDetails('test-manga');
 
-      expect(details.chapters).toHaveLength(1);
       expect(details.chapters[0]!.number).toBe('10');
       expect(details.chapters[0]!.title).toBe('Chapter 10: The Beginning');
     });
 
-    it('skips chapters without valid number', async () => {
-      // Use empty spans and URL without chapter- prefix to ensure no valid number
-      const html = `
-        <h1 itemprop="name">Test Manga</h1>
-        <li class="item">
-          <a href="/read/test/en/page-1">
-            <span></span>
-            <span>Jan 1, 2024</span>
-          </a>
-        </li>
-        <li class="item">
-          <a href="/read/test/en/chapter-5">
-            <span>Chapter 5</span>
-            <span>Jan 2, 2024</span>
-          </a>
-        </li>
-      `;
-      mockedAxios.get.mockResolvedValue({ data: html });
+    it('filters out chapters without valid numbers', async () => {
+      mockMangaApiGet({
+        chapters: {
+          items: [
+            { id: 3, number: '', createdAt: 1704067200 },
+            { id: 4, number: 5, createdAt: 1704067200 },
+          ],
+          meta: { hasNext: false },
+        },
+      });
 
       const details = await fetchMangaDetails('test-manga');
 
@@ -1151,17 +1176,13 @@ describe('mangaFireService', () => {
       expect(details.chapters[0]!.number).toBe('5');
     });
 
-    it('handles non-Chapter prefixed headings', async () => {
-      const html = `
-        <h1 itemprop="name">Test Manga</h1>
-        <li class="item">
-          <a href="/read/test/en/chapter-100">
-            <span>100</span>
-            <span>Jan 1, 2024</span>
-          </a>
-        </li>
-      `;
-      mockedAxios.get.mockResolvedValue({ data: html });
+    it('handles numeric chapter headings from the API', async () => {
+      mockMangaApiGet({
+        chapters: {
+          items: [{ id: 5, number: 100, createdAt: 1704067200 }],
+          meta: { hasNext: false },
+        },
+      });
 
       const details = await fetchMangaDetails('test-manga');
 
@@ -1197,36 +1218,59 @@ describe('mangaFireService', () => {
     });
   });
 
-  describe('fetchChapterImages with VRF token', () => {
-    it('includes VRF token in request when provided', async () => {
-      mockedAxios.get.mockResolvedValue({
-        data: {
-          status: 200,
-          result: { images: [['https://img.jpg']] },
+  describe('loadOnlineChapterImages', () => {
+    it('loads chapter pages using cached chapter metadata', async () => {
+      mockMangaApiGet();
+
+      const images = await loadOnlineChapterImages('test-manga', '1', [
+        {
+          number: '1',
+          title: 'Chapter 1',
+          date: '',
+          url: '/chapter/5438730',
         },
-      });
+      ]);
 
-      await fetchChapterImages('12345', 'my-vrf-token');
-
-      expect(mockedAxios.get).toHaveBeenCalledWith(
-        expect.stringContaining('vrf=my-vrf-token'),
-        expect.any(Object)
-      );
+      expect(images).toHaveLength(2);
+      expect(images[0]?.originalUrl).toBe('https://img1.jpg');
     });
 
-    it('uses session VRF token when no token provided', async () => {
-      setVrfToken('session-vrf-token');
-      mockedAxios.get.mockResolvedValue({
-        data: {
-          status: 200,
-          result: { images: [['https://img.jpg']] },
-        },
-      });
+    it('resolves chapter API ID when chapter list is unavailable', async () => {
+      mockMangaApiGet();
+
+      const images = await loadOnlineChapterImages('test-manga', '1');
+
+      expect(images).toHaveLength(2);
+      expect(mockedAxios.get).toHaveBeenCalled();
+    });
+  });
+
+  describe('getChapterApiIdFromList', () => {
+    it('returns the API chapter ID from cached chapter metadata', () => {
+      const chapterId = getChapterApiIdFromList(
+        [
+          {
+            number: '12',
+            title: 'Chapter 12',
+            date: '',
+            url: '/chapter/999',
+          },
+        ],
+        '12'
+      );
+
+      expect(chapterId).toBe('999');
+    });
+  });
+
+  describe('fetchChapterImages API behavior', () => {
+    it('requests chapter pages from the JSON API', async () => {
+      mockMangaApiGet();
 
       await fetchChapterImages('12345');
 
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        expect.stringContaining('vrf=session-vrf-token'),
+        'https://mangafire.to/api/chapters/12345',
         expect.any(Object)
       );
     });
@@ -1236,48 +1280,24 @@ describe('mangaFireService', () => {
       mockedAxios.get.mockResolvedValue({ data: null });
 
       let thrownError: Error | undefined;
-      const promise = fetchChapterImages('12345').catch(e => { thrownError = e; });
+      const promise = fetchChapterImages('12345').catch((error) => {
+        thrownError = error;
+      });
       await jest.runAllTimersAsync();
       await promise;
 
-      expect(thrownError?.message).toContain('Invalid response data');
+      expect(thrownError).toBeDefined();
       jest.useRealTimers();
     });
   });
 
-  describe('fetchChapterImagesFromUrl with VRF token', () => {
-    it('uses provided VRF token', async () => {
-      setVrfToken('existing-session-token');
+  describe('fetchChapterImagesFromUrl API behavior', () => {
+    it('loads images from API chapter URLs', async () => {
+      mockMangaApiGet();
 
-      // getChapterIdFromPage
-      mockedAxios.get.mockResolvedValueOnce({ data: 'var chapterId = 1234567;' });
-      // fetchChapterImages
-      mockedAxios.get.mockResolvedValueOnce({
-        data: { status: 200, result: { images: [['https://img.jpg']] } },
-      });
+      const result = await fetchChapterImagesFromUrl('/chapter/1234567');
 
-      const result = await fetchChapterImagesFromUrl('/read/manga/en/chapter-1', 'provided-vrf-token');
-
-      expect(result.images).toHaveLength(1);
-    });
-
-    it('extracts VRF token when none provided and none in session', async () => {
-      setVrfToken(''); // Clear session token
-
-      // getVrfTokenFromChapterPage
-      mockedAxios.get.mockResolvedValueOnce({
-        data: '<input name="vrf" value="extracted-vrf-token-123456789012345">',
-      });
-      // getChapterIdFromPage
-      mockedAxios.get.mockResolvedValueOnce({ data: 'var chapterId = 1234567;' });
-      // fetchChapterImages
-      mockedAxios.get.mockResolvedValueOnce({
-        data: { status: 200, result: { images: [['https://img.jpg']] } },
-      });
-
-      const result = await fetchChapterImagesFromUrl('/read/manga/en/chapter-1');
-
-      expect(result.images).toHaveLength(1);
+      expect(result.images).toHaveLength(2);
     });
   });
 

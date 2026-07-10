@@ -853,18 +853,22 @@ class ImageCache {
       let newestEntry = 0;
 
       for (const entry of this.metadata.values()) {
-        const file = new FSFile(entry.cachedPath);
-        const info = file.info();
-        if (info.exists) {
-          totalSize += entry.fileSize;
-          totalFiles++;
+        try {
+          const file = new FSFile(entry.cachedPath);
+          const info = file.info();
+          if (info.exists) {
+            totalSize += entry.fileSize;
+            totalFiles++;
 
-          if (entry.context === 'manga') mangaCount++;
-          if (entry.context === 'search') searchCount++;
-          if (entry.context === 'download') downloadCount++;
+            if (entry.context === 'manga') mangaCount++;
+            if (entry.context === 'search') searchCount++;
+            if (entry.context === 'download') downloadCount++;
 
-          if (entry.lastUpdated < oldestEntry) oldestEntry = entry.lastUpdated;
-          if (entry.lastUpdated > newestEntry) newestEntry = entry.lastUpdated;
+            if (entry.lastUpdated < oldestEntry) oldestEntry = entry.lastUpdated;
+            if (entry.lastUpdated > newestEntry) newestEntry = entry.lastUpdated;
+          }
+        } catch {
+          // Skip entries with inaccessible paths (e.g. missing permissions or stale references)
         }
       }
 
