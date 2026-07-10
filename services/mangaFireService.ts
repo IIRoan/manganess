@@ -23,6 +23,15 @@ import { performanceMonitor } from '@/utils/performance';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 import { stripHtmlToText } from '@/utils/stripHtmlToText';
+import {
+  getApiRetryDelayMs,
+  getRateLimitMaxRetries,
+  isRateLimitError,
+} from '@/utils/httpErrors';
+import {
+  REQUEST_HUB_TTLS,
+  scheduleMangaFireRequest,
+} from '@/services/mangaFireRequestHub';
 import type { Chapter } from '@/types/manga';
 import { ChapterImage, ImageDownloadStatus } from '@/types/download';
 
@@ -63,7 +72,6 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
 
 const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
 
 export const normalizeChapterNumber = (
   value: string | null | undefined
@@ -98,8 +106,11 @@ async function retryApiCall<T>(
 ): Promise<T> {
   const log = logger();
   let lastError: Error;
+  let attempt = 0;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  while (true) {
+    attempt += 1;
+
     try {
       return await operation();
     } catch (error: any) {
@@ -119,21 +130,30 @@ async function retryApiCall<T>(
         throw lastError;
       }
 
-      if (attempt === maxRetries) {
+      const effectiveMaxRetries = isRateLimitError(error)
+        ? getRateLimitMaxRetries()
+        : maxRetries;
+
+      if (attempt >= effectiveMaxRetries) {
+        if (isRateLimitError(error)) {
+          log.warn('Network', 'Rate limit retries exhausted', {
+            attempt,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         throw lastError;
       }
 
-      const delay = RETRY_DELAY * Math.pow(2, attempt - 1);
+      const delay = getApiRetryDelayMs(error, attempt);
       log.warn('Network', 'API call retry scheduled', {
         attempt,
         delayMs: delay,
+        rateLimited: isRateLimitError(error),
         error: error instanceof Error ? error.message : String(error),
       });
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
-
-  throw lastError!;
 }
 
 // Validate URL before making requests
@@ -226,7 +246,14 @@ export function parseSearchResults(html: string): MangaItem[] {
   return unique;
 }
 
-export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
+export interface FetchMangaDetailsOptions {
+  force?: boolean;
+}
+
+export const fetchMangaDetails = async (
+  id: string,
+  options?: FetchMangaDetailsOptions
+): Promise<MangaDetails> => {
   if (!id || id.trim().length === 0) {
     throw new Error('Manga ID is required');
   }
@@ -237,16 +264,22 @@ export const fetchMangaDetails = async (id: string): Promise<MangaDetails> => {
     log.info('Service', 'fetchMangaDetails:start', { id: normalizedId });
   }
 
-  const details = await performanceMonitor.measureAsync(
-    `fetchMangaDetails:${normalizedId}`,
+  const details = await scheduleMangaFireRequest(
+    `details:${normalizedId}`,
     () =>
-      retryApiCall(async () => {
-        const [title, chapters] = await Promise.all([
-          fetchTitleDetails(normalizedId),
-          fetchTitleChapters(normalizedId),
-        ]);
-        return mapApiTitleToMangaDetails(title, chapters);
-      })
+      performanceMonitor.measureAsync(
+        `fetchMangaDetails:${normalizedId}`,
+        () =>
+          retryApiCall(async () => {
+            const title = await fetchTitleDetails(normalizedId);
+            const chapters = await fetchTitleChapters(normalizedId);
+            return mapApiTitleToMangaDetails(title, chapters);
+          })
+      ),
+    {
+      ttlMs: REQUEST_HUB_TTLS.mangaDetails,
+      force: options?.force,
+    }
   );
 
   if (isDebugEnabled()) {

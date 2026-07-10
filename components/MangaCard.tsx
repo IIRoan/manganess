@@ -277,7 +277,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
             // @ts-ignore - router.push accepts params
             router.push({
               pathname: '/(tabs)/manga/[id]',
-              params: { id: mangaId, title, imageUrl },
+              params: { id: mangaId, title, imageUrl, previewId: mangaId },
             });
           }
         }}

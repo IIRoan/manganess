@@ -331,12 +331,21 @@ export default function BookmarksScreen() {
         }
         lastAvailabilityCheckRef.current = now;
 
-        const results = await Promise.all(
-          atomBookmarks.map(async (bookmark) => ({
+        const results: Array<{
+          id: string;
+          status: Awaited<ReturnType<typeof checkMangaAvailability>>;
+        }> = [];
+
+        for (const bookmark of atomBookmarks) {
+          if (isCancelled) {
+            return;
+          }
+
+          results.push({
             id: bookmark.id,
             status: await checkMangaAvailability(bookmark.id),
-          }))
-        );
+          });
+        }
 
         if (isCancelled) {
           return;
@@ -460,7 +469,15 @@ export default function BookmarksScreen() {
         return;
       }
 
-      router.push(`/manga/${item.id}`);
+      router.push({
+        pathname: '/(tabs)/manga/[id]',
+        params: {
+          id: item.id,
+          title: item.title,
+          imageUrl: item.imageUrl,
+          previewId: item.id,
+        },
+      });
     },
     [bookmarkAvailability, handleMissingBookmarkPress, router]
   );

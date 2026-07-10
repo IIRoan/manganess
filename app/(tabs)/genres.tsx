@@ -110,7 +110,15 @@ export default function GenresScreen() {
   };
 
   const handleMangaPress = (manga: MangaItem) => {
-    router.push(`/manga/${manga.id}`);
+    router.push({
+      pathname: '/(tabs)/manga/[id]',
+      params: {
+        id: manga.id,
+        title: manga.title,
+        imageUrl: manga.imageUrl || manga.banner || '',
+        previewId: manga.id,
+      },
+    });
   };
 
   const renderGenreItem = ({ item }: { item: Genre }) => (

@@ -41,6 +41,7 @@ export interface CachedHomeData {
 /** @deprecated Use `offlineCacheAtom` and `useCachedData` hook instead. */
 class OfflineCacheService {
   private static instance: OfflineCacheService;
+  private memoryCache: Record<string, CachedMangaDetails> | null = null;
 
   private constructor() {}
 
@@ -66,6 +67,7 @@ class OfflineCacheService {
 
       const existingCache = await this.getAllCachedMangaDetails();
       existingCache[mangaId] = cachedDetails;
+      this.memoryCache = existingCache;
 
       await AsyncStorage.setItem(
         OFFLINE_MANGA_CACHE_KEY,
@@ -120,15 +122,25 @@ class OfflineCacheService {
   async getAllCachedMangaDetails(): Promise<
     Record<string, CachedMangaDetails>
   > {
+    if (this.memoryCache !== null) {
+      return this.memoryCache;
+    }
+
     try {
       const cached = await AsyncStorage.getItem(OFFLINE_MANGA_CACHE_KEY);
-      return cached ? JSON.parse(cached) : {};
+      this.memoryCache = cached ? JSON.parse(cached) : {};
+      return this.memoryCache;
     } catch (error) {
       logger().error('Storage', 'Failed to get all cached manga details', {
         error,
       });
-      return {};
+      this.memoryCache = {};
+      return this.memoryCache;
     }
+  }
+
+  invalidateMemoryCache(): void {
+    this.memoryCache = null;
   }
 
   async getBookmarkedMangaDetails(): Promise<CachedMangaDetails[]> {
@@ -147,6 +159,7 @@ class OfflineCacheService {
     try {
       const cache = await this.getAllCachedMangaDetails();
       delete cache[mangaId];
+      this.memoryCache = cache;
       await AsyncStorage.setItem(
         OFFLINE_MANGA_CACHE_KEY,
         JSON.stringify(cache)
@@ -169,6 +182,7 @@ class OfflineCacheService {
       const cache = await this.getAllCachedMangaDetails();
       if (cache[mangaId]) {
         cache[mangaId].isBookmarked = isBookmarked;
+        this.memoryCache = cache;
         await AsyncStorage.setItem(
           OFFLINE_MANGA_CACHE_KEY,
           JSON.stringify(cache)
@@ -355,6 +369,7 @@ class OfflineCacheService {
         AsyncStorage.removeItem(OFFLINE_SEARCH_CACHE_KEY),
         AsyncStorage.removeItem(OFFLINE_HOME_CACHE_KEY),
       ]);
+      this.memoryCache = null;
 
       logger().info('Storage', 'Cleared all offline cache');
     } catch (error) {
