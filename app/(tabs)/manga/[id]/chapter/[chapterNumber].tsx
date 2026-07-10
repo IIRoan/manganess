@@ -524,18 +524,20 @@ export default function ReadChapterScreen() {
   }, []);
 
   useEffect(() => {
-    let isActive = true;
+    const loadToken = Symbol('chapter-load');
+    let activeToken: symbol | null = loadToken;
+    const isActive = () => activeToken === loadToken;
 
     const loadChapter = async () => {
       if (!id || !chapterNumber) {
-        if (isActive) {
+        if (isActive()) {
           setError('Invalid chapter parameters');
           setIsLoading(false);
         }
         return;
       }
 
-      if (isActive) {
+      if (isActive()) {
         setIsLoading(true);
         setError(null);
       }
@@ -546,7 +548,7 @@ export default function ReadChapterScreen() {
         const downloadedChapters =
           await chapterStorageService.getDownloadedChapters(mangaId);
 
-        if (!isActive) return;
+        if (!isActive()) return;
 
         let matchedChapter: string | null = null;
         if (downloadedChapters.includes(requestedChapter)) {
@@ -570,7 +572,7 @@ export default function ReadChapterScreen() {
           );
         }
 
-        if (!isActive) return;
+        if (!isActive()) return;
 
         if (images && images.length > 0) {
           setIsDownloaded(true);
@@ -581,26 +583,26 @@ export default function ReadChapterScreen() {
 
           try {
             const detectedType = await detectContentType(images);
-            if (isActive) {
+            if (isActive()) {
               setContentType(detectedType);
             }
           } catch (detectError) {
             logger().error('Service', 'Error detecting content type', {
               error: detectError,
             });
-            if (isActive) {
+            if (isActive()) {
               setContentType('manga');
             }
           }
 
           const mangaData = await getMangaData(mangaId);
-          if (!isActive) return;
+          if (!isActive()) return;
 
           let resolvedTitle = mangaData?.title;
           if (!resolvedTitle) {
             const cachedDetails =
               await offlineCacheService.getCachedMangaDetails(mangaId);
-            if (!isActive) return;
+            if (!isActive()) return;
             resolvedTitle = cachedDetails?.title;
           }
 
@@ -610,14 +612,14 @@ export default function ReadChapterScreen() {
               : `Chapter ${chapterNumber}`;
           }
 
-          if (isActive) {
+          if (isActive()) {
             setMangaTitle(resolvedTitle);
             setError(null);
           }
         } else if (!isOffline) {
           const cachedDetails =
             await offlineCacheService.getCachedMangaDetails(mangaId);
-          if (!isActive) return;
+          if (!isActive()) return;
 
           const onlineImages = await loadOnlineChapterImages(
             mangaId,
@@ -625,7 +627,7 @@ export default function ReadChapterScreen() {
             cachedDetails?.chapters ?? mangaDetails?.chapters
           );
 
-          if (!isActive) return;
+          if (!isActive()) return;
 
           setIsDownloaded(false);
           setIsOnlineChapter(true);
@@ -635,20 +637,20 @@ export default function ReadChapterScreen() {
 
           try {
             const detectedType = await detectContentType(onlineImages);
-            if (isActive) {
+            if (isActive()) {
               setContentType(detectedType);
             }
           } catch (detectError) {
             logger().error('Service', 'Error detecting online content type', {
               error: detectError,
             });
-            if (isActive) {
+            if (isActive()) {
               setContentType('manga');
             }
           }
 
           const mangaData = await getMangaData(mangaId);
-          if (!isActive) return;
+          if (!isActive()) return;
 
           let resolvedTitle =
             mangaData?.title ?? cachedDetails?.title ?? mangaDetails?.title;
@@ -656,12 +658,12 @@ export default function ReadChapterScreen() {
             resolvedTitle = `Chapter ${chapterNumber}`;
           }
 
-          if (isActive) {
+          if (isActive()) {
             setMangaTitle(resolvedTitle);
             setError(null);
           }
         } else {
-          if (isActive) {
+          if (isActive()) {
             setDownloadedImages(null);
             downloadedImagesRef.current = null;
             setContentType(null);
@@ -674,7 +676,7 @@ export default function ReadChapterScreen() {
           }
         }
       } catch (error) {
-        if (isActive) {
+        if (isActive()) {
           logger().error('UI', 'Error loading chapter content', {
             error,
             mangaId: id,
@@ -683,7 +685,7 @@ export default function ReadChapterScreen() {
           setError('Failed to load chapter.');
         }
       } finally {
-        if (isActive) {
+        if (isActive()) {
           setIsLoading(false);
         }
       }
@@ -692,7 +694,7 @@ export default function ReadChapterScreen() {
     loadChapter();
 
     return () => {
-      isActive = false;
+      activeToken = null;
     };
   }, [id, chapterNumber, isOffline, detectContentType, mangaDetails?.chapters]);
 

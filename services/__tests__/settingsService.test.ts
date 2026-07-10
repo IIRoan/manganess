@@ -65,7 +65,7 @@ describe('settingsService', () => {
       enableDebugTab: false,
       onboardingCompleted: false,
       accentColor: undefined,
-      defaultLayout: 'grid',
+      defaultLayout: 'list',
       downloadSettings: {
         maxConcurrentDownloads: 3,
         maxStorageSize: 2147483648,
@@ -189,9 +189,9 @@ describe('settingsService', () => {
   });
 
   describe('getDefaultLayout and setDefaultLayout', () => {
-    it('returns default layout as grid when none stored', async () => {
+    it('returns default layout as list when none stored', async () => {
       const layout = await getDefaultLayout();
-      expect(layout).toBe('grid');
+      expect(layout).toBe('list');
     });
 
     it('sets and retrieves default layout', async () => {
@@ -225,7 +225,7 @@ describe('settingsService', () => {
 
       expect(settings.theme).toBe('system');
       expect(settings.enableDebugTab).toBe(false);
-      expect(settings.defaultLayout).toBe('grid');
+      expect(settings.defaultLayout).toBe('list');
     });
 
     it('returns defaults when AsyncStorage throws', async () => {
@@ -236,7 +236,7 @@ describe('settingsService', () => {
       const settings = await getAppSettings();
 
       expect(settings.theme).toBe('system');
-      expect(settings.defaultLayout).toBe('grid');
+      expect(settings.defaultLayout).toBe('list');
     });
   });
 

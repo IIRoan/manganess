@@ -32,9 +32,6 @@ import {
 
 const MANGA_STORAGE_PREFIX = 'manga_';
 
-const getAniListService = () =>
-  require('./anilistService') as typeof import('./anilistService');
-
 const BOOKMARK_KEYS_KEY = 'bookmarkKeys';
 const BOOKMARK_CHANGED_KEY = 'bookmarkChanged';
 
