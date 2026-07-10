@@ -109,6 +109,68 @@ export const getMangaData = async (id: string): Promise<MangaData | null> => {
   }
 };
 
+export async function removeBookmarkKeyFromIndex(mangaId: string): Promise<void> {
+  const normalizedId = mangaId.trim();
+  if (!normalizedId) {
+    return;
+  }
+
+  try {
+    const raw = await AsyncStorage.getItem(BOOKMARK_KEYS_KEY);
+    const bookmarkKeys: string[] = raw ? JSON.parse(raw) : [];
+    const bookmarkKey = `bookmark_${normalizedId}`;
+    const nextKeys = bookmarkKeys.filter((key) => key !== bookmarkKey);
+
+    if (nextKeys.length !== bookmarkKeys.length) {
+      await AsyncStorage.setItem(BOOKMARK_KEYS_KEY, JSON.stringify(nextKeys));
+    }
+  } catch (error) {
+    logger().warn('Storage', 'Failed to remove bookmark index entry', {
+      mangaId: normalizedId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+export async function pruneStaleBookmarkIndexEntries(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(BOOKMARK_KEYS_KEY);
+    if (!raw) {
+      return 0;
+    }
+
+    const bookmarkKeys: string[] = JSON.parse(raw);
+    const kept: string[] = [];
+    let removed = 0;
+
+    for (const key of bookmarkKeys) {
+      const id = key.replace('bookmark_', '');
+      if (!id) {
+        removed += 1;
+        continue;
+      }
+
+      const manga = await AsyncStorage.getItem(`${MANGA_STORAGE_PREFIX}${id}`);
+      if (manga) {
+        kept.push(key);
+      } else {
+        removed += 1;
+      }
+    }
+
+    if (removed > 0) {
+      await AsyncStorage.setItem(BOOKMARK_KEYS_KEY, JSON.stringify(kept));
+    }
+
+    return removed;
+  } catch (error) {
+    logger().warn('Storage', 'Failed to prune stale bookmark index entries', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 0;
+  }
+}
+
 export const setMangaData = async (data: MangaData): Promise<void> => {
   try {
     await AsyncStorage.setItem(

@@ -22,6 +22,7 @@ import { logger } from '@/utils/logger';
 import Constants from 'expo-constants';
 import { downloadManagerService } from '@/services/downloadManager';
 import { createEcosystem, EcosystemProvider } from '@zedux/react';
+import { StartupMigrationHost } from '@/components/StartupMigrationHost';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -133,6 +134,7 @@ export default function RootLayout() {
       <EcosystemProvider ecosystem={ecosystem}>
         <RootLayoutNav />
         <OfflineIndicator />
+        <StartupMigrationHost />
       </EcosystemProvider>
     </GestureHandlerRootView>
   );

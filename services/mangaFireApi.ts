@@ -1,0 +1,401 @@
+import axios, { type AxiosRequestConfig } from 'axios';
+import { decode } from 'html-entities';
+import { MANGA_API_URL } from '@/constants/Config';
+import { logger } from '@/utils/logger';
+import type { MangaItem } from '@/types/manga';
+import type { Chapter, MangaDetails } from '@/types/manga';
+
+function normalizeChapterNumber(value: string | null | undefined): string {
+  if (!value) return '';
+  let normalized = String(value).trim();
+  if (!normalized) return '';
+  normalized = normalized
+    .replace(/^chapter/i, '')
+    .replace(/\s+/g, '')
+    .replace(/_/g, '.')
+    .replace(/(\d)-(?=\d)/g, '$1.')
+    .replace(/-+/g, '-')
+    .replace(/\.{2,}/g, '.')
+    .replace(/[^0-9a-zA-Z.\-]/g, '');
+  return normalized.replace(/^[.-]+/, '').replace(/[.-]+$/, '');
+}
+
+const API_BASE = `${MANGA_API_URL}/api`;
+
+const DEFAULT_HEADERS = {
+  Accept: 'application/json, text/plain, */*',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
+  Referer: MANGA_API_URL,
+};
+
+export interface ApiPoster {
+  small?: string;
+  medium?: string;
+  large?: string;
+}
+
+export interface ApiTitleSummary {
+  id: number;
+  hid: string;
+  slug: string;
+  title: string;
+  type: string;
+  status?: string;
+  poster?: ApiPoster;
+  latestChapter?: number;
+  year?: number;
+  rank?: number;
+  chapterUpdatedAt?: string;
+  url: string;
+}
+
+export interface ApiTitleDetails extends ApiTitleSummary {
+  synopsisHtml?: string;
+  altTitles?: string[];
+  rating?: number | string;
+  ratingCount?: number | string;
+  follows?: number;
+  languages?: string[];
+  genres?: Array<{ id?: number; name: string; slug?: string } | string>;
+  themes?: Array<{ id?: number; name: string; slug?: string } | string>;
+  demographics?: Array<{ id?: number; name: string; slug?: string } | string>;
+  authors?: Array<{ id?: number; name: string } | string>;
+  artists?: Array<{ id?: number; name: string } | string>;
+  contentRating?: string;
+}
+
+export interface ApiChapterSummary {
+  id: number;
+  number: number | string;
+  name?: string;
+  language?: string;
+  type?: string;
+  createdAt?: number;
+}
+
+export interface ApiPaginated<T> {
+  items: T[];
+  meta?: {
+    total?: number;
+    perPage?: number;
+    page?: number;
+    lastPage?: number;
+    hasNext?: boolean;
+  };
+}
+
+export interface ApiChapterPage {
+  url: string;
+  width?: number;
+  height?: number;
+}
+
+async function apiGet<T>(
+  path: string,
+  params?: Record<string, unknown>,
+  config?: AxiosRequestConfig
+): Promise<T> {
+  const response = await axios.get<T>(`${API_BASE}${path}`, {
+    headers: DEFAULT_HEADERS,
+    timeout: 20000,
+    params,
+    ...config,
+  });
+  return response.data;
+}
+
+function stripHtml(input: string): string {
+  return decode(
+    input
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  );
+}
+
+function mapNames(
+  values?: Array<{ name?: string } | string>
+): string[] {
+  if (!values?.length) return [];
+  return values
+    .map((value) => (typeof value === 'string' ? value : value.name || ''))
+    .filter(Boolean);
+}
+
+export function mapApiTitleToMangaItem(
+  item: ApiTitleSummary,
+  rank?: number
+): MangaItem {
+  const poster =
+    item.poster?.medium || item.poster?.large || item.poster?.small || '';
+  const mapped: MangaItem = {
+    id: item.hid,
+    title: item.title,
+    banner: item.poster?.large || poster,
+    imageUrl: poster,
+    link: item.url.startsWith('http')
+      ? item.url
+      : `${MANGA_API_URL}${item.url}`,
+    type: item.type,
+  };
+  const resolvedRank = rank ?? item.rank;
+  if (resolvedRank != null) {
+    mapped.rank = resolvedRank;
+  }
+  return mapped;
+}
+
+export async function fetchTrendingTitles(
+  days = 7,
+  limit = 30
+): Promise<MangaItem[]> {
+  const data = await apiGet<{ items: ApiTitleSummary[] }>('/top-titles', {
+    type: 'trending',
+    days,
+    limit,
+  });
+  return (data.items || []).map((item, index) =>
+    mapApiTitleToMangaItem(item, index + 1)
+  );
+}
+
+export async function fetchLatestTitles(limit = 30): Promise<MangaItem[]> {
+  const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
+    'order[chapter_updated_at]': 'desc',
+    limit,
+  });
+  return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
+}
+
+export async function searchTitles(keyword: string, limit = 40): Promise<MangaItem[]> {
+  const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
+    keyword: keyword.trim(),
+    limit,
+  });
+  return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
+}
+
+export async function fetchTitlesByGenre(
+  genreSlug: string,
+  limit = 40
+): Promise<MangaItem[]> {
+  const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
+    genres: [genreSlug],
+    limit,
+  });
+  return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
+}
+
+export async function fetchTitleDetails(hid: string): Promise<ApiTitleDetails> {
+  const data = await apiGet<{ data: ApiTitleDetails }>(`/titles/${hid.trim()}`);
+  return data.data;
+}
+
+export async function fetchTitleDetailsIfExists(
+  hid: string
+): Promise<ApiTitleDetails | null> {
+  try {
+    const response = await axios.get<{ data: ApiTitleDetails }>(
+      `${API_BASE}/titles/${hid.trim()}`,
+      {
+        headers: DEFAULT_HEADERS,
+        timeout: 20000,
+        validateStatus: (status) => status === 200 || status === 404,
+      }
+    );
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    return response.data.data;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function fetchTitleChapters(
+  hid: string,
+  language = 'en'
+): Promise<ApiChapterSummary[]> {
+  const chapters: ApiChapterSummary[] = [];
+  let page = 1;
+  let hasNext = true;
+
+  while (hasNext) {
+    const data = await apiGet<ApiPaginated<ApiChapterSummary>>(
+      `/titles/${hid.trim()}/chapters`,
+      {
+        language,
+        page,
+      }
+    );
+
+    chapters.push(...(data.items || []));
+    hasNext = Boolean(data.meta?.hasNext);
+    page += 1;
+
+    if (!data.meta) {
+      break;
+    }
+  }
+
+  return chapters;
+}
+
+export function mapApiTitleToMangaDetails(
+  title: ApiTitleDetails,
+  chapters: ApiChapterSummary[]
+): MangaDetails {
+  const poster =
+    title.poster?.large || title.poster?.medium || title.poster?.small || '';
+
+  const mappedChapters: Chapter[] = chapters.map((chapter) => {
+    const number = normalizeChapterNumber(String(chapter.number));
+    const name = chapter.name?.trim();
+    return {
+      number,
+      title: name ? `Chapter ${number}: ${name}` : `Chapter ${number}`,
+      date: chapter.createdAt
+        ? new Date(chapter.createdAt * 1000).toLocaleDateString()
+        : '',
+      url: `/chapter/${chapter.id}`,
+    };
+  });
+
+  return {
+    id: title.hid,
+    title: title.title,
+    alternativeTitle: (title.altTitles || []).join(', '),
+    status: title.status || 'unknown',
+    description: title.synopsisHtml
+      ? stripHtml(title.synopsisHtml)
+      : 'No description available',
+    author: mapNames(title.authors),
+    published: title.year ? String(title.year) : 'Unknown',
+    genres: mapNames(title.genres),
+    rating: title.rating != null ? String(title.rating) : 'N/A',
+    reviewCount: title.ratingCount != null ? String(title.ratingCount) : '0',
+    bannerImage: poster,
+    chapters: mappedChapters.filter((chapter) => chapter.number && chapter.url),
+    totalChapters: mappedChapters.length,
+  };
+}
+
+export async function fetchHomeMangaData(): Promise<{
+  mostViewed: MangaItem[];
+  newReleases: MangaItem[];
+  featuredManga: MangaItem | null;
+}> {
+  const [mostViewed, newReleases] = await Promise.all([
+    fetchTrendingTitles(),
+    fetchLatestTitles(),
+  ]);
+
+  return {
+    mostViewed,
+    newReleases,
+    featuredManga: mostViewed[0] || null,
+  };
+}
+
+export async function resolveChapterApiId(
+  titleHid: string,
+  chapterNumber: string,
+  language = 'en'
+): Promise<string | null> {
+  const normalizedTarget = normalizeChapterNumber(chapterNumber);
+  if (!normalizedTarget) return null;
+
+  let page = 1;
+  let hasNext = true;
+
+  while (hasNext) {
+    const data = await apiGet<ApiPaginated<ApiChapterSummary>>(
+      `/titles/${titleHid.trim()}/chapters`,
+      { language, page }
+    );
+
+    const match = (data.items || []).find(
+      (chapter) =>
+        normalizeChapterNumber(String(chapter.number)) === normalizedTarget
+    );
+    if (match) {
+      return String(match.id);
+    }
+
+    hasNext = Boolean(data.meta?.hasNext);
+    page += 1;
+    if (!data.meta) break;
+  }
+
+  return null;
+}
+
+export async function fetchChapterPageUrls(
+  chapterId: string
+): Promise<string[]> {
+  const data = await apiGet<{
+    data?: { pages?: ApiChapterPage[] };
+  }>(`/chapters/${chapterId.trim()}`);
+
+  const pages = data.data?.pages || [];
+  if (!pages.length) {
+    throw new Error(`No pages found for chapter ${chapterId}`);
+  }
+
+  return pages.map((page) => page.url).filter(Boolean);
+}
+
+export async function titleExists(hid: string): Promise<boolean> {
+  try {
+    const details = await fetchTitleDetailsIfExists(hid);
+    return details != null;
+  } catch (error: any) {
+    logger().warn('Service', 'titleExists check failed', {
+      hid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+export function extractChapterIdFromUrl(chapterUrl: string): string | null {
+  if (!chapterUrl) return null;
+
+  const patterns = [
+    /\/chapter\/(\d+)(?:[/?#]|$)/i,
+    /\/api\/chapters\/(\d+)(?:[/?#]|$)/i,
+    /\/ajax\/read\/chapter\/(\d+)(?:[/?#]|$)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = chapterUrl.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+export function parseLegacyChapterUrl(chapterUrl: string): {
+  titleKey: string;
+  chapterNumber: string;
+} | null {
+  const match = chapterUrl.match(/\/read\/([^/]+)\/[^/]+\/chapter-([^/?#]+)/i);
+  if (!match?.[1] || !match?.[2]) {
+    return null;
+  }
+
+  return {
+    titleKey: match[1],
+    chapterNumber: match[2],
+  };
+}
