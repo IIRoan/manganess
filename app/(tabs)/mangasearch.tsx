@@ -725,8 +725,8 @@ export default function MangaSearchScreen() {
                 color={colors.primary}
               />
               <Text style={styles.replacementBannerText}>
-                Replacing &quot;{normalizedReplacementSourceTitle}&quot;.
-                Select the correct result to move its bookmark progress over.
+                Replacing &quot;{normalizedReplacementSourceTitle}&quot;. Select
+                the correct result to move its bookmark progress over.
               </Text>
             </View>
           ) : null}
@@ -778,7 +778,7 @@ export default function MangaSearchScreen() {
             text: 'Replace Bookmark',
             icon: 'swap-horizontal',
             onPress: () => {
-              handleConfirmReplacement().catch(() => {});
+              handleConfirmReplacement().catch(console.error);
             },
           },
         ]}
