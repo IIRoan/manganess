@@ -81,7 +81,7 @@ const ensureMinimumSize = (size: number) => {
   return Math.max(size, MIN_TOUCHABLE_SIZE);
 };
 
-/** MangaFire-style image sizing for a single page viewport. */
+/** Image sizing for a single page viewport. */
 function computePageImageSize(
   naturalWidth: number,
   naturalHeight: number,
@@ -155,7 +155,7 @@ const ManhwaImage = React.memo(
         RNImage.getSize(
           imageUri,
           (width, height) => {
-            // Vertical strip: width fit is the MangaFire default; height/both shrink tall panels.
+            // Vertical strip: width fit is the default; height/both shrink tall panels.
             if (imageFit === 'height') {
               const sized = computePageImageSize(
                 width,
@@ -247,7 +247,7 @@ const ManhwaImage = React.memo(
 
 ManhwaImage.displayName = 'ManhwaImage';
 
-/** Single-page manga image with MangaFire-style fit modes. */
+/** Single-page manga image with fit modes. */
 const MangaPageImage = React.memo(
   ({
     image,
@@ -1849,7 +1849,7 @@ export default function ReadChapterScreen() {
             </View>
           </Animated.View>
 
-          {/* MangaFire-style progress bar (page % for manga, scroll % for manhwa) */}
+          {/* Progress bar (page % for manga, scroll % for manhwa) */}
           {progressBarPosition !== 'none' &&
             downloadedImages &&
             downloadedImages.length > 0 &&
@@ -1884,7 +1884,7 @@ export default function ReadChapterScreen() {
               </View>
             )}
 
-          {/* MangaFire-style dim overlay */}
+          {/* Dim overlay */}
           {readerDimPercent > 0 && (
             <View
               pointerEvents="none"

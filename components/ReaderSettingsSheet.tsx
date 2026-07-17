@@ -104,10 +104,10 @@ const IMAGE_FIT_OPTIONS: Array<{
   label: string;
   hint: string;
 }> = [
-  { value: 'width', label: 'Width', hint: 'Fit width (MangaFire Fit Width)' },
-  { value: 'height', label: 'Height', hint: 'Fit height (MangaFire Fit Height)' },
-  { value: 'both', label: 'Both', hint: 'Fit both — contain in screen' },
-  { value: 'fill', label: 'Fill', hint: 'Fill screen (crop edges)' },
+  { value: 'width', label: 'Width', hint: 'Scale pages to screen width' },
+  { value: 'height', label: 'Height', hint: 'Scale pages to screen height' },
+  { value: 'both', label: 'Both', hint: 'Fit the whole page on screen' },
+  { value: 'fill', label: 'Fill', hint: 'Fill the screen (crop edges)' },
 ];
 
 const PROGRESS_OPTIONS: Array<{
@@ -603,7 +603,7 @@ export default function ReaderSettingsSheet({
                 <View style={styles.toggleCopy}>
                   <Text style={styles.toggleTitle}>Sticky header</Text>
                   <Text style={styles.hint}>
-                    Keep controls visible (MangaFire Header Sticky)
+                    Keep chapter controls visible while scrolling
                   </Text>
                 </View>
                 <Switch
