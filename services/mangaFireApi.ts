@@ -288,7 +288,12 @@ export interface FetchTitleChaptersOptions {
   /** Called after each page so UIs can render before the full list is ready. */
   onPage?: (
     chaptersSoFar: ApiChapterSummary[],
-    meta: { page: number; hasMore: boolean }
+    meta: {
+      page: number;
+      hasMore: boolean;
+      lastPage?: number;
+      total?: number;
+    }
   ) => void;
 }
 
@@ -320,7 +325,16 @@ async function fetchTitleChaptersUncached(
     chapters.push(...(data.items || []));
 
     apiHasMore = shouldContinueChapterPagination(page, data);
-    options.onPage?.(chapters, { page, hasMore: apiHasMore });
+    options.onPage?.(chapters, {
+      page,
+      hasMore: apiHasMore,
+      ...(typeof data.meta?.lastPage === 'number'
+        ? { lastPage: data.meta.lastPage }
+        : {}),
+      ...(typeof data.meta?.total === 'number'
+        ? { total: data.meta.total }
+        : {}),
+    });
     page += 1;
 
     if (!data.meta) {
@@ -359,12 +373,22 @@ export async function fetchMappedTitleChaptersPage(
   hid: string,
   page: number,
   language = 'en'
-): Promise<{ chapters: Chapter[]; hasMore: boolean; page: number }> {
+): Promise<{
+  chapters: Chapter[];
+  hasMore: boolean;
+  page: number;
+  lastPage?: number;
+  total?: number;
+}> {
   const data = await fetchTitleChaptersPage(hid.trim(), page, language);
+  const lastPage = data.meta?.lastPage;
+  const total = data.meta?.total;
   return {
     chapters: mapApiChapters(data.items || []),
     hasMore: shouldContinueChapterPagination(page, data),
     page,
+    ...(typeof lastPage === 'number' ? { lastPage } : {}),
+    ...(typeof total === 'number' ? { total } : {}),
   };
 }
 
@@ -387,12 +411,17 @@ export function mapApiChapters(chapters: ApiChapterSummary[]): Chapter[] {
 
 export function mapApiTitleToMangaDetails(
   title: ApiTitleDetails,
-  chapters: ApiChapterSummary[]
+  chapters: ApiChapterSummary[],
+  options?: { totalChapters?: number }
 ): MangaDetails {
   const poster =
     title.poster?.large || title.poster?.medium || title.poster?.small || '';
 
   const mappedChapters = mapApiChapters(chapters);
+  const reportedTotal =
+    typeof options?.totalChapters === 'number' && options.totalChapters > 0
+      ? options.totalChapters
+      : mappedChapters.length;
 
   return {
     id: title.hid,
@@ -409,7 +438,7 @@ export function mapApiTitleToMangaDetails(
     reviewCount: title.ratingCount != null ? String(title.ratingCount) : '0',
     bannerImage: poster,
     chapters: mappedChapters,
-    totalChapters: mappedChapters.length,
+    totalChapters: reportedTotal,
     type: title.type,
   };
 }

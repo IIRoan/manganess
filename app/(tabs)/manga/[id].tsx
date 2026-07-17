@@ -40,6 +40,13 @@ import type { FlashListRef } from '@shopify/flash-list';
 import { fetchMangaDetails } from '@/services/mangaFireService';
 import { fetchMappedTitleChaptersPage } from '@/services/mangaFireApi';
 import {
+  appendUniqueChapters,
+  getReportedChapterCount,
+  loadRemainingChapterPages,
+  pickOldestChapter,
+  resolveOldestChapter,
+} from '@/utils/chapterListPagination';
+import {
   attemptLegacyMangaMigration,
   MIGRATION_MESSAGES,
   type MigrationProgress,
@@ -50,6 +57,8 @@ import {
   removeBookmark,
   getBookmarkPopupConfig,
   getChapterLongPressAlertConfig,
+  getMangaData,
+  setMangaData,
 } from '@/services/bookmarkService';
 import BackButton from '@/components/BackButton';
 import { GenreTag } from '@/components/GanreTag';
@@ -175,6 +184,28 @@ export default function MangaDetailScreen() {
 
       setFetchedDetails({ ...details, id: targetId } as MangaDetails);
       setDisplayMangaId(targetId);
+
+      // Keep stored total in sync so progress stays correct with partial chapter lists.
+      const reportedTotal = details.totalChapters;
+      if (typeof reportedTotal === 'number' && reportedTotal > 0) {
+        void (async () => {
+          try {
+            const existing = await getMangaData(targetId);
+            if (!existing || existing.totalChapters === reportedTotal) {
+              return;
+            }
+            await setMangaData({
+              ...existing,
+              totalChapters: reportedTotal,
+            });
+          } catch (error) {
+            logger().warn('Storage', 'Failed to persist total chapter count', {
+              mangaId: targetId,
+              error,
+            });
+          }
+        })();
+      }
     },
     [id]
   );
@@ -208,8 +239,16 @@ export default function MangaDetailScreen() {
     setDownloadingChapters([]);
     setHasMoreChapters(false);
     setNextChapterPage(2);
+    setLastChapterPage(undefined);
     setIsLoadingMoreChapters(false);
+    setIsJumpingToBottom(false);
     isLoadingMoreChaptersRef.current = false;
+    chapterPaginationRef.current = {
+      chapters: [],
+      nextPage: 2,
+      hasMore: false,
+      lastPage: undefined,
+    };
     hasInstantContentRef.current = false;
     hydratedStateRef.current = {
       hasCachedChapters: false,
@@ -274,8 +313,18 @@ export default function MangaDetailScreen() {
   const downloadedChaptersRef = useRef<string[]>([]);
   const [hasMoreChapters, setHasMoreChapters] = useState(false);
   const [nextChapterPage, setNextChapterPage] = useState(2);
+  const [lastChapterPage, setLastChapterPage] = useState<number | undefined>(
+    undefined
+  );
   const [isLoadingMoreChapters, setIsLoadingMoreChapters] = useState(false);
+  const [isJumpingToBottom, setIsJumpingToBottom] = useState(false);
   const isLoadingMoreChaptersRef = useRef(false);
+  const chapterPaginationRef = useRef({
+    chapters: [] as Chapter[],
+    nextPage: 2,
+    hasMore: false,
+    lastPage: undefined as number | undefined,
+  });
 
   // State for the general alert (e.g., marking chapters as unread)
   const [isAlertVisible, setIsAlertVisible] = useState(false);
@@ -518,12 +567,40 @@ export default function MangaDetailScreen() {
             applyMangaDetailsForIdRef.current(mangaId, partial);
             setIsLoading(false);
           },
-        }).then((details) => {
-          // API returns 60/page; if we got a full page there are likely more.
-          const likelyHasMore = (details.chapters?.length ?? 0) >= 60;
-          setHasMoreChapters(likelyHasMore);
-          setNextChapterPage(2);
-          return details;
+          onChapterPagination: (meta) => {
+            if (shouldCancelFetch()) {
+              return;
+            }
+            setHasMoreChapters(meta.hasMore);
+            setNextChapterPage(meta.page + 1);
+            if (typeof meta.lastPage === 'number') {
+              setLastChapterPage(meta.lastPage);
+            }
+            if (typeof meta.total === 'number' && meta.total > 0) {
+              const reportedTotal = meta.total;
+              setFetchedDetails((current) => {
+                if (!current || current.id !== mangaId) {
+                  return current;
+                }
+                if (current.totalChapters === reportedTotal) {
+                  return current;
+                }
+                return {
+                  ...current,
+                  totalChapters: reportedTotal,
+                };
+              });
+            }
+            chapterPaginationRef.current = {
+              ...chapterPaginationRef.current,
+              nextPage: meta.page + 1,
+              hasMore: meta.hasMore,
+              lastPage:
+                typeof meta.lastPage === 'number'
+                  ? meta.lastPage
+                  : chapterPaginationRef.current.lastPage,
+            };
+          },
         });
 
       const handleMigrationResult = (
@@ -874,15 +951,38 @@ export default function MangaDetailScreen() {
         refreshDownloadingChapters().catch(() => {});
       };
 
+      const syncReadProgress = async () => {
+        if (typeof id !== 'string' || isCancelled) {
+          return;
+        }
+        try {
+          const [chapters, lastChapter] = await Promise.all([
+            getReadChapters(id),
+            getLastReadChapter(id),
+          ]);
+          if (isCancelled) {
+            return;
+          }
+          setReadChapters(chapters);
+          setLastReadChapter(lastChapter);
+        } catch (error) {
+          logger().warn('Storage', 'Failed to refresh read progress on focus', {
+            mangaId: id,
+            error,
+          });
+        }
+      };
+
       // Immediate sync on focus, then periodic sync while focused.
       syncDownloadState();
+      void syncReadProgress();
       const intervalId = setInterval(syncDownloadState, 2000);
 
       return () => {
         isCancelled = true;
         clearInterval(intervalId);
       };
-    }, [refreshDownloadedChapters, refreshDownloadingChapters])
+    }, [id, refreshDownloadedChapters, refreshDownloadingChapters])
   );
 
   const handleSaveBookmark = useCallback(
@@ -1135,6 +1235,20 @@ export default function MangaDetailScreen() {
     [haptics, router, id]
   );
 
+  useEffect(() => {
+    chapterPaginationRef.current = {
+      chapters: mangaDetails?.chapters ?? [],
+      nextPage: nextChapterPage,
+      hasMore: hasMoreChapters,
+      lastPage: lastChapterPage,
+    };
+  }, [
+    mangaDetails?.chapters,
+    nextChapterPage,
+    hasMoreChapters,
+    lastChapterPage,
+  ]);
+
   const loadMoreChapters = useCallback(async () => {
     if (
       typeof id !== 'string' ||
@@ -1157,22 +1271,27 @@ export default function MangaDetailScreen() {
           return current;
         }
 
-        const existingNumbers = new Set(
-          current.chapters.map((chapter) => chapter.number)
-        );
-        const appended = result.chapters.filter(
-          (chapter) => !existingNumbers.has(chapter.number)
-        );
+        const merged = appendUniqueChapters(current.chapters, result.chapters);
+        const reportedTotal =
+          typeof result.total === 'number' && result.total > 0
+            ? result.total
+            : current.totalChapters;
 
         return {
           ...current,
-          chapters: [...current.chapters, ...appended],
-          totalChapters: current.chapters.length + appended.length,
+          chapters: merged,
+          totalChapters:
+            typeof reportedTotal === 'number' && reportedTotal > 0
+              ? Math.max(reportedTotal, merged.length)
+              : merged.length,
         };
       });
 
       setHasMoreChapters(result.hasMore);
       setNextChapterPage(page + 1);
+      if (typeof result.lastPage === 'number') {
+        setLastChapterPage(result.lastPage);
+      }
     } catch (error) {
       logger().warn('Service', 'Failed to load more chapters', {
         mangaId: id,
@@ -1185,24 +1304,145 @@ export default function MangaDetailScreen() {
     }
   }, [id, hasMoreChapters, nextChapterPage, isOffline]);
 
-  const handleLastReadChapterPress = useCallback(() => {
+  /** Load every remaining chapter page so end-of-list actions use the real first chapter. */
+  const ensureAllChaptersLoaded = useCallback(async (): Promise<boolean> => {
+    if (typeof id !== 'string' || isOffline) {
+      return !chapterPaginationRef.current.hasMore;
+    }
+
+    // Wait out an in-flight single-page load (common when FAB is pressed near list end).
+    const waitStarted = Date.now();
+    while (isLoadingMoreChaptersRef.current) {
+      if (Date.now() - waitStarted > 30000) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    if (!chapterPaginationRef.current.hasMore) {
+      return true;
+    }
+
+    isLoadingMoreChaptersRef.current = true;
+    setIsLoadingMoreChapters(true);
+
+    try {
+      const mangaId = id;
+      const result = await loadRemainingChapterPages({
+        currentChapters: chapterPaginationRef.current.chapters,
+        nextPage: chapterPaginationRef.current.nextPage,
+        hasMore: chapterPaginationRef.current.hasMore,
+        fetchPage: (page) => fetchMappedTitleChaptersPage(mangaId, page),
+        onPage: ({ chapters, nextPage, hasMore }) => {
+          setFetchedDetails((current) => {
+            if (!current || current.id !== mangaId) {
+              return current;
+            }
+            return {
+              ...current,
+              chapters,
+              totalChapters: Math.max(
+                current.totalChapters ?? 0,
+                chapters.length
+              ),
+            };
+          });
+          setNextChapterPage(nextPage);
+          setHasMoreChapters(hasMore);
+          chapterPaginationRef.current = {
+            ...chapterPaginationRef.current,
+            chapters,
+            nextPage,
+            hasMore,
+          };
+        },
+      });
+
+      setFetchedDetails((current) => {
+        if (!current || current.id !== mangaId) {
+          return current;
+        }
+        return {
+          ...current,
+          chapters: result.chapters,
+          totalChapters: Math.max(
+            current.totalChapters ?? 0,
+            result.chapters.length
+          ),
+        };
+      });
+      setNextChapterPage(result.nextPage);
+      setHasMoreChapters(result.hasMore);
+      chapterPaginationRef.current = {
+        ...chapterPaginationRef.current,
+        chapters: result.chapters,
+        nextPage: result.nextPage,
+        hasMore: result.hasMore,
+      };
+
+      return !result.hasMore;
+    } catch (error) {
+      logger().warn('Service', 'Failed to load all chapters', {
+        mangaId: id,
+        error,
+      });
+      return false;
+    } finally {
+      isLoadingMoreChaptersRef.current = false;
+      setIsLoadingMoreChapters(false);
+    }
+  }, [id, isOffline]);
+
+  const handleLastReadChapterPress = useCallback(async () => {
     if (!lastReadChapter || lastReadChapter === 'Not started') {
       if (
-        mangaDetails &&
-        mangaDetails.chapters &&
-        mangaDetails.chapters.length > 0
+        !mangaDetails?.chapters?.length ||
+        typeof id !== 'string'
       ) {
-        const firstChapter =
-          mangaDetails.chapters[mangaDetails.chapters.length - 1];
+        return;
+      }
+
+      try {
+        let firstChapter = pickOldestChapter(mangaDetails.chapters);
+
+        if (hasMoreChapters && !isOffline) {
+          firstChapter = await resolveOldestChapter({
+            loadedChapters: mangaDetails.chapters,
+            hasMore: true,
+            ...(typeof lastChapterPage === 'number'
+              ? { lastPage: lastChapterPage }
+              : {}),
+            fetchPage: (page) => fetchMappedTitleChaptersPage(id, page),
+          });
+        }
+
         if (firstChapter) {
           handleChapterPress(firstChapter.number);
         }
+      } catch (error) {
+        logger().warn('Service', 'Failed to resolve first chapter', {
+          mangaId: id,
+          error,
+        });
+        const fallback = pickOldestChapter(mangaDetails.chapters);
+        if (fallback) {
+          handleChapterPress(fallback.number);
+        }
       }
-    } else {
-      const chapterNumber = lastReadChapter.replace('Chapter ', '');
-      handleChapterPress(chapterNumber);
+      return;
     }
-  }, [lastReadChapter, mangaDetails, handleChapterPress]);
+
+    const chapterNumber = lastReadChapter.replace('Chapter ', '');
+    handleChapterPress(chapterNumber);
+  }, [
+    lastReadChapter,
+    mangaDetails,
+    handleChapterPress,
+    hasMoreChapters,
+    lastChapterPage,
+    id,
+    isOffline,
+  ]);
 
   // O(1) lookup set for read chapters — avoids O(n) includes() per item in the list
   const readChaptersSet = useMemo(() => new Set(readChapters), [readChapters]);
@@ -1215,25 +1455,24 @@ export default function MangaDetailScreen() {
     [downloadingChapters]
   );
 
+  const totalChapterCount = useMemo(
+    () => getReportedChapterCount(mangaDetails),
+    [mangaDetails]
+  );
+
   const readingProgress = useMemo(() => {
-    if (
-      !mangaDetails ||
-      !mangaDetails.chapters ||
-      mangaDetails.chapters.length === 0
-    ) {
+    if (!mangaDetails || totalChapterCount === 0) {
       return 0;
     }
-    return Math.round(
-      (readChapters.length / mangaDetails.chapters.length) * 100
-    );
-  }, [mangaDetails, readChapters.length]);
+    return Math.round((readChapters.length / totalChapterCount) * 100);
+  }, [mangaDetails, readChapters.length, totalChapterCount]);
 
   const remainingReadingTime = useMemo(() => {
-    if (!mangaDetails || !mangaDetails.chapters) return 0;
+    if (!mangaDetails || totalChapterCount === 0) return 0;
     const averageTimePerChapter = 7;
-    const unreadChapters = mangaDetails.chapters.length - readChapters.length;
+    const unreadChapters = Math.max(totalChapterCount - readChapters.length, 0);
     return unreadChapters * averageTimePerChapter;
-  }, [mangaDetails, readChapters.length]);
+  }, [mangaDetails, readChapters.length, totalChapterCount]);
 
   const handleScrollJS = useCallback(
     (offsetY: number, contentHeight: number, layoutHeight: number) => {
@@ -1272,10 +1511,13 @@ export default function MangaDetailScreen() {
 
   // Animate button opacity
   useEffect(() => {
-    scrollButtonOpacity.value = withTiming(showScrollButton ? 1 : 0, {
-      duration: 200,
-    });
-  }, [showScrollButton, scrollButtonOpacity]);
+    scrollButtonOpacity.value = withTiming(
+      showScrollButton || isJumpingToBottom ? 1 : 0,
+      {
+        duration: 200,
+      }
+    );
+  }, [showScrollButton, isJumpingToBottom, scrollButtonOpacity]);
 
   const scrollButtonStyle = useAnimatedStyle(() => {
     return {
@@ -1342,18 +1584,50 @@ export default function MangaDetailScreen() {
       return;
     }
 
-    if (latestReadChapterIndex >= 0) {
-      flashListRef.current?.scrollToEnd({ animated: true });
-      return;
-    }
+    const scrollToTrueBottom = async () => {
+      const needsFullLoad =
+        hasMoreChapters ||
+        chapterPaginationRef.current.hasMore ||
+        isLoadingMoreChaptersRef.current;
 
-    flashListRef.current?.scrollToEnd({ animated: true });
+      if (needsFullLoad) {
+        setIsJumpingToBottom(true);
+        // Let the modal paint before starting the network crawl.
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolve());
+          });
+        });
+      }
+
+      try {
+        const fullyLoaded = await ensureAllChaptersLoaded();
+        // Wait a frame so FlashList receives the expanded data before scrolling.
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+        flashListRef.current?.scrollToEnd({ animated: true });
+        if (!fullyLoaded && chapterPaginationRef.current.hasMore) {
+          showToast({
+            message: 'Could not load all chapters yet',
+            type: 'info',
+          });
+        }
+      } finally {
+        setIsJumpingToBottom(false);
+      }
+    };
+
+    void scrollToTrueBottom();
   }, [
     haptics,
     shouldUseDownAction,
     latestReadChapterIndex,
     hasJumpedToLatestRead,
     setHasJumpedToLatestRead,
+    ensureAllChaptersLoaded,
+    showToast,
+    hasMoreChapters,
   ]);
 
   const renderChapterItem = useCallback(
@@ -1494,7 +1768,7 @@ export default function MangaDetailScreen() {
                       size={14}
                       color={colors.text}
                     />{' '}
-                    {readChapters.length}/{mangaDetails.chapters.length}{' '}
+                    {readChapters.length}/{totalChapterCount}{' '}
                     chapters read
                   </Text>
                   <Text style={styles.progressStat}>
@@ -1576,6 +1850,7 @@ export default function MangaDetailScreen() {
       lastReadChapter,
       readingProgress,
       remainingReadingTime,
+      totalChapterCount,
       downloadedChapters,
       refreshDownloadedChapters,
       colors,
@@ -1763,20 +2038,26 @@ export default function MangaDetailScreen() {
                 },
                 scrollButtonStyle,
               ]}
-              pointerEvents={showScrollButton ? 'auto' : 'none'}
+              pointerEvents={
+                showScrollButton || isJumpingToBottom ? 'auto' : 'none'
+              }
             >
               <TouchableOpacity
                 onPress={handleSmartScrollPress}
+                disabled={isJumpingToBottom}
                 style={styles.smartScrollButtonTouchable}
                 accessibilityRole="button"
+                accessibilityState={{ busy: isJumpingToBottom }}
                 accessibilityLabel={
-                  shouldUseDownAction
-                    ? latestReadChapterIndex >= 0
-                      ? hasJumpedToLatestRead
-                        ? 'Scroll to bottom'
-                        : 'Scroll to latest read chapter'
-                      : 'Scroll to bottom'
-                    : 'Scroll to top'
+                  isJumpingToBottom
+                    ? 'Loading chapters'
+                    : shouldUseDownAction
+                      ? latestReadChapterIndex >= 0
+                        ? hasJumpedToLatestRead
+                          ? 'Scroll to bottom'
+                          : 'Scroll to latest read chapter'
+                        : 'Scroll to bottom'
+                      : 'Scroll to top'
                 }
               >
                 <BlurView
@@ -1784,46 +2065,52 @@ export default function MangaDetailScreen() {
                   tint={colorScheme === 'dark' ? 'dark' : 'light'}
                   style={styles.blurContainer}
                 >
-                  {/* Progress Ring */}
-                  <View style={styles.progressRingContainer}>
-                    <Svg width={44} height={44} viewBox="0 0 44 44">
-                      <Circle
-                        cx="22"
-                        cy="22"
-                        r="20"
-                        stroke={colors.text}
-                        strokeWidth="3"
-                        strokeOpacity={0.1}
-                        fill="transparent"
-                      />
-                      <Circle
-                        cx="22"
-                        cy="22"
-                        r="20"
-                        stroke={colors.primary}
-                        strokeWidth="3"
-                        fill="transparent"
-                        strokeDasharray={2 * Math.PI * 20}
-                        strokeDashoffset={
-                          2 * Math.PI * 20 * (1 - scrollProgress)
-                        }
-                        strokeLinecap="round"
-                        rotation="-90"
-                        origin="22, 22"
-                      />
-                    </Svg>
-                  </View>
+                  {isJumpingToBottom ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <>
+                      {/* Progress Ring */}
+                      <View style={styles.progressRingContainer}>
+                        <Svg width={44} height={44} viewBox="0 0 44 44">
+                          <Circle
+                            cx="22"
+                            cy="22"
+                            r="20"
+                            stroke={colors.text}
+                            strokeWidth="3"
+                            strokeOpacity={0.1}
+                            fill="transparent"
+                          />
+                          <Circle
+                            cx="22"
+                            cy="22"
+                            r="20"
+                            stroke={colors.primary}
+                            strokeWidth="3"
+                            fill="transparent"
+                            strokeDasharray={2 * Math.PI * 20}
+                            strokeDashoffset={
+                              2 * Math.PI * 20 * (1 - scrollProgress)
+                            }
+                            strokeLinecap="round"
+                            rotation="-90"
+                            origin="22, 22"
+                          />
+                        </Svg>
+                      </View>
 
-                  <Ionicons
-                    name={
-                      scrollDirection === 'down' && scrollProgress < 0.95
-                        ? 'arrow-down'
-                        : 'arrow-up'
-                    }
-                    size={20}
-                    color={colors.text}
-                    style={styles.fabIcon}
-                  />
+                      <Ionicons
+                        name={
+                          scrollDirection === 'down' && scrollProgress < 0.95
+                            ? 'arrow-down'
+                            : 'arrow-up'
+                        }
+                        size={20}
+                        color={colors.text}
+                        style={styles.fabIcon}
+                      />
+                    </>
+                  )}
                 </BlurView>
               </TouchableOpacity>
             </Reanimated.View>
