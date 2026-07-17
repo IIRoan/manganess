@@ -19,7 +19,15 @@ const DEFAULT_SETTINGS: SettingsAtomState = {
   enableDebugTab: false,
   onboardingCompleted: false,
   defaultLayout: 'list',
+  readingMode: 'auto',
+  readerBackground: 'default',
+  showPageIndicator: false,
+  readerImageFit: 'both',
+  progressBarPosition: 'none',
+  readerDimPercent: 0,
+  keepHeaderVisible: false,
   downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
+  showReaderSettingsButton: true,
 };
 
 /**

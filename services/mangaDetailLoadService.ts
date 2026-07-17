@@ -4,8 +4,9 @@ import {
   getBookmarkProgressFromMangaData,
   type BookmarkProgressSnapshot,
 } from '@/utils/mangaOptimisticLoad';
+import { MANGA_CACHE_REFRESH_MIN_INTERVAL_MS } from '@/constants/mangaCache';
 
-export const MANGA_CACHE_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000;
+export { MANGA_CACHE_REFRESH_MIN_INTERVAL_MS };
 
 export const MANGA_DETAIL_LOAD_PHASES = {
   LOCAL_HYDRATION: 'local_hydration',

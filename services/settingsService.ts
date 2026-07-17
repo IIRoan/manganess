@@ -4,6 +4,16 @@ import { fetchMangaDetails } from './mangaFireService';
 import { resolveStoredMangaId } from './mangaIdMigrationService';
 import { imageCache } from './CacheImages';
 import { logger } from '@/utils/logger';
+import type {
+  ReaderContentProfile,
+  ReaderProfileSettings,
+  ReaderProfiles,
+} from '@/types/settings';
+
+type ReadingMode = 'auto' | 'vertical' | 'ltr' | 'rtl';
+type ReaderBackground = 'default' | 'black' | 'white' | 'gray';
+type ReaderImageFit = 'width' | 'height' | 'both' | 'fill';
+type ProgressBarPosition = 'top' | 'bottom' | 'none';
 
 interface AppSettings {
   theme: 'light' | 'dark' | 'system';
@@ -11,6 +21,17 @@ interface AppSettings {
   onboardingCompleted: boolean;
   accentColor?: string | undefined;
   defaultLayout: 'grid' | 'list';
+  /** Mirrored from readerProfiles.manga for legacy callers. */
+  readingMode: ReadingMode;
+  readerBackground: ReaderBackground;
+  showPageIndicator: boolean;
+  readerImageFit: ReaderImageFit;
+  progressBarPosition: ProgressBarPosition;
+  readerDimPercent: number;
+  keepHeaderVisible: boolean;
+  readerProfiles: ReaderProfiles;
+  /** When false, hide the settings gear in the chapter reader. */
+  showReaderSettingsButton: boolean;
   downloadSettings?: DownloadSettings;
 }
 
@@ -38,46 +59,137 @@ const DEFAULT_DOWNLOAD_SETTINGS: DownloadSettings = {
   autoCleanupDays: 30,
 };
 
+export const DEFAULT_MANGA_READER_PROFILE: ReaderProfileSettings = {
+  readingMode: 'auto',
+  readerBackground: 'default',
+  readerImageFit: 'both',
+  progressBarPosition: 'none',
+  readerDimPercent: 0,
+  keepHeaderVisible: false,
+};
+
+export const DEFAULT_MANHWA_READER_PROFILE: ReaderProfileSettings = {
+  readingMode: 'vertical',
+  readerBackground: 'default',
+  readerImageFit: 'width',
+  progressBarPosition: 'none',
+  readerDimPercent: 0,
+  keepHeaderVisible: false,
+};
+
+function createDefaultReaderProfiles(
+  seed?: Partial<ReaderProfileSettings>
+): ReaderProfiles {
+  return {
+    manga: { ...DEFAULT_MANGA_READER_PROFILE, ...seed },
+    manhwa: { ...DEFAULT_MANHWA_READER_PROFILE, ...seed },
+  };
+}
+
+function mirrorProfileToLegacyFields(
+  settings: AppSettings,
+  profile: ReaderProfileSettings
+): void {
+  settings.readingMode = profile.readingMode;
+  settings.readerBackground = profile.readerBackground;
+  settings.readerImageFit = profile.readerImageFit;
+  settings.progressBarPosition = profile.progressBarPosition;
+  settings.readerDimPercent = profile.readerDimPercent;
+  settings.keepHeaderVisible = profile.keepHeaderVisible;
+  settings.showPageIndicator = profile.progressBarPosition !== 'none';
+}
+
+function ensureReaderProfiles(settings: any): AppSettings {
+  const legacySeed: Partial<ReaderProfileSettings> = {};
+  if (settings.readingMode) legacySeed.readingMode = settings.readingMode;
+  if (settings.readerBackground) {
+    legacySeed.readerBackground = settings.readerBackground;
+  }
+  if (settings.readerImageFit) {
+    legacySeed.readerImageFit = settings.readerImageFit;
+  }
+  if (settings.progressBarPosition) {
+    legacySeed.progressBarPosition = settings.progressBarPosition;
+  } else if (typeof settings.showPageIndicator === 'boolean') {
+    legacySeed.progressBarPosition = settings.showPageIndicator
+      ? 'top'
+      : 'none';
+  }
+  if (typeof settings.readerDimPercent === 'number') {
+    legacySeed.readerDimPercent = settings.readerDimPercent;
+  }
+  if (typeof settings.keepHeaderVisible === 'boolean') {
+    legacySeed.keepHeaderVisible = settings.keepHeaderVisible;
+  }
+
+  if (!settings.readerProfiles) {
+    // One-time migration from flat legacy reader fields into both profiles.
+    settings.readerProfiles = createDefaultReaderProfiles(legacySeed);
+  } else {
+    settings.readerProfiles = {
+      manga: {
+        ...DEFAULT_MANGA_READER_PROFILE,
+        ...(settings.readerProfiles.manga || {}),
+      },
+      manhwa: {
+        ...DEFAULT_MANHWA_READER_PROFILE,
+        ...(settings.readerProfiles.manhwa || {}),
+      },
+    };
+  }
+
+  mirrorProfileToLegacyFields(settings, settings.readerProfiles.manga);
+  return settings as AppSettings;
+}
+
+function createDefaultAppSettings(): AppSettings {
+  const readerProfiles = createDefaultReaderProfiles();
+  return {
+    theme: 'system',
+    enableDebugTab: false,
+    onboardingCompleted: false,
+    accentColor: undefined,
+    defaultLayout: 'list',
+    readingMode: readerProfiles.manga.readingMode,
+    readerBackground: readerProfiles.manga.readerBackground,
+    showPageIndicator: false,
+    readerImageFit: readerProfiles.manga.readerImageFit,
+    progressBarPosition: 'none',
+    readerDimPercent: 0,
+    keepHeaderVisible: false,
+    readerProfiles,
+    showReaderSettingsButton: true,
+    downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
+  };
+}
+
 export async function getAppSettings(): Promise<AppSettings> {
   try {
     const settingsStr = await AsyncStorage.getItem(SETTINGS_KEY);
     if (settingsStr) {
       const settings = JSON.parse(settingsStr);
-      // Ensure download settings exist with defaults
       if (!settings.downloadSettings) {
         settings.downloadSettings = DEFAULT_DOWNLOAD_SETTINGS;
       }
-      // Ensure default layout exists
       if (!settings.defaultLayout) {
-        // Fallback to searchLayout if it exists (migration)
         settings.defaultLayout = settings.searchLayout || 'list';
       }
-      return settings;
+      if (typeof settings.showReaderSettingsButton !== 'boolean') {
+        settings.showReaderSettingsButton = true;
+      }
+      return ensureReaderProfiles(settings);
     }
-    return {
-      theme: 'system',
-      enableDebugTab: false,
-      onboardingCompleted: false,
-      accentColor: undefined,
-      defaultLayout: 'list',
-      downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
-    };
+    return createDefaultAppSettings();
   } catch (error) {
     logger().error('Service', 'Error getting app settings', { error });
-    return {
-      theme: 'system',
-      enableDebugTab: false,
-      onboardingCompleted: false,
-      accentColor: undefined,
-      defaultLayout: 'list',
-      downloadSettings: DEFAULT_DOWNLOAD_SETTINGS,
-    };
+    return createDefaultAppSettings();
   }
 }
 
 export async function setAppSettings(settings: AppSettings): Promise<void> {
   try {
-    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    const normalized = ensureReaderProfiles({ ...settings });
+    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(normalized));
   } catch (error) {
     logger().error('Service', 'Error saving app settings', { error });
   }
@@ -94,6 +206,105 @@ export async function setDefaultLayout(layout: 'grid' | 'list'): Promise<void> {
   await setAppSettings(settings);
 }
 
+export async function getReaderProfile(
+  profile: ReaderContentProfile
+): Promise<ReaderProfileSettings> {
+  const settings = await getAppSettings();
+  return { ...settings.readerProfiles[profile] };
+}
+
+export async function patchReaderProfile(
+  profile: ReaderContentProfile,
+  updates: Partial<ReaderProfileSettings>
+): Promise<ReaderProfileSettings> {
+  const settings = await getAppSettings();
+  const nextProfile: ReaderProfileSettings = {
+    ...settings.readerProfiles[profile],
+    ...updates,
+  };
+  if (typeof updates.readerDimPercent === 'number') {
+    nextProfile.readerDimPercent = Math.max(
+      0,
+      Math.min(70, Math.round(updates.readerDimPercent))
+    );
+  }
+  settings.readerProfiles[profile] = nextProfile;
+  if (profile === 'manga') {
+    mirrorProfileToLegacyFields(settings, nextProfile);
+  }
+  await setAppSettings(settings);
+  return nextProfile;
+}
+
+export async function getReadingMode(): Promise<ReadingMode> {
+  const profile = await getReaderProfile('manga');
+  return profile.readingMode;
+}
+
+export async function setReadingMode(mode: ReadingMode): Promise<void> {
+  await patchReaderProfile('manga', { readingMode: mode });
+}
+
+export async function getReaderBackground(): Promise<ReaderBackground> {
+  const profile = await getReaderProfile('manga');
+  return profile.readerBackground;
+}
+
+export async function setReaderBackground(
+  background: ReaderBackground
+): Promise<void> {
+  await patchReaderProfile('manga', { readerBackground: background });
+}
+
+export async function getShowPageIndicator(): Promise<boolean> {
+  const settings = await getAppSettings();
+  return settings.showPageIndicator;
+}
+
+export async function setShowPageIndicator(show: boolean): Promise<void> {
+  await patchReaderProfile('manga', {
+    progressBarPosition: show ? 'top' : 'none',
+  });
+}
+
+export async function getReaderImageFit(): Promise<ReaderImageFit> {
+  const profile = await getReaderProfile('manga');
+  return profile.readerImageFit;
+}
+
+export async function setReaderImageFit(fit: ReaderImageFit): Promise<void> {
+  await patchReaderProfile('manga', { readerImageFit: fit });
+}
+
+export async function getProgressBarPosition(): Promise<ProgressBarPosition> {
+  const profile = await getReaderProfile('manga');
+  return profile.progressBarPosition;
+}
+
+export async function setProgressBarPosition(
+  position: ProgressBarPosition
+): Promise<void> {
+  await patchReaderProfile('manga', { progressBarPosition: position });
+}
+
+export async function getReaderDimPercent(): Promise<number> {
+  const profile = await getReaderProfile('manga');
+  return profile.readerDimPercent;
+}
+
+export async function setReaderDimPercent(percent: number): Promise<void> {
+  await patchReaderProfile('manga', { readerDimPercent: percent });
+}
+
+export async function getKeepHeaderVisible(): Promise<boolean> {
+  const profile = await getReaderProfile('manga');
+  return profile.keepHeaderVisible;
+}
+
+export async function setKeepHeaderVisible(keep: boolean): Promise<void> {
+  await patchReaderProfile('manga', { keepHeaderVisible: keep });
+}
+
 export async function getDebugTabEnabled(): Promise<boolean> {
   const settings = await getAppSettings();
   return settings.enableDebugTab;
@@ -102,6 +313,19 @@ export async function getDebugTabEnabled(): Promise<boolean> {
 export async function setDebugTabEnabled(enabled: boolean): Promise<void> {
   const settings = await getAppSettings();
   settings.enableDebugTab = enabled;
+  await setAppSettings(settings);
+}
+
+export async function getShowReaderSettingsButton(): Promise<boolean> {
+  const settings = await getAppSettings();
+  return settings.showReaderSettingsButton !== false;
+}
+
+export async function setShowReaderSettingsButton(
+  show: boolean
+): Promise<void> {
+  const settings = await getAppSettings();
+  settings.showReaderSettingsButton = show;
   await setAppSettings(settings);
 }
 

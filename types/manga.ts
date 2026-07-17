@@ -25,6 +25,8 @@ export interface MangaDetails {
   bannerImage: string;
   chapters: Chapter[];
   totalChapters?: number;
+  /** Provider type label, e.g. manga / manhwa / manhua. */
+  type?: string;
 }
 
 export interface Chapter {

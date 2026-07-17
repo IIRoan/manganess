@@ -38,6 +38,7 @@ import BottomPopup from '@/components/BottomPopup';
 import { FlashList } from '@shopify/flash-list';
 import type { FlashListRef } from '@shopify/flash-list';
 import { fetchMangaDetails } from '@/services/mangaFireService';
+import { fetchMappedTitleChaptersPage } from '@/services/mangaFireApi';
 import {
   attemptLegacyMangaMigration,
   MIGRATION_MESSAGES,
@@ -205,6 +206,10 @@ export default function MangaDetailScreen() {
     setError(null);
     setDownloadedChapters([]);
     setDownloadingChapters([]);
+    setHasMoreChapters(false);
+    setNextChapterPage(2);
+    setIsLoadingMoreChapters(false);
+    isLoadingMoreChaptersRef.current = false;
     hasInstantContentRef.current = false;
     hydratedStateRef.current = {
       hasCachedChapters: false,
@@ -238,7 +243,9 @@ export default function MangaDetailScreen() {
     }
 
     setIsLoading(true);
-  }, [id, previewId, title, imageUrl]);
+    // Only reset when the manga id changes — title/imageUrl param churn was
+    // restarting loads and re-crawling every /chapters page.
+  }, [id, previewId]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -265,6 +272,10 @@ export default function MangaDetailScreen() {
   const [downloadedChapters, setDownloadedChapters] = useState<string[]>([]);
   const [downloadingChapters, setDownloadingChapters] = useState<string[]>([]);
   const downloadedChaptersRef = useRef<string[]>([]);
+  const [hasMoreChapters, setHasMoreChapters] = useState(false);
+  const [nextChapterPage, setNextChapterPage] = useState(2);
+  const [isLoadingMoreChapters, setIsLoadingMoreChapters] = useState(false);
+  const isLoadingMoreChaptersRef = useRef(false);
 
   // State for the general alert (e.g., marking chapters as unread)
   const [isAlertVisible, setIsAlertVisible] = useState(false);
@@ -311,14 +322,20 @@ export default function MangaDetailScreen() {
   // Haptic feedback
   const haptics = useHapticFeedback();
 
-  // Toast notifications
+  // Toast notifications — keep a stable ref so fetch effects don't restart every render
   const { showToast } = useToast();
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
 
   // Offline state
   const { isOffline } = useOffline();
+  const isOfflineRef = useRef(isOffline);
+  isOfflineRef.current = isOffline;
 
   const refreshDownloadedChapters = useCallback(async () => {
     if (typeof id !== 'string') {
@@ -387,6 +404,22 @@ export default function MangaDetailScreen() {
     }
   }, [id]);
 
+  // Stable refs for the detail-load effect — avoid restarting 40+ chapter page fetches
+  // when callback identities change mid-request.
+  const applyMangaDetailsForIdRef = useRef(applyMangaDetailsForId);
+  const refreshDownloadedChaptersRef = useRef(refreshDownloadedChapters);
+  const refreshDownloadingChaptersRef = useRef(refreshDownloadingChapters);
+  const routerRef = useRef(router);
+  const routeTitleRef = useRef(title);
+  const routeImageUrlRef = useRef(imageUrl);
+
+  applyMangaDetailsForIdRef.current = applyMangaDetailsForId;
+  refreshDownloadedChaptersRef.current = refreshDownloadedChapters;
+  refreshDownloadingChaptersRef.current = refreshDownloadingChapters;
+  routerRef.current = router;
+  routeTitleRef.current = title;
+  routeImageUrlRef.current = imageUrl;
+
   useEffect(() => {
     downloadedChaptersRef.current = downloadedChapters;
   }, [downloadedChapters]);
@@ -421,7 +454,7 @@ export default function MangaDetailScreen() {
         };
 
         if (hydration.details) {
-          applyMangaDetailsForId(id, hydration.details);
+          applyMangaDetailsForIdRef.current(id, hydration.details);
           hasInstantContentRef.current = true;
           setIsLoading(false);
         }
@@ -445,7 +478,7 @@ export default function MangaDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, applyMangaDetailsForId]);
+  }, [id]);
 
   const handleManualMigrationSearch = useCallback(() => {
     if (!manualMigration) {
@@ -468,6 +501,30 @@ export default function MangaDetailScreen() {
       let isMounted = true;
       const log = logger();
       const phaseTimings: PhaseTiming[] = [];
+      const loadGeneration = loadGenerationRef.current;
+
+      const shouldCancelFetch = () =>
+        !isMounted || loadGeneration !== loadGenerationRef.current;
+
+      const fetchDetailsForScreen = (mangaId: string) =>
+        fetchMangaDetails(mangaId, {
+          // First page only — never crawl all 40+ chapter pages on open.
+          maxChapterPages: 1,
+          shouldCancel: shouldCancelFetch,
+          onPartial: (partial) => {
+            if (shouldCancelFetch()) {
+              return;
+            }
+            applyMangaDetailsForIdRef.current(mangaId, partial);
+            setIsLoading(false);
+          },
+        }).then((details) => {
+          // API returns 60/page; if we got a full page there are likely more.
+          const likelyHasMore = (details.chapters?.length ?? 0) >= 60;
+          setHasMoreChapters(likelyHasMore);
+          setNextChapterPage(2);
+          return details;
+        });
 
       const handleMigrationResult = (
         migrationResult: Awaited<ReturnType<typeof attemptLegacyMangaMigration>>
@@ -478,7 +535,7 @@ export default function MangaDetailScreen() {
 
         if (migrationResult.outcome === 'migrated') {
           setMigrationProgress(null);
-          router.replace(`/manga/${migrationResult.newId}`);
+          routerRef.current.replace(`/manga/${migrationResult.newId}`);
           return;
         }
 
@@ -498,14 +555,11 @@ export default function MangaDetailScreen() {
         setMigrationProgress(null);
       };
 
-      const refreshDetailsInBackground = async (
-        isBookmarked = false
-      ): Promise<void> => {
-        if (!isMounted || isOffline || typeof id !== 'string') {
+      const refreshDetailsInBackground = async (): Promise<void> => {
+        if (!isMounted || isOfflineRef.current || typeof id !== 'string') {
           return;
         }
 
-        const loadGeneration = loadGenerationRef.current;
         const mangaId = id as string;
 
         try {
@@ -517,21 +571,13 @@ export default function MangaDetailScreen() {
             return;
           }
 
-          const freshDetails = await fetchMangaDetails(mangaId);
-          if (
-            !isMounted ||
-            loadGeneration !== loadGenerationRef.current ||
-            typeof id !== 'string'
-          ) {
+          const freshDetails = await fetchDetailsForScreen(mangaId);
+          if (shouldCancelFetch() || typeof id !== 'string') {
             return;
           }
 
-          applyMangaDetailsForId(mangaId, freshDetails);
-          await offlineCacheService.cacheMangaDetails(
-            mangaId,
-            { ...freshDetails, id: mangaId },
-            isBookmarked
-          );
+          applyMangaDetailsForIdRef.current(mangaId, freshDetails);
+          // Intentionally skip offline cache here — this path only loads page 1.
         } catch (backgroundError) {
           if (isRateLimitError(backgroundError)) {
             log.warn('Service', 'Background refresh rate limited — using cached data', {
@@ -552,17 +598,14 @@ export default function MangaDetailScreen() {
           return;
         }
 
-        const loadGeneration = loadGenerationRef.current;
         const mangaId = id as string;
         let hadInstantContent = hasInstantContentRef.current;
+        const isOfflineNow = isOfflineRef.current;
 
         if (!hadInstantContent) {
           try {
             const hydration = await hydrateMangaFromLocal(mangaId);
-            if (
-              !isMounted ||
-              loadGeneration !== loadGenerationRef.current
-            ) {
+            if (shouldCancelFetch()) {
               return;
             }
 
@@ -572,7 +615,7 @@ export default function MangaDetailScreen() {
             };
 
             if (hydration.details) {
-              applyMangaDetailsForId(mangaId, hydration.details);
+              applyMangaDetailsForIdRef.current(mangaId, hydration.details);
               hadInstantContent = true;
               hasInstantContentRef.current = true;
               setIsLoading(false);
@@ -596,8 +639,8 @@ export default function MangaDetailScreen() {
           mangaId: id,
           hasInstantContent: hadInstantContent,
           hasCachedChapters: hydratedStateRef.current.hasCachedChapters,
-          isOffline,
-          hasRouteParams: Boolean(title || imageUrl),
+          isOffline: isOfflineNow,
+          hasRouteParams: Boolean(routeTitleRef.current || routeImageUrlRef.current),
         });
 
         if (!hadInstantContent) {
@@ -610,21 +653,17 @@ export default function MangaDetailScreen() {
         const applyCachedFallback = async (): Promise<boolean> => {
           const cachedDetails =
             await offlineCacheService.getCachedMangaDetails(mangaId);
-          if (
-            !cachedDetails ||
-            !isMounted ||
-            loadGeneration !== loadGenerationRef.current
-          ) {
+          if (!cachedDetails || shouldCancelFetch()) {
             return false;
           }
 
-          applyMangaDetailsForId(mangaId, cachedDetails);
+          applyMangaDetailsForIdRef.current(mangaId, cachedDetails);
           setIsLoading(false);
           return true;
         };
 
         try {
-          if (!isOffline) {
+          if (!isOfflineNow) {
             if (shouldRunMigrationBeforeDisplay(id, hadInstantContent)) {
               const migrationStartedAt = Date.now();
               const migrationResult = await attemptLegacyMangaMigration(
@@ -670,7 +709,7 @@ export default function MangaDetailScreen() {
             }
           }
 
-          if (isOffline) {
+          if (isOfflineNow) {
             await measurePhase(
               MANGA_DETAIL_LOAD_PHASES.CACHE_LOOKUP,
               async () => {
@@ -691,8 +730,8 @@ export default function MangaDetailScreen() {
                     downloadedChapterList.includes(chapter.number)
                   ) || [];
 
-                if (isMounted && loadGeneration === loadGenerationRef.current) {
-                  applyMangaDetailsForId(mangaId, {
+                if (!shouldCancelFetch()) {
+                  applyMangaDetailsForIdRef.current(mangaId, {
                     ...cachedDetails,
                     chapters: filteredChapters,
                   });
@@ -704,53 +743,42 @@ export default function MangaDetailScreen() {
             await measurePhase(
               MANGA_DETAIL_LOAD_PHASES.NETWORK_DETAILS,
               async () => {
-                const details = await fetchMangaDetails(mangaId);
-                if (isMounted && loadGeneration === loadGenerationRef.current) {
-                  applyMangaDetailsForId(mangaId, details);
+                const details = await fetchDetailsForScreen(mangaId);
+                if (!shouldCancelFetch()) {
+                  applyMangaDetailsForIdRef.current(mangaId, details);
                 }
-
-                const cachedDetails =
-                  await offlineCacheService.getCachedMangaDetails(mangaId);
-                await offlineCacheService.cacheMangaDetails(
-                  mangaId,
-                  { ...details, id: mangaId },
-                  cachedDetails?.isBookmarked ?? false
-                );
+                // Skip offline cache — page-1 preview must not replace a full chapter list.
               },
               phaseTimings
             );
           } else if (hadInstantContent) {
             setIsLoading(false);
-            const cachedDetails =
-              await offlineCacheService.getCachedMangaDetails(id as string);
             void measurePhase(
               MANGA_DETAIL_LOAD_PHASES.NETWORK_DETAILS,
               async () => {
-                await refreshDetailsInBackground(
-                  cachedDetails?.isBookmarked ?? !!bookmarkStatusRef.current
-                );
+                await refreshDetailsInBackground();
               },
               phaseTimings
             );
           } else {
             const cachedDetails =
               await offlineCacheService.getCachedMangaDetails(id as string);
-            if (cachedDetails && isMounted && loadGeneration === loadGenerationRef.current) {
-              applyMangaDetailsForId(mangaId, cachedDetails);
+            if (cachedDetails && !shouldCancelFetch()) {
+              applyMangaDetailsForIdRef.current(mangaId, cachedDetails);
               setIsLoading(false);
-              void refreshDetailsInBackground(cachedDetails.isBookmarked);
+              const cachedCount = cachedDetails.chapters?.length ?? 0;
+              setHasMoreChapters(cachedCount > 0 && cachedCount % 60 === 0);
+              setNextChapterPage(Math.floor(cachedCount / 60) + 1);
+              void refreshDetailsInBackground();
             } else {
               await measurePhase(
                 MANGA_DETAIL_LOAD_PHASES.NETWORK_DETAILS,
                 async () => {
-                  const details = await fetchMangaDetails(mangaId);
-                  if (isMounted && loadGeneration === loadGenerationRef.current) {
-                    applyMangaDetailsForId(mangaId, details);
+                  const details = await fetchDetailsForScreen(mangaId);
+                  if (!shouldCancelFetch()) {
+                    applyMangaDetailsForIdRef.current(mangaId, details);
                   }
-                  await offlineCacheService.cacheMangaDetails(
-                    mangaId,
-                    { ...details, id: mangaId }
-                  );
+                  // Skip offline cache for page-1 preview.
                 },
                 phaseTimings
               );
@@ -780,8 +808,8 @@ export default function MangaDetailScreen() {
           }
 
           if (isMounted) {
-            refreshDownloadedChapters().catch(() => {});
-            refreshDownloadingChapters().catch(() => {});
+            refreshDownloadedChaptersRef.current().catch(() => {});
+            refreshDownloadingChaptersRef.current().catch(() => {});
           }
 
           if (isDebugEnabled()) {
@@ -799,7 +827,7 @@ export default function MangaDetailScreen() {
               log.warn('Service', 'Rate limited — showing cached manga details', {
                 mangaId,
               });
-              showToast({
+              showToastRef.current({
                 message: RATE_LIMIT_USING_CACHE_MESSAGE,
                 type: 'warning',
               });
@@ -832,17 +860,7 @@ export default function MangaDetailScreen() {
       return () => {
         isMounted = false;
       };
-    }, [
-      id,
-      applyMangaDetailsForId,
-      refreshDownloadedChapters,
-      refreshDownloadingChapters,
-      isOffline,
-      router,
-      showToast,
-      title,
-      imageUrl,
-    ]);
+    }, [id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1116,6 +1134,56 @@ export default function MangaDetailScreen() {
     },
     [haptics, router, id]
   );
+
+  const loadMoreChapters = useCallback(async () => {
+    if (
+      typeof id !== 'string' ||
+      !hasMoreChapters ||
+      isLoadingMoreChaptersRef.current ||
+      isOffline
+    ) {
+      return;
+    }
+
+    isLoadingMoreChaptersRef.current = true;
+    setIsLoadingMoreChapters(true);
+
+    try {
+      const page = nextChapterPage;
+      const result = await fetchMappedTitleChaptersPage(id, page);
+
+      setFetchedDetails((current) => {
+        if (!current || current.id !== id) {
+          return current;
+        }
+
+        const existingNumbers = new Set(
+          current.chapters.map((chapter) => chapter.number)
+        );
+        const appended = result.chapters.filter(
+          (chapter) => !existingNumbers.has(chapter.number)
+        );
+
+        return {
+          ...current,
+          chapters: [...current.chapters, ...appended],
+          totalChapters: current.chapters.length + appended.length,
+        };
+      });
+
+      setHasMoreChapters(result.hasMore);
+      setNextChapterPage(page + 1);
+    } catch (error) {
+      logger().warn('Service', 'Failed to load more chapters', {
+        mangaId: id,
+        page: nextChapterPage,
+        error,
+      });
+    } finally {
+      isLoadingMoreChaptersRef.current = false;
+      setIsLoadingMoreChapters(false);
+    }
+  }, [id, hasMoreChapters, nextChapterPage, isOffline]);
 
   const handleLastReadChapterPress = useCallback(() => {
     if (!lastReadChapter || lastReadChapter === 'Not started') {
@@ -1661,9 +1729,24 @@ export default function MangaDetailScreen() {
                 ListEmptyComponent={<ChapterListSkeleton count={15} />}
                 ListFooterComponent={
                   <View
-                    style={{ height: 120, backgroundColor: colors.card }}
-                  />
+                    style={{
+                      height: 120,
+                      backgroundColor: colors.card,
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      paddingTop: 12,
+                    }}
+                  >
+                    {isLoadingMoreChapters ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.primary}
+                      />
+                    ) : null}
+                  </View>
                 }
+                onEndReached={loadMoreChapters}
+                onEndReachedThreshold={0.6}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
                 bounces={false}
