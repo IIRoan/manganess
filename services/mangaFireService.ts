@@ -31,6 +31,8 @@ import {
 import {
   REQUEST_HUB_TTLS,
   scheduleMangaFireRequest,
+  peekFreshCache,
+  primeMangaFireRequestCache,
 } from '@/services/mangaFireRequestHub';
 import type { Chapter } from '@/types/manga';
 import { ChapterImage, ImageDownloadStatus } from '@/types/download';
@@ -66,6 +68,8 @@ export interface MangaDetails {
   reviewCount: string;
   bannerImage: string;
   chapters: { number: string; title: string; date: string; url: string }[];
+  /** Provider type label, e.g. manga / manhwa / manhua. */
+  type?: string;
 }
 
 const USER_AGENT =
@@ -248,6 +252,15 @@ export function parseSearchResults(html: string): MangaItem[] {
 
 export interface FetchMangaDetailsOptions {
   force?: boolean;
+  /** Stop chapter pagination early (screen left / manga id changed). */
+  shouldCancel?: () => boolean;
+  /** Deliver a usable MangaDetails as soon as the first chapter page arrives. */
+  onPartial?: (details: MangaDetails) => void;
+  /**
+   * Cap how many /chapters pages to pull.
+   * Use `1` on the manga details screen so opening One Piece does not spam 40+ requests.
+   */
+  maxChapterPages?: number;
 }
 
 export const fetchMangaDetails = async (
@@ -260,32 +273,94 @@ export const fetchMangaDetails = async (
 
   const log = logger();
   const normalizedId = id.trim();
+  const detailsCacheKey = `details:${normalizedId}`;
+  const isPartialChapterLoad =
+    typeof options?.maxChapterPages === 'number' &&
+    options.maxChapterPages > 0;
+
   if (isDebugEnabled()) {
-    log.info('Service', 'fetchMangaDetails:start', { id: normalizedId });
+    log.info('Service', 'fetchMangaDetails:start', {
+      id: normalizedId,
+      maxChapterPages: options?.maxChapterPages,
+    });
   }
 
-  const details = await scheduleMangaFireRequest(
-    `details:${normalizedId}`,
-    () =>
-      performanceMonitor.measureAsync(
-        `fetchMangaDetails:${normalizedId}`,
-        () =>
-          retryApiCall(async () => {
-            const title = await fetchTitleDetails(normalizedId);
-            const chapters = await fetchTitleChapters(normalizedId);
-            return mapApiTitleToMangaDetails(title, chapters);
-          })
-      ),
-    {
-      ttlMs: REQUEST_HUB_TTLS.mangaDetails,
-      force: options?.force,
+  // Full-list cache only — never treat a 1-page preview as the complete details.
+  if (!options?.force && !isPartialChapterLoad) {
+    const cached = peekFreshCache<MangaDetails>(
+      detailsCacheKey,
+      REQUEST_HUB_TTLS.mangaDetails
+    );
+    if (cached !== undefined) {
+      options?.onPartial?.(cached);
+      if (isDebugEnabled()) {
+        log.info('Service', 'fetchMangaDetails:cache-hit', {
+          id: normalizedId,
+          chapterCount: cached.chapters?.length ?? 0,
+        });
+      }
+      return cached;
     }
-  );
+  }
+
+  const loadDetails = async (): Promise<MangaDetails> =>
+    retryApiCall(async () => {
+      const title = await fetchTitleDetails(normalizedId);
+      const chapters = await fetchTitleChapters(normalizedId, {
+        shouldCancel: options?.shouldCancel,
+        maxPages: options?.maxChapterPages,
+        onPage: options?.onPartial
+          ? (chaptersSoFar, meta) => {
+              if (meta.page === 1 || !meta.hasMore) {
+                options.onPartial?.(
+                  mapApiTitleToMangaDetails(title, chaptersSoFar)
+                );
+              }
+            }
+          : undefined,
+      });
+
+      return mapApiTitleToMangaDetails(title, chapters);
+    });
+
+  const useUncachedPath =
+    Boolean(options?.shouldCancel) ||
+    Boolean(options?.onPartial) ||
+    isPartialChapterLoad;
+
+  const details = useUncachedPath
+    ? await performanceMonitor.measureAsync(
+        `fetchMangaDetails:${normalizedId}`,
+        loadDetails
+      )
+    : await scheduleMangaFireRequest(
+        detailsCacheKey,
+        () =>
+          performanceMonitor.measureAsync(
+            `fetchMangaDetails:${normalizedId}`,
+            loadDetails
+          ),
+        {
+          ttlMs: REQUEST_HUB_TTLS.mangaDetails,
+          force: options?.force,
+        }
+      );
+
+  // Only prime the full-details cache when we fetched every chapter page.
+  if (
+    useUncachedPath &&
+    !isPartialChapterLoad &&
+    !options?.shouldCancel?.() &&
+    (details.chapters?.length ?? 0) > 0
+  ) {
+    primeMangaFireRequestCache(detailsCacheKey, details);
+  }
 
   if (isDebugEnabled()) {
     log.info('Service', 'fetchMangaDetails:done', {
       id: normalizedId,
       chapterCount: details.chapters?.length ?? 0,
+      maxChapterPages: options?.maxChapterPages,
     });
   }
 
@@ -364,6 +439,11 @@ export const parseMangaDetails = (html: string): MangaDetails => {
     /<div class="poster">.*?<img src="(.*?)" itemprop="image"/s
   );
   const bannerImage = bannerImageMatch ? bannerImageMatch[1] : '';
+
+  const typeMatch =
+    html.match(/<span[^>]*class="[^"]*\btype\b[^"]*"[^>]*>(.*?)<\/span>/i) ||
+    html.match(/itemprop="additionalType"[^>]*content="([^"]+)"/i);
+  const type = typeMatch?.[1] ? stripHtmlToText(typeMatch[1]) : undefined;
 
   const chapters: {
     url: string;
@@ -450,6 +530,7 @@ export const parseMangaDetails = (html: string): MangaDetails => {
     reviewCount,
     bannerImage: bannerImage || '',
     chapters: chapters.filter((ch) => ch.number && ch.url && ch.date),
+    ...(type ? { type } : {}),
   };
 };
 

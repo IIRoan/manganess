@@ -1,4 +1,4 @@
-import { MANGA_CACHE_REFRESH_MIN_INTERVAL_MS } from '@/services/mangaDetailLoadService';
+import { MANGA_CACHE_REFRESH_MIN_INTERVAL_MS } from '@/constants/mangaCache';
 import { logger } from '@/utils/logger';
 
 export const REQUEST_HUB_TTLS = {
@@ -81,7 +81,12 @@ export async function scheduleMangaFireRequest<T>(
   operation: () => Promise<T>,
   options: ScheduleMangaFireRequestOptions = {}
 ): Promise<T> {
-  const { ttlMs = 0, force = false } = options;
+  // Guard against undefined TTLs from require-cycle init (ttlMs > 0 would skip cache).
+  const ttlMs =
+    typeof options.ttlMs === 'number' && Number.isFinite(options.ttlMs)
+      ? options.ttlMs
+      : MANGA_CACHE_REFRESH_MIN_INTERVAL_MS;
+  const force = options.force === true;
   const log = logger();
 
   if (!force && ttlMs > 0) {
@@ -109,6 +114,10 @@ export async function scheduleMangaFireRequest<T>(
 
   inFlight.set(key, promise);
   return promise;
+}
+
+export function primeMangaFireRequestCache(key: string, value: unknown): void {
+  memoryCache.set(key, { value, cachedAt: Date.now() });
 }
 
 export function invalidateMangaFireRequestCache(keyPrefix?: string): void {

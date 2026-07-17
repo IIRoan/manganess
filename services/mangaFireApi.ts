@@ -248,25 +248,79 @@ export async function fetchTitleDetailsIfExists(
   );
 }
 
+async function fetchTitleChaptersPage(
+  hid: string,
+  page: number,
+  language = 'en'
+): Promise<ApiPaginated<ApiChapterSummary>> {
+  return apiGet<ApiPaginated<ApiChapterSummary>>(
+    `/titles/${hid.trim()}/chapters`,
+    {
+      language,
+      page,
+    }
+  );
+}
+
+function shouldContinueChapterPagination(
+  page: number,
+  data: ApiPaginated<ApiChapterSummary>
+): boolean {
+  const items = data.items || [];
+  const lastPage = data.meta?.lastPage;
+  const pastLastPage = typeof lastPage === 'number' && page >= lastPage;
+  const emptyPage = items.length === 0;
+
+  return (
+    Boolean(data.meta?.hasNext) &&
+    !pastLastPage &&
+    !emptyPage &&
+    Boolean(data.meta)
+  );
+}
+
+export interface FetchTitleChaptersOptions {
+  language?: string;
+  /** Stop after this many pages (1 = first page only). */
+  maxPages?: number;
+  /** Return true to stop pagination early (e.g. screen unmounted). */
+  shouldCancel?: () => boolean;
+  /** Called after each page so UIs can render before the full list is ready. */
+  onPage?: (
+    chaptersSoFar: ApiChapterSummary[],
+    meta: { page: number; hasMore: boolean }
+  ) => void;
+}
+
 async function fetchTitleChaptersUncached(
   hid: string,
-  language = 'en'
+  options: FetchTitleChaptersOptions = {}
 ): Promise<ApiChapterSummary[]> {
+  const language = options.language ?? 'en';
   const chapters: ApiChapterSummary[] = [];
   let page = 1;
-  let hasNext = true;
+  let apiHasMore = true;
+  const hardCap = 200;
+  const maxPages =
+    typeof options.maxPages === 'number' && options.maxPages > 0
+      ? Math.min(options.maxPages, hardCap)
+      : hardCap;
 
-  while (hasNext) {
-    const data = await apiGet<ApiPaginated<ApiChapterSummary>>(
-      `/titles/${hid.trim()}/chapters`,
-      {
-        language,
+  while (apiHasMore && page <= maxPages) {
+    if (options.shouldCancel?.()) {
+      logger().info('Service', 'Chapter pagination cancelled', {
+        hid,
         page,
-      }
-    );
+        chapterCount: chapters.length,
+      });
+      break;
+    }
 
+    const data = await fetchTitleChaptersPage(hid, page, language);
     chapters.push(...(data.items || []));
-    hasNext = Boolean(data.meta?.hasNext);
+
+    apiHasMore = shouldContinueChapterPagination(page, data);
+    options.onPage?.(chapters, { page, hasMore: apiHasMore });
     page += 1;
 
     if (!data.meta) {
@@ -279,14 +333,56 @@ async function fetchTitleChaptersUncached(
 
 export async function fetchTitleChapters(
   hid: string,
-  language = 'en'
+  languageOrOptions: string | FetchTitleChaptersOptions = 'en'
 ): Promise<ApiChapterSummary[]> {
   const normalizedHid = hid.trim();
+  const options: FetchTitleChaptersOptions =
+    typeof languageOrOptions === 'string'
+      ? { language: languageOrOptions }
+      : languageOrOptions;
+  const language = options.language ?? 'en';
+
+  // Limited / cancellable / progressive loads bypass the shared cache entry.
+  if (options.shouldCancel || options.onPage || options.maxPages) {
+    return fetchTitleChaptersUncached(normalizedHid, options);
+  }
+
   return scheduleMangaFireRequest(
     `chapters:${normalizedHid}:${language}`,
-    () => fetchTitleChaptersUncached(normalizedHid, language),
+    () => fetchTitleChaptersUncached(normalizedHid, { language }),
     { ttlMs: REQUEST_HUB_TTLS.chapters }
   );
+}
+
+/** Fetch a single chapter list page, mapped for the UI. */
+export async function fetchMappedTitleChaptersPage(
+  hid: string,
+  page: number,
+  language = 'en'
+): Promise<{ chapters: Chapter[]; hasMore: boolean; page: number }> {
+  const data = await fetchTitleChaptersPage(hid.trim(), page, language);
+  return {
+    chapters: mapApiChapters(data.items || []),
+    hasMore: shouldContinueChapterPagination(page, data),
+    page,
+  };
+}
+
+export function mapApiChapters(chapters: ApiChapterSummary[]): Chapter[] {
+  return chapters
+    .map((chapter) => {
+      const number = normalizeChapterNumber(String(chapter.number));
+      const name = chapter.name?.trim();
+      return {
+        number,
+        title: name ? `Chapter ${number}: ${name}` : `Chapter ${number}`,
+        date: chapter.createdAt
+          ? new Date(chapter.createdAt * 1000).toLocaleDateString()
+          : '',
+        url: `/chapter/${chapter.id}`,
+      };
+    })
+    .filter((chapter) => chapter.number && chapter.url);
 }
 
 export function mapApiTitleToMangaDetails(
@@ -296,18 +392,7 @@ export function mapApiTitleToMangaDetails(
   const poster =
     title.poster?.large || title.poster?.medium || title.poster?.small || '';
 
-  const mappedChapters: Chapter[] = chapters.map((chapter) => {
-    const number = normalizeChapterNumber(String(chapter.number));
-    const name = chapter.name?.trim();
-    return {
-      number,
-      title: name ? `Chapter ${number}: ${name}` : `Chapter ${number}`,
-      date: chapter.createdAt
-        ? new Date(chapter.createdAt * 1000).toLocaleDateString()
-        : '',
-      url: `/chapter/${chapter.id}`,
-    };
-  });
+  const mappedChapters = mapApiChapters(chapters);
 
   return {
     id: title.hid,
@@ -323,8 +408,9 @@ export function mapApiTitleToMangaDetails(
     rating: title.rating != null ? String(title.rating) : 'N/A',
     reviewCount: title.ratingCount != null ? String(title.ratingCount) : '0',
     bannerImage: poster,
-    chapters: mappedChapters.filter((chapter) => chapter.number && chapter.url),
+    chapters: mappedChapters,
     totalChapters: mappedChapters.length,
+    type: title.type,
   };
 }
 
@@ -390,7 +476,16 @@ export async function resolveChapterApiId(
       return String(match.id);
     }
 
-    hasNext = Boolean(data.meta?.hasNext);
+    const lastPage = data.meta?.lastPage;
+    const pastLastPage =
+      typeof lastPage === 'number' && page >= lastPage;
+    const emptyPage = !data.items?.length;
+
+    hasNext =
+      Boolean(data.meta?.hasNext) &&
+      !pastLastPage &&
+      !emptyPage &&
+      Boolean(data.meta);
     page += 1;
     if (!data.meta) break;
   }
