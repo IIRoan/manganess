@@ -47,10 +47,10 @@ export type ReadingMode = 'auto' | 'vertical' | 'ltr' | 'rtl';
 /** Page backdrop behind manga images in the chapter reader. */
 export type ReaderBackground = 'default' | 'black' | 'white' | 'gray';
 
-/** MangaFire-style image sizing. */
+/** How chapter pages are scaled in the reader. */
 export type ReaderImageFit = 'width' | 'height' | 'both' | 'fill';
 
-/** MangaFire-style progress bar placement. */
+/** Where the reading progress bar appears. */
 export type ProgressBarPosition = 'top' | 'bottom' | 'none';
 
 /** Content format used to store separate reader preferences. */
