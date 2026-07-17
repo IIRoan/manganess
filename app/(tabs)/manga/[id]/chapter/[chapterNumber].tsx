@@ -473,13 +473,16 @@ export default function ReadChapterScreen() {
   }, [id, normalizedChapterParam, chapterNumber]);
 
   const hasNextChapter =
-    currentChapterIndex > 0 &&
-    !!mangaDetails?.chapters?.[currentChapterIndex - 1];
+    currentChapterIndex > 0 ||
+    (currentChapterIndex < 0 &&
+      Number.parseFloat(normalizedChapterParam || '') > 0);
 
   const hasPreviousChapter =
-    currentChapterIndex > -1 &&
-    currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
-    !!mangaDetails?.chapters?.[currentChapterIndex + 1];
+    (currentChapterIndex > -1 &&
+      currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
+      !!mangaDetails?.chapters?.[currentChapterIndex + 1]) ||
+    (currentChapterIndex < 0 &&
+      Number.parseFloat(normalizedChapterParam || '') > 1);
 
   // Status bar management
   useFocusEffect(
@@ -864,12 +867,18 @@ export default function ReadChapterScreen() {
       return;
     }
 
+    const mangaId = id as string;
+    const chapterToMark = normalizedChapterParam || chapterNumber;
+    if (!chapterToMark) {
+      return;
+    }
+
     try {
-      const mangaId = id as string;
+      // Local title only — never hit the chapters API just to mark as read.
       const mangaData = await getMangaData(mangaId);
       let resolvedTitle = mangaData?.title;
 
-      if (!resolvedTitle) {
+      if (!resolvedTitle || resolvedTitle === 'Chapter') {
         const cachedDetails =
           await offlineCacheService.getCachedMangaDetails(mangaId);
         if (cachedDetails?.title) {
@@ -877,24 +886,15 @@ export default function ReadChapterScreen() {
         }
       }
 
-      if (!resolvedTitle && !isOffline) {
-        const details = await fetchMangaDetails(mangaId);
-        resolvedTitle = details.title;
-      }
-
       const titleToUse = resolvedTitle || 'Chapter';
 
-      await markChapterAsRead(
-        mangaId,
-        normalizedChapterParam || chapterNumber,
-        titleToUse
-      );
+      await markChapterAsRead(mangaId, chapterToMark, titleToUse);
 
       setMangaTitle((current) => current ?? titleToUse);
     } catch (error) {
       logger().error('Service', 'Error marking chapter as read', { error });
     }
-  }, [id, chapterNumber, normalizedChapterParam, isOffline]);
+  }, [id, chapterNumber, normalizedChapterParam]);
 
   // Hydrate manga metadata instantly from bookmark/cache before network
   useEffect(() => {
@@ -1243,52 +1243,64 @@ export default function ReadChapterScreen() {
       if (cachedDetails) {
         setMangaDetails(cachedDetails);
         setMangaTitle((current) => current ?? cachedDetails.title);
+      }
 
+      // Reader only needs metadata + a small chapter window for the sheet/nav.
+      // Never crawl every chapter page on open (that was 9+ requests for long series).
+      const freshDetails = await fetchMangaDetails(mangaId, {
+        maxChapterPages: 1,
+      });
+
+      setMangaDetails((previous) => {
+        const preferCachedChapters =
+          (previous?.chapters?.length ?? 0) > freshDetails.chapters.length;
+        const mergedTotal = Math.max(
+          previous?.totalChapters ?? 0,
+          freshDetails.totalChapters ?? 0,
+          preferCachedChapters
+            ? previous?.chapters.length ?? 0
+            : freshDetails.chapters.length
+        );
+
+        return {
+          ...freshDetails,
+          id: mangaId,
+          chapters: preferCachedChapters
+            ? previous!.chapters
+            : freshDetails.chapters,
+          ...(mergedTotal > 0 ? { totalChapters: mergedTotal } : {}),
+        };
+      });
+      setMangaTitle((current) => current ?? freshDetails.title);
+
+      // Do not write a page-1 preview over a fuller offline cache.
+      const cachedCount = cachedDetails?.chapters?.length ?? 0;
+      if (cachedCount <= freshDetails.chapters.length) {
         try {
-          const freshDetails = await fetchMangaDetails(mangaId);
-          const typedDetails: MangaDetailsType = {
-            id: mangaId,
-            ...freshDetails,
-          };
-          setMangaDetails(typedDetails);
-
           const mangaData = await getMangaData(mangaId);
           const isBookmarked = !!mangaData?.bookmarkStatus;
           await offlineCacheService.cacheMangaDetails(
             mangaId,
-            typedDetails,
+            {
+              ...freshDetails,
+              id: mangaId,
+              ...(freshDetails.totalChapters != null || cachedDetails?.totalChapters != null
+                ? {
+                    totalChapters: Math.max(
+                      freshDetails.totalChapters ?? 0,
+                      cachedDetails?.totalChapters ?? 0
+                    ),
+                  }
+                : {}),
+            },
             isBookmarked
           );
-        } catch (refreshError) {
-          logger().warn('Service', 'Background manga details refresh failed', {
-            error: refreshError,
+        } catch (cacheError) {
+          logger().warn('Storage', 'Failed to cache manga details', {
+            error: cacheError,
             mangaId,
           });
         }
-        return;
-      }
-
-      const details = await fetchMangaDetails(mangaId);
-      const typedDetails: MangaDetailsType = {
-        id: mangaId,
-        ...details,
-      };
-      setMangaDetails(typedDetails);
-      setMangaTitle((current) => current ?? typedDetails.title);
-
-      try {
-        const mangaData = await getMangaData(mangaId);
-        const isBookmarked = !!mangaData?.bookmarkStatus;
-        await offlineCacheService.cacheMangaDetails(
-          mangaId,
-          typedDetails,
-          isBookmarked
-        );
-      } catch (cacheError) {
-        logger().warn('Storage', 'Failed to cache manga details', {
-          error: cacheError,
-          mangaId,
-        });
       }
     } catch (error) {
       logger().error('Service', 'Error fetching manga details', { error });
@@ -1412,14 +1424,33 @@ export default function ReadChapterScreen() {
   };
 
   const navigateChapter = (chapterOffset: number) => {
-    if (!mangaDetails?.chapters || currentChapterIndex < 0) return;
-    const newChapter =
-      mangaDetails.chapters[currentChapterIndex + chapterOffset];
-    if (newChapter?.number) {
-      const targetChapter = normalizeChapterNumber(newChapter.number);
-      if (!targetChapter) {
+    if (mangaDetails?.chapters && currentChapterIndex >= 0) {
+      const newChapter =
+        mangaDetails.chapters[currentChapterIndex + chapterOffset];
+      if (newChapter?.number) {
+        const targetChapter = normalizeChapterNumber(newChapter.number);
+        if (!targetChapter) {
+          return;
+        }
+        navigateToChapter(targetChapter);
         return;
       }
+    }
+
+    // Partial chapter lists (page-1 only) often omit the chapter being read.
+    // Fall back to sequential numbering: -1 offset = next/newer, +1 = previous/older.
+    const current = Number.parseFloat(
+      normalizedChapterParam || String(chapterNumber)
+    );
+    if (!Number.isFinite(current)) {
+      return;
+    }
+    const targetValue = current + (chapterOffset < 0 ? 1 : -1);
+    if (targetValue <= 0) {
+      return;
+    }
+    const targetChapter = normalizeChapterNumber(String(targetValue));
+    if (targetChapter) {
       navigateToChapter(targetChapter);
     }
   };

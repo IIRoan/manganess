@@ -11,6 +11,7 @@ import {
   extractChapterIdFromUrl,
   parseLegacyChapterUrl,
   titleExists,
+  type FetchTitleChaptersOptions,
 } from '@/services/mangaFireApi';
 import {
   searchAnilistMangaByName,
@@ -68,6 +69,8 @@ export interface MangaDetails {
   reviewCount: string;
   bannerImage: string;
   chapters: { number: string; title: string; date: string; url: string }[];
+  /** API-reported chapter total (may exceed currently loaded pages). */
+  totalChapters?: number;
   /** Provider type label, e.g. manga / manhwa / manhua. */
   type?: string;
 }
@@ -256,6 +259,13 @@ export interface FetchMangaDetailsOptions {
   shouldCancel?: () => boolean;
   /** Deliver a usable MangaDetails as soon as the first chapter page arrives. */
   onPartial?: (details: MangaDetails) => void;
+  /** Pagination meta from chapter list pages (for progressive loading UIs). */
+  onChapterPagination?: (meta: {
+    page: number;
+    hasMore: boolean;
+    lastPage?: number;
+    total?: number;
+  }) => void;
   /**
    * Cap how many /chapters pages to pull.
    * Use `1` on the manga details screen so opening One Piece does not spam 40+ requests.
@@ -306,26 +316,49 @@ export const fetchMangaDetails = async (
   const loadDetails = async (): Promise<MangaDetails> =>
     retryApiCall(async () => {
       const title = await fetchTitleDetails(normalizedId);
-      const chapters = await fetchTitleChapters(normalizedId, {
-        shouldCancel: options?.shouldCancel,
-        maxPages: options?.maxChapterPages,
-        onPage: options?.onPartial
-          ? (chaptersSoFar, meta) => {
-              if (meta.page === 1 || !meta.hasMore) {
-                options.onPartial?.(
-                  mapApiTitleToMangaDetails(title, chaptersSoFar)
-                );
-              }
-            }
-          : undefined,
-      });
+      const chapterFetchOptions: FetchTitleChaptersOptions = {};
+      let knownTotalChapters: number | undefined;
 
-      return mapApiTitleToMangaDetails(title, chapters);
+      if (options?.shouldCancel) {
+        chapterFetchOptions.shouldCancel = options.shouldCancel;
+      }
+      if (typeof options?.maxChapterPages === 'number') {
+        chapterFetchOptions.maxPages = options.maxChapterPages;
+      }
+      if (options?.onPartial || options?.onChapterPagination) {
+        chapterFetchOptions.onPage = (chaptersSoFar, meta) => {
+          if (typeof meta.total === 'number' && meta.total > 0) {
+            knownTotalChapters = meta.total;
+          }
+          options.onChapterPagination?.(meta);
+          if (options.onPartial && (meta.page === 1 || !meta.hasMore)) {
+            options.onPartial(
+              mapApiTitleToMangaDetails(title, chaptersSoFar, {
+                ...(knownTotalChapters != null
+                  ? { totalChapters: knownTotalChapters }
+                  : {}),
+              })
+            );
+          }
+        };
+      }
+
+      const chapters = await fetchTitleChapters(
+        normalizedId,
+        chapterFetchOptions
+      );
+
+      return mapApiTitleToMangaDetails(title, chapters, {
+        ...(knownTotalChapters != null
+          ? { totalChapters: knownTotalChapters }
+          : {}),
+      });
     });
 
   const useUncachedPath =
     Boolean(options?.shouldCancel) ||
     Boolean(options?.onPartial) ||
+    Boolean(options?.onChapterPagination) ||
     isPartialChapterLoad;
 
   const details = useUncachedPath
@@ -628,8 +661,13 @@ export const markChapterAsRead = async (
       const highestChapter = Math.max(
         ...updatedReadChapters.map((ch) => parseFloat(ch))
       ).toString();
+      const shouldRefreshTitle =
+        !mangaData.title ||
+        mangaData.title === 'Chapter' ||
+        mangaData.title === 'Unknown';
       await setMangaData({
         ...mangaData,
+        ...(shouldRefreshTitle ? { title: mangaTitle } : {}),
         readChapters: updatedReadChapters,
         lastReadChapter: highestChapter,
         lastUpdated: Date.now(),
