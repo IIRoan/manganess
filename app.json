@@ -41,7 +41,7 @@
       }
     },
     "owner": "iroan",
-    "runtimeVersion": "1.10.0",
+    "runtimeVersion": "1.11.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
