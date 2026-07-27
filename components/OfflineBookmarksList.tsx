@@ -94,7 +94,15 @@ export const OfflineBookmarksList: React.FC<OfflineBookmarksListProps> = ({
       if (onMangaPress) {
         onMangaPress(manga.id);
       } else {
-        router.navigate(`/manga/${manga.id}`);
+        router.navigate({
+          pathname: '/(tabs)/manga/[id]',
+          params: {
+            id: manga.id,
+            title: manga.title,
+            imageUrl: manga.bannerImage,
+            previewId: manga.id,
+          },
+        });
       }
     },
     [onMangaPress, router]

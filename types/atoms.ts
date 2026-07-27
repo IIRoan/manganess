@@ -1,6 +1,6 @@
 // Atom state type definitions for Zedux state management
 import { ColorScheme } from '@/constants/Colors';
-import { ThemeType, DownloadSettings } from './settings';
+import { ThemeType, DownloadSettings, ReadingMode, ReaderBackground, ReaderImageFit, ProgressBarPosition, ReaderProfiles } from './settings';
 import { MangaData, MangaDetails } from './manga';
 import { DownloadQueueItem, DownloadErrorType } from './download';
 
@@ -48,6 +48,16 @@ export interface SettingsAtomState {
   onboardingCompleted: boolean;
   accentColor?: string | undefined;
   defaultLayout?: 'grid' | 'list';
+  readingMode?: ReadingMode;
+  readerBackground?: ReaderBackground;
+  showPageIndicator?: boolean;
+  readerImageFit?: ReaderImageFit;
+  progressBarPosition?: ProgressBarPosition;
+  readerDimPercent?: number;
+  keepHeaderVisible?: boolean;
+  readerProfiles?: ReaderProfiles;
+  /** When false, hide the settings button in the chapter reader. Default true. */
+  showReaderSettingsButton?: boolean;
   downloadSettings: DownloadSettings;
 }
 

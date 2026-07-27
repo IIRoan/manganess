@@ -220,8 +220,8 @@ export const ChapterGuideOverlay: React.FC<ChapterGuideOverlayProps> = ({
                     />
                   </View>
                   <Text style={[styles.guideText, { color: colors.text }]}>
-                    The edge areas (60px wide) let you scroll without triggering
-                    controls
+                    Edge areas (60px) are safe for scrolling in vertical mode, or
+                    turn pages in LTR/RTL page mode
                   </Text>
                 </View>
                 <Text style={[styles.guideNote, { color: colors.text + '80' }]}>

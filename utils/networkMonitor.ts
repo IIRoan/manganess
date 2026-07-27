@@ -43,6 +43,7 @@ export function installNetworkMonitor(instance?: AxiosInstance) {
     log.debug('Network', `➡️ ${method} ${shortUrl(config.url)}`, {
       id: (config as AnyConfig).metadata.id,
       bodySize,
+      params: config.params,
     });
     return config;
   });

@@ -265,6 +265,15 @@ describe('mangaIdMigrationService', () => {
   });
 
   describe('attemptLegacyMangaMigration', () => {
+    it('skips network lookup for modern short manga IDs', async () => {
+      const result = await attemptLegacyMangaMigration('92kk8');
+
+      expect(result).toEqual({ outcome: 'not_needed' });
+      expect(titleExists).not.toHaveBeenCalled();
+      expect(fetchTitleDetailsIfExists).not.toHaveBeenCalled();
+      expect(searchTitles).not.toHaveBeenCalled();
+    });
+
     it('migrates composite legacy bookmarks without slug search', async () => {
       (fetchTitleDetailsIfExists as jest.Mock).mockResolvedValue({
         hid: 'zxpn2',

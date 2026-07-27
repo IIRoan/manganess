@@ -456,6 +456,10 @@ export async function attemptLegacyMangaMigration(
     return { outcome: 'not_needed' };
   }
 
+  if (!isLikelyLegacyMangaId(normalizedLegacyId)) {
+    return { outcome: 'not_needed' };
+  }
+
   const hidCandidate = extractHidFromCompositeId(normalizedLegacyId);
   if (hidCandidate && hidCandidate !== normalizedLegacyId) {
     const compositeDetails = await fetchTitleDetailsIfExists(hidCandidate);
