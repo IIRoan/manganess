@@ -8,6 +8,10 @@ import {
   scheduleMangaFireRequest,
   withMangaFireRateLimit,
 } from '@/services/mangaFireRequestHub';
+import {
+  appendVrfParams,
+  logVrfFailure,
+} from '@/services/mangaFireVrfBridge';
 import type { MangaItem } from '@/types/manga';
 import type { Chapter, MangaDetails } from '@/types/manga';
 
@@ -33,6 +37,7 @@ const DEFAULT_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
   Referer: MANGA_API_URL,
+  'X-Requested-With': 'XMLHttpRequest',
 };
 
 export interface ApiPoster {
@@ -103,10 +108,18 @@ async function apiGet<T>(
   config?: AxiosRequestConfig
 ): Promise<T> {
   return withMangaFireRateLimit(async () => {
+    let requestParams = params;
+    try {
+      requestParams = await appendVrfParams(path, params);
+    } catch (error) {
+      logVrfFailure(path, error);
+      throw error;
+    }
+
     const response = await axios.get<T>(`${API_BASE}${path}`, {
       headers: DEFAULT_HEADERS,
       timeout: 20000,
-      params,
+      params: requestParams,
       ...config,
     });
     return response.data;
@@ -160,7 +173,7 @@ export async function fetchTrendingTitles(
 }
 
 export async function fetchLatestTitles(limit = 30): Promise<MangaItem[]> {
-  const data = await apiGet<ApiPaginated<ApiTitleSummary>>('/titles', {
+  const data = await apiGet<{ items: ApiTitleSummary[] }>('/top-titles', {
     'order[chapter_updated_at]': 'desc',
     limit,
   });
@@ -221,15 +234,15 @@ export async function fetchTitleDetailsIfExists(
     `title-exists:${normalizedHid}`,
     async () => {
       try {
+        const path = `/titles/${normalizedHid}`;
+        const params = await appendVrfParams(path);
         const response = await withMangaFireRateLimit(() =>
-          axios.get<{ data: ApiTitleDetails }>(
-            `${API_BASE}/titles/${normalizedHid}`,
-            {
-              headers: DEFAULT_HEADERS,
-              timeout: 20000,
-              validateStatus: (status) => status === 200 || status === 404,
-            }
-          )
+          axios.get<{ data: ApiTitleDetails }>(`${API_BASE}${path}`, {
+            headers: DEFAULT_HEADERS,
+            timeout: 20000,
+            params,
+            validateStatus: (status) => status === 200 || status === 404,
+          })
         );
 
         if (response.status === 404) {

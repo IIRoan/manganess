@@ -13,6 +13,7 @@ import { useColorScheme, StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import ErrorBoundary from '../components/ErrorBoundary';
 import BatchDownloadHost from '@/components/BatchDownloadHost';
+import MangaFireVrfHost from '@/components/MangaFireVrfHost';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
@@ -73,6 +74,7 @@ function RootLayoutNav() {
           </Stack>
         </ErrorBoundary>
         <BatchDownloadHost />
+        <MangaFireVrfHost />
       </NavigationThemeProvider>
     </>
   );
