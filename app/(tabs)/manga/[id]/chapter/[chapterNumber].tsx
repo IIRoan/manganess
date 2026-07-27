@@ -62,7 +62,9 @@ import getStyles from './[chapterNumber].styles';
 import { logger } from '@/utils/logger';
 import {
   isVerticalOnlyContentType,
+  normalizeContentTypeLabel,
   resolveEffectiveReaderLayout,
+  resolveReaderContentProfile,
 } from '@/utils/contentType';
 import { isDebugEnabled } from '@/constants/env';
 import {
@@ -443,12 +445,17 @@ export default function ReadChapterScreen() {
 
   // Resolve the effective reader layout from the reading mode setting.
   // Manhwa / manhua / webtoon titles are always vertical — LTR/RTL never apply.
-  // `auto` for manga falls back to aspect-ratio detection (manga=ltr).
-  const isVerticalOnlyTitle = useMemo(
+  // `auto` for unknown types falls back to aspect-ratio detection.
+  // Tall manga pages must NOT steal the manhwa profile or hide LTR/RTL.
+  const activeReaderProfile: ReaderContentProfile = useMemo(
     () =>
-      isVerticalOnlyContentType(mangaDetails?.type) || contentType === 'manhwa',
+      resolveReaderContentProfile({
+        titleType: mangaDetails?.type ?? null,
+        detectedType: contentType,
+      }),
     [mangaDetails?.type, contentType]
   );
+  const isVerticalOnlyTitle = activeReaderProfile === 'manhwa';
 
   const effectiveLayout = useMemo<'vertical' | 'ltr' | 'rtl' | null>(
     () =>
@@ -546,10 +553,6 @@ export default function ReadChapterScreen() {
         return Colors[colorScheme].background;
     }
   }, [readerBackground, colorScheme]);
-
-  const activeReaderProfile: ReaderContentProfile = isVerticalOnlyTitle
-    ? 'manhwa'
-    : 'manga';
 
   const applyReaderProfile = useCallback(
     (profile: {
@@ -962,6 +965,10 @@ export default function ReadChapterScreen() {
     if (isVerticalOnlyContentType(mangaDetails?.type)) {
       return Promise.resolve('manhwa' as const);
     }
+    // Explicit manga titles keep page modes; tall pages are normal for manga.
+    if (normalizeContentTypeLabel(mangaDetails?.type) === 'manga') {
+      return Promise.resolve('manga' as const);
+    }
     if (!images || images.length === 0) return Promise.resolve('manga' as const);
 
     const sampleSize = Math.min(3, images.length);
@@ -1331,12 +1338,11 @@ export default function ReadChapterScreen() {
         index: horizontalScrollIndexForPage({
           pageIndex: currentPage,
           pageCount: downloadedImages.length,
-          inverted: isInvertedLayout,
         }),
         animated: true,
       });
     }
-  }, [currentPage, isHorizontalLayout, downloadedImages, isInvertedLayout]);
+  }, [currentPage, isHorizontalLayout, downloadedImages]);
 
   // Always reset reader position when a new chapter loads offline
   useEffect(() => {
@@ -1357,7 +1363,6 @@ export default function ReadChapterScreen() {
             index: horizontalScrollIndexForPage({
               pageIndex: 0,
               pageCount: downloadedImages.length,
-              inverted: effectiveLayout === 'rtl',
             }),
             animated: false,
           });
@@ -1656,7 +1661,6 @@ export default function ReadChapterScreen() {
               offsetX: offset,
               pageWidth,
               pageCount: sortedImages.length,
-              inverted: isInvertedLayout,
             })
           );
         }}
