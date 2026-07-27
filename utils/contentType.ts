@@ -30,11 +30,47 @@ export function isVerticalOnlyContentType(
 }
 
 /**
+ * True when the provider explicitly labeled the title as page-format manga.
+ * Explicit manga must not be forced into the manhwa profile by tall-page
+ * aspect detection (most manga pages are taller than wide).
+ */
+export function isExplicitMangaContentType(
+  type: string | null | undefined
+): boolean {
+  return normalizeContentTypeLabel(type) === 'manga';
+}
+
+/**
+ * Which reader settings profile to use for a title.
+ *
+ * Provider type wins. Aspect detection is only a fallback when the title type
+ * is missing or ambiguous — never when the provider said "Manga".
+ */
+export function resolveReaderContentProfile(options: {
+  titleType?: string | null;
+  detectedType?: 'manhwa' | 'manga' | null;
+}): 'manga' | 'manhwa' {
+  const { titleType, detectedType } = options;
+
+  if (isVerticalOnlyContentType(titleType)) {
+    return 'manhwa';
+  }
+  if (isExplicitMangaContentType(titleType)) {
+    return 'manga';
+  }
+  if (detectedType === 'manhwa') {
+    return 'manhwa';
+  }
+  return 'manga';
+}
+
+/**
  * Resolve the effective reader layout for a title.
  *
- * Vertical-only titles always return `vertical`, even if the user preference
- * is LTR/RTL. Manga (and unknown titles) follow the reading-mode preference,
- * with `auto` falling back to detected image layout.
+ * Vertical-only provider types always return `vertical`. Explicit LTR/RTL/
+ * vertical preferences are honored for every other title — including manga
+ * pages that aspect detection might misclassify as manhwa. `auto` uses
+ * detection only when the provider type does not already decide the layout.
  */
 export function resolveEffectiveReaderLayout(options: {
   readingMode: 'auto' | 'vertical' | 'ltr' | 'rtl';
@@ -44,18 +80,21 @@ export function resolveEffectiveReaderLayout(options: {
 }): 'vertical' | 'ltr' | 'rtl' | null {
   const { readingMode, titleType, detectedType } = options;
 
-  const verticalOnly =
-    isVerticalOnlyContentType(titleType) || detectedType === 'manhwa';
-
-  if (verticalOnly) {
+  // Provider manhwa/webtoon — never page modes.
+  if (isVerticalOnlyContentType(titleType)) {
     return 'vertical';
   }
 
+  // Explicit user choice always wins for non-vertical-only titles.
   if (readingMode === 'vertical') return 'vertical';
   if (readingMode === 'ltr') return 'ltr';
   if (readingMode === 'rtl') return 'rtl';
 
-  // auto — manga defaults to LTR once detection finishes
+  // auto — prefer provider type, then aspect detection.
+  if (isExplicitMangaContentType(titleType)) {
+    return 'ltr';
+  }
+  if (detectedType === 'manhwa') return 'vertical';
   if (detectedType === 'manga') return 'ltr';
   return null;
 }

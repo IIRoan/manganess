@@ -8,13 +8,12 @@ describe('readerPageIndex', () => {
   const pageCount = 5;
 
   describe('horizontalPageIndexFromOffset', () => {
-    it('maps LTR offsets to the visible page index', () => {
+    it('maps offsets to the data page index', () => {
       expect(
         horizontalPageIndexFromOffset({
           offsetX: 0,
           pageWidth,
           pageCount,
-          inverted: false,
         })
       ).toBe(0);
 
@@ -23,59 +22,67 @@ describe('readerPageIndex', () => {
           offsetX: 800,
           pageWidth,
           pageCount,
-          inverted: false,
         })
       ).toBe(2);
     });
 
-    it('maps inverted RTL offsets to the logical page index', () => {
+    it('clamps out-of-range offsets', () => {
       expect(
         horizontalPageIndexFromOffset({
-          offsetX: 0,
+          offsetX: -400,
           pageWidth,
           pageCount,
-          inverted: true,
         })
-      ).toBe(4);
+      ).toBe(0);
 
       expect(
         horizontalPageIndexFromOffset({
-          offsetX: 800,
+          offsetX: 4000,
           pageWidth,
           pageCount,
-          inverted: true,
         })
-      ).toBe(2);
+      ).toBe(4);
     });
   });
 
   describe('horizontalScrollIndexForPage', () => {
-    it('returns the same index for LTR lists', () => {
-      expect(
-        horizontalScrollIndexForPage({
-          pageIndex: 2,
-          pageCount,
-          inverted: false,
-        })
-      ).toBe(2);
-    });
-
-    it('mirrors the index for inverted RTL lists', () => {
+    it('returns the data index for programmatic scroll', () => {
       expect(
         horizontalScrollIndexForPage({
           pageIndex: 0,
           pageCount,
-          inverted: true,
         })
-      ).toBe(4);
+      ).toBe(0);
+
+      expect(
+        horizontalScrollIndexForPage({
+          pageIndex: 2,
+          pageCount,
+        })
+      ).toBe(2);
 
       expect(
         horizontalScrollIndexForPage({
           pageIndex: 4,
           pageCount,
-          inverted: true,
+        })
+      ).toBe(4);
+    });
+
+    it('clamps out-of-range page indices', () => {
+      expect(
+        horizontalScrollIndexForPage({
+          pageIndex: -1,
+          pageCount,
         })
       ).toBe(0);
+
+      expect(
+        horizontalScrollIndexForPage({
+          pageIndex: 99,
+          pageCount,
+        })
+      ).toBe(4);
     });
   });
 });
