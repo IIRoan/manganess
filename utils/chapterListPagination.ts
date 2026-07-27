@@ -154,3 +154,58 @@ export function getReportedChapterCount(details: {
   }
   return details.chapters?.length ?? 0;
 }
+
+export interface CachedChapterPaginationMeta {
+  nextPage?: number;
+  hasMore?: boolean;
+  lastPage?: number;
+}
+
+export interface CachedChapterPagination {
+  hasMore: boolean;
+  nextPage: number;
+  lastPage?: number;
+}
+
+const DEFAULT_CHAPTER_PAGE_SIZE = 60;
+
+function estimateNextChapterPage(cachedCount: number): number {
+  if (cachedCount <= 0) {
+    return 2;
+  }
+
+  return Math.floor(cachedCount / DEFAULT_CHAPTER_PAGE_SIZE) + 1;
+}
+
+/**
+ * Bootstrap chapter pagination from offline cache using stored metadata or
+ * API-reported totals instead of modulo page-size heuristics.
+ */
+export function resolveCachedChapterPagination(details: {
+  chapters?: Chapter[];
+  totalChapters?: number;
+  chapterPagination?: CachedChapterPaginationMeta;
+}): CachedChapterPagination {
+  if (details.chapterPagination) {
+    return {
+      hasMore: details.chapterPagination.hasMore ?? false,
+      nextPage: details.chapterPagination.nextPage ?? 2,
+      ...(typeof details.chapterPagination.lastPage === 'number'
+        ? { lastPage: details.chapterPagination.lastPage }
+        : {}),
+    };
+  }
+
+  const cachedCount = details.chapters?.length ?? 0;
+  const total = details.totalChapters;
+
+  if (typeof total === 'number' && total > 0) {
+    const hasMore = cachedCount < total;
+    return {
+      hasMore,
+      nextPage: hasMore ? estimateNextChapterPage(cachedCount) : 2,
+    };
+  }
+
+  return { hasMore: false, nextPage: 2 };
+}

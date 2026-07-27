@@ -4,6 +4,7 @@ import {
   getReportedChapterCount,
   loadRemainingChapterPages,
   pickOldestChapter,
+  resolveCachedChapterPagination,
   resolveOldestChapter,
   type MappedChapterPage,
 } from '@/utils/chapterListPagination';
@@ -208,6 +209,65 @@ describe('chapterListPagination', () => {
     it('returns 0 for empty details', () => {
       expect(getReportedChapterCount(null)).toBe(0);
       expect(getReportedChapterCount({ chapters: [] })).toBe(0);
+    });
+  });
+
+  describe('resolveCachedChapterPagination', () => {
+    it('uses stored pagination metadata when present on cached details', () => {
+      expect(
+        resolveCachedChapterPagination({
+          chapters: [chapter('120'), chapter('119')],
+          totalChapters: 2427,
+          chapterPagination: {
+            hasMore: true,
+            nextPage: 3,
+            lastPage: 41,
+          },
+        })
+      ).toEqual({
+        hasMore: true,
+        nextPage: 3,
+        lastPage: 41,
+      });
+    });
+
+    it('uses totalChapters instead of modulo page size for hasMore', () => {
+      expect(
+        resolveCachedChapterPagination({
+          chapters: Array.from({ length: 61 }, (_, index) =>
+            chapter(String(61 - index))
+          ),
+          totalChapters: 2427,
+        })
+      ).toEqual({
+        hasMore: true,
+        nextPage: 2,
+      });
+    });
+
+    it('marks pagination complete when cache contains every chapter', () => {
+      expect(
+        resolveCachedChapterPagination({
+          chapters: [chapter('3'), chapter('2'), chapter('1')],
+          totalChapters: 3,
+        })
+      ).toEqual({
+        hasMore: false,
+        nextPage: 2,
+      });
+    });
+
+    it('does not assume more pages when totalChapters is unknown', () => {
+      expect(
+        resolveCachedChapterPagination({
+          chapters: Array.from({ length: 60 }, (_, index) =>
+            chapter(String(60 - index))
+          ),
+        })
+      ).toEqual({
+        hasMore: false,
+        nextPage: 2,
+      });
     });
   });
 });

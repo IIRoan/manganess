@@ -44,8 +44,10 @@ import {
   getReportedChapterCount,
   loadRemainingChapterPages,
   pickOldestChapter,
+  resolveCachedChapterPagination,
   resolveOldestChapter,
 } from '@/utils/chapterListPagination';
+import { mergeMangaDetailsRefresh } from '@/utils/mangaDetailsMerge';
 import {
   attemptLegacyMangaMigration,
   MIGRATION_MESSAGES,
@@ -182,7 +184,13 @@ export default function MangaDetailScreen() {
         return;
       }
 
-      setFetchedDetails({ ...details, id: targetId } as MangaDetails);
+      setFetchedDetails((previous) =>
+        mergeMangaDetailsRefresh(
+          previous && previous.id === targetId ? previous : null,
+          details,
+          targetId
+        )
+      );
       setDisplayMangaId(targetId);
 
       // Keep stored total in sync so progress stays correct with partial chapter lists.
@@ -843,9 +851,14 @@ export default function MangaDetailScreen() {
             if (cachedDetails && !shouldCancelFetch()) {
               applyMangaDetailsForIdRef.current(mangaId, cachedDetails);
               setIsLoading(false);
-              const cachedCount = cachedDetails.chapters?.length ?? 0;
-              setHasMoreChapters(cachedCount > 0 && cachedCount % 60 === 0);
-              setNextChapterPage(Math.floor(cachedCount / 60) + 1);
+              const cachedPagination = resolveCachedChapterPagination(
+                cachedDetails
+              );
+              setHasMoreChapters(cachedPagination.hasMore);
+              setNextChapterPage(cachedPagination.nextPage);
+              if (typeof cachedPagination.lastPage === 'number') {
+                setLastChapterPage(cachedPagination.lastPage);
+              }
               void refreshDetailsInBackground();
             } else {
               await measurePhase(

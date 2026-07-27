@@ -108,7 +108,7 @@ async function apiGet<T>(
   config?: AxiosRequestConfig
 ): Promise<T> {
   return withMangaFireRateLimit(async () => {
-    let requestParams = params;
+    let requestParams: Record<string, unknown> | undefined;
     try {
       requestParams = await appendVrfParams(path, params);
     } catch (error) {
