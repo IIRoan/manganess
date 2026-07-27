@@ -35,7 +35,8 @@ export type ThemeType = 'light' | 'dark' | 'system';
 
 /**
  * Reading mode for the chapter reader.
- * - `auto`: detect from title type / image aspect (manhwa=vertical, manga=horizontal LTR)
+ * - `auto`: detect from title type / image aspect (manhwa=vertical, manga=horizontal LTR).
+ *   Explicit manga titles use LTR immediately; aspect detection is only for unknown types.
  * - `vertical`: force vertical long-strip (webtoon) scrolling
  * - `ltr`: force horizontal page-by-page, left-to-right (manga only; ignored for manhwa)
  * - `rtl`: force horizontal page-by-page, right-to-left (manga only; ignored for manhwa)

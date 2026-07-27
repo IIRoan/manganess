@@ -1,7 +1,9 @@
 import {
+  isExplicitMangaContentType,
   isVerticalOnlyContentType,
   normalizeContentTypeLabel,
   resolveEffectiveReaderLayout,
+  resolveReaderContentProfile,
 } from '@/utils/contentType';
 
 describe('contentType', () => {
@@ -28,6 +30,51 @@ describe('contentType', () => {
     });
   });
 
+  describe('isExplicitMangaContentType', () => {
+    it('recognizes manga labels', () => {
+      expect(isExplicitMangaContentType('Manga')).toBe(true);
+      expect(isExplicitMangaContentType('manga')).toBe(true);
+      expect(isExplicitMangaContentType('Manhwa')).toBe(false);
+      expect(isExplicitMangaContentType(null)).toBe(false);
+    });
+  });
+
+  describe('resolveReaderContentProfile', () => {
+    it('uses the manhwa profile for vertical-only provider types', () => {
+      expect(
+        resolveReaderContentProfile({
+          titleType: 'Manhwa',
+          detectedType: 'manga',
+        })
+      ).toBe('manhwa');
+    });
+
+    it('keeps the manga profile when the provider says Manga', () => {
+      expect(
+        resolveReaderContentProfile({
+          titleType: 'Manga',
+          detectedType: 'manhwa',
+        })
+      ).toBe('manga');
+    });
+
+    it('falls back to aspect detection when title type is unknown', () => {
+      expect(
+        resolveReaderContentProfile({
+          titleType: null,
+          detectedType: 'manhwa',
+        })
+      ).toBe('manhwa');
+
+      expect(
+        resolveReaderContentProfile({
+          titleType: null,
+          detectedType: 'manga',
+        })
+      ).toBe('manga');
+    });
+  });
+
   describe('resolveEffectiveReaderLayout', () => {
     it('forces vertical for manhwa even when reading mode is LTR or RTL', () => {
       expect(
@@ -45,14 +92,22 @@ describe('contentType', () => {
       ).toBe('vertical');
     });
 
-    it('forces vertical when aspect detection finds manhwa panels', () => {
+    it('honors explicit LTR/RTL even when aspect detection says manhwa', () => {
       expect(
         resolveEffectiveReaderLayout({
           readingMode: 'rtl',
           titleType: 'Manga',
           detectedType: 'manhwa',
         })
-      ).toBe('vertical');
+      ).toBe('rtl');
+
+      expect(
+        resolveEffectiveReaderLayout({
+          readingMode: 'ltr',
+          titleType: null,
+          detectedType: 'manhwa',
+        })
+      ).toBe('ltr');
     });
 
     it('honors LTR/RTL for manga titles', () => {
@@ -73,11 +128,29 @@ describe('contentType', () => {
       ).toBe('rtl');
     });
 
-    it('uses auto detection for manga when mode is auto', () => {
+    it('uses provider manga type for auto without waiting on detection', () => {
       expect(
         resolveEffectiveReaderLayout({
           readingMode: 'auto',
           titleType: 'Manga',
+          detectedType: null,
+        })
+      ).toBe('ltr');
+    });
+
+    it('uses auto detection when mode is auto and type is unknown', () => {
+      expect(
+        resolveEffectiveReaderLayout({
+          readingMode: 'auto',
+          titleType: null,
+          detectedType: 'manhwa',
+        })
+      ).toBe('vertical');
+
+      expect(
+        resolveEffectiveReaderLayout({
+          readingMode: 'auto',
+          titleType: null,
           detectedType: 'manga',
         })
       ).toBe('ltr');
