@@ -1194,7 +1194,15 @@ describe('BookmarksScreen', () => {
       jest.runAllTimers();
     });
 
-    expect(mockRouterPush).toHaveBeenCalledWith('/manga/1');
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/(tabs)/manga/[id]',
+      params: {
+        id: '1',
+        title: 'Test Manga',
+        imageUrl: 'test.jpg',
+        previewId: '1',
+      },
+    });
   });
 
   it('shows a missing overlay for bookmarks that no longer exist', async () => {

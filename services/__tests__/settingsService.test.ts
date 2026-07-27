@@ -14,6 +14,12 @@ import {
   migrateToNewStorage,
   getDefaultLayout,
   setDefaultLayout,
+  getReadingMode,
+  setReadingMode,
+  getReaderProfile,
+  patchReaderProfile,
+  getShowReaderSettingsButton,
+  setShowReaderSettingsButton,
   getDownloadSettings,
   updateDownloadSettings,
   resetDownloadSettings,
@@ -66,6 +72,32 @@ describe('settingsService', () => {
       onboardingCompleted: false,
       accentColor: undefined,
       defaultLayout: 'list',
+      readingMode: 'auto',
+      readerBackground: 'default',
+      showPageIndicator: false,
+      readerImageFit: 'both',
+      progressBarPosition: 'none',
+      readerDimPercent: 0,
+      keepHeaderVisible: false,
+      showReaderSettingsButton: true,
+      readerProfiles: {
+        manga: {
+          readingMode: 'auto',
+          readerBackground: 'default',
+          readerImageFit: 'both',
+          progressBarPosition: 'none',
+          readerDimPercent: 0,
+          keepHeaderVisible: false,
+        },
+        manhwa: {
+          readingMode: 'vertical',
+          readerBackground: 'default',
+          readerImageFit: 'width',
+          progressBarPosition: 'none',
+          readerDimPercent: 0,
+          keepHeaderVisible: false,
+        },
+      },
       downloadSettings: {
         maxConcurrentDownloads: 3,
         maxStorageSize: 2147483648,
@@ -86,6 +118,32 @@ describe('settingsService', () => {
       onboardingCompleted: true,
       accentColor: '#fff',
       defaultLayout: 'list' as const,
+      readingMode: 'auto' as const,
+      readerBackground: 'default' as const,
+      showPageIndicator: false,
+      readerImageFit: 'both' as const,
+      progressBarPosition: 'none' as const,
+      readerDimPercent: 0,
+      keepHeaderVisible: false,
+      showReaderSettingsButton: true,
+      readerProfiles: {
+        manga: {
+          readingMode: 'auto' as const,
+          readerBackground: 'default' as const,
+          readerImageFit: 'both' as const,
+          progressBarPosition: 'none' as const,
+          readerDimPercent: 0,
+          keepHeaderVisible: false,
+        },
+        manhwa: {
+          readingMode: 'vertical' as const,
+          readerBackground: 'default' as const,
+          readerImageFit: 'width' as const,
+          progressBarPosition: 'none' as const,
+          readerDimPercent: 0,
+          keepHeaderVisible: false,
+        },
+      },
     };
     await setAppSettings(nextSettings);
     const result = await getAppSettings();
@@ -112,6 +170,12 @@ describe('settingsService', () => {
     expect(await isOnboardingCompleted()).toBe(false);
     await setOnboardingCompleted(true);
     expect(await isOnboardingCompleted()).toBe(true);
+
+    expect(await getShowReaderSettingsButton()).toBe(true);
+    await setShowReaderSettingsButton(false);
+    expect(await getShowReaderSettingsButton()).toBe(false);
+    await setShowReaderSettingsButton(true);
+    expect(await getShowReaderSettingsButton()).toBe(true);
   });
 
   it('exports and imports raw app data', async () => {
@@ -217,6 +281,62 @@ describe('settingsService', () => {
     });
   });
 
+  describe('Reading Mode', () => {
+    it('defaults to auto when readingMode is missing', async () => {
+      await AsyncStorage.setItem(
+        'app_settings',
+        JSON.stringify({
+          theme: 'system',
+          enableDebugTab: false,
+          onboardingCompleted: false,
+          defaultLayout: 'list',
+        })
+      );
+
+      const mode = await getReadingMode();
+      expect(mode).toBe('auto');
+    });
+
+    it('sets and retrieves reading mode', async () => {
+      await setReadingMode('ltr');
+      expect(await getReadingMode()).toBe('ltr');
+
+      await setReadingMode('rtl');
+      expect(await getReadingMode()).toBe('rtl');
+
+      await setReadingMode('vertical');
+      expect(await getReadingMode()).toBe('vertical');
+    });
+
+    it('stores manga and manhwa reader settings separately', async () => {
+      await patchReaderProfile('manga', {
+        readingMode: 'rtl',
+        progressBarPosition: 'top',
+      });
+      await patchReaderProfile('manhwa', {
+        readingMode: 'vertical',
+        progressBarPosition: 'bottom',
+        readerImageFit: 'width',
+      });
+
+      const manga = await getReaderProfile('manga');
+      const manhwa = await getReaderProfile('manhwa');
+
+      expect(manga.readingMode).toBe('rtl');
+      expect(manga.progressBarPosition).toBe('top');
+      expect(manhwa.readingMode).toBe('vertical');
+      expect(manhwa.progressBarPosition).toBe('bottom');
+      expect(manhwa.readerImageFit).toBe('width');
+    });
+
+    it('defaults progress bar to none for new installs', async () => {
+      const settings = await getAppSettings();
+      expect(settings.progressBarPosition).toBe('none');
+      expect(settings.readerProfiles.manga.progressBarPosition).toBe('none');
+      expect(settings.readerProfiles.manhwa.progressBarPosition).toBe('none');
+    });
+  });
+
   describe('getAppSettings error handling', () => {
     it('returns defaults when JSON parsing fails', async () => {
       await AsyncStorage.setItem('app_settings', 'invalid-json');
@@ -226,6 +346,7 @@ describe('settingsService', () => {
       expect(settings.theme).toBe('system');
       expect(settings.enableDebugTab).toBe(false);
       expect(settings.defaultLayout).toBe('list');
+      expect(settings.readingMode).toBe('auto');
     });
 
     it('returns defaults when AsyncStorage throws', async () => {
@@ -237,6 +358,7 @@ describe('settingsService', () => {
 
       expect(settings.theme).toBe('system');
       expect(settings.defaultLayout).toBe('list');
+      expect(settings.readingMode).toBe('auto');
     });
   });
 
@@ -253,6 +375,32 @@ describe('settingsService', () => {
           enableDebugTab: true,
           onboardingCompleted: true,
           defaultLayout: 'grid',
+          readingMode: 'auto',
+          readerBackground: 'default',
+          showPageIndicator: false,
+          readerImageFit: 'both',
+          progressBarPosition: 'none',
+          readerDimPercent: 0,
+          keepHeaderVisible: false,
+          showReaderSettingsButton: true,
+          readerProfiles: {
+            manga: {
+              readingMode: 'auto',
+              readerBackground: 'default',
+              readerImageFit: 'both',
+              progressBarPosition: 'none',
+              readerDimPercent: 0,
+              keepHeaderVisible: false,
+            },
+            manhwa: {
+              readingMode: 'vertical',
+              readerBackground: 'default',
+              readerImageFit: 'width',
+              progressBarPosition: 'none',
+              readerDimPercent: 0,
+              keepHeaderVisible: false,
+            },
+          },
         })
       ).resolves.not.toThrow();
     });

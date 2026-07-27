@@ -388,7 +388,6 @@ export default function getStyles(colorScheme: ColorScheme) {
       height: screenHeight,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: colors.background,
     },
     mangaImage: {
       width: screenWidth,
@@ -405,6 +404,26 @@ export default function getStyles(colorScheme: ColorScheme) {
 
     chapterEndSpacer: {
       height: screenHeight * 0.1, // 10% of screen height for better UX
+    },
+
+    readerProgressTrack: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      height: 4,
+      backgroundColor:
+        colorScheme === 'dark'
+          ? 'rgba(255, 255, 255, 0.28)'
+          : 'rgba(0, 0, 0, 0.22)',
+      zIndex: 140,
+    },
+    readerProgressFill: {
+      height: '100%',
+      borderRadius: 2,
+    },
+    readerDimOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 120,
     },
   });
 }
