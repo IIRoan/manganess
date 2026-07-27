@@ -23,6 +23,11 @@ export interface CachedMangaDetails extends MangaDetails {
   cachedAt: number;
   isBookmarked: boolean;
   bookmarkStatus?: string;
+  chapterPagination?: {
+    nextPage: number;
+    hasMore: boolean;
+    lastPage?: number;
+  };
 }
 
 export interface CachedSearchResults {

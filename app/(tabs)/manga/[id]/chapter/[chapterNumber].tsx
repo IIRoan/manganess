@@ -38,6 +38,15 @@ import {
   normalizeChapterNumber,
   loadOnlineChapterImages,
 } from '@/services/mangaFireService';
+import {
+  resolveHasNextChapter,
+  resolveHasPreviousChapter,
+} from '@/utils/chapterNavigation';
+import { mergeMangaDetailsRefresh } from '@/utils/mangaDetailsMerge';
+import {
+  horizontalPageIndexFromOffset,
+  horizontalScrollIndexForPage,
+} from '@/utils/readerPageIndex';
 import type { MangaDetails as MangaDetailsType } from '@/types';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { offlineCacheService } from '@/services/offlineCacheService';
@@ -472,17 +481,27 @@ export default function ReadChapterScreen() {
     return `offline-chapter-${id || 'unknown'}-${chapterId}`;
   }, [id, normalizedChapterParam, chapterNumber]);
 
-  const hasNextChapter =
-    currentChapterIndex > 0 ||
-    (currentChapterIndex < 0 &&
-      Number.parseFloat(normalizedChapterParam || '') > 0);
+  const hasNextChapter = resolveHasNextChapter({
+    currentChapterIndex,
+    chapterNumber: normalizedChapterParam || String(chapterNumber ?? ''),
+    ...(mangaDetails?.chapters
+      ? { chapters: mangaDetails.chapters }
+      : {}),
+    ...(typeof mangaDetails?.totalChapters === 'number'
+      ? { totalChapters: mangaDetails.totalChapters }
+      : {}),
+  });
 
-  const hasPreviousChapter =
-    (currentChapterIndex > -1 &&
-      currentChapterIndex < (mangaDetails?.chapters?.length ?? 0) - 1 &&
-      !!mangaDetails?.chapters?.[currentChapterIndex + 1]) ||
-    (currentChapterIndex < 0 &&
-      Number.parseFloat(normalizedChapterParam || '') > 1);
+  const hasPreviousChapter = resolveHasPreviousChapter({
+    currentChapterIndex,
+    chapterNumber: normalizedChapterParam || String(chapterNumber ?? ''),
+    ...(mangaDetails?.chapters
+      ? { chapters: mangaDetails.chapters }
+      : {}),
+    ...(typeof mangaDetails?.totalChapters === 'number'
+      ? { totalChapters: mangaDetails.totalChapters }
+      : {}),
+  });
 
   // Status bar management
   useFocusEffect(
@@ -1251,26 +1270,9 @@ export default function ReadChapterScreen() {
         maxChapterPages: 1,
       });
 
-      setMangaDetails((previous) => {
-        const preferCachedChapters =
-          (previous?.chapters?.length ?? 0) > freshDetails.chapters.length;
-        const mergedTotal = Math.max(
-          previous?.totalChapters ?? 0,
-          freshDetails.totalChapters ?? 0,
-          preferCachedChapters
-            ? previous?.chapters.length ?? 0
-            : freshDetails.chapters.length
-        );
-
-        return {
-          ...freshDetails,
-          id: mangaId,
-          chapters: preferCachedChapters
-            ? previous!.chapters
-            : freshDetails.chapters,
-          ...(mergedTotal > 0 ? { totalChapters: mergedTotal } : {}),
-        };
-      });
+      setMangaDetails((previous) =>
+        mergeMangaDetailsRefresh(previous, freshDetails, mangaId)
+      );
       setMangaTitle((current) => current ?? freshDetails.title);
 
       // Do not write a page-1 preview over a fuller offline cache.
@@ -1326,11 +1328,15 @@ export default function ReadChapterScreen() {
   useEffect(() => {
     if (isHorizontalLayout && mangaFlatListRef.current && downloadedImages) {
       mangaFlatListRef.current.scrollToIndex({
-        index: currentPage,
+        index: horizontalScrollIndexForPage({
+          pageIndex: currentPage,
+          pageCount: downloadedImages.length,
+          inverted: isInvertedLayout,
+        }),
         animated: true,
       });
     }
-  }, [currentPage, isHorizontalLayout, downloadedImages]);
+  }, [currentPage, isHorizontalLayout, downloadedImages, isInvertedLayout]);
 
   // Always reset reader position when a new chapter loads offline
   useEffect(() => {
@@ -1348,7 +1354,11 @@ export default function ReadChapterScreen() {
       } else {
         try {
           mangaFlatListRef.current?.scrollToIndex({
-            index: 0,
+            index: horizontalScrollIndexForPage({
+              pageIndex: 0,
+              pageCount: downloadedImages.length,
+              inverted: effectiveLayout === 'rtl',
+            }),
             animated: false,
           });
         } catch (error) {
@@ -1641,8 +1651,14 @@ export default function ReadChapterScreen() {
         onMomentumScrollEnd={(event) => {
           const pageWidth = Dimensions.get('window').width;
           const offset = event.nativeEvent.contentOffset.x;
-          const page = Math.round(offset / pageWidth);
-          setCurrentPage(page);
+          setCurrentPage(
+            horizontalPageIndexFromOffset({
+              offsetX: offset,
+              pageWidth,
+              pageCount: sortedImages.length,
+              inverted: isInvertedLayout,
+            })
+          );
         }}
         getItemLayout={(_, index) => ({
           length: Dimensions.get('window').width,
