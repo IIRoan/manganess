@@ -17,8 +17,21 @@ type VrfHostMessage =
   | { type: 'vrf'; id: string; vrf?: string | null; error?: string };
 
 const REQUEST_TIMEOUT_MS = 20000;
-const isTestEnv =
+let useTestVrfToken =
   process.env.NODE_ENV === 'test' || typeof jest !== 'undefined';
+
+export function resetMangaFireVrfBridgeForTests(options?: {
+  useTestToken?: boolean;
+}) {
+  mangaFireVrfBridge.detachHost();
+  useTestVrfToken =
+    options?.useTestToken ??
+    (process.env.NODE_ENV === 'test' || typeof jest !== 'undefined');
+}
+
+export function setMangaFireVrfBridgeProductionModeForTests() {
+  useTestVrfToken = false;
+}
 
 function requiresVrfToken(path: string): boolean {
   const normalized = path.startsWith('/') ? path : `/${path}`;
@@ -78,7 +91,10 @@ class MangaFireVrfBridge {
       return;
     }
 
-    const [request] = this.pending.splice(pendingIndex, 1);
+    const request = this.pending.splice(pendingIndex, 1)[0];
+    if (!request) {
+      return;
+    }
     clearTimeout(request.timeoutId);
 
     if (message.error || !message.vrf) {
@@ -99,12 +115,16 @@ class MangaFireVrfBridge {
       return null;
     }
 
-    if (isTestEnv) {
+    if (useTestVrfToken) {
       return 'test-vrf-token';
     }
 
     await this.waitUntilReady();
-    return this.requestVrfToken({ path, params });
+    const vrfRequest: VrfRequest = { path };
+    if (params) {
+      vrfRequest.params = params;
+    }
+    return this.requestVrfToken(vrfRequest);
   }
 
   private async waitUntilReady(): Promise<void> {
@@ -219,14 +239,17 @@ class MangaFireVrfBridge {
         reject(new Error('Timed out waiting for MangaFire VRF token'));
       }, REQUEST_TIMEOUT_MS);
 
-      this.pending.push({
+      const pendingRequest: PendingVrfRequest = {
         id,
         path: request.path,
-        params: request.params,
         resolve,
         reject,
         timeoutId,
-      });
+      };
+      if (request.params) {
+        pendingRequest.params = request.params;
+      }
+      this.pending.push(pendingRequest);
 
       try {
         this.webViewInject?.(script);

@@ -375,7 +375,7 @@ export const fetchMangaDetails = async (
           ),
         {
           ttlMs: REQUEST_HUB_TTLS.mangaDetails,
-          force: options?.force,
+          ...(options?.force ? { force: true } : {}),
         }
       );
 
