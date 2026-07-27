@@ -129,7 +129,7 @@ class OfflineCacheService {
     try {
       const cached = await AsyncStorage.getItem(OFFLINE_MANGA_CACHE_KEY);
       this.memoryCache = cached ? JSON.parse(cached) : {};
-      return this.memoryCache;
+      return this.memoryCache ?? {};
     } catch (error) {
       logger().error('Storage', 'Failed to get all cached manga details', {
         error,

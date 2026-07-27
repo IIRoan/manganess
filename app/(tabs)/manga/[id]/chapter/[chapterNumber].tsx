@@ -445,7 +445,7 @@ export default function ReadChapterScreen() {
     () =>
       resolveEffectiveReaderLayout({
         readingMode,
-        titleType: mangaDetails?.type,
+        titleType: mangaDetails?.type ?? null,
         detectedType: contentType,
       }),
     [readingMode, mangaDetails?.type, contentType]

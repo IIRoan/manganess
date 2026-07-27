@@ -38,7 +38,7 @@ export function getApiRetryDelayMs(error: unknown, attempt: number): number {
   }
 
   const index = Math.min(Math.max(attempt - 1, 0), RATE_LIMIT_DELAYS_MS.length - 1);
-  return RATE_LIMIT_DELAYS_MS[index];
+  return RATE_LIMIT_DELAYS_MS[index] ?? RATE_LIMIT_DELAYS_MS[0];
 }
 
 export function getRateLimitMaxRetries(): number {

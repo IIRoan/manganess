@@ -79,6 +79,7 @@ describe('settingsService', () => {
       progressBarPosition: 'none',
       readerDimPercent: 0,
       keepHeaderVisible: false,
+      showReaderSettingsButton: true,
       readerProfiles: {
         manga: {
           readingMode: 'auto',
@@ -124,6 +125,7 @@ describe('settingsService', () => {
       progressBarPosition: 'none' as const,
       readerDimPercent: 0,
       keepHeaderVisible: false,
+      showReaderSettingsButton: true,
       readerProfiles: {
         manga: {
           readingMode: 'auto' as const,
@@ -380,6 +382,7 @@ describe('settingsService', () => {
           progressBarPosition: 'none',
           readerDimPercent: 0,
           keepHeaderVisible: false,
+          showReaderSettingsButton: true,
           readerProfiles: {
             manga: {
               readingMode: 'auto',

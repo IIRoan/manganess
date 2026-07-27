@@ -85,7 +85,7 @@ describe('contentType', () => {
       expect(
         resolveEffectiveReaderLayout({
           readingMode: 'auto',
-          titleType: undefined,
+          titleType: null,
           detectedType: null,
         })
       ).toBeNull();

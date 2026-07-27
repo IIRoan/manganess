@@ -48,13 +48,21 @@ const DEFAULT_MANGA_COVER =
 export default function HomeScreen() {
   const router = useRouter();
   const openMangaDetails = useCallback(
-    (item: Pick<MangaItem, 'id' | 'title' | 'imageUrl' | 'banner'>) => {
+    (
+      item: {
+        id: string;
+        title: string;
+        imageUrl?: string;
+        banner?: string;
+        bannerImage?: string;
+      }
+    ) => {
       router.navigate({
         pathname: '/(tabs)/manga/[id]',
         params: {
           id: item.id,
           title: item.title,
-          imageUrl: item.imageUrl || item.banner || '',
+          imageUrl: item.imageUrl || item.banner || item.bannerImage || '',
           previewId: item.id,
         },
       });

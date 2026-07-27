@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import GenresScreen from '../genres';
 import axios from 'axios';
 import { router } from 'expo-router';
+import { resetMangaFireRequestHubForTests } from '@/services/mangaFireRequestHub';
 
 // Mock router
 jest.mock('expo-router', () => ({
@@ -89,7 +90,7 @@ const sampleGenreApiResponse = {
 describe('GenresScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-
+    resetMangaFireRequestHubForTests();
     mockedAxios.get.mockResolvedValue({ data: sampleGenreApiResponse });
   });
 
@@ -162,6 +163,7 @@ describe('GenresScreen', () => {
           params: expect.objectContaining({
             genres: ['action'],
             limit: 40,
+            vrf: 'test-vrf-token',
           }),
         })
       );
