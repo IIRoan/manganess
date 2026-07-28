@@ -6,6 +6,7 @@ import {
   mangaFireVrfBridge,
   resetMangaFireVrfBridgeForTests,
   setMangaFireVrfBridgeProductionModeForTests,
+  VRF_PROTECTION_HELPERS_JS,
 } from '@/services/mangaFireVrfBridge';
 
 jest.mock('@/utils/logger', () => ({
@@ -47,9 +48,27 @@ describe('mangaFireVrfBridge', () => {
     ).resolves.toEqual({ vrf: 'test-vrf-token' });
   });
 
-  it('builds the readiness probe script', () => {
-    expect(buildVrfScript()).toContain('notifyReady');
-    expect(buildVrfScript()).toContain('vmz_b5512e');
+  it('builds the readiness probe script with capability-based discovery', () => {
+    const script = buildVrfScript();
+    expect(script).toContain('notifyReady');
+    expect(script).toContain('findProtectionModule');
+    expect(script).toContain('collectProtectionCandidates');
+    expect(script).toContain('scoreProtectionCandidate');
+    expect(script).toContain('getProtectionToken');
+    expect(script).toContain('MutationObserver');
+    // Must not hard-code a single MangaFire build hash — those rename often.
+    expect(script).not.toContain('vmz_b5512e');
+    expect(script).not.toContain('vmO_6faacd');
+  });
+
+  it('includes helpers that discover modules by capability, not name', () => {
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('collectProtectionCandidates');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('Object.getOwnPropertyNames');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('extendClient');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('extractAuthToken');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('looksLikeAuthToken');
+    // No fixed module-name regex — discovery is shape/behavior based.
+    expect(VRF_PROTECTION_HELPERS_JS).not.toContain('/^vm[OoZz]_/');
   });
 
   it('logs vrf acquisition failures', () => {
@@ -91,6 +110,33 @@ describe('mangaFireVrfBridge', () => {
       page: 1,
       vrf: 'generated-token',
     });
+  });
+
+  it('injects dynamic protection helpers when requesting a vrf token', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    const injectedScripts: string[] = [];
+    mangaFireVrfBridge.attachHost((script) => {
+      injectedScripts.push(script);
+    });
+    mangaFireVrfBridge.markReady();
+
+    const vrfPromise = appendVrfParams('/titles/example');
+    await flushPromises();
+
+    expect(injectedScripts[0]).toContain('findProtectionModule');
+    expect(injectedScripts[0]).toContain('generateProtectionToken');
+    expect(injectedScripts[0]).not.toContain('window.vmz_b5512e');
+
+    const requestId = extractRequestId(injectedScripts[0] ?? '');
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({
+        type: 'vrf',
+        id: requestId,
+        vrf: 'dynamic-token',
+      })
+    );
+
+    await expect(vrfPromise).resolves.toEqual({ vrf: 'dynamic-token' });
   });
 
   it('rejects pending vrf requests when the host reports an error', async () => {

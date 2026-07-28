@@ -21,11 +21,15 @@ import {
   FlatList,
   Modal,
   PanResponder,
-  Image as RNImage,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useNavigationHistory } from '@/hooks/useNavigationHistory';
+import {
+  buildMangaImageSource,
+  getMangaImageSize,
+  MANGA_IMAGE_REQUEST_HEADERS,
+} from '@/utils/mangaImageHeaders';
 
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
@@ -158,12 +162,13 @@ const ManhwaImage = React.memo(
     });
     const [isImageLoaded, setIsImageLoaded] = useState(false);
     const imageUri = image.localPath || image.originalUrl;
+    const imageSource = buildMangaImageSource(imageUri);
 
     useEffect(() => {
       if (imageUri) {
         const { width: screenWidth, height: screenHeight } =
           Dimensions.get('window');
-        RNImage.getSize(
+        getMangaImageSize(
           imageUri,
           (width, height) => {
             // Vertical strip: width fit is the default; height/both shrink tall panels.
@@ -219,29 +224,31 @@ const ManhwaImage = React.memo(
               : null,
           ]}
         >
-          <Image
-            source={{ uri: imageUri }}
-            style={[
-              getStyles(colorScheme).manhwaImage,
-              {
-                height: imageSize.height,
-                width: imageSize.width,
-              },
-            ]}
-            contentFit={imageFit === 'fill' ? 'cover' : 'contain'}
-            cachePolicy={isOnline ? 'memory-disk' : 'disk'}
-            transition={200}
-            onError={(error) => {
-              logger().error('UI', 'Failed to load image', {
-                pageNumber: image.pageNumber,
-                error,
-              });
-              setIsImageLoaded(true);
-            }}
-            onLoad={() => {
-              setIsImageLoaded(true);
-            }}
-          />
+          {imageSource && (
+            <Image
+              source={imageSource}
+              style={[
+                getStyles(colorScheme).manhwaImage,
+                {
+                  height: imageSize.height,
+                  width: imageSize.width,
+                },
+              ]}
+              contentFit={imageFit === 'fill' ? 'cover' : 'contain'}
+              cachePolicy={isOnline ? 'memory-disk' : 'disk'}
+              transition={200}
+              onError={(error) => {
+                logger().error('UI', 'Failed to load image', {
+                  pageNumber: image.pageNumber,
+                  error,
+                });
+                setIsImageLoaded(true);
+              }}
+              onLoad={() => {
+                setIsImageLoaded(true);
+              }}
+            />
+          )}
           {!isImageLoaded && (
             <View style={getStyles(colorScheme).manhwaImageLoader}>
               <ActivityIndicator
@@ -279,10 +286,11 @@ const MangaPageImage = React.memo(
       contentFit: 'contain' as 'contain' | 'cover',
     });
     const imageUri = image.localPath || image.originalUrl;
+    const imageSource = buildMangaImageSource(imageUri);
 
     useEffect(() => {
       if (!imageUri) return;
-      RNImage.getSize(
+      getMangaImageSize(
         imageUri,
         (width, height) => {
           setLayout(
@@ -318,19 +326,21 @@ const MangaPageImage = React.memo(
           },
         ]}
       >
-        <Image
-          source={{ uri: imageUri }}
-          style={{ width: layout.width, height: layout.height }}
-          contentFit={layout.contentFit}
-          cachePolicy={isOnline ? 'memory-disk' : 'disk'}
-          transition={200}
-          onError={(error) => {
-            logger().error('UI', 'Failed to load image', {
-              pageNumber: image.pageNumber,
-              error,
-            });
-          }}
-        />
+        {imageSource && (
+          <Image
+            source={imageSource}
+            style={{ width: layout.width, height: layout.height }}
+            contentFit={layout.contentFit}
+            cachePolicy={isOnline ? 'memory-disk' : 'disk'}
+            transition={200}
+            onError={(error) => {
+              logger().error('UI', 'Failed to load image', {
+                pageNumber: image.pageNumber,
+                error,
+              });
+            }}
+          />
+        )}
       </View>
     );
   }
@@ -979,7 +989,7 @@ export default function ReadChapterScreen() {
 
       images.slice(0, sampleSize).forEach((image) => {
         const imageUri = image.localPath || image.originalUrl;
-        RNImage.getSize(
+        getMangaImageSize(
           imageUri || '',
           (width, height) => {
             const aspectRatio = height / width;
@@ -1013,7 +1023,9 @@ export default function ReadChapterScreen() {
     images.slice(0, 5).forEach((image) => {
       const uri = image.originalUrl || image.localPath;
       if (uri?.startsWith('http')) {
-        Image.prefetch(uri).catch(() => {});
+        Image.prefetch(uri, {
+          headers: MANGA_IMAGE_REQUEST_HEADERS,
+        }).catch(() => {});
       }
     });
   }, []);

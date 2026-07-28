@@ -17,6 +17,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import MangaCard from '@/components/MangaCard';
+import { buildMangaImageSource } from '@/utils/mangaImageHeaders';
 import {
   RecentlyReadSkeleton,
   TrendingSkeleton,
@@ -236,7 +237,7 @@ export default function HomeScreen() {
           }
         >
           <Image
-            source={{ uri: item.imageUrl }}
+            source={buildMangaImageSource(item.imageUrl) ?? { uri: item.imageUrl }}
             style={styles.trendingImage}
             accessibilityLabel={`Cover image for ${item.title}`}
             contentFit="cover"
