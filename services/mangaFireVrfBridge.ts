@@ -13,7 +13,7 @@ interface PendingVrfRequest extends VrfRequest {
 }
 
 type VrfHostMessage =
-  | { type: 'ready' }
+  | { type: 'ready'; discovery?: string }
   | { type: 'vrf'; id: string; vrf?: string | null; error?: string };
 
 const REQUEST_TIMEOUT_MS = 20000;
@@ -37,6 +37,257 @@ function requiresVrfToken(path: string): boolean {
   const normalized = path.startsWith('/') ? path : `/${path}`;
   return !normalized.startsWith('/top-titles');
 }
+
+/**
+ * Capability-based MangaFire protection discovery.
+ *
+ * Does NOT hard-code module names (those rotate: vmz_*, vmO_*, …).
+ * Instead it:
+ *  1. Prefers known stable globals (getProtectionToken / extendClient)
+ *  2. Scans every own enumerable window value for a protection-shaped object
+ *  3. Scores candidates by method signatures (extendClient, getProtectionToken,
+ *     shouldProtect, canonicalQuery, …)
+ *  4. Behavior-probes extendClient: wires a mock axios and checks whether the
+ *     interceptor injects a long string param (vrf/token/or any new name)
+ *  5. Continuously re-scans until ready (modules often load after DOMContentLoaded)
+ */
+export const VRF_PROTECTION_HELPERS_JS = `
+  var PROTECTION_METHOD_HINTS = [
+    'getProtectionToken',
+    'extendClient',
+    'shouldProtect',
+    'canonicalQuery',
+    'relativePath',
+    'isTrustedEnvironment',
+    'createStorage',
+    'dynamicEncrypt',
+    'PROTECTED_PATTERNS'
+  ];
+
+  var AUTH_PARAM_HINTS = ['vrf', 'token', 't', 'sig', 'sign', 'auth', 'key'];
+
+  function looksLikeAuthToken(value) {
+    return typeof value === 'string' && value.length >= 16;
+  }
+
+  function extractAuthToken(params, baseline) {
+    if (!params || typeof params !== 'object') return null;
+    baseline = baseline || {};
+    var preferred = AUTH_PARAM_HINTS;
+    var i, key, value;
+
+    for (i = 0; i < preferred.length; i++) {
+      key = preferred[i];
+      value = params[key];
+      if (looksLikeAuthToken(value) && baseline[key] !== value) {
+        return value;
+      }
+    }
+
+    for (key in params) {
+      if (!Object.prototype.hasOwnProperty.call(params, key)) continue;
+      if (Object.prototype.hasOwnProperty.call(baseline, key) && baseline[key] === params[key]) {
+        continue;
+      }
+      value = params[key];
+      if (looksLikeAuthToken(value)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  function extractTokenFromResult(result) {
+    if (looksLikeAuthToken(result)) return result;
+    if (!result || typeof result !== 'object') return null;
+    if (looksLikeAuthToken(result.vrf)) return result.vrf;
+    if (looksLikeAuthToken(result.token)) return result.token;
+    if (result.params) return extractAuthToken(result.params, {});
+    return null;
+  }
+
+  function scoreProtectionCandidate(candidate) {
+    if (!candidate || (typeof candidate !== 'object' && typeof candidate !== 'function')) {
+      return 0;
+    }
+    var score = 0;
+    for (var i = 0; i < PROTECTION_METHOD_HINTS.length; i++) {
+      var name = PROTECTION_METHOD_HINTS[i];
+      var value = candidate[name];
+      if (typeof value === 'function') score += 3;
+      else if (value != null) score += 1;
+    }
+    if (typeof candidate.extendClient === 'function') score += 4;
+    if (typeof candidate.getProtectionToken === 'function') score += 5;
+    return score;
+  }
+
+  function collectProtectionCandidates() {
+    var seen = [];
+    var results = [];
+
+    function consider(candidate, source) {
+      if (!candidate) return;
+      if (seen.indexOf(candidate) !== -1) return;
+      seen.push(candidate);
+      var score = scoreProtectionCandidate(candidate);
+      if (score < 3) return;
+      results.push({ candidate: candidate, source: source, score: score });
+    }
+
+    consider(window, 'window');
+
+    var keys;
+    try {
+      keys = Object.getOwnPropertyNames(window);
+    } catch (e) {
+      keys = Object.keys(window);
+    }
+
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      var value;
+      try {
+        value = window[key];
+      } catch (err) {
+        continue;
+      }
+      consider(value, key);
+      if (value && typeof value === 'object') {
+        try {
+          if (typeof value.extendClient === 'function' || typeof value.getProtectionToken === 'function') {
+            consider(value, key);
+          }
+        } catch (ignore) {}
+      }
+    }
+
+    results.sort(function(a, b) { return b.score - a.score; });
+    return results;
+  }
+
+  function findProtectionModule() {
+    if (window.__manganessProtectionModule) {
+      return window.__manganessProtectionModule;
+    }
+
+    var ranked = collectProtectionCandidates();
+    if (!ranked.length) return null;
+
+    // Prefer highest score; window itself only if it actually has the APIs.
+    for (var i = 0; i < ranked.length; i++) {
+      var entry = ranked[i];
+      if (
+        typeof entry.candidate.getProtectionToken === 'function' ||
+        typeof entry.candidate.extendClient === 'function'
+      ) {
+        window.__manganessProtectionModule = entry.candidate;
+        window.__manganessProtectionSource = entry.source;
+        return entry.candidate;
+      }
+    }
+    return null;
+  }
+
+  function clearProtectionCache() {
+    window.__manganessProtectionModule = null;
+    window.__manganessProtectionSource = null;
+    window.__manganessVrfInterceptor = null;
+  }
+
+  function isProtectionReady() {
+    return !!findProtectionModule();
+  }
+
+  function ensureInterceptor(vmz) {
+    if (typeof window.__manganessVrfInterceptor === 'function') {
+      return window.__manganessVrfInterceptor;
+    }
+    if (typeof vmz.extendClient !== 'function') {
+      return null;
+    }
+    var mockAxios = {
+      interceptors: {
+        request: {
+          use: function(fn) { window.__manganessVrfInterceptor = fn; }
+        },
+        response: { use: function() {} }
+      }
+    };
+    try {
+      vmz.extendClient(mockAxios);
+    } catch (e) {
+      return null;
+    }
+    return typeof window.__manganessVrfInterceptor === 'function'
+      ? window.__manganessVrfInterceptor
+      : null;
+  }
+
+  function generateProtectionToken(path, params) {
+    clearProtectionCache();
+    var vmz = findProtectionModule();
+    if (!vmz) {
+      return Promise.reject(new Error('Protection module not loaded'));
+    }
+
+    try { if (typeof vmz.init === 'function') vmz.init(); } catch (e) {}
+
+    var baseline = Object.assign({}, params || {});
+
+    if (typeof vmz.getProtectionToken === 'function') {
+      return Promise.resolve(vmz.getProtectionToken(path, Object.assign({}, baseline)))
+        .then(function(token) {
+          var extracted = extractTokenFromResult(token);
+          if (extracted) return extracted;
+          throw new Error('Protection token empty');
+        })
+        .catch(function(err) {
+          // Fall through to interceptor path on soft failure.
+          if (typeof vmz.extendClient !== 'function') {
+            return Promise.reject(err);
+          }
+          return generateViaInterceptor(vmz, path, baseline);
+        });
+    }
+
+    return generateViaInterceptor(vmz, path, baseline);
+  }
+
+  function generateViaInterceptor(vmz, path, baseline) {
+    var interceptor = ensureInterceptor(vmz);
+    if (!interceptor) {
+      return Promise.reject(new Error('Protection interceptor unavailable'));
+    }
+
+    var cfg = {
+      url: path,
+      method: 'get',
+      params: Object.assign({}, baseline),
+      headers: {}
+    };
+
+    return Promise.resolve(interceptor(cfg)).then(function(out) {
+      var result = out || cfg;
+      var token = extractAuthToken(result.params, baseline);
+      if (!token && result.headers) {
+        // Some builds may place auth in headers instead of query params.
+        for (var headerName in result.headers) {
+          if (!Object.prototype.hasOwnProperty.call(result.headers, headerName)) continue;
+          var headerValue = result.headers[headerName];
+          if (looksLikeAuthToken(headerValue)) {
+            token = headerValue;
+            break;
+          }
+        }
+      }
+      if (!token) {
+        throw new Error('Protection interceptor produced no auth token');
+      }
+      return token;
+    });
+  }
+`;
 
 class MangaFireVrfBridge {
   private ready = false;
@@ -76,6 +327,11 @@ class MangaFireVrfBridge {
     }
 
     if (message.type === 'ready') {
+      if (message.discovery) {
+        logger().info('Network', 'MangaFire protection module discovered', {
+          discovery: message.discovery,
+        });
+      }
       this.markReady();
       return;
     }
@@ -171,61 +427,25 @@ class MangaFireVrfBridge {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const script = `
       (function() {
+        ${VRF_PROTECTION_HELPERS_JS}
         var requestId = ${JSON.stringify(id)};
         var path = ${JSON.stringify(request.path)};
         var params = ${JSON.stringify(request.params ?? {})};
-        try {
-          var vmz = window.vmz_b5512e;
-          if (!vmz || typeof vmz.extendClient !== 'function') {
+        generateProtectionToken(path, params)
+          .then(function(vrf) {
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'vrf',
               id: requestId,
-              error: 'Protection module not loaded'
+              vrf: vrf || null
             }));
-            return true;
-          }
-          if (!window.__manganessVrfInterceptor) {
-            try { vmz.init(); } catch (e) {}
-            var mockAxios = {
-              interceptors: {
-                request: {
-                  use: function(fn) { window.__manganessVrfInterceptor = fn; }
-                },
-                response: { use: function() {} }
-              }
-            };
-            vmz.extendClient(mockAxios);
-          }
-          var cfg = {
-            url: path,
-            method: 'get',
-            params: Object.assign({}, params),
-            headers: {}
-          };
-          Promise.resolve(window.__manganessVrfInterceptor(cfg))
-            .then(function(out) {
-              var result = out || cfg;
-              var vrf = result.params && result.params.vrf;
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'vrf',
-                id: requestId,
-                vrf: vrf || null
-              }));
-            })
-            .catch(function(err) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'vrf',
-                id: requestId,
-                error: String(err)
-              }));
-            });
-        } catch (err) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'vrf',
-            id: requestId,
-            error: String(err)
-          }));
-        }
+          })
+          .catch(function(err) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'vrf',
+              id: requestId,
+              error: String(err && err.message ? err.message : err)
+            }));
+          });
         return true;
       })();
     `;
@@ -285,14 +505,29 @@ export const mangaFireVrfBridge = new MangaFireVrfBridge();
 export function buildVrfScript(): string {
   return `
     (function() {
+      ${VRF_PROTECTION_HELPERS_JS}
+      var notified = false;
       function notifyReady() {
-        if (window.vmz_b5512e && window.__config) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+        if (notified) return;
+        if (isProtectionReady()) {
+          notified = true;
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'ready',
+            discovery: window.__manganessProtectionSource || 'unknown'
+          }));
           return;
         }
         setTimeout(notifyReady, 100);
       }
       notifyReady();
+      // Modules often arrive after the initial document load (ESM/polyfill).
+      try {
+        if (typeof MutationObserver === 'function' && document.documentElement) {
+          var observer = new MutationObserver(function() { notifyReady(); });
+          observer.observe(document.documentElement, { childList: true, subtree: true });
+          setTimeout(function() { try { observer.disconnect(); } catch (e) {} }, 30000);
+        }
+      } catch (e) {}
       true;
     })();
   `;

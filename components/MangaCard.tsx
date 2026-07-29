@@ -19,6 +19,7 @@ import {
   useMangaImageCache,
   type CacheContext,
 } from '@/services/CacheImages';
+import { buildMangaImageSource } from '@/utils/mangaImageHeaders';
 import { useOffline } from '@/hooks/useOffline';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
@@ -101,7 +102,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
       if (v.startsWith('file://') || v.startsWith('content://')) return v;
       return `file://${v}`;
     })();
-    return { uri } as const;
+    return buildMangaImageSource(uri) ?? { uri };
   };
 
   const handleImageLoad = () => {

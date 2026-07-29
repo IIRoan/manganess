@@ -9,6 +9,7 @@ import Reanimated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { Image, ImageStyle } from 'expo-image';
+import { buildMangaImageSource } from '@/utils/mangaImageHeaders';
 
 // Hook for managing scroll state
 export const useParallaxScroll = (onScroll?: (event: any) => void) => {
@@ -76,7 +77,7 @@ export const ParallaxImage: React.FC<ParallaxImageProps> = ({
         style={[{ width: '100%', height: '100%' }, animatedStyle]}
       >
         <Image
-          source={{ uri: source }}
+          source={buildMangaImageSource(source) ?? { uri: source }}
           style={[{ width: '100%', height: '100%' }, style]}
           contentFit="cover"
           transition={500}

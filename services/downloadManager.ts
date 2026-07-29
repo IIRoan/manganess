@@ -27,6 +27,7 @@ import {
   NativeEventSubscription,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MANGA_IMAGE_REQUEST_HEADERS } from '@/utils/mangaImageHeaders';
 
 // Download configuration
 const MAX_RETRY_ATTEMPTS = 3;
@@ -1551,10 +1552,7 @@ class DownloadManagerService implements DownloadManager {
       const response = await fetch(image.originalUrl, {
         signal: combinedSignal,
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          Referer: image.originalUrl.split('/').slice(0, 3).join('/'),
-          Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          ...MANGA_IMAGE_REQUEST_HEADERS,
         },
       });
 

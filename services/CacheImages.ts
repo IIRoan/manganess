@@ -16,6 +16,7 @@ function simpleHash(str: string): string {
 }
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isDebugEnabled } from '@/constants/env';
+import { MANGA_IMAGE_REQUEST_HEADERS } from '@/utils/mangaImageHeaders';
 
 function normalizeUri(u: string): string {
   if (!u) return u;
@@ -234,7 +235,9 @@ class ImageCache {
           // Ignore delete errors, might be locked or race condition
         }
       }
-      const output = await FSFile.downloadFileAsync(url, destFile);
+      const output = await FSFile.downloadFileAsync(url, destFile, {
+        headers: MANGA_IMAGE_REQUEST_HEADERS,
+      });
       return output as FSFile; // Promise rejects on non-2xx status per new API
     });
   }

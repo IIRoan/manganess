@@ -16,6 +16,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import Svg, { Circle } from 'react-native-svg';
+import { buildMangaImageSource } from '@/utils/mangaImageHeaders';
 import Reanimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -151,7 +152,7 @@ const MangaBannerImage: React.FC<{
   return (
     <Image
       key={`${mangaId}-${bannerUrl}`}
-      source={{ uri: displayUri }}
+      source={buildMangaImageSource(displayUri) ?? { uri: displayUri }}
       style={style}
       contentFit="cover"
       contentPosition="top"
