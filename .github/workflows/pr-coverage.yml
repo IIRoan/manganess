@@ -62,7 +62,7 @@ jobs:
           retention-days: 14
 
       - name: Post Coverage Comment
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         if: always()
         with:
           script: |
