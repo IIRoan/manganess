@@ -11,7 +11,7 @@ import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import Reanimated from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router/react-navigation';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
