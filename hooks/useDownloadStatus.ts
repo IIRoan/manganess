@@ -131,32 +131,27 @@ export const useDownloadStatus = ({
     };
   }, [isActiveInSystem, isDownloaded, checkDownloaded]);
 
-  // Only set up expensive polling and listeners when the chapter is actively in the download system
+  // Always listen to the download service for this chapter.
+  // The Zedux atom is not always synced on the modern download path, and the
+  // swipe DownloadButton unmounts when the row closes — so the chapter chip
+  // must get progress from the service directly.
   useEffect(() => {
-    if (!isActiveInSystem) {
-      // Not downloading — skip polling entirely
-      setServiceProgress(null);
-      return;
-    }
-
-    // Sync once immediately
     const syncServiceStatus = () => {
       try {
         const progress = downloadManagerService.getDownloadProgress(downloadId);
-        if (mountedRef.current) {
-          setServiceProgress((prev) => {
-            if (
-              prev?.status === progress?.status &&
-              prev?.progress === progress?.progress &&
-              prev?.estimatedTimeRemaining ===
-                progress?.estimatedTimeRemaining &&
-              prev?.downloadSpeed === progress?.downloadSpeed
-            ) {
-              return prev;
-            }
-            return progress;
-          });
-        }
+        if (!mountedRef.current) return;
+
+        setServiceProgress((prev) => {
+          if (
+            prev?.status === progress?.status &&
+            prev?.progress === progress?.progress &&
+            prev?.estimatedTimeRemaining === progress?.estimatedTimeRemaining &&
+            prev?.downloadSpeed === progress?.downloadSpeed
+          ) {
+            return prev;
+          }
+          return progress;
+        });
       } catch (error) {
         log.warn('Service', 'Failed to sync download manager service status', {
           downloadId,
@@ -178,13 +173,13 @@ export const useDownloadStatus = ({
       }
     );
 
-    const intervalId = setInterval(syncServiceStatus, 1000);
+    const intervalId = setInterval(syncServiceStatus, 500);
 
     return () => {
       unsubscribe();
       clearInterval(intervalId);
     };
-  }, [isActiveInSystem, downloadId, checkDownloaded, log]);
+  }, [downloadId, checkDownloaded, log]);
 
   // Derive status from atom state reactively
   const statusInfo: DownloadStatusInfo = (() => {
@@ -198,6 +193,41 @@ export const useDownloadStatus = ({
         isFailed: false,
         isPaused: false,
         progress: 100,
+      };
+    }
+
+    // Prefer live service progress (modern download path source of truth)
+    if (serviceProgress) {
+      const isFailed = serviceProgress.status === DownloadStatus.FAILED;
+      const isPaused = serviceProgress.status === DownloadStatus.PAUSED;
+      const isComplete = serviceProgress.status === DownloadStatus.COMPLETED;
+
+      if (isComplete) {
+        return {
+          status: DownloadStatus.COMPLETED,
+          isDownloaded: false,
+          isDownloading: false,
+          isQueued: false,
+          isFailed: false,
+          isPaused: false,
+          progress: 100,
+        };
+      }
+
+      return {
+        status: isFailed
+          ? DownloadStatus.FAILED
+          : isPaused
+            ? DownloadStatus.PAUSED
+            : DownloadStatus.DOWNLOADING,
+        isDownloaded: false,
+        isDownloading: !isFailed && !isPaused,
+        isQueued: false,
+        isFailed,
+        isPaused,
+        progress: serviceProgress.progress,
+        estimatedTimeRemaining: serviceProgress.estimatedTimeRemaining,
+        downloadSpeed: serviceProgress.downloadSpeed,
       };
     }
 
@@ -229,28 +259,6 @@ export const useDownloadStatus = ({
         isFailed: false,
         isPaused: true,
         progress: pausedInfo.progress?.progress ?? 0,
-      };
-    }
-
-    // Fall back to the legacy download manager service
-    if (serviceProgress) {
-      const isFailed = serviceProgress.status === DownloadStatus.FAILED;
-      const isPaused = serviceProgress.status === DownloadStatus.PAUSED;
-
-      return {
-        status: isFailed
-          ? DownloadStatus.FAILED
-          : isPaused
-            ? DownloadStatus.PAUSED
-            : DownloadStatus.DOWNLOADING,
-        isDownloaded: false,
-        isDownloading: !isFailed && !isPaused,
-        isQueued: false,
-        isFailed,
-        isPaused,
-        progress: serviceProgress.progress,
-        estimatedTimeRemaining: serviceProgress.estimatedTimeRemaining,
-        downloadSpeed: serviceProgress.downloadSpeed,
       };
     }
 

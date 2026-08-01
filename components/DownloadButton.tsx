@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
@@ -21,7 +22,6 @@ import {
   DownloadProgress,
   DownloadErrorType,
 } from '@/types/download';
-import HiddenChapterWebView from './HiddenChapterWebView';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 
@@ -29,6 +29,7 @@ interface DownloadButtonProps {
   mangaId: string;
   chapterNumber: string;
   chapterUrl: string;
+  mangaTitle?: string | undefined;
   size?: 'small' | 'medium' | 'large';
   variant?: 'icon' | 'text' | 'full';
   appearance?: 'default' | 'swipe';
@@ -39,10 +40,75 @@ interface DownloadButtonProps {
   style?: any;
 }
 
+interface CircularProgressProps {
+  size: number;
+  progress: number;
+  color: string;
+  trackColor: string;
+  children?: React.ReactNode;
+}
+
+function CircularProgress({
+  size,
+  progress,
+  color,
+  trackColor,
+  children,
+}: CircularProgressProps) {
+  const strokeWidth = Math.max(2.5, size * 0.08);
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(100, progress));
+  const strokeDashoffset = circumference * (1 - clamped / 100);
+  const center = size / 2;
+
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped) }}
+    >
+      <Svg
+        width={size}
+        height={size}
+        style={StyleSheet.absoluteFillObject}
+      >
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={trackColor}
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${center} ${center})`}
+        />
+      </Svg>
+      {children}
+    </View>
+  );
+}
+
 const DownloadButton: React.FC<DownloadButtonProps> = ({
   mangaId,
   chapterNumber,
   chapterUrl,
+  mangaTitle,
   size = 'medium',
   variant = 'icon',
   appearance = 'default',
@@ -69,19 +135,16 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   const [progress, setProgress] = useState<number>(0);
   const [estimatedTime, setEstimatedTime] = useState<number | undefined>();
   const [isLoading, setIsLoading] = useState(true);
-  const [showWebView, setShowWebView] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Subscribe to download manager atom for reactive updates
   const dmState = useAtomValue(downloadManagerAtom);
 
   const loadDownloadStatus = React.useCallback(async () => {
     try {
       setIsLoading(true);
 
-      // Use the new download status service for consistent status
       const statusInfo = await downloadStatusService.getChapterDownloadStatus(
         mangaId,
         chapterNumber
@@ -110,60 +173,43 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       if (progressUpdate.status === DownloadStatus.COMPLETED) {
         setDownloadStatus(DownloadStatus.COMPLETED);
         onDownloadComplete?.();
-        showToast({
-          message: `Chapter ${chapterNumber} downloaded successfully`,
-          type: 'success',
-          icon: 'download',
-          duration: 2500,
-        });
       } else if (progressUpdate.status === DownloadStatus.FAILED) {
         setDownloadStatus(DownloadStatus.FAILED);
         onDownloadError?.('Download failed');
-        showToast({
-          message: `Failed to download chapter ${chapterNumber}`,
-          type: 'error',
-          icon: 'close-circle',
-          duration: 3000,
-        });
       }
     },
-    [chapterNumber, onDownloadComplete, onDownloadError, showToast]
+    [onDownloadComplete, onDownloadError]
   );
 
-  // Load initial download status with throttling
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       loadDownloadStatus();
-    }, 100); // Small delay to prevent blocking
+    }, 100);
 
     return () => clearTimeout(timeoutId);
   }, [loadDownloadStatus]);
 
-  // Set up progress listener when downloading
   useEffect(() => {
-    if (downloadStatus === DownloadStatus.DOWNLOADING) {
-      const downloadId = generateDownloadId(mangaId, chapterNumber);
-      const unsubscribe = downloadManagerService.addProgressListener(
-        downloadId,
-        handleProgressUpdate
-      );
-
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-        // Cleanup state
-        setProgress(0);
-        setEstimatedTime(undefined);
-      };
+    if (downloadStatus !== DownloadStatus.DOWNLOADING) {
+      return undefined;
     }
-    return undefined;
+
+    const downloadId = generateDownloadId(mangaId, chapterNumber);
+    const unsubscribe = downloadManagerService.addProgressListener(
+      downloadId,
+      handleProgressUpdate
+    );
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [downloadStatus, mangaId, chapterNumber, handleProgressUpdate]);
 
   useEffect(() => {
     const downloadId = generateDownloadId(mangaId, chapterNumber);
 
-    // Derive status from atom state
     const activeProgress = dmState.activeDownloads.get(downloadId);
     if (activeProgress) {
       if (activeProgress.error) {
@@ -181,18 +227,13 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     if (pausedInfo) {
       setDownloadStatus(DownloadStatus.PAUSED);
       setProgress(pausedInfo.progress?.progress ?? 0);
-      return;
     }
-
-    // If we were downloading but now the download is gone from both maps,
-    // it likely completed or was removed. Don't override completed/queued status.
   }, [dmState, mangaId, chapterNumber, onDownloadError]);
 
-  // Animate progress changes
   useEffect(() => {
     Animated.timing(progressAnim, {
       toValue: progress / 100,
-      duration: 300,
+      duration: 250,
       useNativeDriver: false,
     }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,7 +257,6 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
           await resumeDownload();
           break;
         case DownloadStatus.COMPLETED:
-          // Already downloaded, could show options or do nothing
           break;
       }
     } catch (error) {
@@ -244,64 +284,39 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     setProgress(0);
     onDownloadStart?.();
     showToast({
-      message: `Downloading chapter ${chapterNumber}...`,
+      message: mangaTitle
+        ? `Downloading ${mangaTitle} ch. ${chapterNumber}...`
+        : `Downloading chapter ${chapterNumber}...`,
       type: 'info',
       icon: 'download',
       duration: 2000,
     });
 
-    // Step 1: Open hidden WebView to intercept AJAX request
-    if (isDebugEnabled()) {
-      log.info('Service', 'Opening hidden WebView to intercept request', {
-        chapterUrl,
-      });
-    }
-
-    setShowWebView(true);
-  };
-
-  const handleRequestIntercepted = async (
-    chapterId: string,
-    vrfToken: string
-  ) => {
-    if (isDebugEnabled()) {
-      log.info('Service', 'Request intercepted, starting download', {
-        chapterId,
-        vrfTokenPreview: vrfToken.substring(0, 30) + '...',
-      });
-    }
-
-    // Hide WebView
-    setShowWebView(false);
-
-    // Step 2: Start actual download using intercepted data
     try {
       const downloadIdForChapter = generateDownloadId(mangaId, chapterNumber);
-
-      const result =
-        await downloadManagerService.downloadChapterFromInterceptedRequest(
-          mangaId,
-          chapterNumber,
-          chapterId,
-          vrfToken,
-          chapterUrl
-        );
+      const result = await downloadManagerService.downloadChapter(
+        mangaId,
+        chapterNumber,
+        chapterUrl,
+        mangaTitle
+      );
 
       if (result.success) {
         setDownloadStatus(DownloadStatus.COMPLETED);
         setProgress(100);
         onDownloadComplete?.();
-
-        if (isDebugEnabled()) {
-          log.info('Service', 'Download completed successfully', {
-            mangaId,
-            chapterNumber,
-          });
-        }
+        const pageCount = result.chapterImages?.length;
+        showToast({
+          message: pageCount
+            ? `Downloaded ch. ${chapterNumber} (${pageCount} pages)`
+            : `Downloaded chapter ${chapterNumber}`,
+          type: 'success',
+          icon: 'checkmark-circle',
+          duration: 2500,
+        });
       } else if (
         downloadManagerService.isDownloadPaused(downloadIdForChapter) ||
-        result.error?.type === DownloadErrorType.CANCELLED ||
-        result.error?.retryable
+        result.error?.type === DownloadErrorType.CANCELLED
       ) {
         setDownloadStatus(DownloadStatus.PAUSED);
 
@@ -334,30 +349,6 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
         });
       }
     }
-  };
-
-  const handleWebViewError = (error: string) => {
-    if (isDebugEnabled()) {
-      log.error('Service', 'WebView error', {
-        error,
-      });
-    }
-
-    setShowWebView(false);
-    setDownloadStatus(DownloadStatus.FAILED);
-    onDownloadError?.(`WebView error: ${error}`);
-  };
-
-  const handleWebViewTimeout = () => {
-    if (isDebugEnabled()) {
-      log.warn('Service', 'WebView timeout', {
-        chapterUrl,
-      });
-    }
-
-    setShowWebView(false);
-    setDownloadStatus(DownloadStatus.FAILED);
-    onDownloadError?.('Timeout waiting for chapter page to load');
   };
 
   const pauseDownload = async () => {
@@ -437,11 +428,14 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       case DownloadStatus.FAILED:
         return colors.error;
       case DownloadStatus.DOWNLOADING:
+      case DownloadStatus.PAUSED:
         return colors.primary;
       default:
         return colors.text;
     }
   };
+
+  const displayProgress = Math.round(Math.max(0, Math.min(100, progress)));
 
   const getStatusText = () => {
     if (isLoading) return 'Loading...';
@@ -450,9 +444,9 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       case DownloadStatus.QUEUED:
         return 'Download';
       case DownloadStatus.DOWNLOADING:
-        return `${progress}%`;
+        return `${displayProgress}%`;
       case DownloadStatus.PAUSED:
-        return 'Paused';
+        return `${displayProgress}% · Paused`;
       case DownloadStatus.COMPLETED:
         return 'Downloaded';
       case DownloadStatus.FAILED:
@@ -470,19 +464,53 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   };
 
   const generateDownloadId = (
-    mangaId: string,
-    chapterNumber: string
+    mangaIdValue: string,
+    chapterNumberValue: string
   ): string => {
-    return `${mangaId}_${chapterNumber}`;
+    return `${mangaIdValue}_${chapterNumberValue}`;
   };
 
+  const ringSize = size === 'small' ? 28 : size === 'large' ? 40 : 34;
+  const percentFontSize = size === 'small' ? 9 : size === 'large' ? 12 : 10;
+  const iconColor = getIconColor();
+  const trackColor =
+    appearance === 'swipe' ? 'rgba(255, 255, 255, 0.28)' : colors.border + '99';
+
   const renderIcon = () => {
-    if (isLoading || downloadStatus === DownloadStatus.DOWNLOADING) {
+    if (isLoading) {
       return (
         <ActivityIndicator
           size={size === 'small' ? 16 : size === 'large' ? 24 : 20}
-          color={getIconColor()}
+          color={iconColor}
         />
+      );
+    }
+
+    if (
+      downloadStatus === DownloadStatus.DOWNLOADING ||
+      downloadStatus === DownloadStatus.PAUSED
+    ) {
+      return (
+        <CircularProgress
+          size={ringSize}
+          progress={displayProgress}
+          color={iconColor}
+          trackColor={trackColor}
+        >
+          <Text
+            style={[
+              styles.progressPercent,
+              {
+                color: iconColor,
+                fontSize: percentFontSize,
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {displayProgress}
+            <Text style={{ fontSize: percentFontSize * 0.75 }}>%</Text>
+          </Text>
+        </CircularProgress>
       );
     }
 
@@ -490,7 +518,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       <Ionicons
         name={getIconName()}
         size={size === 'small' ? 16 : size === 'large' ? 24 : 20}
-        color={getIconColor()}
+        color={iconColor}
       />
     );
   };
@@ -500,6 +528,11 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
       downloadStatus !== DownloadStatus.DOWNLOADING &&
       downloadStatus !== DownloadStatus.PAUSED
     ) {
+      return null;
+    }
+
+    // Icon/swipe uses the circular ring — no thin underline bar.
+    if (variant === 'icon') {
       return null;
     }
 
@@ -518,6 +551,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
             ]}
           />
         </View>
+        <Text style={styles.progressLabel}>{displayProgress}%</Text>
       </View>
     );
   };
@@ -525,12 +559,7 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   const renderContent = () => {
     switch (variant) {
       case 'icon':
-        return (
-          <View style={styles.iconContainer}>
-            {renderIcon()}
-            {renderProgressBar()}
-          </View>
-        );
+        return <View style={styles.iconContainer}>{renderIcon()}</View>;
 
       case 'text':
         return (
@@ -569,33 +598,30 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
   };
 
   return (
-    <>
-      <Pressable
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        disabled={disabled || isLoading}
-        style={[styles.container, style]}
-        accessibilityRole="button"
-        accessibilityLabel={`Download chapter ${chapterNumber}`}
-        accessibilityHint={getStatusText()}
-      >
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          {renderContent()}
-        </Animated.View>
-      </Pressable>
-
-      {/* Hidden WebView for intercepting AJAX requests */}
-      {showWebView && (
-        <HiddenChapterWebView
-          chapterUrl={chapterUrl}
-          onRequestIntercepted={handleRequestIntercepted}
-          onError={handleWebViewError}
-          onTimeout={handleWebViewTimeout}
-          timeout={30000}
-        />
-      )}
-    </>
+    <Pressable
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      disabled={disabled || isLoading}
+      style={[styles.container, style]}
+      accessibilityRole="button"
+      accessibilityLabel={
+        downloadStatus === DownloadStatus.DOWNLOADING
+          ? `Downloading chapter ${chapterNumber}, ${displayProgress} percent. Tap to pause`
+          : `Download chapter ${chapterNumber}`
+      }
+      accessibilityHint={getStatusText()}
+      accessibilityValue={
+        downloadStatus === DownloadStatus.DOWNLOADING ||
+        downloadStatus === DownloadStatus.PAUSED
+          ? { min: 0, max: 100, now: displayProgress }
+          : undefined
+      }
+    >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        {renderContent()}
+      </Animated.View>
+    </Pressable>
   );
 };
 
@@ -624,6 +650,8 @@ const getStyles = (
     iconContainer: {
       width: isSwipe ? 'auto' : baseSize,
       height: isSwipe ? 'auto' : baseSize,
+      minWidth: isSwipe ? ringSizeFor(size) : baseSize,
+      minHeight: isSwipe ? ringSizeFor(size) : baseSize,
       justifyContent: 'center',
       alignItems: 'center',
       position: 'relative',
@@ -631,9 +659,10 @@ const getStyles = (
     textContainer: {
       paddingHorizontal: isSwipe ? 0 : padding * 2,
       paddingVertical: isSwipe ? 0 : padding,
-      minWidth: isSwipe ? undefined : 80,
+      minWidth: isSwipe ? undefined : 96,
       alignItems: 'center',
       position: 'relative',
+      gap: 6,
     },
     fullContainer: {
       flexDirection: isSwipe ? 'column' : 'row',
@@ -641,9 +670,11 @@ const getStyles = (
       justifyContent: 'center',
       paddingHorizontal: isSwipe ? 0 : padding,
       paddingVertical: isSwipe ? 0 : padding,
-      minWidth: isSwipe ? undefined : 120,
+      minWidth: isSwipe ? undefined : 140,
       position: 'relative',
       height: isSwipe ? '100%' : undefined,
+      gap: 8,
+      flexWrap: 'wrap',
     },
     textSection: {
       marginLeft: isSwipe ? 0 : 8,
@@ -663,22 +694,38 @@ const getStyles = (
       textAlign: 'center',
       marginTop: 2,
     },
+    progressPercent: {
+      fontWeight: '700',
+      fontVariant: ['tabular-nums'],
+      textAlign: 'center',
+    },
     progressContainer: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: 2,
+      width: '100%',
+      gap: 4,
     },
     progressBackground: {
-      flex: 1,
-      backgroundColor: isSwipe ? 'rgba(255, 255, 255, 0.3)' : colors.border,
+      height: 6,
+      borderRadius: 999,
+      overflow: 'hidden',
+      backgroundColor: isSwipe ? 'rgba(255, 255, 255, 0.28)' : colors.border,
     },
     progressFill: {
       height: '100%',
+      borderRadius: 999,
       backgroundColor: isSwipe ? '#ffffff' : colors.primary,
+    },
+    progressLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      fontVariant: ['tabular-nums'],
+      color: isSwipe ? 'rgba(255, 255, 255, 0.9)' : colors.tabIconDefault,
+      textAlign: 'right',
     },
   });
 };
+
+function ringSizeFor(size: 'small' | 'medium' | 'large'): number {
+  return size === 'small' ? 28 : size === 'large' ? 40 : 34;
+}
 
 export default DownloadButton;

@@ -9,6 +9,7 @@ import {
 } from '@/utils/httpErrors';
 import { stripHtmlToText } from '@/utils/stripHtmlToText';
 import {
+  invalidateMangaFireRequestCache,
   peekFreshCache,
   REQUEST_HUB_TTLS,
   scheduleMangaFireRequest,
@@ -540,23 +541,30 @@ export async function fetchHomeMangaData(): Promise<HomeMangaData> {
 export async function resolveChapterApiId(
   titleHid: string,
   chapterNumber: string,
-  language = 'en'
+  language = 'en',
+  options?: { force?: boolean }
 ): Promise<string | null> {
   const normalizedTarget = normalizeChapterNumber(chapterNumber);
   if (!normalizedTarget) return null;
 
   const normalizedHid = titleHid.trim();
-  const cachedChapters = peekFreshCache<ApiChapterSummary[]>(
-    `chapters:${normalizedHid}:${language}`,
-    REQUEST_HUB_TTLS.chapters
-  );
+  const chaptersCacheKey = `chapters:${normalizedHid}:${language}`;
 
-  if (cachedChapters !== undefined) {
-    const cachedMatch = cachedChapters.find(
-      (chapter) =>
-        normalizeChapterNumber(String(chapter.number)) === normalizedTarget
+  if (options?.force) {
+    invalidateMangaFireRequestCache(chaptersCacheKey);
+  } else {
+    const cachedChapters = peekFreshCache<ApiChapterSummary[]>(
+      chaptersCacheKey,
+      REQUEST_HUB_TTLS.chapters
     );
-    return cachedMatch ? String(cachedMatch.id) : null;
+
+    if (cachedChapters !== undefined) {
+      const cachedMatch = cachedChapters.find(
+        (chapter) =>
+          normalizeChapterNumber(String(chapter.number)) === normalizedTarget
+      );
+      return cachedMatch ? String(cachedMatch.id) : null;
+    }
   }
 
   let page = 1;

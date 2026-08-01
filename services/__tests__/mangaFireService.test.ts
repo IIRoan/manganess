@@ -27,6 +27,7 @@ import {
   fetchChapterImagesFromInterceptedRequest,
   loadOnlineChapterImages,
   getChapterApiIdFromList,
+  resetChapterApiIdOverridesForTests,
 } from '../mangaFireService';
 
 jest.mock('axios');
@@ -71,6 +72,7 @@ const {
   updateMangaStatus,
   isLoggedInToAniList,
 } = require('@/services/anilistService');
+const { offlineCacheService } = require('@/services/offlineCacheService');
 
 const sampleApiTitle = {
   id: 1,
@@ -194,6 +196,7 @@ describe('mangaFireService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetMangaFireRequestHubForTests();
+    resetChapterApiIdOverridesForTests();
     setVrfToken('');
   });
 
@@ -1254,6 +1257,186 @@ describe('mangaFireService', () => {
 
       expect(images).toHaveLength(2);
       expect(mockedAxios.get).toHaveBeenCalled();
+    });
+
+    it('re-resolves a stale chapter API ID after pages endpoint returns 404', async () => {
+      const staleId = '7333615';
+      const freshId = '9318286';
+      const error404 = Object.assign(
+        new Error('Request failed with status code 404'),
+        {
+          response: {
+            status: 404,
+            data: {
+              message: 'No query results for model [App\\Models\\Chapter].',
+            },
+          },
+        }
+      );
+
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes(`/chapters/${staleId}`)) {
+          return Promise.reject(error404);
+        }
+
+        if (url.includes(`/chapters/${freshId}`)) {
+          return Promise.resolve({ data: sampleChapterPages });
+        }
+
+        if (url.includes('/titles/') && url.includes('/chapters')) {
+          return Promise.resolve({
+            data: {
+              items: [
+                {
+                  id: Number(freshId),
+                  number: 261,
+                  createdAt: 1785110484,
+                },
+              ],
+              meta: { hasNext: false },
+            },
+          });
+        }
+
+        return Promise.resolve({ data: {} });
+      });
+
+      const images = await loadOnlineChapterImages('z1my2', '261', [
+        {
+          number: '261',
+          title: 'Chapter 261',
+          date: '',
+          url: `/chapter/${staleId}`,
+        },
+      ]);
+
+      expect(images).toHaveLength(2);
+      expect(images[0]?.originalUrl).toBe('https://img1.jpg');
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        `https://mangafire.to/api/chapters/${freshId}`,
+        expect.any(Object)
+      );
+      expect(offlineCacheService.patchCachedChapterApiId).toHaveBeenCalledWith(
+        'z1my2',
+        '261',
+        freshId
+      );
+    });
+
+    it('coalesces concurrent stale-ID recoveries and reuses the fresh id next time', async () => {
+      const staleId = '7333615';
+      const freshId = '9318286';
+      const error404 = Object.assign(
+        new Error('Request failed with status code 404'),
+        { response: { status: 404 } }
+      );
+      let staleHits = 0;
+      let chapterListHits = 0;
+
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes(`/chapters/${staleId}`)) {
+          staleHits += 1;
+          return Promise.reject(error404);
+        }
+
+        if (url.includes(`/chapters/${freshId}`)) {
+          return Promise.resolve({ data: sampleChapterPages });
+        }
+
+        if (url.includes('/titles/') && url.includes('/chapters')) {
+          chapterListHits += 1;
+          return Promise.resolve({
+            data: {
+              items: [{ id: Number(freshId), number: 261, createdAt: 1 }],
+              meta: { hasNext: false },
+            },
+          });
+        }
+
+        return Promise.resolve({ data: {} });
+      });
+
+      const staleChapters = [
+        {
+          number: '261',
+          title: 'Chapter 261',
+          date: '',
+          url: `/chapter/${staleId}`,
+        },
+      ];
+
+      const [first, second] = await Promise.all([
+        loadOnlineChapterImages('z1my2', '261', staleChapters),
+        loadOnlineChapterImages('z1my2', '261', staleChapters),
+      ]);
+
+      expect(first).toHaveLength(2);
+      expect(second).toHaveLength(2);
+      expect(staleHits).toBe(1);
+      expect(chapterListHits).toBe(1);
+
+      resetMangaFireRequestHubForTests();
+      mockedAxios.get.mockClear();
+      staleHits = 0;
+
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes(`/chapters/${staleId}`)) {
+          staleHits += 1;
+          return Promise.reject(error404);
+        }
+        if (url.includes(`/chapters/${freshId}`)) {
+          return Promise.resolve({ data: sampleChapterPages });
+        }
+        return Promise.resolve({ data: {} });
+      });
+
+      // Still pass the stale list — session override should win.
+      const third = await loadOnlineChapterImages(
+        'z1my2',
+        '261',
+        staleChapters
+      );
+      expect(third).toHaveLength(2);
+      expect(staleHits).toBe(0);
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        `https://mangafire.to/api/chapters/${freshId}`,
+        expect.any(Object)
+      );
+    });
+
+    it('throws when the chapter is missing even after a forced re-resolve', async () => {
+      const error404 = Object.assign(
+        new Error('Request failed with status code 404'),
+        { response: { status: 404 } }
+      );
+
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('/chapters/')) {
+          return Promise.reject(error404);
+        }
+
+        if (url.includes('/titles/') && url.includes('/chapters')) {
+          return Promise.resolve({
+            data: {
+              items: [{ id: 111, number: 261, createdAt: 1 }],
+              meta: { hasNext: false },
+            },
+          });
+        }
+
+        return Promise.resolve({ data: {} });
+      });
+
+      await expect(
+        loadOnlineChapterImages('z1my2', '261', [
+          {
+            number: '261',
+            title: 'Chapter 261',
+            date: '',
+            url: '/chapter/111',
+          },
+        ])
+      ).rejects.toMatchObject({ response: { status: 404 } });
     });
   });
 

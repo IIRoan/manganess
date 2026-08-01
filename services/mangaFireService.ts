@@ -12,6 +12,7 @@ import {
   parseLegacyChapterUrl,
   titleExists,
   type FetchTitleChaptersOptions,
+  type ApiChapterSummary,
 } from '@/services/mangaFireApi';
 import {
   searchAnilistMangaByName,
@@ -29,9 +30,12 @@ import {
   scheduleMangaFireRequest,
   peekFreshCache,
   primeMangaFireRequestCache,
+  invalidateMangaFireRequestCache,
 } from '@/services/mangaFireRequestHub';
+import { offlineCacheService } from '@/services/offlineCacheService';
 import type { Chapter } from '@/types/manga';
 import { ChapterImage, ImageDownloadStatus } from '@/types/download';
+import { isNotFoundError } from '@/utils/httpErrors';
 
 export class CloudflareDetectedError extends Error {
   html: string;
@@ -532,31 +536,7 @@ export function getChapterApiIdFromList(
   return null;
 }
 
-export async function loadOnlineChapterImages(
-  mangaId: string,
-  chapterNumber: string,
-  chapters?: Chapter[]
-): Promise<ChapterImage[]> {
-  const normalized =
-    normalizeChapterNumber(chapterNumber) || String(chapterNumber ?? '').trim();
-  if (!normalized) {
-    throw new Error('Chapter number is required');
-  }
-
-  let chapterApiId = getChapterApiIdFromList(chapters, normalized);
-  if (!chapterApiId) {
-    chapterApiId = await resolveChapterApiId(mangaId.trim(), normalized);
-  }
-
-  if (!chapterApiId) {
-    throw new Error(`Chapter ${normalized} not found`);
-  }
-
-  const pageUrls = await fetchChapterPageUrls(chapterApiId);
-  if (!pageUrls.length) {
-    throw new Error(`No pages found for chapter ${normalized}`);
-  }
-
+function mapPageUrlsToChapterImages(pageUrls: string[]): ChapterImage[] {
   return pageUrls.map((url, index) => ({
     pageNumber: index + 1,
     originalUrl: url,
@@ -564,6 +544,214 @@ export async function loadOnlineChapterImages(
     downloadStatus: ImageDownloadStatus.COMPLETED,
   }));
 }
+
+/** Session overrides: mangaId:chapterNumber → fresh MangaFire chapter API id. */
+const chapterApiIdOverrides = new Map<string, string>();
+/** Coalesce concurrent stale-ID recoveries for the same chapter. */
+const chapterRecoveryInFlight = new Map<string, Promise<ChapterImage[]>>();
+
+function chapterOverrideKey(mangaId: string, chapterNumber: string): string {
+  return `${mangaId.trim()}:${normalizeChapterNumber(chapterNumber)}`;
+}
+
+function rememberChapterApiIdOverride(
+  mangaId: string,
+  chapterNumber: string,
+  chapterApiId: string
+) {
+  chapterApiIdOverrides.set(
+    chapterOverrideKey(mangaId, chapterNumber),
+    chapterApiId.trim()
+  );
+}
+
+function getChapterApiIdOverride(
+  mangaId: string,
+  chapterNumber: string
+): string | null {
+  return (
+    chapterApiIdOverrides.get(chapterOverrideKey(mangaId, chapterNumber)) ??
+    null
+  );
+}
+
+function patchHubChapterApiId(
+  mangaId: string,
+  chapterNumber: string,
+  chapterApiId: string,
+  language = 'en'
+) {
+  const cacheKey = `chapters:${mangaId.trim()}:${language}`;
+  const cached = peekFreshCache<ApiChapterSummary[]>(
+    cacheKey,
+    REQUEST_HUB_TTLS.chapters
+  );
+  if (!cached?.length) {
+    return;
+  }
+
+  const normalized = normalizeChapterNumber(chapterNumber);
+  const numericId = Number(chapterApiId);
+  if (!Number.isFinite(numericId)) {
+    return;
+  }
+
+  let changed = false;
+  const next = cached.map((chapter) => {
+    if (normalizeChapterNumber(String(chapter.number)) !== normalized) {
+      return chapter;
+    }
+    if (chapter.id === numericId) {
+      return chapter;
+    }
+    changed = true;
+    return { ...chapter, id: numericId };
+  });
+
+  if (changed) {
+    primeMangaFireRequestCache(cacheKey, next);
+  }
+}
+
+async function persistRecoveredChapterApiId(
+  mangaId: string,
+  chapterNumber: string,
+  chapterApiId: string
+) {
+  rememberChapterApiIdOverride(mangaId, chapterNumber, chapterApiId);
+  patchHubChapterApiId(mangaId, chapterNumber, chapterApiId);
+  try {
+    await offlineCacheService.patchCachedChapterApiId(
+      mangaId,
+      chapterNumber,
+      chapterApiId
+    );
+  } catch (error) {
+    logger().warn('Service', 'Failed to persist recovered chapter API id', {
+      mangaId,
+      chapterNumber,
+      chapterApiId,
+      error,
+    });
+  }
+}
+
+export function resetChapterApiIdOverridesForTests() {
+  chapterApiIdOverrides.clear();
+  chapterRecoveryInFlight.clear();
+}
+
+export async function loadOnlineChapterImages(
+  mangaId: string,
+  chapterNumber: string,
+  chapters?: Chapter[]
+): Promise<ChapterImage[]> {
+  const log = logger();
+  const normalized =
+    normalizeChapterNumber(chapterNumber) || String(chapterNumber ?? '').trim();
+  if (!normalized) {
+    throw new Error('Chapter number is required');
+  }
+
+  const titleHid = mangaId.trim();
+  const overrideId = getChapterApiIdOverride(titleHid, normalized);
+  let chapterApiId =
+    overrideId ||
+    getChapterApiIdFromList(chapters, normalized) ||
+    (await resolveChapterApiId(titleHid, normalized));
+
+  if (!chapterApiId) {
+    throw new Error(`Chapter ${normalized} not found`);
+  }
+
+  try {
+    const pageUrls = await fetchChapterPageUrls(chapterApiId);
+    if (!pageUrls.length) {
+      throw new Error(`No pages found for chapter ${normalized}`);
+    }
+    return mapPageUrlsToChapterImages(pageUrls);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+
+    const recoveryKey = `${titleHid}:${normalized}:${chapterApiId}`;
+    const existingRecovery = chapterRecoveryInFlight.get(recoveryKey);
+    if (existingRecovery) {
+      return existingRecovery;
+    }
+
+    const recoveryPromise = (async (): Promise<ChapterImage[]> => {
+      // Offline/cache chapter lists can keep dead MangaFire chapter IDs after
+      // a chapter is re-uploaded. Force a live lookup and retry once.
+      log.warn('Service', 'Chapter pages 404 — attempting stale-ID recovery', {
+        mangaId: titleHid,
+        chapterNumber: normalized,
+        staleChapterApiId: chapterApiId,
+      });
+
+      invalidateMangaFireRequestCache(`chapter-pages:${chapterApiId}`);
+      const freshChapterApiId = await resolveChapterApiId(
+        titleHid,
+        normalized,
+        'en',
+        { force: true }
+      );
+
+      if (!freshChapterApiId || freshChapterApiId === chapterApiId) {
+        log.error('Service', 'Chapter pages 404 — recovery failed', {
+          mangaId: titleHid,
+          chapterNumber: normalized,
+          chapterApiId,
+          resolvedChapterApiId: freshChapterApiId,
+        });
+        throw error;
+      }
+
+      try {
+        const pageUrls = await fetchChapterPageUrls(freshChapterApiId);
+        if (!pageUrls.length) {
+          throw new Error(`No pages found for chapter ${normalized}`);
+        }
+
+        await persistRecoveredChapterApiId(
+          titleHid,
+          normalized,
+          freshChapterApiId
+        );
+
+        log.warn(
+          'Service',
+          'Chapter pages 404 — recovered with fresh chapter ID',
+          {
+            mangaId: titleHid,
+            chapterNumber: normalized,
+            staleChapterApiId: chapterApiId,
+            freshChapterApiId,
+            pageCount: pageUrls.length,
+          }
+        );
+
+        return mapPageUrlsToChapterImages(pageUrls);
+      } catch (recoveryError) {
+        log.error('Service', 'Chapter pages 404 — recovery fetch failed', {
+          mangaId: titleHid,
+          chapterNumber: normalized,
+          staleChapterApiId: chapterApiId,
+          freshChapterApiId,
+          error: recoveryError,
+        });
+        throw recoveryError;
+      }
+    })().finally(() => {
+      chapterRecoveryInFlight.delete(recoveryKey);
+    });
+
+    chapterRecoveryInFlight.set(recoveryKey, recoveryPromise);
+    return recoveryPromise;
+  }
+}
+
 export const markChapterAsRead = async (
   id: string,
   chapterNumber: string,

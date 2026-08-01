@@ -15,14 +15,17 @@ import {
 import { ChapterStorageService } from '@/types/downloadInterfaces';
 import { isDebugEnabled } from '@/constants/env';
 import { logger } from '@/utils/logger';
+import { MANGA_IMAGE_REQUEST_HEADERS } from '@/utils/mangaImageHeaders';
 
-// Storage configuration
-const BASE_DOWNLOAD_DIR = new FSDirectory(Paths.cache, 'downloads');
+// Persist downloads in document storage (cache can be purged by the OS).
+const BASE_DOWNLOAD_DIR = new FSDirectory(Paths.document, 'downloads');
+const LEGACY_DOWNLOAD_DIR = new FSDirectory(Paths.cache, 'downloads');
 const METADATA_KEY = 'chapter_downloads_metadata';
 const SETTINGS_KEY = 'download_settings';
 const USAGE_STATS_KEY = 'download_usage_stats';
 const DEFAULT_MAX_STORAGE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB default limit
 const STORAGE_VERSION = '1.0';
+const MIN_SAVE_SUCCESS_RATE = 0.8;
 
 // Storage management constants
 const CLEANUP_THRESHOLD = 0.85; // Start cleanup at 85% of max storage
@@ -75,17 +78,14 @@ class ChapterStorage implements ChapterStorageService {
       // Set initialized flag immediately to prevent multiple calls
       this.initialized = true;
 
-      // Create base download directory
+      // Create base download directory and migrate any legacy cache downloads
       await this.ensureDirectoryExists(BASE_DOWNLOAD_DIR);
+      await this.migrateLegacyDownloads();
 
-      // Load data asynchronously without blocking UI
-      Promise.all([
-        this.loadMetadata(),
-        this.loadSettings(),
-        this.loadUsageStats(),
-      ])
+      // Metadata must be ready before download checks; settings/stats can lag.
+      await this.loadMetadata();
+      void Promise.all([this.loadSettings(), this.loadUsageStats()])
         .then(() => {
-          // Perform storage check in background
           this.performStorageCheck().catch((error) => {
             this.log.error('Storage', 'Storage check failed during init', {
               error: error instanceof Error ? error.message : String(error),
@@ -97,16 +97,76 @@ class ChapterStorage implements ChapterStorageService {
             error: error instanceof Error ? error.message : String(error),
           });
         });
-
-      if (isDebugEnabled()) {
-        this.log.info('Storage', 'Chapter storage service initialized');
-      }
     } catch (error) {
       this.initialized = false; // Reset on error
       this.log.error('Storage', 'Failed to initialize chapter storage', {
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    }
+  }
+
+  /**
+   * Move chapter downloads from purgeable cache into durable document storage.
+   */
+  private async migrateLegacyDownloads(): Promise<void> {
+    try {
+      if (!LEGACY_DOWNLOAD_DIR.exists) {
+        return;
+      }
+
+      await this.ensureDirectoryExists(BASE_DOWNLOAD_DIR);
+
+      const legacyEntries = LEGACY_DOWNLOAD_DIR.list();
+      if (!legacyEntries.length) {
+        return;
+      }
+
+      let migratedCount = 0;
+      for (const entry of legacyEntries) {
+        try {
+          const source = new FSDirectory(LEGACY_DOWNLOAD_DIR, entry.name);
+          const destination = new FSDirectory(BASE_DOWNLOAD_DIR, entry.name);
+
+          if (!source.exists) {
+            continue;
+          }
+
+          if (destination.exists) {
+            // Prefer the durable copy; drop the legacy duplicate.
+            source.delete();
+            continue;
+          }
+
+          // Prefer native move when available; otherwise leave legacy readable
+          // via getChapterDirectory fallback.
+          const movable = source as FSDirectory & {
+            move?: (destination: FSDirectory) => void;
+          };
+          if (typeof movable.move === 'function') {
+            movable.move(destination);
+            migratedCount++;
+          }
+        } catch (entryError) {
+          this.log.warn('Storage', 'Failed to migrate legacy download entry', {
+            entry: entry.name,
+            error:
+              entryError instanceof Error
+                ? entryError.message
+                : String(entryError),
+          });
+        }
+      }
+
+      if (migratedCount > 0 && isDebugEnabled()) {
+        this.log.info('Storage', 'Migrated legacy chapter downloads', {
+          migratedCount,
+        });
+      }
+    } catch (error) {
+      this.log.warn('Storage', 'Legacy download migration skipped', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -566,7 +626,34 @@ class ChapterStorage implements ChapterStorageService {
     return new FSDirectory(BASE_DOWNLOAD_DIR, `manga_${mangaId}`);
   }
 
+  private getLegacyMangaDirectory(mangaId: string): FSDirectory {
+    return new FSDirectory(LEGACY_DOWNLOAD_DIR, `manga_${mangaId}`);
+  }
+
   private getChapterDirectory(
+    mangaId: string,
+    chapterNumber: string
+  ): FSDirectory {
+    const mangaDir = this.getMangaDirectory(mangaId);
+    const chapterDir = new FSDirectory(mangaDir, `chapter_${chapterNumber}`);
+
+    // Prefer durable document storage; fall back to legacy cache copies.
+    if (chapterDir.exists) {
+      return chapterDir;
+    }
+
+    const legacyChapterDir = new FSDirectory(
+      this.getLegacyMangaDirectory(mangaId),
+      `chapter_${chapterNumber}`
+    );
+    if (legacyChapterDir.exists) {
+      return legacyChapterDir;
+    }
+
+    return chapterDir;
+  }
+
+  private getWritableChapterDirectory(
     mangaId: string,
     chapterNumber: string
   ): FSDirectory {
@@ -586,6 +673,106 @@ class ChapterStorage implements ChapterStorageService {
     return `page_${pageNumber.toString().padStart(3, '0')}.jpg`;
   }
 
+  private getExistingImageSize(imageFile: FSFile): number {
+    const fileInfo = imageFile.info();
+    return fileInfo.exists && typeof fileInfo.size === 'number'
+      ? fileInfo.size
+      : 0;
+  }
+
+  private async downloadImageFile(
+    url: string,
+    imageFile: FSFile
+  ): Promise<FSFile> {
+    if (imageFile.exists) {
+      try {
+        imageFile.delete();
+      } catch {
+        // Destination might be locked; downloadFileAsync may still overwrite.
+      }
+    }
+
+    const downloadedFile = (await FSFile.downloadFileAsync(url, imageFile, {
+      headers: { ...MANGA_IMAGE_REQUEST_HEADERS },
+    })) as FSFile;
+
+    const fileSize = this.getExistingImageSize(downloadedFile);
+    if (fileSize <= 0) {
+      try {
+        if (downloadedFile.exists) {
+          downloadedFile.delete();
+        }
+      } catch {
+        // Best-effort cleanup of empty/corrupt downloads.
+      }
+      throw new Error('Downloaded image file is empty');
+    }
+
+    return downloadedFile;
+  }
+
+  /**
+   * Download a single chapter page into durable storage.
+   */
+  async downloadAndSaveImage(
+    mangaId: string,
+    chapterNumber: string,
+    image: ChapterImage,
+    signal?: AbortSignal
+  ): Promise<ChapterImage> {
+    await this.initialize();
+
+    if (!image.originalUrl) {
+      throw new Error(`Image ${image.pageNumber} has no URL`);
+    }
+
+    if (signal?.aborted) {
+      throw new Error('Download cancelled');
+    }
+
+    const chapterDir = this.getWritableChapterDirectory(mangaId, chapterNumber);
+    await this.ensureDirectoryExists(chapterDir);
+
+    const filename = this.generateImageFilename(image.pageNumber);
+    const imageFile = new FSFile(chapterDir, filename);
+
+    // Reuse a valid on-disk file when present.
+    if (imageFile.exists) {
+      const existingSize = this.getExistingImageSize(imageFile);
+      if (existingSize > 0) {
+        return {
+          ...image,
+          localPath: imageFile.uri,
+          fileSize: existingSize,
+          downloadStatus: ImageDownloadStatus.COMPLETED,
+        };
+      }
+
+      try {
+        imageFile.delete();
+      } catch {
+        // Continue and redownload.
+      }
+    }
+
+    const downloadedFile = await this.downloadImageFile(
+      image.originalUrl,
+      imageFile
+    );
+    const fileSize = this.getExistingImageSize(downloadedFile);
+
+    if (signal?.aborted) {
+      throw new Error('Download cancelled');
+    }
+
+    return {
+      ...image,
+      localPath: downloadedFile.uri,
+      fileSize,
+      downloadStatus: ImageDownloadStatus.COMPLETED,
+    };
+  }
+
   async saveChapterImages(
     mangaId: string,
     chapterNumber: string,
@@ -594,114 +781,77 @@ class ChapterStorage implements ChapterStorageService {
     await this.initialize();
 
     try {
-      const chapterDir = this.getChapterDirectory(mangaId, chapterNumber);
+      const chapterDir = this.getWritableChapterDirectory(mangaId, chapterNumber);
       await this.ensureDirectoryExists(chapterDir);
 
       let totalSize = 0;
       const savedImages: ChapterImage[] = [];
 
-      // Download and save each image
       for (const image of images) {
         try {
           const filename = this.generateImageFilename(image.pageNumber);
           const imageFile = new FSFile(chapterDir, filename);
 
-          // Check if file already exists
+          // Prefer images already written to disk (e.g. by downloadAndSaveImage).
           if (imageFile.exists) {
-            if (isDebugEnabled()) {
-              this.log.info('Storage', 'Using existing image file', {
-                mangaId,
-                chapterNumber,
-                pageNumber: image.pageNumber,
+            const fileSize = this.getExistingImageSize(imageFile);
+            if (fileSize > 0) {
+              totalSize += fileSize;
+              savedImages.push({
+                ...image,
+                localPath: imageFile.uri,
+                fileSize,
+                downloadStatus: ImageDownloadStatus.COMPLETED,
               });
+              continue;
             }
 
-            // Use existing file
-            const fileInfo = imageFile.info();
-            const fileSize =
-              fileInfo.exists && typeof fileInfo.size === 'number'
-                ? fileInfo.size
-                : 0;
-
-            totalSize += fileSize;
-
-            const savedImage: ChapterImage = {
-              ...image,
-              localPath: imageFile.uri,
-              fileSize,
-            };
-
-            savedImages.push(savedImage);
-            continue;
+            try {
+              imageFile.delete();
+            } catch {
+              // Continue with redownload.
+            }
           }
 
-          // Download image to local storage
-          const downloadedFile = await FSFile.downloadFileAsync(
+          if (!image.originalUrl) {
+            throw new Error(`Image ${image.pageNumber} has no URL`);
+          }
+
+          const downloadedFile = await this.downloadImageFile(
             image.originalUrl,
             imageFile
           );
-
-          // Get file size
-          const fileInfo = downloadedFile.info();
-          const fileSize =
-            fileInfo.exists && typeof fileInfo.size === 'number'
-              ? fileInfo.size
-              : 0;
+          const fileSize = this.getExistingImageSize(downloadedFile);
 
           totalSize += fileSize;
-
-          // Update image with local path
-          const savedImage: ChapterImage = {
+          savedImages.push({
             ...image,
             localPath: downloadedFile.uri,
             fileSize,
-          };
-
-          savedImages.push(savedImage);
-
-          if (isDebugEnabled()) {
-            this.log.info('Storage', 'Saved image for chapter', {
-              mangaId,
-              chapterNumber,
-              pageNumber: image.pageNumber,
-            });
-          }
+            downloadStatus: ImageDownloadStatus.COMPLETED,
+          });
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
 
           // Check if it's a "destination already exists" error
           if (errorMessage.includes('already exists')) {
-            // Try to use the existing file
             try {
               const filename = this.generateImageFilename(image.pageNumber);
               const imageFile = new FSFile(chapterDir, filename);
 
               if (imageFile.exists) {
-                const fileInfo = imageFile.info();
-                const fileSize =
-                  fileInfo.exists && typeof fileInfo.size === 'number'
-                    ? fileInfo.size
-                    : 0;
-
-                totalSize += fileSize;
-
-                const savedImage: ChapterImage = {
-                  ...image,
-                  localPath: imageFile.uri,
-                  fileSize,
-                };
-
-                savedImages.push(savedImage);
-
-                if (isDebugEnabled()) {
-                  this.log.info('Storage', 'Using existing image for chapter', {
-                    mangaId,
-                    chapterNumber,
-                    pageNumber: image.pageNumber,
+                const fileSize = this.getExistingImageSize(imageFile);
+                if (fileSize > 0) {
+                  totalSize += fileSize;
+                  savedImages.push({
+                    ...image,
+                    localPath: imageFile.uri,
+                    fileSize,
+                    downloadStatus: ImageDownloadStatus.COMPLETED,
                   });
+                  continue;
                 }
-                continue;
               }
             } catch (retryError) {
               this.log.error('Storage', 'Failed to reuse existing image file', {
@@ -720,40 +870,19 @@ class ChapterStorage implements ChapterStorageService {
             mangaId,
             chapterNumber,
             pageNumber: image.pageNumber,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage,
           });
-          // Continue with other images even if one fails
         }
       }
 
-      // If no images were saved (all existed), still consider it successful
-      if (savedImages.length === 0 && images.length > 0) {
-        // All images already existed, let's verify they're all there
-        for (const image of images) {
-          const filename = this.generateImageFilename(image.pageNumber);
-          const imageFile = new FSFile(chapterDir, filename);
-
-          if (imageFile.exists) {
-            const fileInfo = imageFile.info();
-            const fileSize =
-              fileInfo.exists && typeof fileInfo.size === 'number'
-                ? fileInfo.size
-                : 0;
-
-            totalSize += fileSize;
-
-            const savedImage: ChapterImage = {
-              ...image,
-              localPath: imageFile.uri,
-              fileSize,
-            };
-
-            savedImages.push(savedImage);
-          }
-        }
+      const requiredCount = Math.ceil(images.length * MIN_SAVE_SUCCESS_RATE);
+      if (images.length > 0 && savedImages.length < requiredCount) {
+        throw new Error(
+          `Failed to save enough chapter images: ${savedImages.length}/${images.length} (need at least ${requiredCount})`
+        );
       }
 
-      // Save chapter metadata
+      // Save chapter metadata only after enough images are on disk
       const chapterMetadata: ChapterMetadata = {
         mangaId,
         chapterNumber,
@@ -763,18 +892,10 @@ class ChapterStorage implements ChapterStorageService {
         version: STORAGE_VERSION,
       };
 
-      const metadataFile = this.getChapterMetadataFile(mangaId, chapterNumber);
+      const metadataFile = new FSFile(chapterDir, 'metadata.json');
 
       try {
         await metadataFile.write(JSON.stringify(chapterMetadata, null, 2));
-
-        if (isDebugEnabled()) {
-          this.log.info('Storage', 'Saved chapter metadata', {
-            mangaId,
-            chapterNumber,
-            imageCount: savedImages.length,
-          });
-        }
       } catch (metadataError) {
         this.log.error('Storage', 'Failed to save chapter metadata', {
           mangaId,
@@ -804,15 +925,6 @@ class ChapterStorage implements ChapterStorageService {
 
       // Check if we need cleanup after this download
       await this.performStorageCheck();
-
-      if (isDebugEnabled()) {
-        this.log.info('Storage', 'Saved chapter images', {
-          mangaId,
-          chapterNumber,
-          imageCount: savedImages.length,
-          totalSizeKB: Math.round(totalSize / 1024),
-        });
-      }
     } catch (error) {
       this.log.error('Storage', 'Failed to save chapter images', {
         mangaId,
@@ -836,18 +948,32 @@ class ChapterStorage implements ChapterStorageService {
         return null;
       }
 
-      // Load chapter metadata
       const metadataFile = this.getChapterMetadataFile(mangaId, chapterNumber);
       if (!metadataFile.exists) {
         return null;
       }
 
-      // Metadata file exists, so chapter is downloaded
+      // Prefer in-memory metadata to build URIs without listing every page.
+      const meta = this.metadata[mangaId]?.[chapterNumber];
+      if (meta && meta.totalImages > 0) {
+        const images: ChapterImage[] = [];
+        for (let pageNumber = 1; pageNumber <= meta.totalImages; pageNumber++) {
+          const filename = this.generateImageFilename(pageNumber);
+          const file = new FSFile(chapterDir, filename);
+          images.push({
+            pageNumber,
+            originalUrl: '',
+            localPath: file.uri,
+            downloadStatus: ImageDownloadStatus.COMPLETED,
+          });
+        }
 
-      // Load images from directory
+        this.trackChapterAccess(mangaId, chapterNumber);
+        return images;
+      }
+
+      // Fallback: list page files once (legacy / metadata not in memory yet).
       const images: ChapterImage[] = [];
-
-      // Read directory contents to find image files
       const dirContents = chapterDir.list();
       const imageFiles = dirContents
         .filter(
@@ -857,30 +983,20 @@ class ChapterStorage implements ChapterStorageService {
 
       for (const fileItem of imageFiles) {
         const file = new FSFile(chapterDir, fileItem.name);
-        const fileInfo = file.info();
+        const pageMatch = fileItem.name.match(/page_(\d+)\.jpg/);
+        const pageNumber =
+          pageMatch && pageMatch[1] ? parseInt(pageMatch[1], 10) : 0;
 
-        if (fileInfo.exists) {
-          // Extract page number from filename
-          const pageMatch = fileItem.name.match(/page_(\d+)\.jpg/);
-          const pageNumber =
-            pageMatch && pageMatch[1] ? parseInt(pageMatch[1], 10) : 0;
-
-          const image: ChapterImage = {
-            pageNumber,
-            originalUrl: '', // We don't store original URL in local files
-            localPath: file.uri,
-            downloadStatus: ImageDownloadStatus.COMPLETED,
-            fileSize: typeof fileInfo.size === 'number' ? fileInfo.size : 0,
-          };
-
-          images.push(image);
-        }
+        images.push({
+          pageNumber,
+          originalUrl: '',
+          localPath: file.uri,
+          downloadStatus: ImageDownloadStatus.COMPLETED,
+        });
       }
 
-      // Sort by page number
       images.sort((a, b) => a.pageNumber - b.pageNumber);
 
-      // Track chapter access for usage statistics
       if (images.length > 0) {
         this.trackChapterAccess(mangaId, chapterNumber);
       }
@@ -1055,7 +1171,45 @@ class ChapterStorage implements ChapterStorageService {
   ): Promise<boolean> {
     await this.initialize();
 
-    return !!(this.metadata[mangaId] && this.metadata[mangaId][chapterNumber]);
+    const meta = this.metadata[mangaId]?.[chapterNumber];
+    const chapterDir = this.getChapterDirectory(mangaId, chapterNumber);
+
+    // Fast path: trust in-memory metadata + directory presence.
+    // Avoid listing/statting every page file (that made offline opens multi-second).
+    if (meta && meta.totalImages > 0) {
+      if (chapterDir.exists) {
+        return true;
+      }
+      // Metadata without files — clear stale entry.
+      delete this.metadata[mangaId]![chapterNumber];
+      if (Object.keys(this.metadata[mangaId] || {}).length === 0) {
+        delete this.metadata[mangaId];
+      }
+      this.scheduleSaveMetadata();
+      return false;
+    }
+
+    if (!chapterDir.exists) {
+      return false;
+    }
+
+    const metadataFile = this.getChapterMetadataFile(mangaId, chapterNumber);
+    if (!metadataFile.exists) {
+      return false;
+    }
+
+    // One cheap listing check — no per-file info() calls.
+    try {
+      const hasPages = chapterDir
+        .list()
+        .some(
+          (item) =>
+            item.name.startsWith('page_') && item.name.endsWith('.jpg')
+        );
+      return hasPages;
+    } catch {
+      return false;
+    }
   }
 
   async getDownloadedChapters(mangaId: string): Promise<string[]> {
@@ -1065,7 +1219,14 @@ class ChapterStorage implements ChapterStorageService {
       return [];
     }
 
-    return Object.keys(this.metadata[mangaId]).sort();
+    // Metadata keys are authoritative for UI lists; existence is verified
+    // lazily when a chapter is opened via getChapterImages.
+    return Object.keys(this.metadata[mangaId])
+      .filter((chapterNumber) => {
+        const meta = this.metadata[mangaId]?.[chapterNumber];
+        return !!meta && meta.totalImages > 0;
+      })
+      .sort();
   }
 
   async getMangaDownloadSize(mangaId: string): Promise<number> {

@@ -7,6 +7,11 @@ type AnyConfig = any;
 let installed = false;
 let ejectors: Array<() => void> = [];
 
+/** HTTP statuses the client may recover from (e.g. stale chapter ID → re-resolve). */
+export function isSoftNetworkFailureStatus(status: unknown): boolean {
+  return status === 404;
+}
+
 function shortUrl(url?: string): string {
   if (!url) return '';
   try {
@@ -81,15 +86,23 @@ export function installNetworkMonitor(instance?: AxiosInstance) {
       const url = cfg?.url;
       const method = (cfg?.method || 'GET').toUpperCase();
       const status = error.response?.status;
-      logger().error(
-        'Network',
-        `❌ ${method} ${shortUrl(url)}${status ? ` ${status}` : ''}`,
-        {
-          id: meta?.id,
-          durationMs: Math.round(dur),
-          error: String(error),
-        }
-      );
+      const soft = isSoftNetworkFailureStatus(status);
+      const message = `${soft ? '⚠️' : '❌'} ${method} ${shortUrl(url)}${
+        status ? ` ${status}` : ''
+      }`;
+      const payload = {
+        id: meta?.id,
+        durationMs: Math.round(dur),
+        error: String(error),
+        ...(soft ? { recoverable: true } : {}),
+      };
+
+      // 404s are often recovered by the client (stale chapter IDs, etc.).
+      if (soft) {
+        logger().warn('Network', message, payload);
+      } else {
+        logger().error('Network', message, payload);
+      }
       return Promise.reject(error);
     }
   );
@@ -107,4 +120,9 @@ export function uninstallNetworkMonitor() {
   ejectors.forEach((fn) => fn());
   ejectors = [];
   installed = false;
+}
+
+/** Test helper — reset module install state between Jest cases. */
+export function resetNetworkMonitorForTests() {
+  uninstallNetworkMonitor();
 }

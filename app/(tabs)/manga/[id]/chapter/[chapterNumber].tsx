@@ -93,7 +93,10 @@ import ReaderRetryImage, {
   ReaderImageStatus,
   ReaderImageStatusHandler,
 } from '@/components/ReaderRetryImage';
-import { isForbiddenError, isRateLimitError } from '@/utils/httpErrors';
+import {
+  getChapterLoadErrorInfo,
+  type ChapterLoadErrorInfo,
+} from '@/utils/chapterLoadError';
 import {
   hydrateMangaFromLocal,
 } from '@/utils/mangaOptimisticLoad';
@@ -436,7 +439,9 @@ export default function ReadChapterScreen() {
   const { isOffline } = useOffline();
 
   const [isLoadingImages, setIsLoadingImages] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<ChapterLoadErrorInfo | null>(
+    null
+  );
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
   const [mangaDetails, setMangaDetails] = useState<MangaDetailsType | null>(
     null
@@ -494,6 +499,10 @@ export default function ReadChapterScreen() {
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
   const failedPagesRef = useRef<Set<number>>(new Set());
   const loadedPagesRef = useRef<Set<number>>(new Set());
+  /** In-flight gate prefetches — survives FlatList row unmount/clipping. */
+  const gatePrefetchInflightRef = useRef<Set<number>>(new Set());
+  /** Bumped on chapter change so late prefetches cannot advance a new gate. */
+  const gatePrefetchGenerationRef = useRef(0);
   /** Highest page number such that every page up to it has loaded. */
   const gateBoundaryRef = useRef(0);
 
@@ -1172,7 +1181,8 @@ export default function ReadChapterScreen() {
     if (pageCount <= 0) {
       return;
     }
-    const footerHeight = viewportHeight * 0.1; // matches chapterEndSpacer
+    // Must match chapterEndSpacer (screen height), not FlatList viewport height.
+    const footerHeight = Dimensions.get('window').height * 0.1;
     reportManhwaScrollProgress(
       computeManhwaScrollProgress({
         offsetY,
@@ -1217,6 +1227,8 @@ export default function ReadChapterScreen() {
         setFailedPageCount(failed.size);
       }
 
+      gatePrefetchInflightRef.current.delete(pageNumber);
+
       // Advance the sequential gate past every contiguously loaded page.
       loadedPagesRef.current.add(pageNumber);
       let boundary = gateBoundaryRef.current;
@@ -1225,11 +1237,124 @@ export default function ReadChapterScreen() {
       }
       if (boundary !== gateBoundaryRef.current) {
         gateBoundaryRef.current = boundary;
-        setAllowedPage(boundary + 1);
+        setAllowedPage((prev) => {
+          const next = boundary + 1;
+          return prev === next ? prev : next;
+        });
       }
     },
     []
   );
+
+  // Keep the sequential gate moving even when FlatList clips/unmounts a row
+  // before ReaderRetryImage can report `loaded`.
+  useEffect(() => {
+    if (!downloadedImages || contentType !== 'manhwa') {
+      return;
+    }
+
+    const generation = gatePrefetchGenerationRef.current;
+    const maxPrefetchAttempts = 3;
+    const retryTimeoutIds: ReturnType<typeof setTimeout>[] = [];
+    let cancelled = false;
+    // Mutable id so effect cleanup can clearTimeout the latest retry timer.
+    let retryTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const imagesByPage = new Map(
+      downloadedImages.map((image) => [image.pageNumber, image])
+    );
+
+    // Advance over contiguous local / already-loaded pages in ONE pass.
+    // Calling setAllowedPage per page (via handlePageStatusChange) re-enters
+    // this effect synchronously and hits "Maximum update depth exceeded".
+    let boundary = gateBoundaryRef.current;
+    for (;;) {
+      const nextPage = boundary + 1;
+      const image = imagesByPage.get(nextPage);
+      if (!image) {
+        break;
+      }
+      if (loadedPagesRef.current.has(nextPage)) {
+        boundary = nextPage;
+        continue;
+      }
+      const uri = image.localPath || image.originalUrl;
+      if (uri && !uri.startsWith('http')) {
+        loadedPagesRef.current.add(nextPage);
+        gatePrefetchInflightRef.current.delete(nextPage);
+        boundary = nextPage;
+        continue;
+      }
+      break;
+    }
+    if (boundary !== gateBoundaryRef.current) {
+      gateBoundaryRef.current = boundary;
+      setAllowedPage((prev) => {
+        const next = boundary + 1;
+        return prev === next ? prev : next;
+      });
+    }
+
+    const prefetchForGate = (pageNumber: number, uri: string, attempt: number) => {
+      Image.prefetch(uri, {
+        headers: MANGA_IMAGE_REQUEST_HEADERS,
+      })
+        .then(() => {
+          if (cancelled || generation !== gatePrefetchGenerationRef.current) {
+            return;
+          }
+          handlePageStatusChange(pageNumber, 'loaded');
+        })
+        .catch(() => {
+          if (cancelled || generation !== gatePrefetchGenerationRef.current) {
+            return;
+          }
+          if (attempt + 1 < maxPrefetchAttempts) {
+            retryTimeoutId = setTimeout(() => {
+              if (cancelled || generation !== gatePrefetchGenerationRef.current) {
+                return;
+              }
+              prefetchForGate(pageNumber, uri, attempt + 1);
+            }, 750 * (attempt + 1));
+            retryTimeoutIds.push(retryTimeoutId);
+            return;
+          }
+          // Allow a later retry from a remounted row or effect re-run.
+          gatePrefetchInflightRef.current.delete(pageNumber);
+        });
+    };
+
+    const prefetchLimit = Math.max(allowedPage, boundary + 1);
+    for (const image of downloadedImages) {
+      if (image.pageNumber > prefetchLimit) {
+        continue;
+      }
+      if (loadedPagesRef.current.has(image.pageNumber)) {
+        continue;
+      }
+      if (gatePrefetchInflightRef.current.has(image.pageNumber)) {
+        continue;
+      }
+
+      const uri = image.localPath || image.originalUrl;
+      if (!uri || !uri.startsWith('http')) {
+        continue;
+      }
+
+      gatePrefetchInflightRef.current.add(image.pageNumber);
+      prefetchForGate(image.pageNumber, uri, 0);
+    }
+
+    return () => {
+      cancelled = true;
+      if (retryTimeoutId !== undefined) {
+        clearTimeout(retryTimeoutId);
+      }
+      for (const timeoutId of retryTimeoutIds) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [allowedPage, downloadedImages, contentType, handlePageStatusChange]);
 
   const handleRetryFailedPages = useCallback(() => {
     failedPagesRef.current.clear();
@@ -1241,11 +1366,13 @@ export default function ReadChapterScreen() {
   // Clear previous chapter before paint so navigation never flashes stale pages.
   useLayoutEffect(() => {
     setIsLoadingImages(true);
-    setError(null);
+    setLoadError(null);
     setDownloadedImages(null);
     downloadedImagesRef.current = null;
     failedPagesRef.current.clear();
     loadedPagesRef.current.clear();
+    gatePrefetchInflightRef.current.clear();
+    gatePrefetchGenerationRef.current += 1;
     gateBoundaryRef.current = 0;
     setAllowedPage(1);
     setFailedPageCount(0);
@@ -1272,40 +1399,52 @@ export default function ReadChapterScreen() {
     const loadChapter = async () => {
       if (!id || !chapterNumber) {
         if (isActive()) {
-          setError('Invalid chapter parameters');
+          setLoadError({
+            title: 'Invalid chapter',
+            message: 'Missing manga or chapter information.',
+            canRetry: false,
+          });
           setIsLoadingImages(false);
         }
         return;
       }
 
+      // Keep the spinner up for the whole attempt (including stale-ID
+      // re-resolve). Only the error screen appears if this attempt fails.
+      if (isActive()) {
+        setIsLoadingImages(true);
+        setLoadError(null);
+      }
+
       try {
         const mangaId = id as string;
         const requestedChapter = chapterNumber as string;
-        const downloadedChapters =
-          await chapterStorageService.getDownloadedChapters(mangaId);
 
-        if (!isActive()) return;
+        // Fast path: load this chapter's local pages directly.
+        // Avoid scanning every downloaded chapter (that made opens multi-second).
+        let images =
+          (await chapterStorageService.getChapterImages(
+            mangaId,
+            requestedChapter
+          )) ?? null;
 
-        let matchedChapter: string | null = null;
-        if (downloadedChapters.includes(requestedChapter)) {
-          matchedChapter = requestedChapter;
-        } else {
+        if (!images || images.length === 0) {
+          const downloadedChapters =
+            await chapterStorageService.getDownloadedChapters(mangaId);
+          if (!isActive()) return;
+
           const normalizedRequested = normalizeChapterNumber(requestedChapter);
           const matchingChapter = downloadedChapters.find(
-            (ch) => normalizeChapterNumber(ch) === normalizedRequested
+            (ch) =>
+              ch === requestedChapter ||
+              normalizeChapterNumber(ch) === normalizedRequested
           );
           if (matchingChapter) {
-            matchedChapter = matchingChapter;
+            images = await chapterStorageService.getChapterImages(
+              mangaId,
+              matchingChapter
+            );
           }
-        }
-
-        let images: ChapterImage[] | null = null;
-
-        if (matchedChapter) {
-          images = await chapterStorageService.getChapterImages(
-            mangaId,
-            matchedChapter
-          );
         }
 
         if (!isActive()) return;
@@ -1320,54 +1459,65 @@ export default function ReadChapterScreen() {
           setAllowedPage(firstPage);
           setCurrentPage(0);
 
-          try {
-            const detectedType = await detectContentType(images);
-            if (isActive()) {
-              setContentType(detectedType);
+          // Prefer title metadata — never block the spinner on Image.getSize.
+          if (isVerticalOnlyContentType(mangaDetails?.type)) {
+            setContentType('manhwa');
+          } else if (normalizeContentTypeLabel(mangaDetails?.type) === 'manga') {
+            setContentType('manga');
+          } else {
+            // Show pages immediately; refine type in the background if needed.
+            setContentType('manga');
+            void detectContentType(images)
+              .then((detectedType) => {
+                if (isActive()) {
+                  setContentType(detectedType);
+                }
+              })
+              .catch((detectError) => {
+                logger().error('Service', 'Error detecting content type', {
+                  error: detectError,
+                });
+              });
+          }
+
+          // Title resolution is AsyncStorage-heavy — don't gate the reader on it.
+          if (mangaDetails?.title) {
+            setMangaTitle(mangaDetails.title);
+          } else {
+            setMangaTitle(`Chapter ${chapterNumber}`);
+          }
+          setLoadError(null);
+
+          void (async () => {
+            try {
+              const mangaData = await getMangaData(mangaId);
+              if (!isActive()) return;
+
+              let resolvedTitle = mangaData?.title ?? mangaDetails?.title;
+              if (!resolvedTitle) {
+                const cachedDetails =
+                  await offlineCacheService.getCachedMangaDetails(mangaId);
+                if (!isActive()) return;
+                resolvedTitle = cachedDetails?.title;
+              }
+
+              if (resolvedTitle && isActive()) {
+                setMangaTitle(resolvedTitle);
+              }
+            } catch {
+              // Keep the interim title already shown.
             }
-          } catch (detectError) {
-            logger().error('Service', 'Error detecting content type', {
-              error: detectError,
-            });
-            if (isActive()) {
-              setContentType(
-                isVerticalOnlyContentType(mangaDetails?.type)
-                  ? 'manhwa'
-                  : 'manga'
-              );
-            }
-          }
-
-          const mangaData = await getMangaData(mangaId);
-          if (!isActive()) return;
-
-          let resolvedTitle = mangaData?.title;
-          if (!resolvedTitle) {
-            const cachedDetails =
-              await offlineCacheService.getCachedMangaDetails(mangaId);
-            if (!isActive()) return;
-            resolvedTitle = cachedDetails?.title;
-          }
-
-          if (!resolvedTitle) {
-            resolvedTitle = isOffline
-              ? 'Offline Chapter'
-              : `Chapter ${chapterNumber}`;
-          }
-
-          if (isActive()) {
-            setMangaTitle(resolvedTitle);
-            setError(null);
-          }
+          })();
         } else if (!isOffline) {
           const cachedDetails =
             await offlineCacheService.getCachedMangaDetails(mangaId);
           if (!isActive()) return;
 
+          // Prefer live/merged chapter metadata so stale offline IDs don't win.
           const onlineImages = await loadOnlineChapterImages(
             mangaId,
             requestedChapter,
-            cachedDetails?.chapters ?? mangaDetails?.chapters
+            mangaDetails?.chapters ?? cachedDetails?.chapters
           );
 
           if (!isActive()) return;
@@ -1410,7 +1560,7 @@ export default function ReadChapterScreen() {
 
           if (isActive()) {
             setMangaTitle(resolvedTitle);
-            setError(null);
+            setLoadError(null);
           }
         } else {
           if (isActive()) {
@@ -1420,8 +1570,11 @@ export default function ReadChapterScreen() {
             setIsDownloaded(false);
             setIsOnlineChapter(false);
             setCurrentPage(0);
-            setError(
-              'This chapter is not downloaded. Please connect to internet or download it first.'
+            setLoadError(
+              getChapterLoadErrorInfo(null, {
+                chapterNumber: String(chapterNumber),
+                isOffline: true,
+              })
             );
           }
         }
@@ -1432,12 +1585,10 @@ export default function ReadChapterScreen() {
             mangaId: id,
             chapterNumber,
           });
-          setError(
-            isRateLimitError(error)
-              ? 'MangaFire is busy right now. Wait a moment and try again.'
-              : isForbiddenError(error)
-                ? 'MangaFire blocked this request. Try again in a few seconds.'
-                : 'Failed to load chapter.'
+          setLoadError(
+            getChapterLoadErrorInfo(error, {
+              chapterNumber: String(chapterNumber),
+            })
           );
         }
       } finally {
@@ -1468,8 +1619,65 @@ export default function ReadChapterScreen() {
     }
 
     const mangaId = id as string;
+    const requestedChapter =
+      typeof chapterNumber === 'string' ? chapterNumber : undefined;
 
     try {
+      // Prefer local chapter files + cached details — avoid MangaFire API spam
+      // when the reader already has a downloaded chapter on disk.
+      if (requestedChapter) {
+        // Show cached details immediately — don't wait on download-disk checks
+        // (AsyncStorage/file IO were stacking into multi-second opens).
+        // Online readers still fall through to refresh below.
+        const cachedDetails =
+          await offlineCacheService.getCachedMangaDetails(mangaId);
+        if (cachedDetails) {
+          setMangaDetails(cachedDetails);
+          setMangaTitle((current) => current ?? cachedDetails.title);
+        }
+
+        const alreadyDownloaded =
+          await chapterStorageService.isChapterDownloaded(
+            mangaId,
+            requestedChapter
+          );
+        if (alreadyDownloaded) {
+          if (!cachedDetails) {
+            const [mangaData, downloadedChapters] = await Promise.all([
+              getMangaData(mangaId),
+              chapterStorageService.getDownloadedChapters(mangaId),
+            ]);
+            if (mangaData || downloadedChapters.length > 0) {
+              const fallbackDetails: MangaDetailsType = {
+                id: mangaId,
+                title: mangaData?.title || 'Downloaded Chapter',
+                alternativeTitle: mangaData?.title || '',
+                status: '',
+                description: '',
+                author: [],
+                published: '',
+                genres: [],
+                rating: '',
+                reviewCount: '',
+                bannerImage: mangaData?.bannerImage || '',
+                chapters: downloadedChapters.map((chapter) => ({
+                  number: chapter,
+                  title: `Chapter ${chapter}`,
+                  date: '',
+                  url: '',
+                })),
+                ...(mangaData?.totalChapters != null
+                  ? { totalChapters: mangaData.totalChapters }
+                  : {}),
+              };
+              setMangaDetails(fallbackDetails);
+              setMangaTitle((current) => current ?? fallbackDetails.title);
+            }
+          }
+          return;
+        }
+      }
+
       if (isOffline) {
         const cachedDetails =
           await offlineCacheService.getCachedMangaDetails(mangaId);
@@ -1574,7 +1782,7 @@ export default function ReadChapterScreen() {
         setMangaTitle((current) => current ?? cachedDetails.title);
       }
     }
-  }, [id, isOffline]);
+  }, [id, chapterNumber, isOffline]);
 
   useEffect(() => {
     markChapterAsReadWithFallback();
@@ -1960,11 +2168,38 @@ export default function ReadChapterScreen() {
       : renderMangaChapter();
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: readerCanvasColor }]}>
-      {error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
+  const renderChapterLoadError = (info: ChapterLoadErrorInfo) => (
+    <View
+      style={[
+        styles.errorContainer,
+        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+      ]}
+      accessibilityRole="alert"
+    >
+      <View style={styles.errorIconWrap}>
+        <Ionicons
+          name="alert-circle-outline"
+          size={48}
+          color={Colors[colorScheme].error}
+        />
+      </View>
+      <Text style={styles.errorTitle}>{info.title}</Text>
+      <Text style={styles.errorMessage}>{info.message}</Text>
+      <View style={styles.errorActions}>
+        <TouchableOpacity
+          style={styles.chapterBackButton}
+          onPress={handleBackPress}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons
+            name="arrow-back"
+            size={18}
+            color={Colors[colorScheme].text}
+          />
+          <Text style={styles.chapterBackButtonText}>Go back</Text>
+        </TouchableOpacity>
+        {info.canRetry ? (
           <TouchableOpacity
             style={styles.chapterRetryButton}
             onPress={() => setLoadRetryToken((token) => token + 1)}
@@ -1973,7 +2208,15 @@ export default function ReadChapterScreen() {
           >
             <Text style={styles.chapterRetryButtonText}>Retry</Text>
           </TouchableOpacity>
-        </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: readerCanvasColor }]}>
+      {loadError && !isLoadingImages ? (
+        renderChapterLoadError(loadError)
       ) : (
         <>
           <View
@@ -1990,19 +2233,12 @@ export default function ReadChapterScreen() {
             ) : (isDownloaded || isOnlineChapter) && downloadedImages ? (
               renderDownloadedChapter()
             ) : (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>
-                  {error || 'Chapter is not available.'}
-                </Text>
-                <TouchableOpacity
-                  style={styles.chapterRetryButton}
-                  onPress={() => setLoadRetryToken((token) => token + 1)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry loading chapter"
-                >
-                  <Text style={styles.chapterRetryButtonText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
+              renderChapterLoadError({
+                title: 'Chapter isn’t available',
+                message:
+                  'This chapter could not be opened. Go back and try another chapter, or retry.',
+                canRetry: true,
+              })
             )}
           </View>
 

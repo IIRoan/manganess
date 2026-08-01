@@ -124,6 +124,74 @@ class OfflineCacheService {
     }
   }
 
+  /**
+   * Replace a chapter's MangaFire API id in the offline details cache.
+   * Used after stale-ID recovery so the next open does not 404 again.
+   */
+  async patchCachedChapterApiId(
+    mangaId: string,
+    chapterNumber: string,
+    chapterApiId: string
+  ): Promise<boolean> {
+    const normalizedMangaId = mangaId.trim();
+    const normalizedChapter = String(chapterNumber ?? '').trim();
+    const normalizedApiId = String(chapterApiId ?? '').trim();
+    if (!normalizedMangaId || !normalizedChapter || !normalizedApiId) {
+      return false;
+    }
+
+    try {
+      const cache = await this.getAllCachedMangaDetails();
+      const existing = cache[normalizedMangaId];
+      if (!existing?.chapters?.length) {
+        return false;
+      }
+
+      const nextUrl = `/chapter/${normalizedApiId}`;
+      let changed = false;
+      const chapters = existing.chapters.map((chapter) => {
+        if (String(chapter.number).trim() !== normalizedChapter) {
+          return chapter;
+        }
+        if (chapter.url === nextUrl) {
+          return chapter;
+        }
+        changed = true;
+        return { ...chapter, url: nextUrl };
+      });
+
+      if (!changed) {
+        return false;
+      }
+
+      cache[normalizedMangaId] = {
+        ...existing,
+        chapters,
+        cachedAt: Date.now(),
+      };
+      this.memoryCache = cache;
+      await AsyncStorage.setItem(
+        OFFLINE_MANGA_CACHE_KEY,
+        JSON.stringify(cache)
+      );
+
+      logger().info('Storage', 'Patched cached chapter API id after recovery', {
+        mangaId: normalizedMangaId,
+        chapterNumber: normalizedChapter,
+        chapterApiId: normalizedApiId,
+      });
+      return true;
+    } catch (error) {
+      logger().warn('Storage', 'Failed to patch cached chapter API id', {
+        error,
+        mangaId: normalizedMangaId,
+        chapterNumber: normalizedChapter,
+        chapterApiId: normalizedApiId,
+      });
+      return false;
+    }
+  }
+
   async getAllCachedMangaDetails(): Promise<
     Record<string, CachedMangaDetails>
   > {
