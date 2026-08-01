@@ -8,7 +8,7 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import ErrorBoundary from '../components/ErrorBoundary';

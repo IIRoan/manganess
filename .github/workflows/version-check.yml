@@ -18,13 +18,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref }}
           path: pr-branch
 
       - name: Checkout main branch
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
         with:
           ref: main
           path: main-branch

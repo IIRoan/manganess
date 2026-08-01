@@ -208,7 +208,7 @@ const getStyles = (colors: typeof Colors.light, insets: { bottom: number }) =>
       justifyContent: 'flex-end',
     },
     modalOverlay: {
-      ...StyleSheet.absoluteFill,
+      ...StyleSheet.absoluteFillObject,
       backgroundColor: 'rgba(0,0,0,0.5)',
     },
     container: {
