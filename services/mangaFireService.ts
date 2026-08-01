@@ -25,11 +25,6 @@ import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 import { stripHtmlToText } from '@/utils/stripHtmlToText';
 import {
-  getApiRetryDelayMs,
-  getRateLimitMaxRetries,
-  isRateLimitError,
-} from '@/utils/httpErrors';
-import {
   REQUEST_HUB_TTLS,
   scheduleMangaFireRequest,
   peekFreshCache,
@@ -78,8 +73,6 @@ export interface MangaDetails {
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0';
 
-const MAX_RETRIES = 3;
-
 export const normalizeChapterNumber = (
   value: string | null | undefined
 ): string => {
@@ -105,63 +98,6 @@ export const normalizeChapterNumber = (
 
   return normalized;
 };
-
-// Utility function for retrying API calls with exponential backoff
-async function retryApiCall<T>(
-  operation: () => Promise<T>,
-  maxRetries: number = MAX_RETRIES
-): Promise<T> {
-  const log = logger();
-  let lastError: Error;
-  let attempt = 0;
-
-  while (true) {
-    attempt += 1;
-
-    try {
-      return await operation();
-    } catch (error: any) {
-      lastError = error as Error;
-
-      // Don't retry permanent client errors
-      const status = error?.response?.status;
-      const is403 = status === 403 || error?.message?.includes('403');
-      const is404 = status === 404 || error?.message?.includes('404');
-      if (is403 || is404) {
-        if (is403) {
-          log.warn('Network', 'Request failed with 403 - VRF token may be stale', {
-            attempt,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-        throw lastError;
-      }
-
-      const effectiveMaxRetries = isRateLimitError(error)
-        ? getRateLimitMaxRetries()
-        : maxRetries;
-
-      if (attempt >= effectiveMaxRetries) {
-        if (isRateLimitError(error)) {
-          log.warn('Network', 'Rate limit retries exhausted', {
-            attempt,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-        throw lastError;
-      }
-
-      const delay = getApiRetryDelayMs(error, attempt);
-      log.warn('Network', 'API call retry scheduled', {
-        attempt,
-        delayMs: delay,
-        rateLimited: isRateLimitError(error),
-        error: error instanceof Error ? error.message : String(error),
-      });
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-}
 
 // Validate URL before making requests
 function validateUrl(url: string): boolean {
@@ -196,7 +132,7 @@ export const searchManga = async (
 
   const result = await performanceMonitor.measureAsync(
     `searchManga:${keyword}`,
-    () => retryApiCall(() => searchTitles(keyword))
+    () => searchTitles(keyword)
   );
 
   if (isDebugEnabled()) {
@@ -313,8 +249,7 @@ export const fetchMangaDetails = async (
     }
   }
 
-  const loadDetails = async (): Promise<MangaDetails> =>
-    retryApiCall(async () => {
+  const loadDetails = async (): Promise<MangaDetails> => {
       const title = await fetchTitleDetails(normalizedId);
       const chapterFetchOptions: FetchTitleChaptersOptions = {};
       let knownTotalChapters: number | undefined;
@@ -353,7 +288,7 @@ export const fetchMangaDetails = async (
           ? { totalChapters: knownTotalChapters }
           : {}),
       });
-    });
+  };
 
   const useUncachedPath =
     Boolean(options?.shouldCancel) ||
@@ -949,14 +884,13 @@ export const fetchChapterImages = async (
 
   const result = await performanceMonitor.measureAsync(
     `fetchChapterImages:${chapterId}`,
-    () =>
-      retryApiCall(async () => {
-        const pageUrls = await fetchChapterPageUrls(chapterId.trim());
-        return {
-          images: pageUrls.map((url) => [url]),
-          status: 200,
-        };
-      })
+    async () => {
+      const pageUrls = await fetchChapterPageUrls(chapterId.trim());
+      return {
+        images: pageUrls.map((url) => [url]),
+        status: 200,
+      };
+    }
   );
 
   if (isDebugEnabled()) {

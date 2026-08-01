@@ -46,6 +46,36 @@ describe('mangaFireRequestHub', () => {
     expect(peekFreshCache<string>('details:test', 60_000)).toBe('fresh');
   });
 
+  it('skips cache writes when shouldCache returns false', async () => {
+    const operation = jest
+      .fn()
+      .mockResolvedValueOnce({ value: 'partial', partialFailure: true })
+      .mockResolvedValueOnce({ value: 'complete', partialFailure: false });
+
+    const shouldCache = (value: { partialFailure: boolean }) =>
+      !value.partialFailure;
+
+    const first = await scheduleMangaFireRequest('home:test', operation, {
+      ttlMs: 60_000,
+      shouldCache,
+    });
+
+    expect(first).toEqual({ value: 'partial', partialFailure: true });
+    expect(peekFreshCache('home:test', 60_000)).toBeUndefined();
+
+    const second = await scheduleMangaFireRequest('home:test', operation, {
+      ttlMs: 60_000,
+      shouldCache,
+    });
+
+    expect(second).toEqual({ value: 'complete', partialFailure: false });
+    expect(operation).toHaveBeenCalledTimes(2);
+    expect(peekFreshCache('home:test', 60_000)).toEqual({
+      value: 'complete',
+      partialFailure: false,
+    });
+  });
+
   it('spaces sequential requests through the rate limiter', async () => {
     const timestamps: number[] = [];
 

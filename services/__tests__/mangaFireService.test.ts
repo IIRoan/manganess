@@ -1197,15 +1197,22 @@ describe('mangaFireService', () => {
   });
 
   describe('searchManga retry logic', () => {
-    it('does not retry on 403 error', async () => {
+    it('retries on intermittent 403 errors', async () => {
+      jest.useFakeTimers();
       const error403 = new Error('Request failed with status code 403');
       (error403 as any).response = { status: 403 };
-      mockedAxios.get.mockRejectedValue(error403);
+      mockedAxios.get
+        .mockRejectedValueOnce(error403)
+        .mockResolvedValueOnce({
+          data: { items: [] },
+        });
 
-      await expect(searchManga('test')).rejects.toThrow();
+      const promise = searchManga('test');
+      await jest.runAllTimersAsync();
+      await expect(promise).resolves.toEqual([]);
 
-      // Should only be called once (no retries for 403)
-      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+      expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+      jest.useRealTimers();
     });
 
     it('retries on other errors', async () => {
