@@ -1672,6 +1672,7 @@ export default function MangaDetailScreen() {
           getCurrentlyOpenSwipeable={getCurrentlyOpenSwipeable}
           setCurrentlyOpenSwipeable={setCurrentlyOpenSwipeableStable}
           mangaId={id as string}
+          mangaTitle={mangaDetails?.title}
           showDownloadButton={true}
           onDownloadStart={() => {
             setDownloadingChapters((prev) =>

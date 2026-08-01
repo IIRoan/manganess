@@ -9,7 +9,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,6 +60,7 @@ interface SwipeableChapterItemProps {
   getCurrentlyOpenSwipeable: () => SwipeableMethods | null;
   setCurrentlyOpenSwipeable: (swipeable: SwipeableMethods | null) => void;
   mangaId?: string;
+  mangaTitle?: string;
   showDownloadButton?: boolean;
   onDownloadStart?: () => void;
   onDownloadComplete?: () => void;
@@ -128,6 +128,7 @@ const DownloadActionButton = React.memo(
     backgroundColor,
     buttonWidth,
     mangaId,
+    mangaTitle,
     chapter,
     disabled,
     onDownloadStart,
@@ -138,6 +139,7 @@ const DownloadActionButton = React.memo(
     backgroundColor: string;
     buttonWidth: number;
     mangaId: string;
+    mangaTitle?: string;
     chapter: Chapter;
     disabled: boolean;
     onDownloadStart: () => void;
@@ -164,6 +166,7 @@ const DownloadActionButton = React.memo(
         >
           <DownloadButton
             mangaId={mangaId}
+            mangaTitle={mangaTitle}
             chapterNumber={chapter.number}
             chapterUrl={chapter.url}
             size="medium"
@@ -217,6 +220,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
   getCurrentlyOpenSwipeable,
   setCurrentlyOpenSwipeable,
   mangaId,
+  mangaTitle,
   showDownloadButton = false,
   onDownloadStart,
   onDownloadComplete,
@@ -240,7 +244,10 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
       ? isDownloading
       : isDownloading || downloadStatus.isDownloading);
   const showTopDownloading =
-    !resolvedIsDownloaded && (isStartingDownload || resolvedIsDownloading);
+    !resolvedIsDownloaded &&
+    (isStartingDownload ||
+      resolvedIsDownloading ||
+      downloadStatus.isDownloading);
 
   useEffect(() => {
     if (resolvedIsDownloaded) setIsStartingDownload(false);
@@ -276,6 +283,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
               progress={progress}
               backgroundColor={colors.primary}
               mangaId={mangaId!}
+              mangaTitle={mangaTitle}
               chapter={chapter}
               disabled={resolvedIsDownloaded || resolvedIsDownloading}
               buttonWidth={buttonWidth}
@@ -329,6 +337,7 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     [
       showDownloadButton,
       mangaId,
+      mangaTitle,
       resolvedIsDownloaded,
       resolvedIsDownloading,
       onDeleteDownload,
@@ -384,12 +393,22 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     const icons: React.ReactNode[] = [];
 
     if (showTopDownloading) {
+      const pct = Math.round(
+        Math.max(0, Math.min(100, downloadStatus.progress || 0))
+      );
       icons.push(
         <View
           key="downloading"
           style={[s.statusChip, { backgroundColor: colors.primary + '18' }]}
         >
-          <ActivityIndicator size={12} color={colors.primary} />
+          <Text
+            style={[
+              s.downloadPercent,
+              { color: colors.primary },
+            ]}
+          >
+            {pct}%
+          </Text>
         </View>
       );
     } else if (resolvedIsDownloaded) {
@@ -415,7 +434,13 @@ const SwipeableChapterItem: React.FC<SwipeableChapterItemProps> = ({
     }
 
     return icons;
-  }, [showTopDownloading, resolvedIsDownloaded, isRead, colors.primary]);
+  }, [
+    showTopDownloading,
+    resolvedIsDownloaded,
+    isRead,
+    colors.primary,
+    downloadStatus.progress,
+  ]);
 
   return (
     <Swipeable
@@ -615,11 +640,18 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   statusChip: {
-    width: 24,
+    minWidth: 24,
     height: 24,
+    paddingHorizontal: 4,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  downloadPercent: {
+    fontSize: 10,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.2,
   },
   chevron: {
     opacity: 0.4,

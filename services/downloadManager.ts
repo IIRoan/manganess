@@ -20,20 +20,18 @@ import { downloadValidationService } from './downloadValidationService';
 // import { downloadNotificationService } from './downloadNotificationService'; // Reserved for future use
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
-import { webViewRequestInterceptor } from './webViewRequestInterceptor';
 import {
   AppState,
   AppStateStatus,
   NativeEventSubscription,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MANGA_IMAGE_REQUEST_HEADERS } from '@/utils/mangaImageHeaders';
+import { loadOnlineChapterImages } from './mangaFireService';
 
 // Download configuration
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_BASE = 1000; // Base delay in milliseconds
 const RETRY_DELAY_MULTIPLIER = 2; // Exponential backoff multiplier
-const DOWNLOAD_TIMEOUT = 30000; // 30 seconds per image
 const CONCURRENT_IMAGE_DOWNLOADS = 3; // Max concurrent image downloads per chapter
 const PAUSED_DOWNLOAD_STORAGE_KEY = 'download_manager_paused_contexts';
 
@@ -69,8 +67,8 @@ interface DownloadContext {
   mangaId: string;
   mangaTitle?: string;
   chapterNumber: string;
-  chapterId: string;
-  vrfToken: string;
+  chapterId?: string;
+  vrfToken?: string;
   refererUrl?: string;
   chapterUrl?: string;
 }
@@ -323,9 +321,8 @@ class DownloadManagerService implements DownloadManager {
   }
 
   /**
-   * Download a chapter with retry logic and progress tracking
-   * This method REQUIRES opening a WebView to intercept the AJAX request
-   * The WebView must be opened BEFORE calling this method to capture the VRF token
+   * Download a chapter using the same MangaFire API + VRF host path as online reading.
+   * No per-chapter WebView intercept is required.
    */
   async downloadChapter(
     mangaId: string,
@@ -335,28 +332,17 @@ class DownloadManagerService implements DownloadManager {
   ): Promise<DownloadResult> {
     const downloadId = this.generateDownloadId(mangaId, chapterNumber);
 
-    if (isDebugEnabled()) {
-      this.log.info('Service', 'Starting chapter download', {
-        mangaId,
-        chapterNumber,
-        chapterUrl,
-        downloadId,
-      });
-    }
-
     try {
-      // Quick check if already downloaded (non-blocking)
       const isAlreadyDownloaded =
         await chapterStorageService.isChapterDownloaded(mangaId, chapterNumber);
 
       if (isAlreadyDownloaded) {
-        if (isDebugEnabled()) {
-          this.log.info('Service', 'Chapter already downloaded', {
-            downloadId,
-          });
-        }
+        this.log.info(
+          'Service',
+          `Chapter ${chapterNumber} already downloaded`,
+          { mangaId, chapterNumber }
+        );
 
-        // Get images asynchronously
         const existingImages = await chapterStorageService.getChapterImages(
           mangaId,
           chapterNumber
@@ -369,56 +355,41 @@ class DownloadManagerService implements DownloadManager {
         };
       }
 
-      // CRITICAL: We MUST wait for WebView to intercept the AJAX request
-      // The calling code should open a WebView in the background first
-      if (isDebugEnabled()) {
-        this.log.info(
-          'Service',
-          '⏳ Waiting for WebView to intercept AJAX request...',
-          {
-            downloadId,
-            chapterUrl,
-          }
-        );
-      }
-
-      // Wait for intercepted data with timeout
-      const interceptedData = await this.waitForInterceptedRequest(
-        chapterUrl,
-        30000 // 30 second timeout
-      );
-
-      if (!interceptedData) {
-        throw new Error(
-          'Failed to intercept AJAX request from WebView. Make sure the chapter page is loaded in a WebView before downloading.'
-        );
-      }
-
-      if (isDebugEnabled()) {
-        this.log.info(
-          'Service',
-          'Got intercepted WebView data, starting download',
-          {
-            downloadId,
-            chapterId: interceptedData.chapterId,
-            vrfTokenPreview: interceptedData.vrfToken.substring(0, 30) + '...',
-          }
-        );
-      }
-
-      // Use the intercepted data to download
-      return this.downloadChapterFromInterceptedRequest(
+      const context: DownloadContext = {
         mangaId,
         chapterNumber,
-        interceptedData.chapterId,
-        interceptedData.vrfToken,
         chapterUrl,
-        mangaTitle
+      };
+
+      if (mangaTitle !== undefined) {
+        context.mangaTitle = mangaTitle;
+      }
+
+      const abortController = await this.initializeActiveDownload(
+        downloadId,
+        context,
+        'initial'
       );
+
+      const result = await this.performModernChapterDownload(
+        mangaId,
+        chapterNumber,
+        downloadId,
+        abortController.signal,
+        {
+          attempt: 1,
+          maxAttempts: MAX_RETRY_ATTEMPTS,
+          baseDelay: RETRY_DELAY_BASE,
+          multiplier: RETRY_DELAY_MULTIPLIER,
+        }
+      );
+
+      return this.handleDownloadResult(downloadId, context, result);
     } catch (error) {
-      // Clean up on error
       this.activeDownloads.delete(downloadId);
       this.downloadAbortControllers.delete(downloadId);
+      this.downloadContexts.delete(downloadId);
+      this.pausedDownloads.delete(downloadId);
 
       const downloadError: DownloadError = {
         type: DownloadErrorType.UNKNOWN,
@@ -443,57 +414,6 @@ class DownloadManagerService implements DownloadManager {
         error: downloadError,
       };
     }
-  }
-
-  /**
-   * Wait for WebView to intercept the AJAX request
-   * This polls the interceptor service until data is available or timeout
-   */
-  private async waitForInterceptedRequest(
-    chapterUrl: string,
-    timeoutMs: number
-  ): Promise<{
-    chapterId: string;
-    vrfToken: string;
-  } | null> {
-    const startTime = Date.now();
-    const pollInterval = 100; // Check every 100ms
-
-    while (Date.now() - startTime < timeoutMs) {
-      // Try to extract chapter ID from URL to check if we have intercepted data
-      const potentialChapterId =
-        webViewRequestInterceptor.extractChapterIdFromUrl(chapterUrl);
-
-      if (potentialChapterId) {
-        const interceptedData =
-          webViewRequestInterceptor.getInterceptedRequest(potentialChapterId);
-
-        if (interceptedData) {
-          if (isDebugEnabled()) {
-            this.log.info('Service', 'Found intercepted request', {
-              chapterId: interceptedData.chapterId,
-              waitedMs: Date.now() - startTime,
-            });
-          }
-          return {
-            chapterId: interceptedData.chapterId,
-            vrfToken: interceptedData.vrfToken,
-          };
-        }
-      }
-
-      // Wait before next poll
-      await this.delay(pollInterval);
-    }
-
-    if (isDebugEnabled()) {
-      this.log.warn('Service', '⏱️ Timeout waiting for intercepted request', {
-        chapterUrl,
-        timeoutMs,
-      });
-    }
-
-    return null;
   }
 
   private async initializeActiveDownload(
@@ -891,6 +811,274 @@ class DownloadManagerService implements DownloadManager {
   }
 
   /**
+   * Resolve pages via the shared online reader API (MangaFireVrfHost),
+   * then persist images with the normal download pipeline.
+   */
+  private async performModernChapterDownload(
+    mangaId: string,
+    chapterNumber: string,
+    downloadId: string,
+    signal: AbortSignal,
+    retryConfig: RetryConfig
+  ): Promise<DownloadResult> {
+    try {
+      if (signal.aborted) {
+        throw new Error('Download cancelled');
+      }
+
+      if (isDebugEnabled()) {
+        this.log.info(
+          'Service',
+          `Modern download attempt ${retryConfig.attempt}/${retryConfig.maxAttempts}`,
+          {
+            downloadId,
+            mangaId,
+            chapterNumber,
+            attempt: retryConfig.attempt,
+          }
+        );
+      }
+
+      const storageStats = await chapterStorageService.getStorageStats();
+      const estimatedSize = 10 * 1024 * 1024;
+      if (storageStats.availableSpace < estimatedSize) {
+        const storageContext: StorageErrorContext = {
+          availableSpace: storageStats.availableSpace,
+          requiredSpace: estimatedSize,
+          totalUsage: storageStats.totalSize,
+          maxStorage: storageStats.totalSize + storageStats.availableSpace,
+          canCleanup: storageStats.totalChapters > 0,
+        };
+
+        const recoveryResult = await downloadErrorHandler.handleStorageError(
+          new Error('Insufficient storage space'),
+          downloadId,
+          storageContext,
+          { mangaId, chapterNumber }
+        );
+
+        if (!recoveryResult.shouldRetry) {
+          return {
+            success: false,
+            error: {
+              type: DownloadErrorType.STORAGE_FULL,
+              message: recoveryResult.message,
+              retryable: false,
+              chapter: chapterNumber,
+              mangaId,
+            },
+          };
+        }
+
+        if (recoveryResult.delay) {
+          await this.delay(recoveryResult.delay);
+        }
+      }
+
+      if (isDebugEnabled()) {
+        this.log.info('Service', 'Resolving chapter pages via MangaFire API', {
+          downloadId,
+          mangaId,
+          chapterNumber,
+        });
+      }
+
+      const resolvedImages = await loadOnlineChapterImages(
+        mangaId,
+        chapterNumber
+      );
+      const images: ChapterImage[] = resolvedImages
+        .map((image) => ({
+          pageNumber: image.pageNumber,
+          originalUrl: image.originalUrl || image.localPath || '',
+          downloadStatus: ImageDownloadStatus.PENDING,
+        }))
+        .filter((image) => image.originalUrl.trim() !== '');
+
+      if (!images.length) {
+        throw new Error('No images found in chapter');
+      }
+
+      const progress = this.activeDownloads.get(downloadId);
+      if (progress) {
+        progress.totalImages = images.length;
+        await downloadQueueService.updateDownloadProgress(
+          downloadId,
+          0,
+          0,
+          images.length
+        );
+      }
+
+      if (signal.aborted) {
+        throw new Error('Download cancelled');
+      }
+
+      const downloadedImages = await this.downloadImagesWithValidation(
+        images,
+        downloadId,
+        signal,
+        mangaId,
+        chapterNumber
+      );
+
+      if (signal.aborted) {
+        throw new Error('Download cancelled');
+      }
+
+      const completedImages = downloadedImages.filter(
+        (img) => img.downloadStatus === ImageDownloadStatus.COMPLETED
+      );
+      await chapterStorageService.saveChapterImages(
+        mangaId,
+        chapterNumber,
+        completedImages
+      );
+
+      const persistedImages = await chapterStorageService.getChapterImages(
+        mangaId,
+        chapterNumber
+      );
+      const persistedCount = persistedImages?.length ?? 0;
+      const requiredCount = Math.ceil(images.length * 0.8);
+      if (persistedCount < requiredCount) {
+        throw new Error(
+          `Chapter files missing after download: found ${persistedCount}, expected at least ${requiredCount}`
+        );
+      }
+
+      // Skip full-file scans when every page landed on disk — saves seconds.
+      if (persistedCount < images.length) {
+        const validationResult =
+          await downloadValidationService.validateChapterIntegrity(
+            mangaId,
+            chapterNumber,
+            {
+              validateFileSize: true,
+              validateFormat: false,
+              validateContent: false,
+              checkDimensions: false,
+              deepScan: false,
+              repairCorrupted: false,
+            }
+          );
+
+        if (
+          !validationResult.isValid &&
+          validationResult.integrityScore < 30 &&
+          validationResult.recommendedAction === 'redownload_corrupted' &&
+          retryConfig.attempt < retryConfig.maxAttempts
+        ) {
+          await chapterStorageService.deleteChapter(mangaId, chapterNumber);
+          await this.delay(2000);
+          return this.performModernChapterDownload(
+            mangaId,
+            chapterNumber,
+            downloadId,
+            signal,
+            { ...retryConfig, attempt: retryConfig.attempt + 1 }
+          );
+        }
+
+        if (
+          !validationResult.isValid &&
+          validationResult.integrityScore < 30 &&
+          persistedCount === 0
+        ) {
+          throw new Error(
+            `Chapter validation failed: integrity score ${validationResult.integrityScore}%`
+          );
+        }
+      }
+
+      this.log.info(
+        'Service',
+        `Downloaded chapter ${chapterNumber} (${persistedCount} pages)`,
+        {
+          mangaId,
+          chapterNumber,
+          pages: persistedCount,
+        }
+      );
+
+      return {
+        success: true,
+        downloadId,
+        chapterImages: persistedImages || downloadedImages,
+      };
+    } catch (error) {
+      if (signal.aborted) {
+        return {
+          success: false,
+          error: {
+            type: DownloadErrorType.CANCELLED,
+            message: 'Download was cancelled',
+            retryable: false,
+            chapter: chapterNumber,
+            mangaId,
+          },
+        };
+      }
+
+      const recoveryResult = await downloadErrorHandler.handleDownloadError(
+        error instanceof Error ? error : new Error('Unknown error'),
+        downloadId,
+        {
+          mangaId,
+          chapterNumber,
+          attemptNumber: retryConfig.attempt,
+        }
+      );
+
+      if (
+        recoveryResult.shouldRetry &&
+        retryConfig.attempt < retryConfig.maxAttempts
+      ) {
+        const isNowComplete = await chapterStorageService.isChapterDownloaded(
+          mangaId,
+          chapterNumber
+        );
+        if (isNowComplete) {
+          const existingImages = await chapterStorageService.getChapterImages(
+            mangaId,
+            chapterNumber
+          );
+          return {
+            success: true,
+            downloadId,
+            chapterImages: existingImages || [],
+          };
+        }
+
+        if (recoveryResult.delay) {
+          await this.delay(recoveryResult.delay);
+        }
+
+        return this.performModernChapterDownload(
+          mangaId,
+          chapterNumber,
+          downloadId,
+          signal,
+          { ...retryConfig, attempt: retryConfig.attempt + 1 }
+        );
+      }
+
+      return {
+        success: false,
+        error: {
+          type: this.categorizeError(error),
+          message:
+            recoveryResult.message ||
+            (error instanceof Error ? error.message : 'Unknown error'),
+          retryable: recoveryResult.shouldRetry,
+          chapter: chapterNumber,
+          mangaId,
+        },
+      };
+    }
+  }
+
+  /**
    * Perform download using intercepted WebView request data
    * This bypasses the need to fetch and parse HTML
    */
@@ -1050,7 +1238,7 @@ class DownloadManagerService implements DownloadManager {
         });
       }
 
-      // Step 4: Save to storage
+      // Step 4: Finalize chapter metadata for images already on disk
       if (isDebugEnabled()) {
         this.log.info('Service', 'Step 4: Saving to storage', {
           downloadId,
@@ -1058,10 +1246,13 @@ class DownloadManagerService implements DownloadManager {
       }
 
       try {
+        const completedImages = downloadedImages.filter(
+          (img) => img.downloadStatus === ImageDownloadStatus.COMPLETED
+        );
         await chapterStorageService.saveChapterImages(
           mangaId,
           chapterNumber,
-          downloadedImages
+          completedImages
         );
 
         if (isDebugEnabled()) {
@@ -1096,6 +1287,20 @@ class DownloadManagerService implements DownloadManager {
         }
       }
 
+      // Verify files are actually readable before claiming success
+      const persistedImages = await chapterStorageService.getChapterImages(
+        mangaId,
+        chapterNumber
+      );
+      const persistedCount = persistedImages?.length ?? 0;
+      const requiredCount = Math.ceil(downloadedImages.length * 0.8);
+
+      if (persistedCount < requiredCount) {
+        throw new Error(
+          `Chapter files missing after download: found ${persistedCount}, expected at least ${requiredCount}`
+        );
+      }
+
       // Step 5: Validate chapter integrity
       if (isDebugEnabled()) {
         this.log.info('Service', 'Step 5: Validating chapter integrity', {
@@ -1109,7 +1314,7 @@ class DownloadManagerService implements DownloadManager {
           chapterNumber,
           {
             validateFileSize: true,
-            validateFormat: true,
+            validateFormat: false,
             validateContent: false,
             checkDimensions: false,
             deepScan: false,
@@ -1125,7 +1330,7 @@ class DownloadManagerService implements DownloadManager {
         });
       }
 
-      // Handle validation failures - be more lenient since images are downloaded successfully
+      // Handle validation failures - require real on-disk images
       if (!validationResult.isValid && validationResult.integrityScore < 30) {
         if (
           validationResult.recommendedAction === 'redownload_corrupted' &&
@@ -1157,40 +1362,39 @@ class DownloadManagerService implements DownloadManager {
             downloadId,
             integrityScore: validationResult.integrityScore,
           });
+        } else if (persistedCount > 0 && validationResult.integrityScore >= 30) {
+          this.log.warn(
+            'Service',
+            'Validation soft-failed but chapter files exist, continuing',
+            {
+              downloadId,
+              integrityScore: validationResult.integrityScore,
+              persistedCount,
+            }
+          );
         } else {
-          // Don't throw error if we have downloaded images - validation might be failing due to metadata issues
-          if (downloadedImages.length > 0) {
-            this.log.warn(
-              'Service',
-              'Validation failed but images were downloaded successfully, continuing',
-              {
-                downloadId,
-                integrityScore: validationResult.integrityScore,
-                downloadedImages: downloadedImages.length,
-              }
-            );
-          } else {
-            throw new Error(
-              `Chapter validation failed: integrity score ${validationResult.integrityScore}%`
-            );
-          }
+          throw new Error(
+            `Chapter validation failed: integrity score ${validationResult.integrityScore}%`
+          );
         }
       }
 
       // Download completion is now tracked via downloadManagerAtom
 
-      if (isDebugEnabled()) {
-        this.log.info('Service', 'Chapter download completed successfully', {
-          downloadId,
-          totalImages: downloadedImages.length,
-          integrityScore: validationResult.integrityScore,
-        });
-      }
+      this.log.info(
+        'Service',
+        `Downloaded chapter ${chapterNumber} (${persistedCount} pages)`,
+        {
+          mangaId,
+          chapterNumber,
+          pages: persistedCount,
+        }
+      );
 
       return {
         success: true,
         downloadId,
-        chapterImages: downloadedImages,
+        chapterImages: persistedImages || downloadedImages,
       };
     } catch (error) {
       if (signal.aborted) {
@@ -1297,10 +1501,16 @@ class DownloadManagerService implements DownloadManager {
     images: ChapterImage[],
     downloadId: string,
     signal: AbortSignal,
-    _mangaId: string,
-    _chapterNumber: string
+    mangaId: string,
+    chapterNumber: string
   ): Promise<ChapterImage[]> {
-    return this.downloadImages(images, downloadId, signal);
+    return this.downloadImages(
+      images,
+      downloadId,
+      signal,
+      mangaId,
+      chapterNumber
+    );
   }
 
   /**
@@ -1309,7 +1519,9 @@ class DownloadManagerService implements DownloadManager {
   private async downloadImages(
     images: ChapterImage[],
     downloadId: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    mangaId: string,
+    chapterNumber: string
   ): Promise<ChapterImage[]> {
     const downloadedImages: ChapterImage[] = [];
     const progress = this.activeDownloads.get(downloadId);
@@ -1318,14 +1530,20 @@ class DownloadManagerService implements DownloadManager {
       throw new Error('Download progress not found');
     }
 
-    if (isDebugEnabled()) {
-      this.log.info('Service', 'Starting batch image downloads', {
-        downloadId,
-        totalImages: images.length,
-        batchSize: CONCURRENT_IMAGE_DOWNLOADS,
-        totalBatches: Math.ceil(images.length / CONCURRENT_IMAGE_DOWNLOADS),
-      });
-    }
+    const totalBatches = Math.ceil(images.length / CONCURRENT_IMAGE_DOWNLOADS);
+    const mangaLabel = progress.mangaTitle || mangaId;
+    let lastLoggedPercent = -1;
+
+    this.log.info(
+      'Service',
+      `Downloading ${mangaLabel} ch. ${chapterNumber} (${images.length} pages)`,
+      {
+        mangaId,
+        chapterNumber,
+        pages: images.length,
+        batches: totalBatches,
+      }
+    );
 
     // Process images in batches to limit concurrent downloads
     for (let i = 0; i < images.length; i += CONCURRENT_IMAGE_DOWNLOADS) {
@@ -1335,25 +1553,15 @@ class DownloadManagerService implements DownloadManager {
 
       const batch = images.slice(i, i + CONCURRENT_IMAGE_DOWNLOADS);
       const batchNumber = Math.floor(i / CONCURRENT_IMAGE_DOWNLOADS) + 1;
-      const totalBatches = Math.ceil(
-        images.length / CONCURRENT_IMAGE_DOWNLOADS
-      );
-
-      if (isDebugEnabled()) {
-        this.log.info(
-          'Service',
-          `Processing batch ${batchNumber}/${totalBatches}`,
-          {
-            downloadId,
-            batchStart: i + 1,
-            batchEnd: Math.min(i + CONCURRENT_IMAGE_DOWNLOADS, images.length),
-            batchSize: batch.length,
-          }
-        );
-      }
 
       const batchPromises = batch.map((image) =>
-        this.downloadSingleImage(image, downloadId, signal)
+        this.downloadSingleImage(
+          image,
+          downloadId,
+          signal,
+          mangaId,
+          chapterNumber
+        )
       );
 
       try {
@@ -1369,76 +1577,28 @@ class DownloadManagerService implements DownloadManager {
             if (result.value) {
               downloadedImages.push(result.value);
               progress.downloadedImages++;
-
-              if (isDebugEnabled()) {
-                this.log.info(
-                  'Service',
-                  `Image ${originalImage.pageNumber} downloaded`,
-                  {
-                    downloadId,
-                    pageNumber: originalImage.pageNumber,
-                    fileSize: result.value.fileSize,
-                  }
-                );
-              }
             } else {
-              // Null result, mark as failed
               progress.failedImages++;
               downloadedImages.push({
                 pageNumber: originalImage.pageNumber,
                 originalUrl: originalImage.originalUrl,
                 downloadStatus: ImageDownloadStatus.FAILED,
               });
-
-              if (isDebugEnabled()) {
-                this.log.warn(
-                  'Service',
-                  `Image ${originalImage.pageNumber} failed (null result)`,
-                  {
-                    downloadId,
-                    pageNumber: originalImage.pageNumber,
-                  }
-                );
-              }
             }
           } else {
-            // Mark as failed but continue with other images
             progress.failedImages++;
-
-            // Add failed image with error status
             downloadedImages.push({
               pageNumber: originalImage.pageNumber,
               originalUrl: originalImage.originalUrl,
               downloadStatus: ImageDownloadStatus.FAILED,
             });
-
-            const errorMessage =
-              result.reason instanceof Error
-                ? result.reason.message
-                : String(result.reason);
-
-            if (isDebugEnabled()) {
-              this.log.warn(
-                'Service',
-                `Image ${originalImage.pageNumber} failed`,
-                {
-                  downloadId,
-                  pageNumber: originalImage.pageNumber,
-                  error: errorMessage,
-                  url: originalImage.originalUrl,
-                }
-              );
-            }
           }
         }
 
-        // Update progress with time estimation
         progress.progress = Math.round(
           (progress.downloadedImages / progress.totalImages) * 100
         );
         progress.lastUpdateTime = Date.now();
-
-        // Calculate download speed and ETA
         this.updateProgressMetrics(progress);
 
         await downloadQueueService.updateDownloadProgress(
@@ -1448,25 +1608,27 @@ class DownloadManagerService implements DownloadManager {
           progress.totalImages
         );
 
-        // Progress is now tracked via progress listeners
         this.notifyProgressListeners(
           downloadId,
           this.createProgressUpdate(progress)
         );
 
-        if (isDebugEnabled()) {
+        // Milestone logs (~25% steps) — not per page / per batch.
+        const milestone =
+          progress.progress === 100 ||
+          Math.floor(progress.progress / 25) > Math.floor(lastLoggedPercent / 25);
+        if (milestone && progress.progress !== lastLoggedPercent) {
+          lastLoggedPercent = progress.progress;
           this.log.info(
             'Service',
-            `Batch ${batchNumber}/${totalBatches} complete`,
+            `${mangaLabel} ch. ${chapterNumber}: ${progress.downloadedImages}/${progress.totalImages} pages (${progress.progress}%)`,
             {
-              downloadId,
+              mangaId,
+              chapterNumber,
               downloaded: progress.downloadedImages,
-              failed: progress.failedImages,
               total: progress.totalImages,
-              progress: progress.progress,
-              speed: progress.downloadSpeed
-                ? `${(progress.downloadSpeed / 1024).toFixed(2)} KB/s`
-                : 'N/A',
+              failed: progress.failedImages,
+              batch: `${batchNumber}/${totalBatches}`,
             }
           );
         }
@@ -1481,20 +1643,60 @@ class DownloadManagerService implements DownloadManager {
       }
     }
 
+    // Retry any failed pages once before accepting the chapter.
+    const failedIndexes: number[] = [];
+    for (let idx = 0; idx < downloadedImages.length; idx++) {
+      if (downloadedImages[idx]?.downloadStatus === ImageDownloadStatus.FAILED) {
+        failedIndexes.push(idx);
+      }
+    }
+
+    if (failedIndexes.length > 0 && !signal.aborted) {
+      for (const idx of failedIndexes) {
+        if (signal.aborted) {
+          break;
+        }
+
+        const original = images.find(
+          (img) => img.pageNumber === downloadedImages[idx]?.pageNumber
+        );
+        if (!original) {
+          continue;
+        }
+
+        try {
+          const retried = await this.downloadSingleImage(
+            original,
+            downloadId,
+            signal,
+            mangaId,
+            chapterNumber
+          );
+          if (retried) {
+            downloadedImages[idx] = retried;
+            progress.downloadedImages++;
+            progress.failedImages = Math.max(0, progress.failedImages - 1);
+          }
+        } catch {
+          // Keep the failed entry; summary below decides if enough succeeded.
+        }
+      }
+
+      progress.progress = Math.round(
+        (progress.downloadedImages / progress.totalImages) * 100
+      );
+      await downloadQueueService.updateDownloadProgress(
+        downloadId,
+        progress.progress,
+        progress.downloadedImages,
+        progress.totalImages
+      );
+    }
+
     // Check if we have enough successful downloads
     const successfulDownloads = downloadedImages.filter(
       (img) => img.downloadStatus !== ImageDownloadStatus.FAILED
     ).length;
-
-    if (isDebugEnabled()) {
-      this.log.info('Service', 'Download summary', {
-        downloadId,
-        total: images.length,
-        successful: successfulDownloads,
-        failed: progress.failedImages,
-        successRate: `${((successfulDownloads / images.length) * 100).toFixed(1)}%`,
-      });
-    }
 
     if (successfulDownloads === 0) {
       throw new Error('All image downloads failed');
@@ -1510,12 +1712,14 @@ class DownloadManagerService implements DownloadManager {
   }
 
   /**
-   * Download a single image with retry logic
+   * Download a single image to durable chapter storage with retry-friendly errors.
    */
   private async downloadSingleImage(
     image: ChapterImage,
     downloadId: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    mangaId: string,
+    chapterNumber: string
   ): Promise<ChapterImage | null> {
     if (!image.originalUrl) {
       if (isDebugEnabled()) {
@@ -1527,95 +1731,36 @@ class DownloadManagerService implements DownloadManager {
       return null;
     }
 
-    const timeoutController = new AbortController();
-    const timeoutId = setTimeout(
-      () => timeoutController.abort(),
-      DOWNLOAD_TIMEOUT
-    );
-
-    const startTime = Date.now();
-
     try {
-      if (isDebugEnabled()) {
-        this.log.info('Service', `⬇️ Downloading image ${image.pageNumber}`, {
-          downloadId,
-          pageNumber: image.pageNumber,
-          url: image.originalUrl.substring(0, 100) + '...',
-        });
-      }
+      const savedImage = await chapterStorageService.downloadAndSaveImage(
+        mangaId,
+        chapterNumber,
+        image,
+        signal
+      );
 
-      const combinedSignal = this.combineAbortSignals([
-        signal,
-        timeoutController.signal,
-      ]);
-
-      const response = await fetch(image.originalUrl, {
-        signal: combinedSignal,
-        headers: {
-          ...MANGA_IMAGE_REQUEST_HEADERS,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status} for image ${image.pageNumber}`
-        );
-      }
-
-      const blob = await response.blob();
-      const downloadTime = Date.now() - startTime;
+      const fileSize = savedImage.fileSize || 0;
 
       // Update downloaded bytes for progress tracking
       const progress = this.activeDownloads.get(downloadId);
       if (progress) {
-        progress.downloadedBytes += blob.size;
-        progress.totalBytes += blob.size; // Estimate total based on downloaded
+        progress.downloadedBytes += fileSize;
+        progress.totalBytes += fileSize;
       }
 
-      if (isDebugEnabled()) {
-        this.log.info('Service', `Image ${image.pageNumber} downloaded`, {
-          downloadId,
-          pageNumber: image.pageNumber,
-          fileSize: `${(blob.size / 1024).toFixed(2)} KB`,
-          downloadTime: `${downloadTime}ms`,
-          speed: `${(blob.size / 1024 / (downloadTime / 1000)).toFixed(2)} KB/s`,
-        });
-      }
-
-      return {
-        ...image,
-        downloadStatus: ImageDownloadStatus.COMPLETED,
-        fileSize: blob.size,
-      };
+      return savedImage;
     } catch (error) {
-      const downloadTime = Date.now() - startTime;
-
-      if (signal.aborted || timeoutController.signal.aborted) {
-        if (isDebugEnabled()) {
-          this.log.warn(
-            'Service',
-            `⏹️ Image ${image.pageNumber} download cancelled/timeout`,
-            {
-              downloadId,
-              pageNumber: image.pageNumber,
-              downloadTime: `${downloadTime}ms`,
-            }
-          );
-        }
+      if (signal.aborted) {
         throw error;
       }
 
       this.log.warn('Service', `Image ${image.pageNumber} download failed`, {
         downloadId,
         pageNumber: image.pageNumber,
-        url: image.originalUrl.substring(0, 100) + '...',
         error: error instanceof Error ? error.message : 'Unknown error',
-        downloadTime: `${downloadTime}ms`,
       });
 
       return null;
-    } finally {
-      clearTimeout(timeoutId);
     }
   }
 
@@ -1725,21 +1870,35 @@ class DownloadManagerService implements DownloadManager {
         'resume'
       );
 
-      const result = await this.performDownloadFromInterceptedRequest(
-        context.mangaId,
-        context.chapterNumber,
-        context.chapterId,
-        context.vrfToken,
-        downloadId,
-        abortController.signal,
-        context.refererUrl,
-        {
-          attempt: 1,
-          maxAttempts: MAX_RETRY_ATTEMPTS,
-          baseDelay: RETRY_DELAY_BASE,
-          multiplier: RETRY_DELAY_MULTIPLIER,
-        }
-      );
+      const result =
+        context.chapterId && context.vrfToken
+          ? await this.performDownloadFromInterceptedRequest(
+              context.mangaId,
+              context.chapterNumber,
+              context.chapterId,
+              context.vrfToken,
+              downloadId,
+              abortController.signal,
+              context.refererUrl,
+              {
+                attempt: 1,
+                maxAttempts: MAX_RETRY_ATTEMPTS,
+                baseDelay: RETRY_DELAY_BASE,
+                multiplier: RETRY_DELAY_MULTIPLIER,
+              }
+            )
+          : await this.performModernChapterDownload(
+              context.mangaId,
+              context.chapterNumber,
+              downloadId,
+              abortController.signal,
+              {
+                attempt: 1,
+                maxAttempts: MAX_RETRY_ATTEMPTS,
+                baseDelay: RETRY_DELAY_BASE,
+                multiplier: RETRY_DELAY_MULTIPLIER,
+              }
+            );
 
       await this.handleDownloadResult(downloadId, context, result);
     } catch (error) {
@@ -2015,23 +2174,6 @@ class DownloadManagerService implements DownloadManager {
     }
 
     return DownloadErrorType.UNKNOWN;
-  }
-
-  private combineAbortSignals(signals: AbortSignal[]): AbortSignal {
-    const controller = new AbortController();
-
-    for (const signal of signals) {
-      if (signal.aborted) {
-        controller.abort();
-        break;
-      }
-
-      signal.addEventListener('abort', () => {
-        controller.abort();
-      });
-    }
-
-    return controller.signal;
   }
 
   private delay(ms: number): Promise<void> {

@@ -401,60 +401,25 @@ class DownloadQueueService implements DownloadQueue {
   }
 
   private async executeDownload(item: DownloadQueueItem): Promise<void> {
-    // 1. Request WebView Interception
-    const tokens = await this.requestWebViewTokens(item);
     const downloadManagerService = this.getDownloadManagerService();
 
-    // 2. Call DownloadManager
-    const result =
-      await downloadManagerService.downloadChapterFromInterceptedRequest(
-        item.mangaId,
-        item.chapterNumber,
-        tokens.chapterId,
-        tokens.vrfToken,
-        item.chapterUrl,
-        item.mangaTitle
-      );
+    // Use the shared online-reader API path (MangaFireVrfHost). No per-chapter
+    // WebView intercept is required — that path was unreliable and remounted.
+    const result = await downloadManagerService.downloadChapter(
+      item.mangaId,
+      item.chapterNumber,
+      item.chapterUrl,
+      item.mangaTitle
+    );
 
     if (!result.success) {
       throw new Error(result.error?.message || 'Download failed');
     }
 
-    // Success!
     if (isDebugEnabled()) console.log(`Queue: Download success for ${item.id}`);
   }
 
-  // --- WebView Coordination Logic ---
-
-  private requestWebViewTokens(
-    item: DownloadQueueItem
-  ): Promise<{ chapterId: string; vrfToken: string }> {
-    return new Promise((resolve, reject) => {
-      // Set timeout for the whole process
-      const timeout = setTimeout(() => {
-        this.setActiveWebViewRequest(null);
-        reject(new Error('WebView Token Interception Timeout'));
-      }, 45000);
-
-      this.currentDownloadResolver = (data) => {
-        clearTimeout(timeout);
-        resolve(data);
-      };
-
-      this.currentDownloadRejecter = (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      };
-
-      this.setActiveWebViewRequest({
-        id: item.id,
-        mangaId: item.mangaId,
-        chapterNumber: item.chapterNumber,
-        url: item.chapterUrl,
-        attempt: 1,
-      });
-    });
-  }
+  // --- WebView Coordination Logic (legacy host APIs kept for BatchDownloadHost) ---
 
   // Called by Host (UI)
   subscribeWebView(
