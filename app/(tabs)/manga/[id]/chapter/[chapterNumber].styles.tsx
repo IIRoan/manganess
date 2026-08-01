@@ -193,6 +193,56 @@ export default function getStyles(colorScheme: ColorScheme) {
       textAlign: 'center',
       color: colors.error,
     },
+    chapterRetryButton: {
+      marginTop: 20,
+      paddingVertical: 12,
+      paddingHorizontal: 32,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
+    },
+    chapterRetryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+
+    // Failed pages banner (per-image load failures)
+    failedPagesBanner: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      zIndex: 145,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 6,
+    },
+    failedPagesBannerText: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 14,
+    },
+    failedPagesRetryButton: {
+      backgroundColor: colors.primary,
+      borderRadius: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+    },
+    failedPagesRetryText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
 
     // Controls styles
     controlsWrapper: {

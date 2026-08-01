@@ -2,6 +2,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useMemo,
 } from 'react';
@@ -15,12 +16,12 @@ import {
   Animated,
   StatusBar,
   TouchableWithoutFeedback,
-  ScrollView,
   Dimensions,
   GestureResponderEvent,
   FlatList,
   Modal,
   PanResponder,
+  ViewToken,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -51,6 +52,10 @@ import {
   horizontalPageIndexFromOffset,
   horizontalScrollIndexForPage,
 } from '@/utils/readerPageIndex';
+import {
+  computeManhwaScrollProgress,
+  DEFAULT_MANHWA_PAGE_HEIGHT,
+} from '@/utils/manhwaScrollProgress';
 import type { MangaDetails as MangaDetailsType } from '@/types';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { offlineCacheService } from '@/services/offlineCacheService';
@@ -84,6 +89,11 @@ import type {
   ReaderContentProfile,
 } from '@/types/settings';
 import ReaderSettingsSheet from '@/components/ReaderSettingsSheet';
+import ReaderRetryImage, {
+  ReaderImageStatus,
+  ReaderImageStatusHandler,
+} from '@/components/ReaderRetryImage';
+import { isForbiddenError, isRateLimitError } from '@/utils/httpErrors';
 import {
   hydrateMangaFromLocal,
 } from '@/utils/mangaOptimisticLoad';
@@ -145,31 +155,66 @@ function computePageImageSize(
 const ManhwaImage = React.memo(
   ({
     image,
+    pageIndex,
     onPress,
     colorScheme,
     isOnline,
     imageFit = 'width',
+    onStatusChange,
+    onHeightChange,
+    retryToken,
+    shouldLoad = true,
   }: {
     image: ChapterImage;
+    pageIndex: number;
     onPress: (event: GestureResponderEvent) => void;
     colorScheme: ColorScheme;
     isOnline?: boolean;
     imageFit?: ReaderImageFit;
+    onStatusChange?: ReaderImageStatusHandler;
+    /** Reports laid-out height so scroll % does not depend on FlatList contentSize. */
+    onHeightChange?: (pageIndex: number, height: number) => void;
+    retryToken?: number;
+    /** Sequential gate: false = wait for earlier pages, touch nothing. */
+    shouldLoad?: boolean;
   }) => {
     const [imageSize, setImageSize] = useState({
       width: Dimensions.get('window').width,
-      height: 400,
+      height: DEFAULT_MANHWA_PAGE_HEIGHT,
     });
     const [isImageLoaded, setIsImageLoaded] = useState(false);
+    const [resolvedLocalUri, setResolvedLocalUri] = useState<string | null>(
+      null
+    );
     const imageUri = image.localPath || image.originalUrl;
     const imageSource = buildMangaImageSource(imageUri);
+    // Once the manual download fallback kicks in, measure the local file —
+    // the remote URL is exactly the one that fails to load.
+    const measureUri = resolvedLocalUri || imageUri;
+
+    const handleStatusChange = useCallback(
+      (pageNumber: number, status: ReaderImageStatus, localUri?: string) => {
+        setIsImageLoaded(status !== 'loading');
+        if (localUri) {
+          setResolvedLocalUri(localUri);
+        }
+        onStatusChange?.(pageNumber, status);
+      },
+      [onStatusChange]
+    );
 
     useEffect(() => {
-      if (imageUri) {
+      onHeightChange?.(pageIndex, imageSize.height);
+    }, [pageIndex, imageSize.height, onHeightChange]);
+
+    useEffect(() => {
+      if (!shouldLoad) return;
+      setIsImageLoaded(false);
+      if (measureUri) {
         const { width: screenWidth, height: screenHeight } =
           Dimensions.get('window');
         getMangaImageSize(
-          imageUri,
+          measureUri,
           (width, height) => {
             // Vertical strip: width fit is the default; height/both shrink tall panels.
             if (imageFit === 'height') {
@@ -204,15 +249,36 @@ const ManhwaImage = React.memo(
             }
           },
           (error) => {
-            logger().error('UI', 'Error getting image size', { error });
+            logger().warn('UI', 'Error getting image size', { error });
             setImageSize({
               width: Dimensions.get('window').width,
-              height: 400,
+              height: DEFAULT_MANHWA_PAGE_HEIGHT,
             });
           }
         );
       }
-    }, [imageUri, imageFit]);
+    }, [measureUri, imageFit, shouldLoad]);
+
+    if (!shouldLoad) {
+      // Waiting for earlier pages: hold layout space, fire no requests.
+      return (
+        <View
+          style={[
+            getStyles(colorScheme).manhwaImageContainer,
+            {
+              height: imageSize.height,
+              alignItems: 'center',
+              justifyContent: 'center',
+            },
+          ]}
+        >
+          <ActivityIndicator
+            size="small"
+            color={Colors[colorScheme].primary}
+          />
+        </View>
+      );
+    }
 
     return (
       <TouchableWithoutFeedback onPress={onPress}>
@@ -225,7 +291,7 @@ const ManhwaImage = React.memo(
           ]}
         >
           {imageSource && (
-            <Image
+            <ReaderRetryImage
               source={imageSource}
               style={[
                 getStyles(colorScheme).manhwaImage,
@@ -236,17 +302,11 @@ const ManhwaImage = React.memo(
               ]}
               contentFit={imageFit === 'fill' ? 'cover' : 'contain'}
               cachePolicy={isOnline ? 'memory-disk' : 'disk'}
-              transition={200}
-              onError={(error) => {
-                logger().error('UI', 'Failed to load image', {
-                  pageNumber: image.pageNumber,
-                  error,
-                });
-                setIsImageLoaded(true);
-              }}
-              onLoad={() => {
-                setIsImageLoaded(true);
-              }}
+              pageNumber={image.pageNumber}
+              fallbackHeight={imageSize.height}
+              colors={Colors[colorScheme]}
+              retryToken={retryToken}
+              onStatusChange={handleStatusChange}
             />
           )}
           {!isImageLoaded && (
@@ -272,11 +332,17 @@ const MangaPageImage = React.memo(
     isOnline,
     imageFit,
     canvasColor,
+    colorScheme,
+    onStatusChange,
+    retryToken,
   }: {
     image: ChapterImage;
     isOnline?: boolean;
     imageFit: ReaderImageFit;
     canvasColor: string;
+    colorScheme: ColorScheme;
+    onStatusChange?: ReaderImageStatusHandler;
+    retryToken?: number;
   }) => {
     const { width: screenWidth, height: screenHeight } =
       Dimensions.get('window');
@@ -285,13 +351,27 @@ const MangaPageImage = React.memo(
       height: screenHeight,
       contentFit: 'contain' as 'contain' | 'cover',
     });
+    const [resolvedLocalUri, setResolvedLocalUri] = useState<string | null>(
+      null
+    );
     const imageUri = image.localPath || image.originalUrl;
     const imageSource = buildMangaImageSource(imageUri);
+    const measureUri = resolvedLocalUri || imageUri;
+
+    const handleStatusChange = useCallback(
+      (pageNumber: number, status: ReaderImageStatus, localUri?: string) => {
+        if (localUri) {
+          setResolvedLocalUri(localUri);
+        }
+        onStatusChange?.(pageNumber, status);
+      },
+      [onStatusChange]
+    );
 
     useEffect(() => {
-      if (!imageUri) return;
+      if (!measureUri) return;
       getMangaImageSize(
-        imageUri,
+        measureUri,
         (width, height) => {
           setLayout(
             computePageImageSize(
@@ -311,7 +391,7 @@ const MangaPageImage = React.memo(
           });
         }
       );
-    }, [imageUri, imageFit, screenWidth, screenHeight]);
+    }, [measureUri, imageFit, screenWidth, screenHeight]);
 
     return (
       <View
@@ -327,18 +407,16 @@ const MangaPageImage = React.memo(
         ]}
       >
         {imageSource && (
-          <Image
+          <ReaderRetryImage
             source={imageSource}
             style={{ width: layout.width, height: layout.height }}
             contentFit={layout.contentFit}
             cachePolicy={isOnline ? 'memory-disk' : 'disk'}
-            transition={200}
-            onError={(error) => {
-              logger().error('UI', 'Failed to load image', {
-                pageNumber: image.pageNumber,
-                error,
-              });
-            }}
+            pageNumber={image.pageNumber}
+            fallbackHeight={layout.height}
+            colors={Colors[colorScheme]}
+            retryToken={retryToken}
+            onStatusChange={handleStatusChange}
           />
         )}
       </View>
@@ -391,13 +469,33 @@ export default function ReadChapterScreen() {
   /** 0–1 scroll progress for vertical (manhwa) reading. */
   const [scrollProgress, setScrollProgress] = useState(0);
   const lastReportedScrollProgressRef = useRef(0);
+  /** Measured row heights by FlatList index — used for stable scroll %. */
+  const pageHeightsRef = useRef<Map<number, number>>(new Map());
+  const manhwaScrollMetricsRef = useRef({
+    offsetY: 0,
+    viewportHeight: Dimensions.get('window').height,
+  });
+  const manhwaPageCountRef = useRef(0);
+  const [failedPageCount, setFailedPageCount] = useState(0);
+  const [isFailedBannerDismissed, setIsFailedBannerDismissed] = useState(false);
+  const [retryAllToken, setRetryAllToken] = useState(0);
+  const [loadRetryToken, setLoadRetryToken] = useState(0);
+  /**
+   * Sequential loading gate (vertical mode): page N+1 only starts loading
+   * once page N is on screen, so a failed page never becomes an invisible gap.
+   */
+  const [allowedPage, setAllowedPage] = useState(1);
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mangaFlatListRef = useRef<FlatList>(null);
-  const manhwaScrollViewRef = useRef<ScrollView>(null);
+  const manhwaListRef = useRef<FlatList<ChapterImage>>(null);
   const downloadedImagesRef = useRef<ChapterImage[] | null>(null);
+  const failedPagesRef = useRef<Set<number>>(new Set());
+  const loadedPagesRef = useRef<Set<number>>(new Set());
+  /** Highest page number such that every page up to it has loaded. */
+  const gateBoundaryRef = useRef(0);
 
   const navigationTimestampRef = useRef<number>(0);
   const lastNavigatedChapterRef = useRef<string>('');
@@ -1019,16 +1117,152 @@ export default function ReadChapterScreen() {
     });
   }, [mangaDetails?.type]);
 
-  const prefetchChapterImages = useCallback((images: ChapterImage[]) => {
-    images.slice(0, 5).forEach((image) => {
-      const uri = image.originalUrl || image.localPath;
-      if (uri?.startsWith('http')) {
-        Image.prefetch(uri, {
-          headers: MANGA_IMAGE_REQUEST_HEADERS,
-        }).catch(() => {});
+  const prefetchImagesFrom = useCallback(
+    (images: ChapterImage[], startIndex: number, count = 3) => {
+      images.slice(startIndex, startIndex + count).forEach((image) => {
+        const uri = image.originalUrl || image.localPath;
+        if (uri?.startsWith('http')) {
+          Image.prefetch(uri, {
+            headers: MANGA_IMAGE_REQUEST_HEADERS,
+          }).catch(() => {});
+        }
+      });
+    },
+    []
+  );
+
+  // Prefetch a few pages ahead of the first viewable item (paced, not bursted).
+  // Never prefetch past the sequential gate — a blocked page must not be
+  // bypassed, and hammering a failing URL just makes the CDN angrier.
+  const handleManhwaViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const firstIndex =
+        viewableItems.find((item) => item.index != null)?.index ?? 0;
+      const images = downloadedImagesRef.current;
+      if (!images) return;
+      const maxPage = gateBoundaryRef.current + 1;
+      const ahead = images.filter(
+        (image) =>
+          image.pageNumber > firstIndex + 1 && image.pageNumber <= maxPage
+      );
+      if (ahead.length > 0) {
+        prefetchImagesFrom(ahead, 0);
       }
-    });
+    }
+  ).current;
+
+  const manhwaViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 10,
+  }).current;
+
+  const reportManhwaScrollProgress = useCallback((next: number) => {
+    if (
+      Math.abs(next - lastReportedScrollProgressRef.current) >= 0.01 ||
+      next === 0 ||
+      next === 1
+    ) {
+      lastReportedScrollProgressRef.current = next;
+      setScrollProgress(next);
+    }
   }, []);
+
+  const recomputeManhwaScrollProgress = useCallback(() => {
+    const { offsetY, viewportHeight } = manhwaScrollMetricsRef.current;
+    const pageCount = manhwaPageCountRef.current;
+    if (pageCount <= 0) {
+      return;
+    }
+    const footerHeight = viewportHeight * 0.1; // matches chapterEndSpacer
+    reportManhwaScrollProgress(
+      computeManhwaScrollProgress({
+        offsetY,
+        viewportHeight,
+        pageCount,
+        heights: pageHeightsRef.current,
+        footerHeight,
+      })
+    );
+  }, [reportManhwaScrollProgress]);
+
+  const handleManhwaPageHeightChange = useCallback(
+    (pageIndex: number, height: number) => {
+      const prev = pageHeightsRef.current.get(pageIndex);
+      if (prev === height) {
+        return;
+      }
+      pageHeightsRef.current.set(pageIndex, height);
+      recomputeManhwaScrollProgress();
+    },
+    [recomputeManhwaScrollProgress]
+  );
+
+  const handlePageStatusChange = useCallback(
+    (pageNumber: number, status: ReaderImageStatus) => {
+      const failed = failedPagesRef.current;
+      if (status === 'failed') {
+        if (!failed.has(pageNumber)) {
+          failed.add(pageNumber);
+          setFailedPageCount(failed.size);
+          setIsFailedBannerDismissed(false);
+        }
+        return;
+      }
+
+      if (status !== 'loaded') {
+        return;
+      }
+
+      if (failed.has(pageNumber)) {
+        failed.delete(pageNumber);
+        setFailedPageCount(failed.size);
+      }
+
+      // Advance the sequential gate past every contiguously loaded page.
+      loadedPagesRef.current.add(pageNumber);
+      let boundary = gateBoundaryRef.current;
+      while (loadedPagesRef.current.has(boundary + 1)) {
+        boundary += 1;
+      }
+      if (boundary !== gateBoundaryRef.current) {
+        gateBoundaryRef.current = boundary;
+        setAllowedPage(boundary + 1);
+      }
+    },
+    []
+  );
+
+  const handleRetryFailedPages = useCallback(() => {
+    failedPagesRef.current.clear();
+    setFailedPageCount(0);
+    setIsFailedBannerDismissed(false);
+    setRetryAllToken((token) => token + 1);
+  }, []);
+
+  // Clear previous chapter before paint so navigation never flashes stale pages.
+  useLayoutEffect(() => {
+    setIsLoadingImages(true);
+    setError(null);
+    setDownloadedImages(null);
+    downloadedImagesRef.current = null;
+    failedPagesRef.current.clear();
+    loadedPagesRef.current.clear();
+    gateBoundaryRef.current = 0;
+    setAllowedPage(1);
+    setFailedPageCount(0);
+    setIsFailedBannerDismissed(false);
+    setIsDownloaded(false);
+    setIsOnlineChapter(false);
+    setContentType(null);
+    setCurrentPage(0);
+    setScrollProgress(0);
+    lastReportedScrollProgressRef.current = 0;
+    pageHeightsRef.current.clear();
+    manhwaScrollMetricsRef.current = {
+      offsetY: 0,
+      viewportHeight: Dimensions.get('window').height,
+    };
+    manhwaPageCountRef.current = 0;
+  }, [id, chapterNumber]);
 
   useEffect(() => {
     const loadToken = Symbol('chapter-load');
@@ -1042,11 +1276,6 @@ export default function ReadChapterScreen() {
           setIsLoadingImages(false);
         }
         return;
-      }
-
-      if (isActive()) {
-        setIsLoadingImages(true);
-        setError(null);
       }
 
       try {
@@ -1086,6 +1315,9 @@ export default function ReadChapterScreen() {
           setIsOnlineChapter(false);
           setDownloadedImages(images);
           downloadedImagesRef.current = images;
+          const firstPage = Math.min(...images.map((i) => i.pageNumber));
+          gateBoundaryRef.current = firstPage - 1;
+          setAllowedPage(firstPage);
           setCurrentPage(0);
 
           try {
@@ -1144,8 +1376,10 @@ export default function ReadChapterScreen() {
           setIsOnlineChapter(true);
           setDownloadedImages(onlineImages);
           downloadedImagesRef.current = onlineImages;
+          const firstPage = Math.min(...onlineImages.map((i) => i.pageNumber));
+          gateBoundaryRef.current = firstPage - 1;
+          setAllowedPage(firstPage);
           setCurrentPage(0);
-          prefetchChapterImages(onlineImages);
 
           try {
             const detectedType = await detectContentType(onlineImages);
@@ -1198,7 +1432,13 @@ export default function ReadChapterScreen() {
             mangaId: id,
             chapterNumber,
           });
-          setError('Failed to load chapter.');
+          setError(
+            isRateLimitError(error)
+              ? 'MangaFire is busy right now. Wait a moment and try again.'
+              : isForbiddenError(error)
+                ? 'MangaFire blocked this request. Try again in a few seconds.'
+                : 'Failed to load chapter.'
+          );
         }
       } finally {
         if (isActive()) {
@@ -1218,7 +1458,8 @@ export default function ReadChapterScreen() {
     isOffline,
     detectContentType,
     mangaDetails?.chapters,
-    prefetchChapterImages,
+    prefetchImagesFrom,
+    loadRetryToken,
   ]);
 
   const fetchDetails = useCallback(async () => {
@@ -1368,7 +1609,7 @@ export default function ReadChapterScreen() {
 
     const scrollToTop = () => {
       if (effectiveLayout === 'vertical') {
-        manhwaScrollViewRef.current?.scrollTo({ x: 0, y: 0, animated: false });
+        manhwaListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } else {
         try {
           mangaFlatListRef.current?.scrollToIndex({
@@ -1576,16 +1817,36 @@ export default function ReadChapterScreen() {
     ]
   );
 
-  // Manhwa-style continuous scrolling renderer
+  // Manhwa-style continuous scrolling renderer.
+  // Windowed FlatList: only a viewport plus a small buffer mounts at once,
+  // which keeps concurrent CDN image requests low (rate-limit prevention).
   const renderManhwaChapter = () => {
     const sortedImages = downloadedImages!.sort(
       (a, b) => a.pageNumber - b.pageNumber
     );
+    manhwaPageCountRef.current = sortedImages.length;
 
     return (
-      <ScrollView
+      <FlatList
         key={`${offlineChapterRenderKey}-vertical-${readerBackground}-${readerImageFit}`}
-        ref={manhwaScrollViewRef}
+        ref={manhwaListRef}
+        data={sortedImages}
+        renderItem={({ item, index }) => (
+          <ManhwaImage
+            image={item}
+            pageIndex={index}
+            onPress={handleDownloadedChapterTouch}
+            colorScheme={colorScheme}
+            isOnline={isOnlineChapter}
+            imageFit={readerImageFit}
+            onStatusChange={handlePageStatusChange}
+            onHeightChange={handleManhwaPageHeightChange}
+            retryToken={retryAllToken}
+            shouldLoad={item.pageNumber <= allowedPage}
+          />
+        )}
+        keyExtractor={(item) => `page-${item.pageNumber}`}
+        extraData={allowedPage}
         style={[styles.webView, { backgroundColor: readerCanvasColor }]}
         contentContainerStyle={[
           styles.manhwaImagesContainer,
@@ -1594,37 +1855,22 @@ export default function ReadChapterScreen() {
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
         scrollEventThrottle={16}
+        initialNumToRender={3}
+        maxToRenderPerBatch={4}
+        windowSize={5}
+        removeClippedSubviews
+        onViewableItemsChanged={handleManhwaViewableItemsChanged}
+        viewabilityConfig={manhwaViewabilityConfig}
+        ListFooterComponent={<View style={styles.chapterEndSpacer} />}
         onScroll={(event) => {
-          const { contentOffset, contentSize, layoutMeasurement } =
-            event.nativeEvent;
-          const maxScroll = contentSize.height - layoutMeasurement.height;
-          const next =
-            maxScroll <= 0
-              ? 0
-              : Math.min(1, Math.max(0, contentOffset.y / maxScroll));
-          // Avoid re-rendering on every pixel — update at ~1% steps.
-          if (
-            Math.abs(next - lastReportedScrollProgressRef.current) >= 0.01 ||
-            next === 0 ||
-            next === 1
-          ) {
-            lastReportedScrollProgressRef.current = next;
-            setScrollProgress(next);
-          }
+          const { contentOffset, layoutMeasurement } = event.nativeEvent;
+          manhwaScrollMetricsRef.current = {
+            offsetY: contentOffset.y,
+            viewportHeight: layoutMeasurement.height,
+          };
+          recomputeManhwaScrollProgress();
         }}
-      >
-        {sortedImages.map((image) => (
-          <ManhwaImage
-            key={`page-${image.pageNumber}`}
-            image={image}
-            onPress={handleDownloadedChapterTouch}
-            colorScheme={colorScheme}
-            isOnline={isOnlineChapter}
-            imageFit={readerImageFit}
-          />
-        ))}
-        <View style={styles.chapterEndSpacer} />
-      </ScrollView>
+      />
     );
   };
 
@@ -1647,6 +1893,9 @@ export default function ReadChapterScreen() {
             isOnline={isOnlineChapter}
             imageFit={readerImageFit}
             canvasColor={readerCanvasColor}
+            colorScheme={colorScheme}
+            onStatusChange={handlePageStatusChange}
+            retryToken={retryAllToken}
           />
         </View>
       </TouchableWithoutFeedback>
@@ -1716,13 +1965,21 @@ export default function ReadChapterScreen() {
       {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.chapterRetryButton}
+            onPress={() => setLoadRetryToken((token) => token + 1)}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading chapter"
+          >
+            <Text style={styles.chapterRetryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <>
           <View
             style={[styles.webViewContainer, { backgroundColor: readerCanvasColor }]}
           >
-            {isLoadingImages && !downloadedImages ? (
+            {isLoadingImages ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator
                   testID="loading-indicator"
@@ -1737,6 +1994,14 @@ export default function ReadChapterScreen() {
                 <Text style={styles.errorText}>
                   {error || 'Chapter is not available.'}
                 </Text>
+                <TouchableOpacity
+                  style={styles.chapterRetryButton}
+                  onPress={() => setLoadRetryToken((token) => token + 1)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading chapter"
+                >
+                  <Text style={styles.chapterRetryButtonText}>Retry</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -1946,6 +2211,41 @@ export default function ReadChapterScreen() {
                 />
               </View>
             )}
+
+          {/* Failed pages banner */}
+          {failedPageCount > 0 && !isFailedBannerDismissed && (
+            <View
+              style={[
+                styles.failedPagesBanner,
+                { bottom: Math.max(insets.bottom, 0) + 16 },
+              ]}
+            >
+              <Text style={styles.failedPagesBannerText}>
+                {failedPageCount} {failedPageCount === 1 ? 'page' : 'pages'}{' '}
+                failed to load
+              </Text>
+              <TouchableOpacity
+                onPress={handleRetryFailedPages}
+                style={styles.failedPagesRetryButton}
+                accessibilityRole="button"
+                accessibilityLabel="Retry failed pages"
+              >
+                <Text style={styles.failedPagesRetryText}>Retry</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setIsFailedBannerDismissed(true)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss failed pages notice"
+              >
+                <Ionicons
+                  name="close"
+                  size={18}
+                  color={Colors[colorScheme].text}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Dim overlay */}
           {readerDimPercent > 0 && (

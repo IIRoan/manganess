@@ -1,6 +1,12 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import { MANGA_API_URL } from '@/constants/Config';
 import { logger } from '@/utils/logger';
+import {
+  getErrorMessage,
+  isForbiddenError,
+  isRateLimitError,
+  withApiRetry,
+} from '@/utils/httpErrors';
 import { stripHtmlToText } from '@/utils/stripHtmlToText';
 import {
   peekFreshCache,
@@ -107,23 +113,41 @@ async function apiGet<T>(
   params?: Record<string, unknown>,
   config?: AxiosRequestConfig
 ): Promise<T> {
-  return withMangaFireRateLimit(async () => {
-    let requestParams: Record<string, unknown> | undefined;
-    try {
-      requestParams = await appendVrfParams(path, params);
-    } catch (error) {
-      logVrfFailure(path, error);
-      throw error;
-    }
+  const log = logger();
 
-    const response = await axios.get<T>(`${API_BASE}${path}`, {
-      headers: DEFAULT_HEADERS,
-      timeout: 20000,
-      params: requestParams,
-      ...config,
-    });
-    return response.data;
-  });
+  return withApiRetry(
+    async () =>
+      withMangaFireRateLimit(async () => {
+        let requestParams: Record<string, unknown> | undefined;
+        try {
+          // Fresh VRF on every attempt — stale tokens commonly cause 403s
+          requestParams = await appendVrfParams(path, params);
+        } catch (error) {
+          logVrfFailure(path, error);
+          throw error;
+        }
+
+        const response = await axios.get<T>(`${API_BASE}${path}`, {
+          headers: DEFAULT_HEADERS,
+          timeout: 20000,
+          params: requestParams,
+          ...config,
+        });
+        return response.data;
+      }),
+    {
+      onRetry: ({ attempt, delayMs, error }) => {
+        log.warn('Network', 'MangaFire API retry scheduled', {
+          path,
+          attempt,
+          delayMs,
+          forbidden: isForbiddenError(error),
+          rateLimited: isRateLimitError(error),
+          error: getErrorMessage(error),
+        });
+      },
+    }
+  );
 }
 
 function mapNames(
@@ -456,26 +480,60 @@ export function mapApiTitleToMangaDetails(
   };
 }
 
-export async function fetchHomeMangaData(): Promise<{
+export interface HomeMangaData {
   mostViewed: MangaItem[];
   newReleases: MangaItem[];
   featuredManga: MangaItem | null;
-}> {
+  /** True when one section failed but the other returned data. */
+  partialFailure: boolean;
+}
+
+function settledValues(
+  label: string,
+  result: PromiseSettledResult<MangaItem[]>
+): { items: MangaItem[]; error: unknown } {
+  if (result.status === 'fulfilled') {
+    return { items: result.value, error: undefined };
+  }
+  logger().warn('Service', `Home ${label} fetch failed after retries`, {
+    error: getErrorMessage(result.reason),
+  });
+  return { items: [], error: result.reason };
+}
+
+export async function fetchHomeMangaData(): Promise<HomeMangaData> {
   return scheduleMangaFireRequest(
     'home',
     async () => {
-      const [mostViewed, newReleases] = await Promise.all([
+      const [trendingResult, latestResult] = await Promise.allSettled([
         fetchTrendingTitles(),
         fetchLatestTitles(),
       ]);
 
+      const trending = settledValues('trending', trendingResult);
+      const latest = settledValues('latest', latestResult);
+
+      const mostViewed = trending.items;
+      const newReleases = latest.items;
+      const firstError = trending.error ?? latest.error;
+
+      if (mostViewed.length === 0 && newReleases.length === 0) {
+        throw firstError instanceof Error
+          ? firstError
+          : new Error('Failed to fetch home manga data');
+      }
+
       return {
         mostViewed,
         newReleases,
-        featuredManga: mostViewed[0] || null,
+        featuredManga: mostViewed[0] ?? newReleases[0] ?? null,
+        partialFailure: firstError !== undefined,
       };
     },
-    { ttlMs: REQUEST_HUB_TTLS.home }
+    {
+      ttlMs: REQUEST_HUB_TTLS.home,
+      shouldCache: (value) => !value.partialFailure,
+    }
   );
 }
 

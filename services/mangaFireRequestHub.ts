@@ -71,15 +71,17 @@ export function peekFreshCache<T>(key: string, ttlMs: number): T | undefined {
   return cached.value as T;
 }
 
-export interface ScheduleMangaFireRequestOptions {
+export interface ScheduleMangaFireRequestOptions<T = unknown> {
   ttlMs?: number;
   force?: boolean;
+  /** Return false to skip writing a successful result into the hub cache. */
+  shouldCache?: (value: T) => boolean;
 }
 
 export async function scheduleMangaFireRequest<T>(
   key: string,
   operation: () => Promise<T>,
-  options: ScheduleMangaFireRequestOptions = {}
+  options: ScheduleMangaFireRequestOptions<T> = {}
 ): Promise<T> {
   // Guard against undefined TTLs from require-cycle init (ttlMs > 0 would skip cache).
   const ttlMs =
@@ -105,7 +107,10 @@ export async function scheduleMangaFireRequest<T>(
 
   const promise = operation()
     .then((value) => {
-      memoryCache.set(key, { value, cachedAt: Date.now() });
+      const allowCache = options.shouldCache?.(value) ?? true;
+      if (allowCache) {
+        memoryCache.set(key, { value, cachedAt: Date.now() });
+      }
       return value;
     })
     .finally(() => {

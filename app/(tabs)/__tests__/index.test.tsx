@@ -111,6 +111,7 @@ const defaultHomeData = {
     type: 'manga',
     rank: 1,
   },
+  partialFailure: false,
 };
 
 jest.mock('@expo/vector-icons', () => ({
