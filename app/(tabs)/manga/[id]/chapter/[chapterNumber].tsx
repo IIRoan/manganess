@@ -1237,7 +1237,10 @@ export default function ReadChapterScreen() {
       }
       if (boundary !== gateBoundaryRef.current) {
         gateBoundaryRef.current = boundary;
-        setAllowedPage(boundary + 1);
+        setAllowedPage((prev) => {
+          const next = boundary + 1;
+          return prev === next ? prev : next;
+        });
       }
     },
     []
@@ -1256,6 +1259,41 @@ export default function ReadChapterScreen() {
     let cancelled = false;
     // Mutable id so effect cleanup can clearTimeout the latest retry timer.
     let retryTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const imagesByPage = new Map(
+      downloadedImages.map((image) => [image.pageNumber, image])
+    );
+
+    // Advance over contiguous local / already-loaded pages in ONE pass.
+    // Calling setAllowedPage per page (via handlePageStatusChange) re-enters
+    // this effect synchronously and hits "Maximum update depth exceeded".
+    let boundary = gateBoundaryRef.current;
+    for (;;) {
+      const nextPage = boundary + 1;
+      const image = imagesByPage.get(nextPage);
+      if (!image) {
+        break;
+      }
+      if (loadedPagesRef.current.has(nextPage)) {
+        boundary = nextPage;
+        continue;
+      }
+      const uri = image.localPath || image.originalUrl;
+      if (uri && !uri.startsWith('http')) {
+        loadedPagesRef.current.add(nextPage);
+        gatePrefetchInflightRef.current.delete(nextPage);
+        boundary = nextPage;
+        continue;
+      }
+      break;
+    }
+    if (boundary !== gateBoundaryRef.current) {
+      gateBoundaryRef.current = boundary;
+      setAllowedPage((prev) => {
+        const next = boundary + 1;
+        return prev === next ? prev : next;
+      });
+    }
 
     const prefetchForGate = (pageNumber: number, uri: string, attempt: number) => {
       Image.prefetch(uri, {
@@ -1286,8 +1324,9 @@ export default function ReadChapterScreen() {
         });
     };
 
+    const prefetchLimit = Math.max(allowedPage, boundary + 1);
     for (const image of downloadedImages) {
-      if (image.pageNumber > allowedPage) {
+      if (image.pageNumber > prefetchLimit) {
         continue;
       }
       if (loadedPagesRef.current.has(image.pageNumber)) {
@@ -1298,17 +1337,11 @@ export default function ReadChapterScreen() {
       }
 
       const uri = image.localPath || image.originalUrl;
-      if (!uri) {
+      if (!uri || !uri.startsWith('http')) {
         continue;
       }
 
       gatePrefetchInflightRef.current.add(image.pageNumber);
-
-      if (!uri.startsWith('http')) {
-        handlePageStatusChange(image.pageNumber, 'loaded');
-        continue;
-      }
-
       prefetchForGate(image.pageNumber, uri, 0);
     }
 
