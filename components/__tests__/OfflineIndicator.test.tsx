@@ -1,4 +1,3 @@
-import React from 'react';
 import { Animated } from 'react-native';
 import { act, render } from '@testing-library/react-native';
 import { usePathname } from 'expo-router';
@@ -259,7 +258,7 @@ describe('OfflineIndicator', () => {
       // Find Ionicons component
       const icons = UNSAFE_getAllByType('Ionicons' as any);
       expect(icons.length).toBeGreaterThan(0);
-      expect(icons[0].props.name).toBe('cloud-offline-outline');
+      expect(icons[0]!.props.name).toBe('cloud-offline-outline');
     });
 
     it('shows cloud-done icon when back online', () => {
@@ -274,7 +273,7 @@ describe('OfflineIndicator', () => {
 
       const icons = UNSAFE_getAllByType('Ionicons' as any);
       expect(icons.length).toBeGreaterThan(0);
-      expect(icons[0].props.name).toBe('cloud-done-outline');
+      expect(icons[0]!.props.name).toBe('cloud-done-outline');
     });
   });
 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "manganess",
     "slug": "manganess",
-    "version": "1.12",
+    "version": "1.13",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
@@ -29,11 +29,12 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-image",
+      "expo-sharing"
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     },
     "extra": {
       "eas": {
@@ -41,12 +42,14 @@
       }
     },
     "owner": "iroan",
-    "runtimeVersion": "1.12.0",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/e39fdc53-b1f4-4839-8e48-07a5e789d5eb",
-      "checkAutomatically": "ON_LOAD"
+      "checkAutomatically": "ON_ERROR_RECOVERY"
     }
   }
 }

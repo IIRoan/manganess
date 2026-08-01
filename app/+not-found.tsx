@@ -1,7 +1,6 @@
-import React from 'react';
 import { Link, Stack } from 'expo-router';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { useTheme, Theme } from '@react-navigation/native';
+import { StyleSheet, View, Text, TouchableOpacity, type ColorValue } from 'react-native';
+import { useTheme } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function NotFoundScreen() {
@@ -34,7 +33,14 @@ export default function NotFoundScreen() {
   );
 }
 
-const getStyles = (colors: Theme['colors']) =>
+const getStyles = (colors: {
+  primary: ColorValue;
+  background: ColorValue;
+  card: ColorValue;
+  text: ColorValue;
+  border: ColorValue;
+  notification: ColorValue;
+}) =>
   StyleSheet.create({
     container: {
       flex: 1,

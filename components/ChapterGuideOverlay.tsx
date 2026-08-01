@@ -353,17 +353,17 @@ export const hasSeenChapterGuide = async (): Promise<boolean> => {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'space-between',
     zIndex: 100,
   },
   fullOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'transparent',
   },
   guideOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 1,
   },
   navHighlight: {
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   edgeTapAreas: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
