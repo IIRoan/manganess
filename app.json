@@ -42,9 +42,7 @@
       }
     },
     "owner": "iroan",
-    "runtimeVersion": {
-      "policy": "sdkVersion"
-    },
+    "runtimeVersion": "1.13.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,

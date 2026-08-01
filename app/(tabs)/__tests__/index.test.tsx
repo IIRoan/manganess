@@ -12,7 +12,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockRouterNavigate }),
 }));
 
-jest.mock('@react-navigation/native', () => ({
+jest.mock('expo-router/react-navigation', () => ({
   useFocusEffect: jest.fn((cb) => {
     cb();
   }),
