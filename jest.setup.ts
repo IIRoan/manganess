@@ -209,6 +209,7 @@ jest.mock('expo-file-system', () => {
 
   const Paths = {
     cache: 'mock-cache',
+    document: 'mock-docs',
     documentDirectory: 'mock-docs',
     availableDiskSpace: 10 * 1024 * 1024 * 1024,
     totalDiskSpace: 64 * 1024 * 1024 * 1024,
@@ -252,6 +253,35 @@ jest.mock('@/services/offlineCacheService', () => {
       ),
       getCachedMangaDetails: jest.fn(
         async (id: string) => mockOfflineCacheStore.get(id) ?? null
+      ),
+      patchCachedChapterApiId: jest.fn(
+        async (id: string, chapterNumber: string, chapterApiId: string) => {
+          const existing = mockOfflineCacheStore.get(id);
+          if (!existing?.chapters) {
+            return false;
+          }
+          const nextUrl = `/chapter/${chapterApiId}`;
+          let changed = false;
+          const chapters = existing.chapters.map((chapter: any) => {
+            if (String(chapter.number) !== String(chapterNumber)) {
+              return chapter;
+            }
+            if (chapter.url === nextUrl) {
+              return chapter;
+            }
+            changed = true;
+            return { ...chapter, url: nextUrl };
+          });
+          if (!changed) {
+            return false;
+          }
+          mockOfflineCacheStore.set(id, {
+            ...existing,
+            chapters,
+            cachedAt: Date.now(),
+          });
+          return true;
+        }
       ),
       getBookmarkedMangaDetails: jest.fn(async () =>
         Array.from(mockOfflineCacheStore.values()).filter(
@@ -307,7 +337,28 @@ jest.mock('@/services/chapterStorageService', () => {
           return downloads.get(mangaId)?.has(chapterNumber) ?? false;
         }
       ),
-      getChapterImages: jest.fn(async () => []),
+      getChapterImages: jest.fn(async (mangaId: string, chapterNumber: string) => {
+        return downloads.get(mangaId)?.get(chapterNumber) ?? null;
+      }),
+      downloadAndSaveImage: jest.fn(
+        async (
+          mangaId: string,
+          chapterNumber: string,
+          image: any
+        ) => {
+          const saved = {
+            ...image,
+            localPath: `file://mock/${mangaId}/${chapterNumber}/${image.pageNumber}.jpg`,
+            fileSize: 1024,
+            downloadStatus: 'completed',
+          };
+          const chapters = downloads.get(mangaId) ?? new Map<string, any>();
+          const existing = chapters.get(chapterNumber) ?? [];
+          chapters.set(chapterNumber, [...existing, saved]);
+          downloads.set(mangaId, chapters);
+          return saved;
+        }
+      ),
       saveChapterImages: jest.fn(
         async (mangaId: string, chapterNumber: string, images: any[]) => {
           const chapters = downloads.get(mangaId) ?? new Map<string, any>();

@@ -1,11 +1,11 @@
 {
   "name": "manganess",
   "main": "expo-router/entry",
-  "version": "1.13",
+  "version": "1.14",
   "expo": {
     "name": "manganess",
     "slug": "manganess",
-    "version": "1.13",
+    "version": "1.14",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
@@ -42,7 +42,7 @@
         "projectId": "e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
       }
     },
-    "runtimeVersion": "1.13.0",
+    "runtimeVersion": "1.14.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,

@@ -6,7 +6,6 @@ import GenresScreen from '../genres';
 import axios from 'axios';
 import { router } from 'expo-router';
 import { resetMangaFireRequestHubForTests } from '@/services/mangaFireRequestHub';
-import * as mangaFireApi from '@/services/mangaFireApi';
 
 // Mock router
 jest.mock('expo-router', () => ({
@@ -251,9 +250,11 @@ describe('GenresScreen', () => {
   });
 
   it('handles fetch error gracefully', async () => {
-    const fetchSpy = jest
-      .spyOn(mangaFireApi, 'fetchTitlesByGenre')
-      .mockRejectedValueOnce(new Error('Network error'));
+    // Non-retryable (404) so withApiRetry fails immediately instead of ~3s backoff.
+    mockedAxios.get.mockRejectedValue({
+      message: 'Request failed with status code 404',
+      response: { status: 404 },
+    });
 
     const { getByText } = renderScreen();
 
@@ -264,8 +265,6 @@ describe('GenresScreen', () => {
     await waitFor(() => {
       expect(getByText('No manga found for this genre')).toBeTruthy();
     });
-
-    fetchSpy.mockRestore();
   });
 
   it('navigates to home when back button pressed on genre list', async () => {
