@@ -1389,16 +1389,13 @@ export default function ReadChapterScreen() {
 
         // Fast path: load this chapter's local pages directly.
         // Avoid scanning every downloaded chapter (that made opens multi-second).
-        let matchedChapter: string | null = null;
         let images =
           (await chapterStorageService.getChapterImages(
             mangaId,
             requestedChapter
           )) ?? null;
 
-        if (images && images.length > 0) {
-          matchedChapter = requestedChapter;
-        } else {
+        if (!images || images.length === 0) {
           const downloadedChapters =
             await chapterStorageService.getDownloadedChapters(mangaId);
           if (!isActive()) return;
@@ -1410,7 +1407,6 @@ export default function ReadChapterScreen() {
               normalizeChapterNumber(ch) === normalizedRequested
           );
           if (matchingChapter) {
-            matchedChapter = matchingChapter;
             images = await chapterStorageService.getChapterImages(
               mangaId,
               matchingChapter

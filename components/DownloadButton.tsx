@@ -29,7 +29,7 @@ interface DownloadButtonProps {
   mangaId: string;
   chapterNumber: string;
   chapterUrl: string;
-  mangaTitle?: string;
+  mangaTitle?: string | undefined;
   size?: 'small' | 'medium' | 'large';
   variant?: 'icon' | 'text' | 'full';
   appearance?: 'default' | 'swipe';

@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from '../index';
 import { getRecentlyReadManga } from '@/services/readChapterService';
 import { fetchHomeMangaData } from '@/services/mangaFireService';
+import type { HomeMangaData } from '@/services/mangaFireApi';
 
 // Mock router
 const mockRouterNavigate = jest.fn();
@@ -80,7 +81,7 @@ jest.mock('@/hooks/useCachedData', () => ({
   }),
 }));
 
-const defaultHomeData = {
+const defaultHomeData: HomeMangaData = {
   mostViewed: [
     {
       id: '1',
