@@ -60,7 +60,7 @@ interface SwipeableChapterItemProps {
   getCurrentlyOpenSwipeable: () => SwipeableMethods | null;
   setCurrentlyOpenSwipeable: (swipeable: SwipeableMethods | null) => void;
   mangaId?: string;
-  mangaTitle?: string;
+  mangaTitle?: string | undefined;
   showDownloadButton?: boolean;
   onDownloadStart?: () => void;
   onDownloadComplete?: () => void;
@@ -139,7 +139,7 @@ const DownloadActionButton = React.memo(
     backgroundColor: string;
     buttonWidth: number;
     mangaId: string;
-    mangaTitle?: string;
+    mangaTitle?: string | undefined;
     chapter: Chapter;
     disabled: boolean;
     onDownloadStart: () => void;
