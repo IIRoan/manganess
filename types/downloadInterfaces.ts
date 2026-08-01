@@ -45,6 +45,12 @@ export interface ChapterStorageService {
     chapterNumber: string,
     images: ChapterImage[]
   ): Promise<void>;
+  downloadAndSaveImage(
+    mangaId: string,
+    chapterNumber: string,
+    image: ChapterImage,
+    signal?: AbortSignal
+  ): Promise<ChapterImage>;
   getChapterImages(
     mangaId: string,
     chapterNumber: string

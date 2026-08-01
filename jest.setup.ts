@@ -209,6 +209,7 @@ jest.mock('expo-file-system', () => {
 
   const Paths = {
     cache: 'mock-cache',
+    document: 'mock-docs',
     documentDirectory: 'mock-docs',
     availableDiskSpace: 10 * 1024 * 1024 * 1024,
     totalDiskSpace: 64 * 1024 * 1024 * 1024,
@@ -336,7 +337,28 @@ jest.mock('@/services/chapterStorageService', () => {
           return downloads.get(mangaId)?.has(chapterNumber) ?? false;
         }
       ),
-      getChapterImages: jest.fn(async () => []),
+      getChapterImages: jest.fn(async (mangaId: string, chapterNumber: string) => {
+        return downloads.get(mangaId)?.get(chapterNumber) ?? null;
+      }),
+      downloadAndSaveImage: jest.fn(
+        async (
+          mangaId: string,
+          chapterNumber: string,
+          image: any
+        ) => {
+          const saved = {
+            ...image,
+            localPath: `file://mock/${mangaId}/${chapterNumber}/${image.pageNumber}.jpg`,
+            fileSize: 1024,
+            downloadStatus: 'completed',
+          };
+          const chapters = downloads.get(mangaId) ?? new Map<string, any>();
+          const existing = chapters.get(chapterNumber) ?? [];
+          chapters.set(chapterNumber, [...existing, saved]);
+          downloads.set(mangaId, chapters);
+          return saved;
+        }
+      ),
       saveChapterImages: jest.fn(
         async (mangaId: string, chapterNumber: string, images: any[]) => {
           const chapters = downloads.get(mangaId) ?? new Map<string, any>();
