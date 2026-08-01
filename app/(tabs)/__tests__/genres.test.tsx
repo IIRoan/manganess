@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -6,6 +5,7 @@ import GenresScreen from '../genres';
 import axios from 'axios';
 import { router } from 'expo-router';
 import { resetMangaFireRequestHubForTests } from '@/services/mangaFireRequestHub';
+import * as mangaFireApi from '@/services/mangaFireApi';
 
 // Mock router
 jest.mock('expo-router', () => ({
@@ -250,7 +250,9 @@ describe('GenresScreen', () => {
   });
 
   it('handles fetch error gracefully', async () => {
-    mockedAxios.get.mockRejectedValue(new Error('Network error'));
+    const fetchSpy = jest
+      .spyOn(mangaFireApi, 'fetchTitlesByGenre')
+      .mockRejectedValueOnce(new Error('Network error'));
 
     const { getByText } = renderScreen();
 
@@ -261,6 +263,8 @@ describe('GenresScreen', () => {
     await waitFor(() => {
       expect(getByText('No manga found for this genre')).toBeTruthy();
     });
+
+    fetchSpy.mockRestore();
   });
 
   it('navigates to home when back button pressed on genre list', async () => {

@@ -16,7 +16,7 @@ export default function getStyles(colorScheme: ColorScheme) {
 
   return StyleSheet.create({
     modalOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0,0,0,0.5)',
     },
     fallbackSheetContainer: {
@@ -46,11 +46,11 @@ export default function getStyles(colorScheme: ColorScheme) {
 
     // Chapter List Modal Styles
     chapterListModalOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     chapterListModalTouchLayer: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     chapterListContainer: {
       position: 'absolute',
@@ -472,7 +472,7 @@ export default function getStyles(colorScheme: ColorScheme) {
       borderRadius: 2,
     },
     readerDimOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       zIndex: 120,
     },
   });

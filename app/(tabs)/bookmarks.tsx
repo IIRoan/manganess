@@ -1324,7 +1324,7 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.tabIconDefault,
     },
     missingOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0, 0, 0, 0.68)',
       borderRadius: 10,
       alignItems: 'center',

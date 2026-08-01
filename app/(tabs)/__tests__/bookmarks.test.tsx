@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -483,7 +482,7 @@ describe('BookmarksScreen', () => {
     });
 
     // Press the first Clear Search button
-    fireEvent.press(getAllByText('Clear Search')[0]);
+    fireEvent.press(getAllByText('Clear Search')[0]!);
 
     await act(async () => {
       jest.runAllTimers();
@@ -1188,7 +1187,7 @@ describe('BookmarksScreen', () => {
 
     // Press the first manga card (multiple rendered due to section pages)
     const cards = getAllByTestId('manga-card-press-1');
-    fireEvent.press(cards[0]);
+    fireEvent.press(cards[0]!);
 
     await act(async () => {
       jest.runAllTimers();
@@ -1247,7 +1246,7 @@ describe('BookmarksScreen', () => {
       expect(queryByText('Loading...')).toBeNull();
     });
 
-    fireEvent.press(getAllByTestId('manga-card-press-old-id')[0]);
+    fireEvent.press(getAllByTestId('manga-card-press-old-id')[0]!);
 
     await waitFor(() => {
       expect(getByText('Bookmark source missing')).toBeTruthy();
@@ -1315,7 +1314,7 @@ describe('BookmarksScreen', () => {
 
     // Press remove bookmark button (first one)
     const removeButtons = getAllByTestId('manga-card-remove-bookmark-1');
-    fireEvent.press(removeButtons[0]);
+    fireEvent.press(removeButtons[0]!);
 
     await act(async () => {
       jest.runAllTimers();
@@ -1350,7 +1349,7 @@ describe('BookmarksScreen', () => {
 
     // Press change bookmark button (first one)
     const changeButtons = getAllByTestId('manga-card-change-bookmark-1');
-    fireEvent.press(changeButtons[0]);
+    fireEvent.press(changeButtons[0]!);
 
     await act(async () => {
       jest.runAllTimers();
@@ -1387,7 +1386,7 @@ describe('BookmarksScreen', () => {
 
     // Press remove bookmark button (first one)
     const removeButtons = getAllByTestId('manga-card-remove-bookmark-1');
-    fireEvent.press(removeButtons[0]);
+    fireEvent.press(removeButtons[0]!);
 
     await act(async () => {
       jest.runAllTimers();
@@ -1424,7 +1423,7 @@ describe('BookmarksScreen', () => {
 
     // Press change bookmark button (first one)
     const changeButtons = getAllByTestId('manga-card-change-bookmark-1');
-    fireEvent.press(changeButtons[0]);
+    fireEvent.press(changeButtons[0]!);
 
     await act(async () => {
       jest.runAllTimers();
