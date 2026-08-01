@@ -37,7 +37,7 @@ import type {
 } from '@/types/settings';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router/react-navigation';
+import { useFocusEffect } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
   Easing,

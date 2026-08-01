@@ -71,7 +71,7 @@ import {
   markChapterAsUnread,
 } from '@/services/readChapterService';
 import { chapterStorageService } from '@/services/chapterStorageService';
-import { useFocusEffect } from 'expo-router/react-navigation';
+import { useFocusEffect } from '@react-navigation/native';
 import LastReadChapterBar from '@/components/LastReadChapterBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHapticFeedback } from '@/utils/haptics';

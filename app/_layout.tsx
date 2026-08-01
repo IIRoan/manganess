@@ -4,7 +4,7 @@ import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider as NavigationThemeProvider,
-} from 'expo-router/react-navigation';
+} from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';

@@ -12,7 +12,7 @@ const mockRouterPush = jest.fn();
 const mockCheckMangaAvailability = jest.fn().mockResolvedValue('exists');
 
 // Mock all dependencies
-jest.mock('expo-router/react-navigation', () => ({
+jest.mock('@react-navigation/native', () => ({
   useFocusEffect: jest.fn((cb) => {
     // Call the callback synchronously, simulating focus
     cb();

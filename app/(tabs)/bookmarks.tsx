@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router/react-navigation';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
