@@ -1,6 +1,6 @@
 import { Link, Stack } from 'expo-router';
 import { StyleSheet, View, Text, TouchableOpacity, type ColorValue } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useTheme } from 'expo-router/react-navigation';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function NotFoundScreen() {
