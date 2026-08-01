@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -45,6 +45,8 @@ const RECENTLY_READ_CARD_WIDTH = Math.min(160, (SCREEN_WIDTH - 64) / 2);
 
 const DEFAULT_MANGA_COVER =
   'https://static.mangafire.to/default/img/no-image.jpg';
+
+const HOME_AUTO_RETRY_DELAYS_MS = [2000, 5000, 12000] as const;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -97,9 +99,60 @@ export default function HomeScreen() {
 
   const { scrollY, scrollHandler } = useParallaxScroll();
 
+  const homeRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const homeRetryAttemptRef = useRef(0);
+  const fetchMangaDataRef = useRef<(() => Promise<void>) | null>(null);
+
+  const clearHomeAutoRetry = useCallback(() => {
+    if (homeRetryTimeoutRef.current) {
+      clearTimeout(homeRetryTimeoutRef.current);
+      homeRetryTimeoutRef.current = null;
+    }
+  }, []);
+
+  const resetHomeAutoRetry = useCallback(() => {
+    homeRetryAttemptRef.current = 0;
+    clearHomeAutoRetry();
+  }, [clearHomeAutoRetry]);
+
+  const scheduleHomeAutoRetry = useCallback(
+    (reason: string) => {
+      if (isOffline) {
+        return;
+      }
+
+      const attempt = homeRetryAttemptRef.current;
+      if (attempt >= HOME_AUTO_RETRY_DELAYS_MS.length) {
+        return;
+      }
+
+      const delayMs = HOME_AUTO_RETRY_DELAYS_MS[attempt] ?? 12000;
+      clearHomeAutoRetry();
+      homeRetryAttemptRef.current = attempt + 1;
+
+      logger().info('Service', 'Scheduling home data auto-retry', {
+        reason,
+        attempt: attempt + 1,
+        delayMs,
+      });
+
+      homeRetryTimeoutRef.current = setTimeout(() => {
+        homeRetryTimeoutRef.current = null;
+        void fetchMangaDataRef.current?.();
+      }, delayMs);
+    },
+    [clearHomeAutoRetry, isOffline]
+  );
+
   const fetchMangaData = useCallback(async () => {
     try {
       setError(null);
+
+      if (isRefreshing) {
+        resetHomeAutoRetry();
+      }
 
       // 1. Load cached data immediately (Stale-while-revalidate)
       const cachedData = getCachedHomeData();
@@ -124,16 +177,45 @@ export default function HomeScreen() {
       }
 
       // 2. Fetch fresh data in background
-      const { mostViewed, newReleases, featuredManga: newFeatured } =
-        await fetchHomeMangaData();
+      const {
+        mostViewed,
+        newReleases: freshReleases,
+        featuredManga: newFeatured,
+        partialFailure,
+      } = await fetchHomeMangaData();
 
-      // Update state with fresh data
-      setMostViewedManga(mostViewed);
-      setNewReleases(newReleases);
-      setFeaturedManga(newFeatured);
+      // Only replace sections that actually returned data (partial recovery)
+      const mergedMostViewed =
+        mostViewed.length > 0
+          ? mostViewed
+          : cachedData?.mostViewed || mostViewedManga;
+      const mergedReleases =
+        freshReleases.length > 0
+          ? freshReleases
+          : cachedData?.newReleases || newReleases;
+      const mergedFeatured =
+        newFeatured ||
+        mergedMostViewed[0] ||
+        cachedData?.featuredManga ||
+        featuredManga;
 
-      // Cache the fresh data
-      await cacheHomeData(mostViewed, newReleases, newFeatured);
+      setMostViewedManga(mergedMostViewed);
+      setNewReleases(mergedReleases);
+      setFeaturedManga(mergedFeatured);
+
+      if (mergedMostViewed.length > 0 || mergedReleases.length > 0) {
+        await cacheHomeData(
+          mergedMostViewed,
+          mergedReleases,
+          mergedFeatured
+        );
+      }
+
+      if (partialFailure) {
+        scheduleHomeAutoRetry('partial_home_failure');
+      } else {
+        resetHomeAutoRetry();
+      }
     } catch (error) {
       logger().error('Service', 'Error fetching manga data', { error });
 
@@ -145,12 +227,31 @@ export default function HomeScreen() {
           'An error occurred while fetching manga data. Please try again.'
         );
       }
+
+      // Keep showing cached content and silently recover
+      scheduleHomeAutoRetry('home_fetch_error');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRefreshing, checkForCloudflare, isOffline]);
+  }, [
+    isRefreshing,
+    checkForCloudflare,
+    isOffline,
+    scheduleHomeAutoRetry,
+    resetHomeAutoRetry,
+  ]);
+
+  useEffect(() => {
+    fetchMangaDataRef.current = fetchMangaData;
+  }, [fetchMangaData]);
+
+  useEffect(() => {
+    return () => {
+      clearHomeAutoRetry();
+    };
+  }, [clearHomeAutoRetry]);
 
   const fetchRecentlyReadManga = useCallback(async (showLoading = true) => {
     try {
