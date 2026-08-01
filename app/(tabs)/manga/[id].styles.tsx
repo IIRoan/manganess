@@ -69,10 +69,10 @@ const getStyles = (colors: typeof Colors.light) =>
       overflow: 'hidden',
     },
     bannerImage: {
-      ...StyleSheet.absoluteFill,
+      ...StyleSheet.absoluteFillObject,
     },
     overlay: {
-      ...StyleSheet.absoluteFill,
+      ...StyleSheet.absoluteFillObject,
       backgroundColor: 'rgba(0, 0, 0, 0.65)',
     },
     headerContent: {

@@ -228,7 +228,7 @@ const getStyles = (colors: typeof Colors.light) =>
       zIndex: 9999,
     },
     backdrop: {
-      ...StyleSheet.absoluteFill,
+      ...StyleSheet.absoluteFillObject,
       backgroundColor: '#000',
     },
     sheet: {

@@ -17,7 +17,7 @@ jest.mock('@/utils/logger', () => ({
   }),
 }));
 
-const flushPromises = () => new Promise<void>((resolve) => setImmediate(resolve));
+const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 function extractRequestId(script: string): string | null {
   const match = script.match(/var requestId = ("[^"]+"|'[^']+');/);
