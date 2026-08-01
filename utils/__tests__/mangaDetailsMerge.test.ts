@@ -102,4 +102,42 @@ describe('mergeMangaDetailsRefresh', () => {
       mergeMangaDetailsRefresh(previous, incoming, 'abc12').totalChapters
     ).toBe(120);
   });
+
+  it('refreshes overlapping chapter URLs when keeping a longer cached list', () => {
+    const previous = details({
+      id: 'z1my2',
+      chapters: [
+        { number: '261', title: 'Chapter 261', date: '', url: '/chapter/7333615' },
+        { number: '260', title: 'Chapter 260', date: '', url: '/chapter/old-260' },
+        { number: '1', title: 'Chapter 1', date: '', url: '/chapter/1' },
+      ],
+      totalChapters: 261,
+    });
+    const incoming = details({
+      id: 'z1my2',
+      title: 'Fresh title',
+      chapters: [
+        {
+          number: '261',
+          title: 'Chapter 261',
+          date: '',
+          url: '/chapter/9318286',
+        },
+        {
+          number: '260',
+          title: 'Chapter 260',
+          date: '',
+          url: '/chapter/new-260',
+        },
+      ],
+      totalChapters: 261,
+    });
+
+    const merged = mergeMangaDetailsRefresh(previous, incoming, 'z1my2');
+
+    expect(merged.chapters).toHaveLength(3);
+    expect(merged.chapters[0]?.url).toBe('/chapter/9318286');
+    expect(merged.chapters[1]?.url).toBe('/chapter/new-260');
+    expect(merged.chapters[2]?.url).toBe('/chapter/1');
+  });
 });

@@ -73,6 +73,41 @@ describe('offlineCacheService', () => {
       expect(cached?.cachedAt).toBeDefined();
     });
 
+    it('patches a chapter API id in the cached chapter list', async () => {
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        {
+          ...mockMangaDetails,
+          chapters: [
+            {
+              number: '261',
+              title: 'Chapter 261',
+              url: '/chapter/7333615',
+              date: '2024-01-01',
+            },
+            {
+              number: '260',
+              title: 'Chapter 260',
+              url: '/chapter/old-260',
+              date: '2024-01-01',
+            },
+          ],
+        },
+        false
+      );
+
+      const patched = await offlineCacheService.patchCachedChapterApiId(
+        'manga-1',
+        '261',
+        '9318286'
+      );
+      expect(patched).toBe(true);
+
+      const cached = await offlineCacheService.getCachedMangaDetails('manga-1');
+      expect(cached?.chapters[0]?.url).toBe('/chapter/9318286');
+      expect(cached?.chapters[1]?.url).toBe('/chapter/old-260');
+    });
+
     it('returns null for non-existent manga', async () => {
       const cached =
         await offlineCacheService.getCachedMangaDetails('non-existent');

@@ -253,6 +253,35 @@ jest.mock('@/services/offlineCacheService', () => {
       getCachedMangaDetails: jest.fn(
         async (id: string) => mockOfflineCacheStore.get(id) ?? null
       ),
+      patchCachedChapterApiId: jest.fn(
+        async (id: string, chapterNumber: string, chapterApiId: string) => {
+          const existing = mockOfflineCacheStore.get(id);
+          if (!existing?.chapters) {
+            return false;
+          }
+          const nextUrl = `/chapter/${chapterApiId}`;
+          let changed = false;
+          const chapters = existing.chapters.map((chapter: any) => {
+            if (String(chapter.number) !== String(chapterNumber)) {
+              return chapter;
+            }
+            if (chapter.url === nextUrl) {
+              return chapter;
+            }
+            changed = true;
+            return { ...chapter, url: nextUrl };
+          });
+          if (!changed) {
+            return false;
+          }
+          mockOfflineCacheStore.set(id, {
+            ...existing,
+            chapters,
+            cachedAt: Date.now(),
+          });
+          return true;
+        }
+      ),
       getBookmarkedMangaDetails: jest.fn(async () =>
         Array.from(mockOfflineCacheStore.values()).filter(
           (entry: any) => entry.isBookmarked

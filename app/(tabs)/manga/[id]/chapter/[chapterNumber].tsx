@@ -93,7 +93,10 @@ import ReaderRetryImage, {
   ReaderImageStatus,
   ReaderImageStatusHandler,
 } from '@/components/ReaderRetryImage';
-import { isForbiddenError, isRateLimitError } from '@/utils/httpErrors';
+import {
+  getChapterLoadErrorInfo,
+  type ChapterLoadErrorInfo,
+} from '@/utils/chapterLoadError';
 import {
   hydrateMangaFromLocal,
 } from '@/utils/mangaOptimisticLoad';
@@ -436,7 +439,9 @@ export default function ReadChapterScreen() {
   const { isOffline } = useOffline();
 
   const [isLoadingImages, setIsLoadingImages] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<ChapterLoadErrorInfo | null>(
+    null
+  );
   const [mangaTitle, setMangaTitle] = useState<string | null>(null);
   const [mangaDetails, setMangaDetails] = useState<MangaDetailsType | null>(
     null
@@ -1241,7 +1246,7 @@ export default function ReadChapterScreen() {
   // Clear previous chapter before paint so navigation never flashes stale pages.
   useLayoutEffect(() => {
     setIsLoadingImages(true);
-    setError(null);
+    setLoadError(null);
     setDownloadedImages(null);
     downloadedImagesRef.current = null;
     failedPagesRef.current.clear();
@@ -1272,10 +1277,21 @@ export default function ReadChapterScreen() {
     const loadChapter = async () => {
       if (!id || !chapterNumber) {
         if (isActive()) {
-          setError('Invalid chapter parameters');
+          setLoadError({
+            title: 'Invalid chapter',
+            message: 'Missing manga or chapter information.',
+            canRetry: false,
+          });
           setIsLoadingImages(false);
         }
         return;
+      }
+
+      // Keep the spinner up for the whole attempt (including stale-ID
+      // re-resolve). Only the error screen appears if this attempt fails.
+      if (isActive()) {
+        setIsLoadingImages(true);
+        setLoadError(null);
       }
 
       try {
@@ -1357,17 +1373,18 @@ export default function ReadChapterScreen() {
 
           if (isActive()) {
             setMangaTitle(resolvedTitle);
-            setError(null);
+            setLoadError(null);
           }
         } else if (!isOffline) {
           const cachedDetails =
             await offlineCacheService.getCachedMangaDetails(mangaId);
           if (!isActive()) return;
 
+          // Prefer live/merged chapter metadata so stale offline IDs don't win.
           const onlineImages = await loadOnlineChapterImages(
             mangaId,
             requestedChapter,
-            cachedDetails?.chapters ?? mangaDetails?.chapters
+            mangaDetails?.chapters ?? cachedDetails?.chapters
           );
 
           if (!isActive()) return;
@@ -1410,7 +1427,7 @@ export default function ReadChapterScreen() {
 
           if (isActive()) {
             setMangaTitle(resolvedTitle);
-            setError(null);
+            setLoadError(null);
           }
         } else {
           if (isActive()) {
@@ -1420,8 +1437,11 @@ export default function ReadChapterScreen() {
             setIsDownloaded(false);
             setIsOnlineChapter(false);
             setCurrentPage(0);
-            setError(
-              'This chapter is not downloaded. Please connect to internet or download it first.'
+            setLoadError(
+              getChapterLoadErrorInfo(null, {
+                chapterNumber: String(chapterNumber),
+                isOffline: true,
+              })
             );
           }
         }
@@ -1432,12 +1452,10 @@ export default function ReadChapterScreen() {
             mangaId: id,
             chapterNumber,
           });
-          setError(
-            isRateLimitError(error)
-              ? 'MangaFire is busy right now. Wait a moment and try again.'
-              : isForbiddenError(error)
-                ? 'MangaFire blocked this request. Try again in a few seconds.'
-                : 'Failed to load chapter.'
+          setLoadError(
+            getChapterLoadErrorInfo(error, {
+              chapterNumber: String(chapterNumber),
+            })
           );
         }
       } finally {
@@ -1960,11 +1978,38 @@ export default function ReadChapterScreen() {
       : renderMangaChapter();
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: readerCanvasColor }]}>
-      {error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
+  const renderChapterLoadError = (info: ChapterLoadErrorInfo) => (
+    <View
+      style={[
+        styles.errorContainer,
+        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+      ]}
+      accessibilityRole="alert"
+    >
+      <View style={styles.errorIconWrap}>
+        <Ionicons
+          name="alert-circle-outline"
+          size={48}
+          color={Colors[colorScheme].error}
+        />
+      </View>
+      <Text style={styles.errorTitle}>{info.title}</Text>
+      <Text style={styles.errorMessage}>{info.message}</Text>
+      <View style={styles.errorActions}>
+        <TouchableOpacity
+          style={styles.chapterBackButton}
+          onPress={handleBackPress}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons
+            name="arrow-back"
+            size={18}
+            color={Colors[colorScheme].text}
+          />
+          <Text style={styles.chapterBackButtonText}>Go back</Text>
+        </TouchableOpacity>
+        {info.canRetry ? (
           <TouchableOpacity
             style={styles.chapterRetryButton}
             onPress={() => setLoadRetryToken((token) => token + 1)}
@@ -1973,7 +2018,15 @@ export default function ReadChapterScreen() {
           >
             <Text style={styles.chapterRetryButtonText}>Retry</Text>
           </TouchableOpacity>
-        </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: readerCanvasColor }]}>
+      {loadError && !isLoadingImages ? (
+        renderChapterLoadError(loadError)
       ) : (
         <>
           <View
@@ -1990,19 +2043,12 @@ export default function ReadChapterScreen() {
             ) : (isDownloaded || isOnlineChapter) && downloadedImages ? (
               renderDownloadedChapter()
             ) : (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>
-                  {error || 'Chapter is not available.'}
-                </Text>
-                <TouchableOpacity
-                  style={styles.chapterRetryButton}
-                  onPress={() => setLoadRetryToken((token) => token + 1)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry loading chapter"
-                >
-                  <Text style={styles.chapterRetryButtonText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
+              renderChapterLoadError({
+                title: 'Chapter isn’t available',
+                message:
+                  'This chapter could not be opened. Go back and try another chapter, or retry.',
+                canRetry: true,
+              })
             )}
           </View>
 
