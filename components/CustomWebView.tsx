@@ -80,9 +80,11 @@ const CustomWebView = forwardRef<CustomWebViewRef, CustomWebViewProps>(
       useState(false);
 
     useEffect(() => {
-      if (Platform.OS === 'ios') {
-        setTimeout(() => setWebViewKey((key) => key + 1), 50);
+      if (Platform.OS !== 'ios') {
+        return;
       }
+      const timeoutId = setTimeout(() => setWebViewKey((key) => key + 1), 50);
+      return () => clearTimeout(timeoutId);
     }, []);
 
     // Handle download suggestions and chapter viewing notifications
