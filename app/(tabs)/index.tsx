@@ -353,7 +353,7 @@ export default function HomeScreen() {
               <Text style={styles.trendingTitle} numberOfLines={2}>
                 {item.title}
               </Text>
-              {item.rank && (
+              {item.rank != null && item.rank > 0 ? (
                 <View
                   style={[
                     styles.rankBadge,
@@ -362,7 +362,7 @@ export default function HomeScreen() {
                 >
                   <Text style={styles.rankText}>#{item.rank}</Text>
                 </View>
-              )}
+              ) : null}
             </View>
           </LinearGradient>
         </TouchableOpacity>
