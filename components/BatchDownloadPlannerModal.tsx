@@ -637,13 +637,13 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
                                 >
                                   Chapter {chapter.number}
                                 </Text>
-                                {fileSize && (
+                                {fileSize != null ? (
                                   <View style={styles.sizeBadge}>
                                     <Text style={styles.sizeBadgeText}>
                                       {fileSize}
                                     </Text>
                                   </View>
-                                )}
+                                ) : null}
                               </View>
 
                               {(chapter.title || !fileSize) && (
