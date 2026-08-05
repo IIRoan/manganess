@@ -122,18 +122,35 @@ export default function MangaSearchScreen() {
 
   // Load layout setting and search history on mount (not on focus to avoid re-animations)
   useEffect(() => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     const loadInitialData = async () => {
       const [layout, history] = await Promise.all([
         getDefaultLayout(),
         getSearchHistory(),
       ]);
+      if (cancelled) {
+        return;
+      }
       setLayoutMode(layout);
       setSearchHistory(history);
       hasLoadedHistoryRef.current = true;
       // Small delay to ensure smooth transition
-      setTimeout(() => setIsInitialLoad(false), 50);
+      timeoutId = setTimeout(() => {
+        if (!cancelled) {
+          setIsInitialLoad(false);
+        }
+      }, 50);
     };
     loadInitialData();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, []);
 
   useEffect(() => {
