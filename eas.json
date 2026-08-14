@@ -3,21 +3,16 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "testing": {
+      "channel": "testing",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "preview": {
       "channel": "preview",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "main": {
-      "channel": "main",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "testing": {
       "distribution": "internal",
-      "channel": "testing",
       "android": {
         "buildType": "apk"
       }

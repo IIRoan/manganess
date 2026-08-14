@@ -68,6 +68,8 @@
     "build": "eas build -p android --profile preview",
     "build:ios": "eas build -p ios --profile preview",
     "build:android": "eas build -p android --profile preview",
+    "build:ios:testing": "eas build -p ios --profile testing",
+    "build:android:testing": "eas build -p android --profile testing",
     "dev": "expo start --go",
     "dev:lan": "expo start --lan --go",
     "prebuild": "expo prebuild --clean",
