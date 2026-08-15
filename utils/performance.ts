@@ -24,7 +24,7 @@ class PerformanceMonitor {
     }
   })();
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): PerformanceMonitor {
     if (!PerformanceMonitor.instance) {
@@ -117,7 +117,7 @@ export function useRenderTime(componentName: string) {
     };
   }
 
-  return () => {}; // No-op in production
+  return () => { }; // No-op in production
 }
 
 // Decorator for measuring function execution time
