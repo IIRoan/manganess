@@ -745,7 +745,7 @@ const getStyles = (colors: typeof Colors.light) =>
       backgroundColor: 'rgba(0,0,0,0.6)',
     },
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     backdropTouchable: {
       flex: 1,

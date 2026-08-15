@@ -3,24 +3,41 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "preview": {
-      "channel": "preview",
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "bun": "1.3.14",
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_MANGA_API_URL": "https://mangafire.to"
+      },
       "android": {
         "buildType": "apk"
       }
     },
-    "main": {
-      "channel": "main",
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "bun": "1.3.14",
+      "env": {
+        "APP_VARIANT": "preview",
+        "EXPO_PUBLIC_MANGA_API_URL": "https://mangafire.to"
+      },
       "android": {
         "buildType": "apk"
+      }
+    },
+    "production": {
+      "channel": "main",
+      "bun": "1.3.14",
+      "env": {
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_MANGA_API_URL": "https://mangafire.to"
       }
     },
     "testing": {
-      "distribution": "internal",
-      "channel": "testing",
-      "android": {
-        "buildType": "apk"
-      }
+      "extends": "development"
     }
   }
 }

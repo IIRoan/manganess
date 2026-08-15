@@ -103,12 +103,14 @@ export default function DebugScreen() {
   const getChannelDisplayName = (channel: string | null): string => {
     if (!channel) return 'Unknown';
     switch (channel) {
-      case 'main':
-        return 'Production (main)';
       case 'preview':
         return 'Preview';
+      case 'development':
+        return 'Development';
+      case 'main':
+        return 'Production';
       case 'testing':
-        return 'Testing (Internal)';
+        return 'Testing (legacy)';
       default:
         return channel;
     }
@@ -118,8 +120,6 @@ export default function DebugScreen() {
     channel: string | null
   ): { bg: string; text: string } => {
     switch (channel) {
-      case 'main':
-        return { bg: '#22C55E', text: '#FFFFFF' }; // Green for production
       case 'preview':
         return { bg: '#F97316', text: '#FFFFFF' }; // Orange for preview
       case 'testing':
@@ -253,7 +253,7 @@ export default function DebugScreen() {
   const showChannelInfo = () => {
     showAlertWithConfig({
       title: 'Channel Information',
-      message: `Current Channel: ${getChannelDisplayName(extendedUpdateInfo?.channel ?? null)}\n\nAvailable Channels:\n\u2022 main - Production releases\n\u2022 preview - Preview/beta releases\n\u2022 testing - Internal testing builds\n\nNote: Channel switching requires a new app build. Updates are automatically delivered to your current channel.`,
+      message: `Current Channel: ${getChannelDisplayName(extendedUpdateInfo?.channel ?? null)}\n\nAvailable Channels:\n\u2022 development - Dev client (Metro)\n\u2022 preview - Standalone tester builds\n\u2022 main - Production / store builds\n\nNote: Channel is baked into the binary at EAS Build time. Publish JS with eas update --branch matching that channel.`,
       options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
     });
   };

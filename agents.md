@@ -6,8 +6,8 @@ MangaNess is a React Native manga reading application built with Expo SDK 54, fe
 
 ### Core Technologies
 
-- **React Native 0.81.4** with **React 19.1.0**
-- **Expo SDK 54** with Expo Router for file-based navigation
+- **React Native 0.86.2** with **React 19.2.3**
+- **Expo SDK 57** with Expo Router for file-based navigation
 - **TypeScript** with strict configuration
 - **Bun** as package manager and runtime
 - **AsyncStorage** for local data persistence
@@ -286,7 +286,8 @@ const getStyles = (colors: typeof Colors.light) =>
 ### EAS Configuration
 
 - **File**: `eas.json`
-- **Profiles**: development, preview, production
+- **Profiles**: development (dev client), preview (internal APK/IPA), production (store)
+- **Update channels**: `development`, `preview`, and `main` (mapped to branches of the same name)
 - **Environment**: Variables in `constants/env.ts`
 
 ### Scripts

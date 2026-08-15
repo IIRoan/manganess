@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -12,9 +11,6 @@ const mockRouterNavigate = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockRouterNavigate }),
-}));
-
-jest.mock('@react-navigation/native', () => ({
   useFocusEffect: jest.fn((cb) => {
     cb();
   }),
