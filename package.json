@@ -48,7 +48,7 @@
     "@react-native-community/netinfo": "12.0.1",
     "@shopify/flash-list": "2.0.2",
     "@zedux/react": "^1.3.5",
-    "axios": "^1.7.8",
+    "axios": "1.19.0",
     "expo": "^57.0.0",
     "expo-background-fetch": "~57.0.10",
     "expo-blur": "~57.0.2",
