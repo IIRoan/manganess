@@ -4,11 +4,11 @@ import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider as NavigationThemeProvider,
-} from '@react-navigation/native';
+} from 'expo-router/react-navigation';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import React, { useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -24,6 +24,7 @@ import Constants from 'expo-constants';
 import { downloadManagerService } from '@/services/downloadManager';
 import { createEcosystem, EcosystemProvider } from '@zedux/react';
 import { StartupMigrationHost } from '@/components/StartupMigrationHost';
+import { AppUpdateHost } from '@/components/AppUpdateHost';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -137,6 +138,7 @@ export default function RootLayout() {
         <RootLayoutNav />
         <OfflineIndicator />
         <StartupMigrationHost />
+        <AppUpdateHost />
       </EcosystemProvider>
     </GestureHandlerRootView>
   );

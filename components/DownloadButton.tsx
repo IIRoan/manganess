@@ -76,7 +76,7 @@ function CircularProgress({
       <Svg
         width={size}
         height={size}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
       >
         <Circle
           cx={center}

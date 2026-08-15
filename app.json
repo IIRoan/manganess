@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "manganess",
+    "name": "MangaNess",
     "slug": "manganess",
     "version": "1.14",
     "orientation": "portrait",
@@ -33,7 +33,9 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-image",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -41,16 +43,23 @@
     },
     "extra": {
       "eas": {
-        "projectId": "e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
+        "projectId": "62c8f87b-d0b8-432c-9ba5-f9532047ef7e"
       }
     },
-    "owner": "iroan",
-    "runtimeVersion": "1.14.0",
+    "owner": "iiroan",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/e39fdc53-b1f4-4839-8e48-07a5e789d5eb",
-      "checkAutomatically": "ON_LOAD"
+      "url": "https://u.expo.dev/62c8f87b-d0b8-432c-9ba5-f9532047ef7e",
+      "checkAutomatically": "NEVER"
+    },
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "listUnknownPackages": false
+      }
     }
   }
 }

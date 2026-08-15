@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -36,8 +36,7 @@ import type {
   ReaderProfileSettings,
 } from '@/types/settings';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
   Easing,
@@ -55,6 +54,9 @@ import { syncAllMangaWithAniList } from '@/services/anilistService';
 import Svg, { Path } from 'react-native-svg';
 import CustomColorPicker from '@/components/CustomColorPicker';
 import { logger } from '@/utils/logger';
+import { useAtomInstance, useAtomValue } from '@zedux/react';
+import { appUpdateAtom } from '@/atoms/appUpdateAtom';
+import { areUpdatesAvailable } from '@/services/updateService';
 
 const AnimatedView = Reanimated.createAnimatedComponent(View);
 
@@ -186,6 +188,9 @@ export default function SettingsScreen() {
   const styles = getStyles(colors);
   const router = useRouter();
   const { showToast } = useToast();
+  const appUpdate = useAtomValue(appUpdateAtom);
+  const appUpdateInstance = useAtomInstance(appUpdateAtom);
+  const updatesEnabled = areUpdatesAvailable();
   const [user, setUser] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const insets = useSafeAreaInsets();
@@ -324,9 +329,13 @@ export default function SettingsScreen() {
       const show = await getShowReaderSettingsButton();
       setShowReaderSettingsButtonState(show);
     } catch (error) {
-      logger().error('Service', 'Error loading reader settings button preference', {
-        error,
-      });
+      logger().error(
+        'Service',
+        'Error loading reader settings button preference',
+        {
+          error,
+        }
+      );
     }
   };
 
@@ -335,9 +344,13 @@ export default function SettingsScreen() {
       await setShowReaderSettingsButton(show);
       setShowReaderSettingsButtonState(show);
     } catch (error) {
-      logger().error('Service', 'Error saving reader settings button preference', {
-        error,
-      });
+      logger().error(
+        'Service',
+        'Error saving reader settings button preference',
+        {
+          error,
+        }
+      );
       showToast({
         message: 'Failed to update reader settings button',
         type: 'error',
@@ -398,12 +411,7 @@ export default function SettingsScreen() {
         }
       );
     },
-    [
-      readerIsAnimating,
-      readerPageIndex,
-      readerPagerWidthSV,
-      readerTranslateX,
-    ]
+    [readerIsAnimating, readerPageIndex, readerPagerWidthSV, readerTranslateX]
   );
 
   const selectReaderProfile = useCallback(
@@ -492,9 +500,7 @@ export default function SettingsScreen() {
           let target = Math.round(progress);
           if (Math.abs(event.velocityX) > 600) {
             target =
-              event.velocityX < 0
-                ? Math.ceil(progress)
-                : Math.floor(progress);
+              event.velocityX < 0 ? Math.ceil(progress) : Math.floor(progress);
           }
           target = Math.max(0, Math.min(1, target));
           readerIsAnimating.value = true;
@@ -895,6 +901,23 @@ export default function SettingsScreen() {
     });
   };
 
+  const handleCheckForUpdate = async () => {
+    if (appUpdate.isPending || appUpdate.isDownloaded) {
+      appUpdateInstance.exports.openFromSettings();
+      return;
+    }
+
+    await appUpdateInstance.exports.check({ showPrompt: true });
+    const next = appUpdateInstance.getState();
+    if (!next.isPending && !next.isDownloaded) {
+      showToast({
+        message: next.lastResultMessage || 'MangaNess is up to date',
+        type: 'info',
+        duration: 2000,
+      });
+    }
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Custom Color Picker */}
@@ -1225,6 +1248,65 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
         </Reanimated.View>
+
+        {updatesEnabled ? (
+          <Reanimated.View
+            entering={FadeInDown.delay(450).springify()}
+            style={styles.section}
+          >
+            <Text style={styles.sectionTitle}>Updates</Text>
+            <Text
+              style={[styles.settingHint, { marginTop: 0, marginBottom: 8 }]}
+            >
+              {appUpdate.isDownloaded
+                ? 'An update is downloaded and waiting to restart.'
+                : appUpdate.isPending
+                  ? 'An update is available. Install it when you are ready.'
+                  : 'Check for a JavaScript update, then install and restart from this screen.'}
+            </Text>
+            <TouchableOpacity
+              style={styles.option}
+              onPress={() => {
+                void handleCheckForUpdate();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Check for update"
+            >
+              <Ionicons name="refresh-outline" size={24} color={colors.text} />
+              <Text style={styles.optionText}>Check for update</Text>
+            </TouchableOpacity>
+            {appUpdate.isPending && !appUpdate.isDownloaded ? (
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => {
+                  void appUpdateInstance.exports.install();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Install update"
+              >
+                <Ionicons
+                  name="cloud-download-outline"
+                  size={24}
+                  color={colors.text}
+                />
+                <Text style={styles.optionText}>Install</Text>
+              </TouchableOpacity>
+            ) : null}
+            {appUpdate.isDownloaded ? (
+              <TouchableOpacity
+                style={styles.option}
+                onPress={() => {
+                  void appUpdateInstance.exports.restart();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Restart to apply update"
+              >
+                <Ionicons name="reload-outline" size={24} color={colors.text} />
+                <Text style={styles.optionText}>Restart</Text>
+              </TouchableOpacity>
+            ) : null}
+          </Reanimated.View>
+        ) : null}
 
         <Reanimated.View
           entering={FadeInDown.delay(500).springify()}

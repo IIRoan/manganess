@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import {
   StyleSheet,
   View,
@@ -10,8 +16,7 @@ import {
 import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import Reanimated from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -51,15 +56,13 @@ const HOME_AUTO_RETRY_DELAYS_MS = [2000, 5000, 12000] as const;
 export default function HomeScreen() {
   const router = useRouter();
   const openMangaDetails = useCallback(
-    (
-      item: {
-        id: string;
-        title: string;
-        imageUrl?: string;
-        banner?: string;
-        bannerImage?: string;
-      }
-    ) => {
+    (item: {
+      id: string;
+      title: string;
+      imageUrl?: string;
+      banner?: string;
+      bannerImage?: string;
+    }) => {
       router.navigate({
         pathname: '/(tabs)/manga/[id]',
         params: {
@@ -204,11 +207,7 @@ export default function HomeScreen() {
       setFeaturedManga(mergedFeatured);
 
       if (mergedMostViewed.length > 0 || mergedReleases.length > 0) {
-        await cacheHomeData(
-          mergedMostViewed,
-          mergedReleases,
-          mergedFeatured
-        );
+        await cacheHomeData(mergedMostViewed, mergedReleases, mergedFeatured);
       }
 
       if (partialFailure) {
@@ -338,7 +337,9 @@ export default function HomeScreen() {
           }
         >
           <Image
-            source={buildMangaImageSource(item.imageUrl) ?? { uri: item.imageUrl }}
+            source={
+              buildMangaImageSource(item.imageUrl) ?? { uri: item.imageUrl }
+            }
             style={styles.trendingImage}
             accessibilityLabel={`Cover image for ${item.title}`}
             contentFit="cover"
