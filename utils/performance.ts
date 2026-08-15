@@ -148,9 +148,9 @@ export function measureComponentLifecycle(ComponentClass: any) {
   const componentName = ComponentClass.name;
 
   ComponentClass.prototype.render = function () {
-    const endMeasure = useRenderTime(componentName);
+    performanceMonitor.startMeasure(`render:${componentName}`);
     const result = originalRender.call(this);
-    endMeasure();
+    performanceMonitor.endMeasure(`render:${componentName}`);
     return result;
   };
 

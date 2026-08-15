@@ -1,4 +1,3 @@
-import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { DownloadStatus } from '@/types/download';
 
@@ -56,7 +55,6 @@ jest.mock('@/services/downloadStatusService', () => ({
 }));
 
 jest.mock('@/components/HiddenChapterWebView', () => {
-  const React = require('react');
   const { Text } = require('react-native');
   return {
     __esModule: true,
