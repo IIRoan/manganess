@@ -18,6 +18,8 @@ import {
 import {
   appendVrfParams,
   logVrfFailure,
+  mangaFireVrfBridge,
+  shouldProxyMangaFireApi,
 } from '@/services/mangaFireVrfBridge';
 import type { MangaItem } from '@/types/manga';
 import type { Chapter, MangaDetails } from '@/types/manga';
@@ -65,7 +67,7 @@ export interface ApiTitleSummary {
   year?: number;
   rank?: number;
   chapterUpdatedAt?: string;
-  url: string;
+  url?: string;
 }
 
 export interface ApiTitleDetails extends ApiTitleSummary {
@@ -109,16 +111,23 @@ export interface ApiChapterPage {
   height?: number;
 }
 
-async function apiGet<T>(
+async function apiRequest<T>(
   path: string,
   params?: Record<string, unknown>,
   config?: AxiosRequestConfig
-): Promise<T> {
+): Promise<{ status: number; data: T }> {
   const log = logger();
+  const validateStatus = config?.validateStatus;
 
   return withApiRetry(
     async () =>
       withMangaFireRateLimit(async () => {
+        if (shouldProxyMangaFireApi()) {
+          return mangaFireVrfBridge.fetchJson<T>(path, params, {
+            ...(validateStatus ? { validateStatus } : {}),
+          });
+        }
+
         let requestParams: Record<string, unknown> | undefined;
         try {
           // Fresh VRF on every attempt — stale tokens commonly cause 403s
@@ -134,7 +143,7 @@ async function apiGet<T>(
           params: requestParams,
           ...config,
         });
-        return response.data;
+        return { status: response.status, data: response.data };
       }),
     {
       onRetry: ({ attempt, delayMs, error }) => {
@@ -149,6 +158,15 @@ async function apiGet<T>(
       },
     }
   );
+}
+
+async function apiGet<T>(
+  path: string,
+  params?: Record<string, unknown>,
+  config?: AxiosRequestConfig
+): Promise<T> {
+  const { data } = await apiRequest<T>(path, params, config);
+  return data;
 }
 
 function mapNames(
@@ -166,14 +184,16 @@ export function mapApiTitleToMangaItem(
 ): MangaItem {
   const poster =
     item.poster?.medium || item.poster?.large || item.poster?.small || '';
+  const relativeUrl =
+    item.url || `/title/${item.hid}${item.slug ? `-${item.slug}` : ''}`;
   const mapped: MangaItem = {
     id: item.hid,
     title: item.title,
     banner: item.poster?.large || poster,
     imageUrl: poster,
-    link: item.url.startsWith('http')
-      ? item.url
-      : `${MANGA_API_URL}${item.url}`,
+    link: relativeUrl.startsWith('http')
+      ? relativeUrl
+      : `${MANGA_API_URL}${relativeUrl}`,
     type: item.type,
   };
   const resolvedRank = rank ?? item.rank;
@@ -260,14 +280,12 @@ export async function fetchTitleDetailsIfExists(
     async () => {
       try {
         const path = `/titles/${normalizedHid}`;
-        const params = await appendVrfParams(path);
-        const response = await withMangaFireRateLimit(() =>
-          axios.get<{ data: ApiTitleDetails }>(`${API_BASE}${path}`, {
-            headers: DEFAULT_HEADERS,
-            timeout: 20000,
-            params,
+        const response = await apiRequest<{ data: ApiTitleDetails }>(
+          path,
+          undefined,
+          {
             validateStatus: (status) => status === 200 || status === 404,
-          })
+          }
         );
 
         if (response.status === 404) {

@@ -12,9 +12,28 @@ interface PendingVrfRequest extends VrfRequest {
   timeoutId: ReturnType<typeof setTimeout>;
 }
 
+interface PendingApiRequest {
+  id: string;
+  resolve: (result: { status: number; data: unknown }) => void;
+  reject: (error: Error) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
+  validateStatus: (status: number) => boolean;
+}
+
 type VrfHostMessage =
   | { type: 'ready'; discovery?: string }
-  | { type: 'vrf'; id: string; vrf?: string | null; error?: string };
+  | { type: 'vrf'; id: string; vrf?: string | null; error?: string }
+  | {
+    type: 'api';
+    id: string;
+    status?: number;
+    data?: unknown;
+    error?: string;
+  };
+
+export interface MangaFireHostFetchOptions {
+  validateStatus?: (status: number) => boolean;
+}
 
 const REQUEST_TIMEOUT_MS = 20000;
 let useTestVrfToken =
@@ -31,6 +50,33 @@ export function resetMangaFireVrfBridgeForTests(options?: {
 
 export function setMangaFireVrfBridgeProductionModeForTests() {
   useTestVrfToken = false;
+}
+
+export function shouldProxyMangaFireApi(): boolean {
+  return !useTestVrfToken;
+}
+
+function createHttpError(
+  status: number,
+  data: unknown,
+  message?: string
+): Error & { response: { status: number; data: unknown } } {
+  const error = new Error(
+    message || `Request failed with status code ${status}`
+  ) as Error & { response: { status: number; data: unknown } };
+  error.response = { status, data };
+  return error;
+}
+
+function isCloudflareChallenge(data: unknown): boolean {
+  if (typeof data !== 'string') {
+    return false;
+  }
+  return (
+    data.includes('Just a moment') ||
+    data.includes('cf-mitigated') ||
+    data.includes('challenge-platform')
+  );
 }
 
 function requiresVrfToken(path: string): boolean {
@@ -287,6 +333,62 @@ export const VRF_PROTECTION_HELPERS_JS = `
       return token;
     });
   }
+
+  function appendCanonicalParams(usp, params) {
+    if (!params || typeof params !== 'object') return;
+    Object.keys(params).forEach(function(key) {
+      var value = params[key];
+      if (value == null) return;
+      if (Array.isArray(value)) {
+        value.forEach(function(item, index) {
+          usp.append(key + '[' + index + ']', String(item));
+        });
+        return;
+      }
+      if (typeof value === 'object') {
+        Object.keys(value).forEach(function(child) {
+          if (value[child] == null) return;
+          usp.append(key + '[' + child + ']', String(value[child]));
+        });
+        return;
+      }
+      usp.append(key, String(value));
+    });
+  }
+
+  function fetchProtectedJson(path, params) {
+    var vmz = findProtectionModule();
+    var queryParams = Object.assign({}, params || {});
+    var protect = true;
+    if (vmz && typeof vmz.shouldProtect === 'function') {
+      try { protect = !!vmz.shouldProtect(path); } catch (e) { protect = true; }
+    }
+
+    var tokenPromise = protect
+      ? generateProtectionToken(path, queryParams)
+      : Promise.resolve(null);
+
+    return tokenPromise.then(function(vrf) {
+      var usp = new URLSearchParams();
+      appendCanonicalParams(usp, queryParams);
+      if (vrf) usp.append('vrf', String(vrf));
+      var qs = usp.toString();
+      var url = '/api' + path + (qs ? '?' + qs : '');
+      return fetch(url, {
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      }).then(function(response) {
+        return response.text().then(function(text) {
+          var data = text;
+          try { data = JSON.parse(text); } catch (e) {}
+          return { status: response.status, data: data };
+        });
+      });
+    });
+  }
 `;
 
 class MangaFireVrfBridge {
@@ -294,6 +396,7 @@ class MangaFireVrfBridge {
   private hostAttached = false;
   private webViewInject: ((script: string) => void) | null = null;
   private pending: PendingVrfRequest[] = [];
+  private pendingApi: PendingApiRequest[] = [];
   private readyWaiters: Array<{
     resolve: () => void;
     reject: (error: Error) => void;
@@ -336,6 +439,11 @@ class MangaFireVrfBridge {
       return;
     }
 
+    if (message.type === 'api') {
+      this.resolveApiRequest(message);
+      return;
+    }
+
     if (message.type !== 'vrf' || !message.id) {
       return;
     }
@@ -361,6 +469,128 @@ class MangaFireVrfBridge {
     }
 
     request.resolve(message.vrf);
+  }
+
+  /**
+   * Fetch MangaFire JSON from the hidden WebView so Cloudflare cookies
+   * (cf_clearance) are sent. Native axios calls get challenged.
+   */
+  async fetchJson<T>(
+    path: string,
+    params?: Record<string, unknown>,
+    options?: MangaFireHostFetchOptions
+  ): Promise<{ status: number; data: T }> {
+    if (useTestVrfToken) {
+      throw new Error('MangaFire host fetch is disabled in tests');
+    }
+
+    await this.waitUntilReady();
+    if (!this.webViewInject) {
+      throw new Error('MangaFire VRF host is not available');
+    }
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const validateStatus =
+      options?.validateStatus ??
+      ((status: number) => status >= 200 && status < 300);
+    const script = `
+      (function() {
+        ${VRF_PROTECTION_HELPERS_JS}
+        var requestId = ${JSON.stringify(id)};
+        var path = ${JSON.stringify(path)};
+        var params = ${JSON.stringify(params ?? {})};
+        fetchProtectedJson(path, params)
+          .then(function(result) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'api',
+              id: requestId,
+              status: result.status,
+              data: result.data
+            }));
+          })
+          .catch(function(err) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'api',
+              id: requestId,
+              error: String(err && err.message ? err.message : err)
+            }));
+          });
+        return true;
+      })();
+    `;
+
+    return new Promise<{ status: number; data: T }>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        const index = this.pendingApi.findIndex((item) => item.id === id);
+        if (index !== -1) {
+          this.pendingApi.splice(index, 1);
+        }
+        reject(new Error('Timed out waiting for MangaFire API response'));
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pendingApi.push({
+        id,
+        resolve: (result) => resolve(result as { status: number; data: T }),
+        reject,
+        timeoutId,
+        validateStatus,
+      });
+
+      try {
+        this.webViewInject?.(script);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        this.pendingApi = this.pendingApi.filter((item) => item.id !== id);
+        reject(
+          error instanceof Error
+            ? error
+            : new Error('Failed to inject MangaFire API fetch script')
+        );
+      }
+    });
+  }
+
+  private resolveApiRequest(
+    message: Extract<VrfHostMessage, { type: 'api' }>
+  ) {
+    if (!message.id) {
+      return;
+    }
+
+    const pendingIndex = this.pendingApi.findIndex(
+      (request) => request.id === message.id
+    );
+    if (pendingIndex === -1) {
+      return;
+    }
+
+    const request = this.pendingApi.splice(pendingIndex, 1)[0];
+    if (!request) {
+      return;
+    }
+    clearTimeout(request.timeoutId);
+
+    if (message.error) {
+      request.reject(new Error(message.error));
+      return;
+    }
+
+    const status = message.status ?? 0;
+    const data = message.data;
+
+    if (isCloudflareChallenge(data)) {
+      request.reject(
+        createHttpError(status || 403, data, 'Cloudflare verification detected')
+      );
+      return;
+    }
+
+    if (!request.validateStatus(status)) {
+      request.reject(createHttpError(status, data));
+      return;
+    }
+
+    request.resolve({ status, data });
   }
 
   async getVrfToken(
@@ -491,6 +721,12 @@ class MangaFireVrfBridge {
       request.reject(error);
     }
     this.pending = [];
+
+    for (const request of this.pendingApi) {
+      clearTimeout(request.timeoutId);
+      request.reject(error);
+    }
+    this.pendingApi = [];
 
     for (const waiter of this.readyWaiters) {
       clearTimeout(waiter.timeoutId);
