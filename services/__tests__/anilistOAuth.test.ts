@@ -14,8 +14,8 @@ jest.mock('expo-web-browser', () => ({
   openAuthSessionAsync: jest.fn(),
 }));
 
-jest.mock('expo-constants', () => ({
-  appOwnership: 'expo',
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn(() => 'com.iroan.manganess://oauth'),
 }));
 
 jest.mock('../anilistAuthService', () => ({
@@ -50,7 +50,7 @@ describe('anilistOAuth', () => {
 
     expect(mockOpenAuthSessionAsync).toHaveBeenCalledWith(
       expect.stringContaining('https://anilist.co/api/v2/oauth/authorize'),
-      'https://auth.expo.io/@iroan/manganess'
+      'com.iroan.manganess://oauth'
     );
     expect(saveAuthData).toHaveBeenCalledWith({
       accessToken: 'test-token',

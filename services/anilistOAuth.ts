@@ -1,4 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 import { saveAuthData, getAuthData, clearAuthData } from './anilistAuthService';
 
@@ -26,8 +27,8 @@ export async function loginWithAniList() {
 
     const redirectUri =
       Constants.appOwnership === 'expo'
-        ? 'https://auth.expo.io/@iroan/manganess'
-        : 'com.iroan.manganess://oauth';
+        ? 'https://auth.expo.io/@iiroan/manganess'
+        : Linking.createURL('oauth');
 
     const authUrl = `${ANILIST_AUTH_URL}?client_id=${ANILIST_CLIENT_ID}&response_type=token`;
 

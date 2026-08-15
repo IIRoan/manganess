@@ -1,14 +1,18 @@
 {
   "expo": {
-    "name": "manganess",
+    "name": "MangaNess",
     "slug": "manganess",
-    "version": "1.14",
+    "version": "1.15",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iroan.manganess",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -29,7 +33,9 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-image",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -40,13 +46,18 @@
         "projectId": "e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
       }
     },
-    "owner": "iroan",
-    "runtimeVersion": "1.14.0",
+    "owner": "astralgrove",
+    "runtimeVersion": "1.15.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/e39fdc53-b1f4-4839-8e48-07a5e789d5eb",
-      "checkAutomatically": "ON_LOAD"
+      "checkAutomatically": "NEVER"
+    },
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "listUnknownPackages": false
+      }
     }
   }
 }

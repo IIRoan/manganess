@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,9 +12,9 @@ const mockRouterPush = jest.fn();
 const mockCheckMangaAvailability = jest.fn().mockResolvedValue('exists');
 
 // Mock all dependencies
-jest.mock('@react-navigation/native', () => ({
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: mockRouterPush }),
   useFocusEffect: jest.fn((cb) => {
-    // Call the callback synchronously, simulating focus
     cb();
   }),
 }));
@@ -24,12 +23,9 @@ jest.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ actualTheme: 'light' }),
 }));
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockRouterPush }),
-}));
-
 jest.mock('@/services/mangaFireService', () => ({
-  checkMangaAvailability: (...args: any[]) => mockCheckMangaAvailability(...args),
+  checkMangaAvailability: (...args: any[]) =>
+    mockCheckMangaAvailability(...args),
 }));
 
 jest.mock('@/services/chapterStorageService', () => ({

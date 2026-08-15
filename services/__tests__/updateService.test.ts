@@ -11,18 +11,30 @@ import {
   getUpdateInfo,
 } from '../updateService';
 
-jest.mock('expo-updates', () => ({
-  checkForUpdateAsync: jest.fn(),
-  fetchUpdateAsync: jest.fn(),
-  reloadAsync: jest.fn(),
-  channel: 'testing',
-  runtimeVersion: '1.0.0',
-  updateId: 'test-update-id',
-  createdAt: new Date('2024-01-01'),
-  isEmbeddedLaunch: false,
-  isEmergencyLaunch: false,
-  checkAutomatically: 'ON_LOAD',
-}));
+jest.mock('expo-updates', () => {
+  const state = {
+    isEnabled: true,
+  };
+
+  return {
+    checkForUpdateAsync: jest.fn(),
+    fetchUpdateAsync: jest.fn(),
+    reloadAsync: jest.fn(),
+    get isEnabled() {
+      return state.isEnabled;
+    },
+    set isEnabled(value: boolean) {
+      state.isEnabled = value;
+    },
+    channel: 'preview',
+    runtimeVersion: '1.0.0',
+    updateId: 'test-update-id',
+    createdAt: new Date('2024-01-01'),
+    isEmbeddedLaunch: false,
+    isEmergencyLaunch: false,
+    checkAutomatically: 'NEVER',
+  };
+});
 
 jest.mock('expo-constants', () => ({
   executionEnvironment: 'standalone',
@@ -47,6 +59,7 @@ describe('updateService', () => {
     jest.clearAllMocks();
     (globalThis as any).__DEV__ = false;
     Constants.executionEnvironment = 'standalone';
+    Updates.isEnabled = true;
   });
 
   afterAll(() => {
@@ -71,30 +84,27 @@ describe('updateService', () => {
     });
 
     it('correctly reports update availability', () => {
-      // In standalone with __DEV__ = false, updates should be available
       Constants.executionEnvironment = 'standalone';
-      (globalThis as any).__DEV__ = false;
+      Updates.isEnabled = true;
       expect(areUpdatesAvailable()).toBe(true);
 
-      // In Expo Go, updates should not be available
       Constants.executionEnvironment = 'storeClient';
       expect(areUpdatesAvailable()).toBe(false);
 
-      // In dev mode, updates should not be available
       Constants.executionEnvironment = 'standalone';
-      (globalThis as any).__DEV__ = true;
+      Updates.isEnabled = false;
       expect(areUpdatesAvailable()).toBe(false);
     });
 
     it('provides reason when updates unavailable', () => {
       Constants.executionEnvironment = 'standalone';
-      (globalThis as any).__DEV__ = false;
+      Updates.isEnabled = true;
       expect(getUnavailableReason()).toBeNull();
 
-      (globalThis as any).__DEV__ = true;
-      expect(getUnavailableReason()).toContain('development');
+      Updates.isEnabled = false;
+      expect(getUnavailableReason()).toContain('not enabled');
 
-      (globalThis as any).__DEV__ = false;
+      Updates.isEnabled = true;
       Constants.executionEnvironment = 'storeClient';
       expect(getUnavailableReason()).toContain('Expo Go');
     });
@@ -103,7 +113,7 @@ describe('updateService', () => {
   describe('getUpdateInfo', () => {
     it('returns current update information', () => {
       const info = getUpdateInfo();
-      expect(info.channel).toBe('testing');
+      expect(info.channel).toBe('preview');
       expect(info.runtimeVersion).toBe('1.0.0');
       expect(info.updateId).toBe('test-update-id');
     });
@@ -115,12 +125,12 @@ describe('updateService', () => {
       (globalThis as any).__DEV__ = false;
     });
 
-    it('short-circuits in development mode', async () => {
-      (globalThis as any).__DEV__ = true;
+    it('short-circuits when updates are disabled', async () => {
+      Updates.isEnabled = false;
 
       const result = await checkForUpdate();
       expect(result.success).toBe(false);
-      expect(result.message).toContain('development');
+      expect(result.message).toContain('not enabled');
       expect(Updates.checkForUpdateAsync).not.toHaveBeenCalled();
     });
 
@@ -170,8 +180,8 @@ describe('updateService', () => {
       (globalThis as any).__DEV__ = false;
     });
 
-    it('rejects in development mode', async () => {
-      (globalThis as any).__DEV__ = true;
+    it('rejects when updates are disabled', async () => {
+      Updates.isEnabled = false;
 
       const result = await downloadUpdate();
       expect(result.success).toBe(false);
@@ -201,8 +211,8 @@ describe('updateService', () => {
       (globalThis as any).__DEV__ = false;
     });
 
-    it('prevents update on dev mode', async () => {
-      (globalThis as any).__DEV__ = true;
+    it('prevents update when updates are disabled', async () => {
+      Updates.isEnabled = false;
       const result = await applyUpdate();
       expect(result.success).toBe(false);
       expect(Updates.reloadAsync).not.toHaveBeenCalled();
@@ -313,9 +323,8 @@ describe('updateService', () => {
 
       const statuses: any[] = [];
 
-      const result = await performFullUpdateFlow(
-        { silent: false },
-        (status) => statuses.push({ ...status })
+      const result = await performFullUpdateFlow({ silent: false }, (status) =>
+        statuses.push({ ...status })
       );
 
       expect(result.success).toBe(false);
@@ -331,9 +340,8 @@ describe('updateService', () => {
 
       const statuses: any[] = [];
 
-      const result = await performFullUpdateFlow(
-        { silent: true },
-        (status) => statuses.push({ ...status })
+      const result = await performFullUpdateFlow({ silent: true }, (status) =>
+        statuses.push({ ...status })
       );
 
       expect(result.success).toBe(false);
@@ -362,9 +370,8 @@ describe('updateService', () => {
 
       const statuses: any[] = [];
 
-      const result = await performFullUpdateFlow(
-        { silent: true },
-        (status) => statuses.push({ ...status })
+      const result = await performFullUpdateFlow({ silent: true }, (status) =>
+        statuses.push({ ...status })
       );
 
       expect(result.success).toBe(false);
@@ -375,13 +382,12 @@ describe('updateService', () => {
     });
 
     it('handles unavailable environment with silent mode', async () => {
-      (globalThis as any).__DEV__ = true;
+      Updates.isEnabled = false;
 
       const statuses: any[] = [];
 
-      const result = await performFullUpdateFlow(
-        { silent: true },
-        (status) => statuses.push({ ...status })
+      const result = await performFullUpdateFlow({ silent: true }, (status) =>
+        statuses.push({ ...status })
       );
 
       expect(result.success).toBe(false);

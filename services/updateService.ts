@@ -59,25 +59,23 @@ export const isDevelopment = (): boolean => {
  * Check if updates are available in the current environment
  */
 export const areUpdatesAvailable = (): boolean => {
-  // Updates not available in dev mode, Expo Go, or web
-  if (isDevelopment()) return false;
-  if (isExpoGo()) return false;
   if (Platform.OS === 'web') return false;
-  return true;
+  if (isExpoGo()) return false;
+  return Updates.isEnabled;
 };
 
 /**
  * Get a human-readable reason why updates aren't available
  */
 export const getUnavailableReason = (): string | null => {
-  if (isDevelopment()) {
-    return 'Updates are not available in development mode';
+  if (Platform.OS === 'web') {
+    return 'Updates are not available on web platform';
   }
   if (isExpoGo()) {
     return 'Updates are not available in Expo Go. Use a development or production build.';
   }
-  if (Platform.OS === 'web') {
-    return 'Updates are not available on web platform';
+  if (!Updates.isEnabled) {
+    return 'Updates are not enabled in this environment (Metro / expo start).';
   }
   return null;
 };
@@ -176,7 +174,8 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
       };
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     logger().error('Service', 'Error checking for update', {
       error: errorMessage,
       channel: Updates.channel,
@@ -222,8 +221,11 @@ export const downloadUpdate = async (): Promise<UpdateResult> => {
       };
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    logger().error('Service', 'Error downloading update', { error: errorMessage });
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    logger().error('Service', 'Error downloading update', {
+      error: errorMessage,
+    });
     return {
       success: false,
       message: `Error downloading update: ${errorMessage}`,
@@ -254,7 +256,8 @@ export const applyUpdate = async (): Promise<UpdateResult> => {
       message: 'Update applied successfully',
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     logger().error('Service', 'Error applying update', { error: errorMessage });
     return {
       success: false,
@@ -375,7 +378,8 @@ export const performFullUpdateFlow = async (
       updateId: update.manifest?.id,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     updateState({
       isChecking: false,
       isDownloading: false,
@@ -415,5 +419,8 @@ export const checkAndDownloadUpdate = async (
 export const checkDownloadAndApplyUpdate = async (
   onStatusChange?: (status: UpdateStatus) => void
 ): Promise<UpdateResult> => {
-  return performFullUpdateFlow({ forceReload: true, silent: true }, onStatusChange);
+  return performFullUpdateFlow(
+    { forceReload: true, silent: true },
+    onStatusChange
+  );
 };

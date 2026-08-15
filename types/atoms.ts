@@ -1,8 +1,8 @@
 // Atom state type definitions for Zedux state management
 import { ColorScheme } from '@/constants/Colors';
-import { ThemeType, DownloadSettings, ReadingMode, ReaderBackground, ReaderImageFit, ProgressBarPosition, ReaderProfiles } from './settings';
+import { ThemeType, ReadingMode, ReaderBackground, ReaderImageFit, ProgressBarPosition, ReaderProfiles } from './settings';
 import { MangaData, MangaDetails } from './manga';
-import { DownloadQueueItem, DownloadErrorType } from './download';
+import { DownloadQueueItem, DownloadErrorType, DownloadSettings } from './download';
 
 // Theme Atom State
 export interface ThemeAtomState {

@@ -1,8 +1,17 @@
-name: Manual Android APK Build
+name: Manual EAS Build
 
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: 'Platform'
+        required: true
+        default: 'android'
+        type: choice
+        options:
+          - android
+          - ios
+          - all
       build-profile:
         description: 'EAS Build Profile'
         required: true
@@ -11,11 +20,10 @@ on:
         options:
           - preview
           - testing
-          - main
 
 jobs:
   build:
-    name: EAS Build APK
+    name: EAS Build
     runs-on: ubuntu-latest
     steps:
       - name: Check for EXPO_TOKEN
@@ -42,5 +50,5 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build Android APK
-        run: eas build -p android --profile ${{ inputs.build-profile }} --non-interactive
+      - name: Build
+        run: eas build -p ${{ inputs.platform }} --profile ${{ inputs.build-profile }} --non-interactive

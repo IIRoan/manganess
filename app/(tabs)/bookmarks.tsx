@@ -19,8 +19,7 @@ import {
   ListRenderItemInfo,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -1324,7 +1323,7 @@ const getStyles = (colors: typeof Colors.light) =>
       color: colors.tabIconDefault,
     },
     missingOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0, 0, 0, 0.68)',
       borderRadius: 10,
       alignItems: 'center',
