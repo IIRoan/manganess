@@ -2,7 +2,7 @@
   "expo": {
     "name": "MangaNess",
     "slug": "manganess",
-    "version": "1.14",
+    "version": "1.15",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.iroan.manganess",
@@ -43,17 +43,15 @@
     },
     "extra": {
       "eas": {
-        "projectId": "62c8f87b-d0b8-432c-9ba5-f9532047ef7e"
+        "projectId": "e39fdc53-b1f4-4839-8e48-07a5e789d5eb"
       }
     },
-    "owner": "iiroan",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
+    "owner": "iroan",
+    "runtimeVersion": "1.15.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/62c8f87b-d0b8-432c-9ba5-f9532047ef7e",
+      "url": "https://u.expo.dev/e39fdc53-b1f4-4839-8e48-07a5e789d5eb",
       "checkAutomatically": "NEVER"
     },
     "doctor": {

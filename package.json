@@ -1,8 +1,9 @@
 {
   "name": "manganess",
   "main": "expo-router/entry",
-  "version": "1.14",
+  "version": "1.15",
   "expo": {
+    "version": "1.15",
     "install": {
       "exclude": [
         "typescript"

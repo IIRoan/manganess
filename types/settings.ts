@@ -1,5 +1,5 @@
 // Contains all settings-related types
-import { DownloadSettings, StorageStats } from './download';
+import { DownloadSettings } from './download';
 
 export interface AppSettings {
   theme: ThemeType;
@@ -71,6 +71,3 @@ export interface ReaderProfiles {
   manga: ReaderProfileSettings;
   manhwa: ReaderProfileSettings;
 }
-
-// Re-export for convenience
-export type { DownloadSettings, StorageStats };

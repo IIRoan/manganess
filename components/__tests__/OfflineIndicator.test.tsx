@@ -1,4 +1,3 @@
-import React from 'react';
 import { Animated } from 'react-native';
 import { act, render } from '@testing-library/react-native';
 import { usePathname } from 'expo-router';
