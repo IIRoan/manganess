@@ -1,25 +1,23 @@
-name: EAS Update
+name: EAS Update (preview)
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    types: [closed]
-    branches:
-      - main
+
+concurrency:
+  group: eas-update-preview-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   update:
     name: EAS Update
-    # Only run if the PR was merged (not just closed) or if it's a direct push
-    if: github.event.pull_request.merged == true || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Check for EXPO_TOKEN
         run: |
           if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
-            echo "You must provide an EXPO_TOKEN secret linked to your Expo account"
+            echo "You must provide an EXPO_TOKEN secret linked to this Expo project"
             exit 1
           fi
 
@@ -40,5 +38,15 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Show update target
+        run: |
+          echo "owner=$(jq -r '.expo.owner' app.json)"
+          echo "projectId=$(jq -r '.expo.extra.eas.projectId' app.json)"
+          echo "runtimeVersion=$(jq -r '.expo.runtimeVersion' app.json)"
+          echo "updates.url=$(jq -r '.expo.updates.url' app.json)"
+          echo "channel=preview"
+
       - name: Publish update
-        run: eas update --auto --branch preview --environment preview
+        run: |
+          MESSAGE=$(git log -1 --pretty=%s)
+          eas update --channel preview --environment preview --non-interactive --message "$MESSAGE"
