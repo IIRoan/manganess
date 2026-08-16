@@ -17,7 +17,7 @@ import { Colors } from '@/constants/Colors';
 import { setOnboardingCompleted } from '@/services/settingsService';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import Constants from 'expo-constants';
 import { imageCache } from '@/services/CacheImages';
 import Alert from '@/components/Alert';
 import axios, { isAxiosError } from 'axios';
@@ -29,30 +29,24 @@ import { isExpoGo, isDevelopment } from '@/services/updateService';
 import { setMangaData } from '@/services/bookmarkService';
 import type { MangaData } from '@/types';
 
-// Environment detection helpers
 const getExecutionEnvironment = (): string => {
   return Constants.executionEnvironment || 'unknown';
 };
 
-const isDevBuild = (): boolean => {
-  return (
-    Constants.executionEnvironment === ExecutionEnvironment.Standalone ||
-    Constants.executionEnvironment === ExecutionEnvironment.Bare
-  );
-};
-
 const getEnvironmentLabel = (): string => {
   if (isExpoGo()) return 'Expo Go';
-  if (isDevelopment()) return 'Development Mode';
-  if (isDevBuild()) return 'Development Build (used in prod)';
-  return 'Production Build';
+  return getExecutionEnvironment();
 };
 
 const getEnvironmentColor = (): string => {
-  if (isExpoGo()) return '#8B5CF6'; // Purple for Expo Go
-  if (isDevelopment()) return '#EF4444'; // Red for dev mode
-  if (isDevBuild()) return '#F59E0B'; // Amber for dev builds
-  return '#10B981'; // Green for production
+  if (isExpoGo()) return '#8B5CF6';
+  if (isDevelopment()) return '#EF4444';
+  return '#10B981';
+};
+
+const displayValue = (value: string | null | undefined): string => {
+  if (value == null || value === '') return 'none';
+  return value;
 };
 
 export default function DebugScreen() {
@@ -96,24 +90,8 @@ export default function DebugScreen() {
   };
 
   const formatDate = (date: Date | null): string => {
-    if (!date) return 'N/A';
-    return date.toLocaleString();
-  };
-
-  const getChannelDisplayName = (channel: string | null): string => {
-    if (!channel) return 'Unknown';
-    switch (channel) {
-      case 'preview':
-        return 'Preview';
-      case 'development':
-        return 'Development';
-      case 'main':
-        return 'Production';
-      case 'testing':
-        return 'Testing (legacy)';
-      default:
-        return channel;
-    }
+    if (!date) return 'none';
+    return date.toISOString();
   };
 
   const getChannelColor = (
@@ -121,11 +99,13 @@ export default function DebugScreen() {
   ): { bg: string; text: string } => {
     switch (channel) {
       case 'preview':
-        return { bg: '#F97316', text: '#FFFFFF' }; // Orange for preview
-      case 'testing':
-        return { bg: '#3B82F6', text: '#FFFFFF' }; // Blue for testing
+        return { bg: '#F97316', text: '#FFFFFF' };
+      case 'development':
+        return { bg: '#EF4444', text: '#FFFFFF' };
+      case 'main':
+        return { bg: '#10B981', text: '#FFFFFF' };
       default:
-        return { bg: colors.border, text: colors.text }; // Neutral for unknown
+        return { bg: colors.border, text: colors.text };
     }
   };
 
@@ -252,45 +232,33 @@ export default function DebugScreen() {
 
   const showChannelInfo = () => {
     showAlertWithConfig({
-      title: 'Channel Information',
-      message: `Current Channel: ${getChannelDisplayName(extendedUpdateInfo?.channel ?? null)}\n\nAvailable Channels:\n\u2022 development - Dev client (Metro)\n\u2022 preview - Standalone tester builds\n\u2022 main - Production / store builds\n\nNote: Channel is baked into the binary at EAS Build time. Publish JS with eas update --branch matching that channel.`,
+      title: 'Update channel',
+      message: [
+        `channel: ${displayValue(extendedUpdateInfo?.channel)}`,
+        `Updates.isEnabled: ${String(Updates.isEnabled)}`,
+        `runtimeVersion: ${displayValue(extendedUpdateInfo?.runtimeVersion)}`,
+        `isEmbeddedLaunch: ${String(extendedUpdateInfo?.isEmbeddedLaunch)}`,
+        `isEmergencyLaunch: ${String(extendedUpdateInfo?.isEmergencyLaunch)}`,
+      ].join('\n'),
       options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
     });
   };
 
   const handleReloadApp = async () => {
-    if (isExpoGo()) {
-      showAlertWithConfig({
-        title: 'Not Available',
-        message:
-          'App reload is not available in Expo Go.\n\nTo reload the app in Expo Go, shake your device to open the developer menu and select "Reload", or press R in the terminal.',
-        options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
-      });
-      return;
-    }
-
     try {
       await Updates.reloadAsync();
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+        error instanceof Error ? error.message : String(error);
       showAlertWithConfig({
-        title: 'Reload Failed',
-        message: `Failed to reload the app: ${errorMessage}\n\nThis may happen if no update is currently running. Try using "Check for Updates" first.`,
+        title: 'reloadAsync failed',
+        message: errorMessage,
         options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
       });
     }
   };
 
   const handleRefreshInfo = () => {
-    if (isExpoGo()) {
-      showAlertWithConfig({
-        title: 'Limited Functionality',
-        message:
-          'Update information is limited in Expo Go. Some values may not be available or accurate.',
-        options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
-      });
-    }
     refreshUpdateInfo();
   };
 
@@ -761,18 +729,31 @@ export default function DebugScreen() {
                     </Text>
                   </View>
                 </View>
-                <View style={styles.environmentDetails}>
-                  <Text style={styles.environmentLabel}>
-                    Execution Environment
-                  </Text>
-                  <Text style={styles.environmentValue}>
-                    {getExecutionEnvironment()}
-                  </Text>
+                <View style={styles.environmentFacts}>
+                  <View style={styles.environmentDetails}>
+                    <Text style={styles.environmentLabel}>
+                      executionEnvironment
+                    </Text>
+                    <Text style={styles.environmentValue}>
+                      {getExecutionEnvironment()}
+                    </Text>
+                  </View>
+                  <View style={styles.environmentDetails}>
+                    <Text style={styles.environmentLabel}>__DEV__</Text>
+                    <Text style={styles.environmentValue}>
+                      {String(__DEV__)}
+                    </Text>
+                  </View>
+                  <View style={styles.environmentDetails}>
+                    <Text style={styles.environmentLabel}>Updates.isEnabled</Text>
+                    <Text style={styles.environmentValue}>
+                      {String(Updates.isEnabled)}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
-              {/* Expo Go Warning */}
-              {isExpoGo() && (
+              {unavailableReason ? (
                 <View style={styles.expoGoWarning}>
                   <Ionicons
                     name="information-circle"
@@ -780,12 +761,10 @@ export default function DebugScreen() {
                     color="#8B5CF6"
                   />
                   <Text style={styles.expoGoWarningText}>
-                    Running in Expo Go. OTA updates are not available in this
-                    environment. Build a development or production build to
-                    enable updates.
+                    {unavailableReason}
                   </Text>
                 </View>
-              )}
+              ) : null}
 
               {/* Channel & Status Row */}
               <View style={styles.badgesRow}>
@@ -815,7 +794,7 @@ export default function DebugScreen() {
                       },
                     ]}
                   >
-                    {getChannelDisplayName(extendedUpdateInfo.channel)}
+                    {`channel: ${displayValue(extendedUpdateInfo.channel)}`}
                   </Text>
                   <Ionicons
                     name="chevron-forward"
@@ -830,67 +809,52 @@ export default function DebugScreen() {
                   style={[
                     styles.statusBadge,
                     {
-                      backgroundColor: isExpoGo()
-                        ? '#8B5CF620'
-                        : extendedUpdateInfo.isEmbeddedLaunch
-                          ? '#F9731620'
-                          : '#22C55E20',
-                      borderColor: isExpoGo()
-                        ? '#8B5CF6'
-                        : extendedUpdateInfo.isEmbeddedLaunch
-                          ? '#F97316'
-                          : '#22C55E',
+                      backgroundColor: extendedUpdateInfo.isEmbeddedLaunch
+                        ? '#F9731620'
+                        : '#22C55E20',
+                      borderColor: extendedUpdateInfo.isEmbeddedLaunch
+                        ? '#F97316'
+                        : '#22C55E',
                     },
                   ]}
                 >
                   <Ionicons
                     name={
-                      isExpoGo()
-                        ? 'phone-portrait-outline'
-                        : extendedUpdateInfo.isEmbeddedLaunch
-                          ? 'cube-outline'
-                          : 'cloud-done-outline'
+                      extendedUpdateInfo.isEmbeddedLaunch
+                        ? 'cube-outline'
+                        : 'cloud-done-outline'
                     }
                     size={14}
                     color={
-                      isExpoGo()
-                        ? '#8B5CF6'
-                        : extendedUpdateInfo.isEmbeddedLaunch
-                          ? '#F97316'
-                          : '#22C55E'
+                      extendedUpdateInfo.isEmbeddedLaunch
+                        ? '#F97316'
+                        : '#22C55E'
                     }
                   />
                   <Text
                     style={[
                       styles.statusBadgeText,
                       {
-                        color: isExpoGo()
-                          ? '#8B5CF6'
-                          : extendedUpdateInfo.isEmbeddedLaunch
-                            ? '#F97316'
-                            : '#22C55E',
+                        color: extendedUpdateInfo.isEmbeddedLaunch
+                          ? '#F97316'
+                          : '#22C55E',
                       },
                     ]}
                   >
-                    {isExpoGo()
-                      ? 'Expo Go'
-                      : extendedUpdateInfo.isEmbeddedLaunch
-                        ? 'Embedded'
-                        : 'OTA Update'}
+                    {`isEmbeddedLaunch: ${String(extendedUpdateInfo.isEmbeddedLaunch)}`}
                   </Text>
                 </View>
 
-                {/* Emergency Badge */}
-                {extendedUpdateInfo.isEmergencyLaunch && (
+                {extendedUpdateInfo.isEmergencyLaunch ? (
                   <View style={[styles.statusBadge, styles.emergencyBadge]}>
                     <Ionicons name="warning" size={14} color="#EF4444" />
                     <Text
                       style={[styles.statusBadgeText, { color: '#EF4444' }]}
                     >
-                      Emergency
+                      isEmergencyLaunch: true
                     </Text>
                   </View>
-                )}
+                ) : null}
               </View>
 
               {/* Info Cards */}
@@ -900,7 +864,7 @@ export default function DebugScreen() {
                   style={styles.infoCard}
                   onPress={() =>
                     extendedUpdateInfo.updateId &&
-                    copyToClipboard(extendedUpdateInfo.updateId, 'Update ID')
+                    copyToClipboard(extendedUpdateInfo.updateId, 'updateId')
                   }
                   disabled={!extendedUpdateInfo.updateId}
                 >
@@ -910,12 +874,10 @@ export default function DebugScreen() {
                       size={18}
                       color={colors.text}
                     />
-                    <Text style={styles.infoCardTitle}>Update ID</Text>
+                    <Text style={styles.infoCardTitle}>updateId</Text>
                   </View>
-                  <Text style={styles.infoCardValue} numberOfLines={1}>
-                    {extendedUpdateInfo.updateId
-                      ? extendedUpdateInfo.updateId.substring(0, 20) + '...'
-                      : 'N/A'}
+                  <Text style={styles.infoCardValue} selectable>
+                    {displayValue(extendedUpdateInfo.updateId)}
                   </Text>
                   {extendedUpdateInfo.updateId && (
                     <Text style={styles.infoCardHint}>Tap to copy</Text>
@@ -929,7 +891,7 @@ export default function DebugScreen() {
                     extendedUpdateInfo.runtimeVersion &&
                     copyToClipboard(
                       extendedUpdateInfo.runtimeVersion,
-                      'Runtime Version'
+                      'runtimeVersion'
                     )
                   }
                   disabled={!extendedUpdateInfo.runtimeVersion}
@@ -940,13 +902,10 @@ export default function DebugScreen() {
                       size={18}
                       color={colors.text}
                     />
-                    <Text style={styles.infoCardTitle}>Runtime Version</Text>
+                    <Text style={styles.infoCardTitle}>runtimeVersion</Text>
                   </View>
-                  <Text style={styles.infoCardValue} numberOfLines={1}>
-                    {extendedUpdateInfo.runtimeVersion
-                      ? extendedUpdateInfo.runtimeVersion.substring(0, 16) +
-                        '...'
-                      : 'N/A'}
+                  <Text style={styles.infoCardValue} selectable>
+                    {displayValue(extendedUpdateInfo.runtimeVersion)}
                   </Text>
                   {extendedUpdateInfo.runtimeVersion && (
                     <Text style={styles.infoCardHint}>Tap to copy</Text>
@@ -957,51 +916,61 @@ export default function DebugScreen() {
               {/* Additional Info */}
               <View style={styles.additionalInfo}>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Created At:</Text>
-                  <Text style={styles.infoValue}>
+                  <Text style={styles.infoLabel}>createdAt</Text>
+                  <Text style={styles.infoValue} selectable>
                     {formatDate(extendedUpdateInfo.createdAt)}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Auto Check:</Text>
-                  <Text style={styles.infoValue}>
-                    {extendedUpdateInfo.checkAutomatically}
+                  <Text style={styles.infoLabel}>checkAutomatically</Text>
+                  <Text style={styles.infoValue} selectable>
+                    {displayValue(Updates.checkAutomatically)}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Platform:</Text>
+                  <Text style={styles.infoLabel}>isEmergencyLaunch</Text>
+                  <Text style={styles.infoValue}>
+                    {String(extendedUpdateInfo.isEmergencyLaunch)}
+                  </Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Platform.OS</Text>
                   <Text style={styles.infoValue}>{Platform.OS}</Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Expo SDK:</Text>
-                  <Text style={styles.infoValue}>
-                    {Constants.expoConfig?.sdkVersion || 'N/A'}
+                  <Text style={styles.infoLabel}>sdkVersion</Text>
+                  <Text style={styles.infoValue} selectable>
+                    {displayValue(Constants.expoConfig?.sdkVersion)}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>App Version:</Text>
-                  <Text style={styles.infoValue}>
-                    {Constants.expoConfig?.version || 'N/A'}
+                  <Text style={styles.infoLabel}>version</Text>
+                  <Text style={styles.infoValue} selectable>
+                    {displayValue(Constants.expoConfig?.version)}
                   </Text>
                 </View>
-                {Constants.expoConfig?.extra?.eas?.projectId && (
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Project ID:</Text>
-                    <Text style={styles.infoValue} numberOfLines={1}>
-                      {Constants.expoConfig.extra.eas.projectId.substring(
-                        0,
-                        12
-                      )}
-                      ...
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>eas.projectId</Text>
+                  <Text
+                    style={[styles.infoValue, styles.infoValueWrap]}
+                    selectable
+                    onPress={() => {
+                      const projectId =
+                        Constants.expoConfig?.extra?.eas?.projectId;
+                      if (projectId) {
+                        copyToClipboard(projectId, 'eas.projectId');
+                      }
+                    }}
+                  >
+                    {displayValue(Constants.expoConfig?.extra?.eas?.projectId)}
+                  </Text>
+                </View>
               </View>
 
               {/* Last Check Result */}
               {lastCheckResult && (
                 <View style={styles.lastCheckContainer}>
-                  <Text style={styles.lastCheckLabel}>Last Check Result:</Text>
+                  <Text style={styles.lastCheckLabel}>lastCheckResult</Text>
                   <Text style={styles.lastCheckValue}>{lastCheckResult}</Text>
                 </View>
               )}
@@ -1012,14 +981,14 @@ export default function DebugScreen() {
                   style={[
                     styles.updateButton,
                     { backgroundColor: accentColor || colors.primary },
-                    (updateStatus.isChecking || isExpoGo()) &&
+                    (updateStatus.isChecking || !updatesAvailable) &&
                       styles.buttonDisabled,
                   ]}
                   onPress={checkForUpdateDetailed}
                   disabled={
                     updateStatus.isChecking ||
                     updateStatus.isDownloading ||
-                    isExpoGo()
+                    !updatesAvailable
                   }
                 >
                   {updateStatus.isChecking ? (
@@ -1032,8 +1001,8 @@ export default function DebugScreen() {
                     />
                   )}
                   <Text style={styles.updateButtonText}>
-                    {isExpoGo()
-                      ? 'Not Available in Expo Go'
+                    {!updatesAvailable
+                      ? 'Updates unavailable'
                       : updateStatus.isChecking
                         ? 'Checking...'
                         : 'Check for Updates'}
@@ -1044,14 +1013,14 @@ export default function DebugScreen() {
                   style={[
                     styles.updateButtonSecondary,
                     { borderColor: accentColor || colors.primary },
-                    (updateStatus.isDownloading || isExpoGo()) &&
+                    (updateStatus.isDownloading || !updatesAvailable) &&
                       styles.buttonDisabled,
                   ]}
                   onPress={fetchAndApplyUpdate}
                   disabled={
                     updateStatus.isChecking ||
                     updateStatus.isDownloading ||
-                    isExpoGo()
+                    !updatesAvailable
                   }
                 >
                   {updateStatus.isDownloading ? (
@@ -1094,19 +1063,21 @@ export default function DebugScreen() {
                   <TouchableOpacity
                     style={[
                       styles.smallButton,
-                      isExpoGo() && styles.smallButtonDisabled,
+                      !updatesAvailable && styles.smallButtonDisabled,
                     ]}
                     onPress={handleReloadApp}
                   >
                     <Ionicons
                       name="reload-outline"
                       size={18}
-                      color={isExpoGo() ? colors.secondaryText : colors.text}
+                      color={
+                        !updatesAvailable ? colors.secondaryText : colors.text
+                      }
                     />
                     <Text
                       style={[
                         styles.smallButtonText,
-                        isExpoGo() && styles.smallButtonTextDisabled,
+                        !updatesAvailable && styles.smallButtonTextDisabled,
                       ]}
                     >
                       Reload App
@@ -1114,25 +1085,15 @@ export default function DebugScreen() {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[
-                      styles.smallButton,
-                      isExpoGo() && styles.smallButtonDisabled,
-                    ]}
+                    style={styles.smallButton}
                     onPress={handleRefreshInfo}
                   >
                     <Ionicons
                       name="sync-outline"
                       size={18}
-                      color={isExpoGo() ? colors.secondaryText : colors.text}
+                      color={colors.text}
                     />
-                    <Text
-                      style={[
-                        styles.smallButtonText,
-                        isExpoGo() && styles.smallButtonTextDisabled,
-                      ]}
-                    >
-                      Refresh
-                    </Text>
+                    <Text style={styles.smallButtonText}>Refresh</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1317,6 +1278,9 @@ const getStyles = (colors: typeof Colors.light, accentColor?: string) =>
       fontSize: 14,
       fontWeight: '700',
     },
+    environmentFacts: {
+      gap: 8,
+    },
     environmentDetails: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -1384,7 +1348,6 @@ const getStyles = (colors: typeof Colors.light, accentColor?: string) =>
       borderColor: '#EF4444',
     },
     infoCardsContainer: {
-      flexDirection: 'row',
       gap: 10,
     },
     infoCard: {
@@ -1414,6 +1377,7 @@ const getStyles = (colors: typeof Colors.light, accentColor?: string) =>
       color: colors.text,
       marginBottom: 6,
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      lineHeight: 18,
     },
     infoCardHint: {
       fontSize: 10,
@@ -1431,7 +1395,8 @@ const getStyles = (colors: typeof Colors.light, accentColor?: string) =>
     infoRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
+      alignItems: 'flex-start',
+      gap: 12,
       paddingVertical: 2,
     },
     infoLabel: {
@@ -1443,6 +1408,11 @@ const getStyles = (colors: typeof Colors.light, accentColor?: string) =>
       fontWeight: '600',
       color: colors.text,
       fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      flexShrink: 1,
+      textAlign: 'right',
+    },
+    infoValueWrap: {
+      flex: 1,
     },
     lastCheckContainer: {
       backgroundColor: colors.background,
