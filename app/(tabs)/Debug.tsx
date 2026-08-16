@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,8 +15,9 @@ import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { setOnboardingCompleted } from '@/services/settingsService';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Updates from 'expo-updates';
+import * as Sharing from 'expo-sharing';
 import Constants from 'expo-constants';
 import { imageCache } from '@/services/CacheImages';
 import Alert from '@/components/Alert';
@@ -27,7 +28,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppUpdates } from '@/hooks/useAppUpdates';
 import { isExpoGo, isDevelopment } from '@/services/updateService';
 import { setMangaData } from '@/services/bookmarkService';
+import { errorLogService } from '@/services/errorLogService';
 import type { MangaData } from '@/types';
+import type { ErrorLogSummary, PersistedErrorEntry } from '@/types/errorLog';
 
 const getExecutionEnvironment = (): string => {
   return Constants.executionEnvironment || 'unknown';
@@ -80,8 +83,15 @@ export default function DebugScreen() {
 
   const [lastCheckResult, setLastCheckResult] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(
-    'updates'
+    'errors'
   );
+  const [errorLogSummary, setErrorLogSummary] = useState<ErrorLogSummary | null>(
+    null
+  );
+  const [errorLogEntries, setErrorLogEntries] = useState<PersistedErrorEntry[]>(
+    []
+  );
+  const [isErrorLogLoading, setIsErrorLogLoading] = useState(false);
 
   // Extended update info with manifest (from expo-updates directly)
   const extendedUpdateInfo = {
@@ -264,6 +274,157 @@ export default function DebugScreen() {
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
+  };
+
+  const refreshErrorLog = useCallback(async () => {
+    setIsErrorLogLoading(true);
+    try {
+      const [summary, entries] = await Promise.all([
+        errorLogService.getSummary(),
+        errorLogService.getEntries(),
+      ]);
+      setErrorLogSummary(summary);
+      setErrorLogEntries(entries.slice().reverse());
+    } catch (error) {
+      showAlertWithConfig({
+        title: 'Error Log',
+        message:
+          'Failed to read the error log: ' +
+          (error instanceof Error ? error.message : String(error)),
+        options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+      });
+    } finally {
+      setIsErrorLogLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshErrorLog();
+    }, [refreshErrorLog])
+  );
+
+  const formatErrorPreview = (entry: PersistedErrorEntry): string => {
+    const time = new Date(entry.ts).toLocaleString();
+    const scope = entry.scope ? `/${entry.scope}` : '';
+    const lines = [
+      time,
+      `${entry.level.toUpperCase()} (${entry.source}${scope})`,
+      entry.message,
+    ];
+    if (typeof entry.data !== 'undefined') {
+      try {
+        lines.push(JSON.stringify(entry.data, null, 2));
+      } catch {
+        lines.push(String(entry.data));
+      }
+    }
+    if (entry.stack) {
+      lines.push(entry.stack);
+    }
+    lines.push(
+      `platform=${entry.platform} ${entry.platformVersion} app=${entry.appVersion ?? 'unknown'}`
+    );
+    lines.push(
+      `channel=${entry.channel ?? 'none'} updateId=${entry.updateId ?? 'none'}`
+    );
+    return lines.join('\n');
+  };
+
+  const showErrorLogContents = async () => {
+    try {
+      const text = await errorLogService.getText();
+      showAlertWithConfig({
+        title: `Error Log (${errorLogSummary?.count ?? 0})`,
+        message: text,
+        options: [
+          {
+            text: 'Copy',
+            onPress: () => {
+              Clipboard.setString(text);
+              setShowAlert(false);
+            },
+          },
+          { text: 'Close', onPress: () => setShowAlert(false) },
+        ],
+      });
+    } catch (error) {
+      showAlertWithConfig({
+        title: 'Error Log',
+        message:
+          'Failed to open the error log: ' +
+          (error instanceof Error ? error.message : String(error)),
+        options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+      });
+    }
+  };
+
+  const copyErrorLog = async () => {
+    try {
+      const text = await errorLogService.getText();
+      Clipboard.setString(text);
+      showAlertWithConfig({
+        title: 'Copied',
+        message: 'Error log copied to clipboard.',
+        options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+      });
+    } catch (error) {
+      showAlertWithConfig({
+        title: 'Copy Failed',
+        message: error instanceof Error ? error.message : String(error),
+        options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+      });
+    }
+  };
+
+  const shareErrorLog = async () => {
+    try {
+      const fileUri = await errorLogService.getPersistedFileUri();
+      if (!(await Sharing.isAvailableAsync())) {
+        await copyErrorLog();
+        return;
+      }
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'application/json',
+        dialogTitle: 'Share MangaNess error log',
+      });
+    } catch (error) {
+      showAlertWithConfig({
+        title: 'Share Failed',
+        message: error instanceof Error ? error.message : String(error),
+        options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+      });
+    }
+  };
+
+  const clearErrorLog = () => {
+    showAlertWithConfig({
+      title: 'Clear Error Log',
+      message: 'Delete all saved errors from this device?',
+      options: [
+        { text: 'Cancel', onPress: () => setShowAlert(false) },
+        {
+          text: 'Clear',
+          onPress: async () => {
+            try {
+              await errorLogService.clear();
+              await refreshErrorLog();
+              showAlertWithConfig({
+                title: 'Cleared',
+                message: 'Error log file has been cleared.',
+                options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+              });
+            } catch (error) {
+              showAlertWithConfig({
+                title: 'Clear Failed',
+                message: error instanceof Error ? error.message : String(error),
+                options: [{ text: 'OK', onPress: () => setShowAlert(false) }],
+              });
+            }
+          },
+        },
+      ],
+    });
   };
 
   const addLog = (message: string) => {
@@ -682,6 +843,193 @@ export default function DebugScreen() {
         contentContainerStyle={styles.scrollViewContent}
       >
         <Text style={styles.title}>Debug Menu</Text>
+
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => toggleSection('errors')}
+            accessibilityRole="button"
+            accessibilityLabel="Error log section"
+          >
+            <View style={styles.sectionHeaderLeft}>
+              <Ionicons
+                name="warning-outline"
+                size={24}
+                color={accentColor || colors.primary}
+              />
+              <Text style={styles.sectionTitle}>Error Log</Text>
+              {errorLogSummary && errorLogSummary.count > 0 ? (
+                <View style={styles.errorCountBadge}>
+                  <Text style={styles.errorCountBadgeText}>
+                    {errorLogSummary.count}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Ionicons
+              name={
+                expandedSection === 'errors' ? 'chevron-up' : 'chevron-down'
+              }
+              size={20}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+
+          {expandedSection === 'errors' && (
+            <View style={styles.errorLogContainer}>
+              <Text style={styles.errorLogHint}>
+                Manga load and other failures are saved to a file on this
+                device so you can copy or share them after a user hits the
+                issue.
+              </Text>
+
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>saved errors</Text>
+                <Text style={styles.infoValue}>
+                  {errorLogSummary?.count ?? 0}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>file</Text>
+                <Text
+                  style={[styles.infoValue, styles.infoValueWrap]}
+                  selectable
+                >
+                  {errorLogSummary?.fileUri ?? 'none'}
+                </Text>
+              </View>
+
+              {errorLogEntries.length === 0 ? (
+                <Text style={styles.errorLogEmpty}>
+                  No errors recorded yet. Reproduce the manga loading issue,
+                  then reopen this section.
+                </Text>
+              ) : (
+                <ScrollView
+                  style={styles.errorLogList}
+                  nestedScrollEnabled
+                >
+                  {errorLogEntries.slice(0, 20).map((entry) => (
+                    <TouchableOpacity
+                      key={entry.id}
+                      style={styles.errorLogItem}
+                      onPress={() =>
+                        showAlertWithConfig({
+                          title: `${entry.level.toUpperCase()} ${entry.source}`,
+                          message: formatErrorPreview(entry),
+                          options: [
+                            {
+                              text: 'Copy',
+                              onPress: () => {
+                                Clipboard.setString(formatErrorPreview(entry));
+                                setShowAlert(false);
+                              },
+                            },
+                            {
+                              text: 'Close',
+                              onPress: () => setShowAlert(false),
+                            },
+                          ],
+                        })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`Error ${entry.message}`}
+                    >
+                      <Text style={styles.errorLogItemLevel}>
+                        {entry.level.toUpperCase()}
+                        {entry.scope ? ` · ${entry.scope}` : ''}
+                      </Text>
+                      <Text style={styles.errorLogItemMessage} numberOfLines={3}>
+                        {entry.message}
+                      </Text>
+                      <Text style={styles.errorLogItemMeta}>
+                        {new Date(entry.ts).toLocaleString()} · {entry.platform}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+
+              <View style={styles.errorLogActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.updateButton,
+                    { backgroundColor: accentColor || colors.primary },
+                  ]}
+                  onPress={showErrorLogContents}
+                  accessibilityRole="button"
+                  accessibilityLabel="View full error log"
+                >
+                  {isErrorLogLoading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons
+                      name="document-text-outline"
+                      size={20}
+                      color="#FFFFFF"
+                    />
+                  )}
+                  <Text style={styles.updateButtonText}>View Full Log</Text>
+                </TouchableOpacity>
+
+                <View style={styles.smallButtonsRow}>
+                  <TouchableOpacity
+                    style={styles.smallButton}
+                    onPress={copyErrorLog}
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy error log"
+                  >
+                    <Ionicons
+                      name="copy-outline"
+                      size={18}
+                      color={colors.text}
+                    />
+                    <Text style={styles.smallButtonText}>Copy</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.smallButton}
+                    onPress={shareErrorLog}
+                    accessibilityRole="button"
+                    accessibilityLabel="Share error log file"
+                  >
+                    <Ionicons
+                      name="share-outline"
+                      size={18}
+                      color={colors.text}
+                    />
+                    <Text style={styles.smallButtonText}>Share</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.smallButton}
+                    onPress={() => void refreshErrorLog()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Refresh error log"
+                  >
+                    <Ionicons
+                      name="sync-outline"
+                      size={18}
+                      color={colors.text}
+                    />
+                    <Text style={styles.smallButtonText}>Refresh</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.smallButton}
+                    onPress={clearErrorLog}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear error log"
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={18}
+                      color={colors.text}
+                    />
+                    <Text style={styles.smallButtonText}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* Expo Updates Section */}
         <View style={styles.section}>
@@ -1497,5 +1845,71 @@ const getStyles = (colors: typeof Colors.light, accentColor?: string) =>
     },
     smallButtonTextDisabled: {
       color: colors.secondaryText,
+    },
+    errorCountBadge: {
+      backgroundColor: '#EF4444',
+      borderRadius: 10,
+      minWidth: 20,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      alignItems: 'center',
+    },
+    errorCountBadgeText: {
+      color: '#FFFFFF',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    errorLogContainer: {
+      marginTop: 16,
+      gap: 12,
+    },
+    errorLogHint: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.secondaryText,
+    },
+    errorLogEmpty: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.secondaryText,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    errorLogList: {
+      maxHeight: 280,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: colors.background,
+    },
+    errorLogItem: {
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    errorLogItemLevel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#EF4444',
+      letterSpacing: 0.4,
+      marginBottom: 4,
+    },
+    errorLogItemMessage: {
+      fontSize: 13,
+      color: colors.text,
+      lineHeight: 18,
+    },
+    errorLogItemMeta: {
+      fontSize: 11,
+      color: colors.secondaryText,
+      marginTop: 6,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    errorLogActions: {
+      gap: 12,
     },
   });

@@ -20,6 +20,7 @@ import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
 import { useNavigationPerf } from '@/hooks/useNavigationPerf';
 import { logger } from '@/utils/logger';
+import { errorLogService } from '@/services/errorLogService';
 import Constants from 'expo-constants';
 import { downloadManagerService } from '@/services/downloadManager';
 import { createEcosystem, EcosystemProvider } from '@zedux/react';
@@ -27,6 +28,7 @@ import { StartupMigrationHost } from '@/components/StartupMigrationHost';
 import { AppUpdateHost } from '@/components/AppUpdateHost';
 
 SplashScreen.preventAutoHideAsync();
+errorLogService.installGlobalHandlers();
 
 function RootLayoutNav() {
   // Track route change durations globally

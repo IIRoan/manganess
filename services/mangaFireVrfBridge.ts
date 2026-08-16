@@ -22,6 +22,8 @@ interface PendingApiRequest {
 
 type VrfHostMessage =
   | { type: 'ready'; discovery?: string }
+  | { type: 'challenge'; title?: string }
+  | { type: 'probe'; title?: string; snippet?: string }
   | { type: 'vrf'; id: string; vrf?: string | null; error?: string }
   | {
     type: 'api';
@@ -31,11 +33,30 @@ type VrfHostMessage =
     error?: string;
   };
 
+export interface MangaFireVrfHostHandles {
+  reload?: () => void;
+}
+
+export interface MangaFireVrfHostEvent {
+  type: 'loadEnd' | 'httpError' | 'terminated' | 'error';
+  url?: string;
+  title?: string;
+  statusCode?: number;
+  description?: string;
+}
+
 export interface MangaFireHostFetchOptions {
   validateStatus?: (status: number) => boolean;
 }
 
 const REQUEST_TIMEOUT_MS = 20000;
+const HOST_RELOAD_AFTER_MS = 10000;
+export const MANGA_FIRE_VRF_CHALLENGE_WAIT_MS = 180000;
+
+export interface MangaFireVrfHostUiState {
+  challengeVisible: boolean;
+  ready: boolean;
+}
 let useTestVrfToken =
   process.env.NODE_ENV === 'test' || typeof jest !== 'undefined';
 
@@ -395,30 +416,85 @@ class MangaFireVrfBridge {
   private ready = false;
   private hostAttached = false;
   private webViewInject: ((script: string) => void) | null = null;
+  private webViewReload: (() => void) | null = null;
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
+  private challengeSeen = false;
+  private challengeDismissed = false;
+  private lastHostEvent: string | null = null;
   private pending: PendingVrfRequest[] = [];
   private pendingApi: PendingApiRequest[] = [];
+  private uiListeners = new Set<(state: MangaFireVrfHostUiState) => void>();
   private readyWaiters: Array<{
     resolve: () => void;
     reject: (error: Error) => void;
     timeoutId: ReturnType<typeof setTimeout>;
   }> = [];
 
-  attachHost(injectJavaScript: (script: string) => void) {
+  attachHost(
+    injectJavaScript: (script: string) => void,
+    handles?: MangaFireVrfHostHandles
+  ) {
     this.hostAttached = true;
     this.webViewInject = injectJavaScript;
+    this.webViewReload = handles?.reload ?? null;
     this.flushReadyWaiters();
   }
 
   detachHost() {
     this.hostAttached = false;
     this.webViewInject = null;
+    this.webViewReload = null;
     this.ready = false;
+    this.challengeSeen = false;
+    this.challengeDismissed = false;
+    this.lastHostEvent = null;
+    this.clearReloadTimer();
+    this.notifyHostUi();
     this.rejectAllPending(new Error('MangaFire VRF host detached'));
+  }
+
+  subscribeHostUi(
+    listener: (state: MangaFireVrfHostUiState) => void
+  ): () => void {
+    this.uiListeners.add(listener);
+    listener(this.getHostUiState());
+    return () => {
+      this.uiListeners.delete(listener);
+    };
+  }
+
+  dismissChallenge() {
+    this.challengeDismissed = true;
+    this.notifyHostUi();
+    logger().warn('Network', 'Cloudflare verification dismissed');
+    this.rejectAllPending(new Error('Cloudflare verification dismissed'));
+  }
+
+  reportHostEvent(event: MangaFireVrfHostEvent) {
+    const details = [
+      event.type,
+      event.url,
+      event.title,
+      event.statusCode != null ? `status=${event.statusCode}` : null,
+      event.description,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    this.lastHostEvent = details;
+
+    if (event.type === 'terminated') {
+      this.ready = false;
+      this.challengeSeen = false;
+      this.challengeDismissed = false;
+      this.notifyHostUi();
+    }
   }
 
   markReady() {
     this.ready = true;
+    this.clearReloadTimer();
     this.flushReadyWaiters();
+    this.notifyHostUi();
   }
 
   handleMessage(rawMessage: string) {
@@ -430,12 +506,35 @@ class MangaFireVrfBridge {
     }
 
     if (message.type === 'ready') {
+      this.challengeSeen = false;
+      this.challengeDismissed = false;
+      this.clearReloadTimer();
       if (message.discovery) {
         logger().info('Network', 'MangaFire protection module discovered', {
           discovery: message.discovery,
         });
       }
       this.markReady();
+      return;
+    }
+
+    if (message.type === 'challenge') {
+      if (!this.challengeSeen) {
+        logger().warn('Network', 'MangaFire VRF host hit Cloudflare challenge', {
+          title: message.title || 'Just a moment',
+        });
+      }
+      this.challengeSeen = true;
+      this.extendReadyWaitersForChallenge();
+      this.notifyHostUi();
+      return;
+    }
+
+    if (message.type === 'probe') {
+      logger().warn('Network', 'MangaFire VRF host still waiting for protection module', {
+        title: message.title,
+        snippet: message.snippet,
+      });
       return;
     }
 
@@ -622,6 +721,13 @@ class MangaFireVrfBridge {
       throw new Error('MangaFire VRF host is not available');
     }
 
+    if (this.challengeSeen && this.challengeDismissed) {
+      this.challengeDismissed = false;
+      this.notifyHostUi();
+    }
+
+    this.scheduleHostReloadIfNeeded();
+
     await new Promise<void>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         const index = this.readyWaiters.findIndex(
@@ -630,11 +736,74 @@ class MangaFireVrfBridge {
         if (index !== -1) {
           this.readyWaiters.splice(index, 1);
         }
-        reject(new Error('Timed out waiting for MangaFire protection module'));
-      }, REQUEST_TIMEOUT_MS);
+        reject(new Error(this.buildReadyTimeoutMessage()));
+      }, this.challengeSeen ? MANGA_FIRE_VRF_CHALLENGE_WAIT_MS : REQUEST_TIMEOUT_MS);
 
       this.readyWaiters.push({ resolve, reject, timeoutId });
     });
+  }
+
+  private extendReadyWaitersForChallenge() {
+    for (const waiter of this.readyWaiters) {
+      clearTimeout(waiter.timeoutId);
+      waiter.timeoutId = setTimeout(() => {
+        const index = this.readyWaiters.indexOf(waiter);
+        if (index !== -1) {
+          this.readyWaiters.splice(index, 1);
+        }
+        waiter.reject(new Error(this.buildReadyTimeoutMessage()));
+      }, MANGA_FIRE_VRF_CHALLENGE_WAIT_MS);
+    }
+  }
+
+  private getHostUiState(): MangaFireVrfHostUiState {
+    return {
+      challengeVisible:
+        this.challengeSeen && !this.ready && !this.challengeDismissed,
+      ready: this.ready,
+    };
+  }
+
+  private notifyHostUi() {
+    const state = this.getHostUiState();
+    for (const listener of this.uiListeners) {
+      listener(state);
+    }
+  }
+
+  private scheduleHostReloadIfNeeded() {
+    if (this.ready || this.reloadTimer || !this.webViewReload) {
+      return;
+    }
+
+    this.reloadTimer = setTimeout(() => {
+      this.reloadTimer = null;
+      if (this.ready || this.challengeSeen) {
+        return;
+      }
+      logger().warn('Service', 'MangaFire VRF host still not ready, reloading WebView', {
+        lastHostEvent: this.lastHostEvent,
+      });
+      this.webViewReload?.();
+    }, HOST_RELOAD_AFTER_MS);
+  }
+
+  private clearReloadTimer() {
+    if (this.reloadTimer) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = null;
+    }
+  }
+
+  private buildReadyTimeoutMessage(): string {
+    const parts = ['Timed out waiting for MangaFire protection module'];
+    if (this.challengeSeen) {
+      parts.push('Cloudflare challenge still active');
+    }
+    if (this.lastHostEvent) {
+      parts.push(this.lastHostEvent);
+    }
+    return parts.join(' — ');
   }
 
   private flushReadyWaiters() {
@@ -743,8 +912,59 @@ export function buildVrfScript(): string {
     (function() {
       ${VRF_PROTECTION_HELPERS_JS}
       var notified = false;
+      var challengeNotified = false;
+      var probeNotified = false;
+      var startedAt = Date.now();
+
+      function pageSnippet() {
+        try {
+          return String(document.documentElement && document.documentElement.innerHTML || '').slice(0, 240);
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function looksLikeChallenge() {
+        var html = pageSnippet().toLowerCase();
+        var title = '';
+        try { title = String(document.title || '').toLowerCase(); } catch (e) {}
+        return (
+          title.indexOf('just a moment') !== -1 ||
+          html.indexOf('just a moment') !== -1 ||
+          html.indexOf('cf-browser-verification') !== -1 ||
+          html.indexOf('challenge-platform') !== -1 ||
+          html.indexOf('cf-mitigated') !== -1
+        );
+      }
+
+      function notifyChallenge() {
+        if (challengeNotified || !looksLikeChallenge()) return;
+        challengeNotified = true;
+        var title = '';
+        try { title = document.title || ''; } catch (e) {}
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'challenge',
+          title: title
+        }));
+      }
+
+      function notifyProbe() {
+        if (probeNotified || notified) return;
+        if (Date.now() - startedAt < 8000) return;
+        probeNotified = true;
+        var title = '';
+        try { title = document.title || ''; } catch (e) {}
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'probe',
+          title: title,
+          snippet: pageSnippet()
+        }));
+      }
+
       function notifyReady() {
         if (notified) return;
+        notifyChallenge();
+        notifyProbe();
         if (isProtectionReady()) {
           notified = true;
           window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -785,8 +1005,8 @@ export async function appendVrfParams(
 }
 
 export function logVrfFailure(path: string, error: unknown) {
-  logger().warn('Network', 'Failed to acquire MangaFire VRF token', {
+  logger().error('Network', 'Failed to acquire MangaFire VRF token', {
     path,
-    error: error instanceof Error ? error.message : String(error),
+    error,
   });
 }

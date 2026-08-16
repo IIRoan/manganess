@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 
 import ErrorBoundary from '../ErrorBoundary';
+import { errorLogService } from '@/services/errorLogService';
 
 // Mock dependencies
 jest.mock('@/hooks/useTheme', () => ({
@@ -11,6 +12,12 @@ jest.mock('@/hooks/useTheme', () => ({
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
+}));
+
+jest.mock('@/services/errorLogService', () => ({
+  errorLogService: {
+    recordException: jest.fn(),
+  },
 }));
 
 // Component that throws an error
@@ -108,6 +115,10 @@ describe('ErrorBoundary', () => {
         'ErrorBoundary caught an error:',
         expect.any(Error),
         expect.any(Object)
+      );
+      expect(errorLogService.recordException).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ source: 'react' })
       );
     });
 
