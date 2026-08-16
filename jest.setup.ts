@@ -21,7 +21,7 @@ afterAll(() => {
 jest.mock('react-native-reanimated', () => {
   const ReactNative = require('react-native');
   const ID = <T>(value: T) => value;
-  const NOOP = () => {};
+  const NOOP = () => { };
   const animationBuilder = {
     delay: () => animationBuilder,
     duration: () => animationBuilder,
@@ -142,8 +142,8 @@ jest.mock('expo-modules-core', () => {
     addListener() {
       return { remove: jest.fn() };
     }
-    removeAllListeners() {}
-    removeSubscription() {}
+    removeAllListeners() { }
+    removeSubscription() { }
   }
 
   return {
@@ -159,6 +159,8 @@ jest.mock('expo-modules-core', () => {
 });
 
 jest.mock('expo-file-system', () => {
+  const mockFsContents = new Map<string, string>();
+
   class MockFile {
     uri: string;
     constructor(dir: any, name?: string) {
@@ -172,10 +174,17 @@ jest.mock('expo-file-system', () => {
     get exists() {
       return true;
     }
-    async write() {}
-    async delete() {}
+    async write(contents?: string) {
+      mockFsContents.set(this.uri, String(contents ?? ''));
+    }
+    async delete() {
+      mockFsContents.delete(this.uri);
+    }
     async read() {
-      return '';
+      return mockFsContents.get(this.uri) ?? '';
+    }
+    async text() {
+      return mockFsContents.get(this.uri) ?? '';
     }
     info() {
       return { exists: true, size: 0, uri: this.uri };
@@ -200,8 +209,8 @@ jest.mock('expo-file-system', () => {
     get exists() {
       return true;
     }
-    async create() {}
-    delete() {}
+    async create() { }
+    delete() { }
     list() {
       return [];
     }

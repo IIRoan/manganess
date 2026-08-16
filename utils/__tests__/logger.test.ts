@@ -4,7 +4,16 @@ jest.mock('@/constants/env', () => ({
   isDebugEnabled: jest.fn(() => true),
 }));
 
+jest.mock('@/services/errorLogService', () => ({
+  errorLogService: {
+    recordFromLogger: jest.fn(),
+    recordException: jest.fn(),
+    installGlobalHandlers: jest.fn(),
+  },
+}));
+
 import { logger } from '../logger';
+import { errorLogService } from '@/services/errorLogService';
 
 describe('logger', () => {
   let consoleSpy: {
@@ -232,5 +241,86 @@ describe('logger', () => {
       const entries = log.getEntries();
       expect(entries.length).toBeLessThanOrEqual(500);
     });
+  });
+
+  describe('error file persistence', () => {
+    beforeEach(() => {
+      (errorLogService.recordFromLogger as jest.Mock).mockClear();
+    });
+
+    it('records errors for the on-device debug log', () => {
+      const log = logger();
+      const data = { mangaId: 'ro8ro' };
+      log.error('Service', 'Failed to load manga details', data);
+
+      expect(errorLogService.recordFromLogger).toHaveBeenCalledWith(
+        'error',
+        'Service',
+        'Failed to load manga details',
+        data
+      );
+    });
+
+    it('records Network and Service warnings', () => {
+      const log = logger();
+      log.warn('Network', 'MangaFire API retry scheduled');
+      log.warn('Service', 'Rate limited — showing cached manga details');
+
+      expect(errorLogService.recordFromLogger).toHaveBeenCalledWith(
+        'warn',
+        'Network',
+        'MangaFire API retry scheduled',
+        undefined
+      );
+      expect(errorLogService.recordFromLogger).toHaveBeenCalledWith(
+        'warn',
+        'Service',
+        'Rate limited — showing cached manga details',
+        undefined
+      );
+    });
+
+    it('does not persist UI warnings or info logs', () => {
+      const log = logger();
+      log.warn('UI', 'harmless warning');
+      log.info('Service', 'not an error');
+      log.debug('Network', 'trace');
+
+      expect(errorLogService.recordFromLogger).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('logger persistence when debug is disabled', () => {
+  const originalEnv = process.env;
+
+  afterEach(() => {
+    process.env = originalEnv;
+    jest.resetModules();
+    jest.dontMock('@/constants/env');
+  });
+
+  it('still writes errors when isDebugEnabled is false', () => {
+    jest.resetModules();
+    jest.doMock('@/constants/env', () => ({
+      appStartTs: 0,
+      isDebugEnabled: jest.fn(() => false),
+    }));
+    const recordFromLogger = jest.fn();
+    jest.doMock('@/services/errorLogService', () => ({
+      errorLogService: {
+        recordFromLogger,
+      },
+    }));
+
+    const { logger: createLogger } = require('../logger');
+    createLogger().error('Service', 'preview build manga load failed');
+
+    expect(recordFromLogger).toHaveBeenCalledWith(
+      'error',
+      'Service',
+      'preview build manga load failed',
+      undefined
+    );
   });
 });

@@ -1,8 +1,9 @@
-import { render, act } from '@testing-library/react-native';
+import { render, act, fireEvent } from '@testing-library/react-native';
 import MangaFireVrfHost from '@/components/MangaFireVrfHost';
 import { mangaFireVrfBridge } from '@/services/mangaFireVrfBridge';
 
 const mockInjectJavaScript = jest.fn();
+const mockReload = jest.fn();
 let latestWebViewProps: any;
 
 jest.mock('react-native-webview', () => {
@@ -14,6 +15,7 @@ jest.mock('react-native-webview', () => {
 
     React.useImperativeHandle(ref, () => ({
       injectJavaScript: mockInjectJavaScript,
+      reload: mockReload,
     }));
 
     React.useEffect(() => {
@@ -41,6 +43,17 @@ jest.mock('@/constants/env', () => ({
   isDebugEnabled: jest.fn(() => false),
 }));
 
+jest.mock('@/hooks/useTheme', () => ({
+  useTheme: () => ({
+    actualTheme: 'light',
+    accentColor: '#2E8B57',
+  }),
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
 describe('MangaFireVrfHost', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -53,8 +66,13 @@ describe('MangaFireVrfHost', () => {
 
     const { getByTestId } = render(<MangaFireVrfHost />);
 
-    expect(getByTestId('manga-fire-vrf-webview')).toBeTruthy();
-    expect(attachSpy).toHaveBeenCalled();
+    expect(
+      getByTestId('manga-fire-vrf-webview', { includeHiddenElements: true })
+    ).toBeTruthy();
+    expect(attachSpy).toHaveBeenCalledWith(expect.any(Function), {
+      reload: expect.any(Function),
+    });
+    expect(latestWebViewProps.injectedJavaScript).toContain('notifyReady');
     expect(mockInjectJavaScript).toHaveBeenCalledWith(
       expect.stringContaining('notifyReady')
     );
@@ -105,6 +123,83 @@ describe('MangaFireVrfHost', () => {
       'Service',
       'MangaFire VRF host failed to load',
       expect.objectContaining({ error: 'network failed' })
+    );
+  });
+
+  it('reloads when the iOS webview content process is terminated', () => {
+    const reportSpy = jest.spyOn(mangaFireVrfBridge, 'reportHostEvent');
+    render(<MangaFireVrfHost />);
+    mockReload.mockClear();
+
+    act(() => {
+      latestWebViewProps.onContentProcessDidTerminate?.();
+    });
+
+    expect(reportSpy).toHaveBeenCalledWith({ type: 'terminated' });
+    expect(mockReload).toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Service',
+      'MangaFire VRF host WebView process terminated'
+    );
+    reportSpy.mockRestore();
+  });
+
+  it('keeps the webview on-screen so iOS will run its javascript', () => {
+    render(<MangaFireVrfHost />);
+
+    expect(latestWebViewProps.style).toEqual(
+      expect.objectContaining({
+        width: 64,
+        height: 64,
+      })
+    );
+  });
+
+  it('expands to a visible security check when Cloudflare challenges the host', () => {
+    const { getByText, getByLabelText, queryByText } = render(
+      <MangaFireVrfHost />
+    );
+
+    act(() => {
+      latestWebViewProps.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ type: 'challenge', title: 'Just a moment...' }) },
+      });
+    });
+
+    expect(getByText('Security check')).toBeTruthy();
+    expect(
+      getByText('Complete the check so manga can load on this device.')
+    ).toBeTruthy();
+    expect(latestWebViewProps.scrollEnabled).toBe(true);
+
+    fireEvent.press(getByLabelText('Dismiss security check'));
+
+    expect(queryByText('Security check')).toBeNull();
+    expect(latestWebViewProps.scrollEnabled).toBe(false);
+  });
+
+  it('treats Cloudflare 403 responses as a challenge, not a fatal load error', () => {
+    render(<MangaFireVrfHost />);
+
+    act(() => {
+      latestWebViewProps.onHttpError?.({
+        nativeEvent: {
+          statusCode: 403,
+          description: '',
+          url: 'https://mangafire.to/',
+        },
+      });
+    });
+
+    expect(mockLogger.error).not.toHaveBeenCalledWith(
+      'Service',
+      'MangaFire VRF host HTTP error',
+      expect.anything()
+    );
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Network',
+      'MangaFire VRF host received Cloudflare 403',
+      expect.objectContaining({ url: 'https://mangafire.to/' })
     );
   });
 

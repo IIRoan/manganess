@@ -933,7 +933,10 @@ export default function MangaDetailScreen() {
           return;
         }
 
-        log.error('Service', 'Error fetching data', { error });
+        log.error('Service', 'Failed to load manga details', {
+          mangaId: id,
+          error,
+        });
         if (isMounted) {
           setError('Failed to load manga details. Please try again.');
         }

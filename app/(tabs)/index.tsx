@@ -216,7 +216,10 @@ export default function HomeScreen() {
         resetHomeAutoRetry();
       }
     } catch (error) {
-      logger().error('Service', 'Error fetching manga data', { error });
+      logger().error('Service', 'Failed to load home manga data', {
+        error,
+        offline: isOffline,
+      });
 
       // Only show error if we don't have any cached data to display
       const hasNoData =
