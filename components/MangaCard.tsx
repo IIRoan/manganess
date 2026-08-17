@@ -24,6 +24,10 @@ import { useOffline } from '@/hooks/useOffline';
 import { MangaCardProps, BookmarkStatus } from '@/types';
 import { useHapticFeedback } from '@/utils/haptics';
 import { useRouter } from 'expo-router';
+import {
+  navigateToMangaDetails,
+  prefetchMangaOpen,
+} from '@/utils/mangaOpenNavigation';
 import BottomPopup from './BottomPopup';
 import {
   getBookmarkPopupConfig,
@@ -66,7 +70,11 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const scaleAnim = useSharedValue(1);
   const haptics = useHapticFeedback();
   const { isOffline } = useOffline();
-  const { bookmarks } = useBookmarks();
+  const {
+    bookmarks,
+    addBookmark,
+    removeBookmark: removeBookmarkFromList,
+  } = useBookmarks();
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -112,6 +120,9 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
 
   const handlePressIn = () => {
     haptics.onPress();
+    if (mangaId) {
+      prefetchMangaOpen(mangaId);
+    }
     scaleAnim.value = withSpring(0.95, {
       damping: 15,
       stiffness: 150,
@@ -177,6 +188,19 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
         () => {}
       );
 
+      const saved = await getMangaData(mangaId);
+      await addBookmark({
+        ...(saved ?? {
+          id: mangaId,
+          title,
+          bannerImage: imageUrl,
+          readChapters: mangaData?.readChapters || [],
+          lastUpdated: Date.now(),
+        }),
+        id: mangaId,
+        bookmarkStatus: status,
+      });
+
       // Show success toast
       const statusIcons: Record<
         BookmarkStatus,
@@ -229,6 +253,7 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
         (newStatus) => setBookmarkStatus(newStatus as BookmarkStatus | null),
         () => {}
       );
+      await removeBookmarkFromList(mangaId);
 
       // Show success toast
       const shortTitle =
@@ -270,11 +295,11 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
           if (onPress) {
             onPress();
           } else if (mangaId) {
-            // @ts-ignore - router.push accepts params
-            router.push({
-              pathname: '/(tabs)/manga/[id]',
-              params: { id: mangaId, title, imageUrl, previewId: mangaId },
-            });
+            navigateToMangaDetails(
+              router,
+              { id: mangaId, title, imageUrl },
+              'card'
+            );
           }
         }}
         onPressIn={handlePressIn}
@@ -311,7 +336,10 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
               </View>
             )}
             {bookmarkStatus && context !== 'bookmark' && (
-              <View style={styles.bookmarkIndicator}>
+              <View
+                testID="manga-card-bookmark-indicator"
+                style={styles.bookmarkIndicator}
+              >
                 <Ionicons name="bookmark" size={16} color={colors.primary} />
               </View>
             )}

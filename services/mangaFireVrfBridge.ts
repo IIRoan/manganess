@@ -15,6 +15,7 @@ interface PendingVrfRequest extends VrfRequest {
 
 interface PendingApiRequest {
   id: string;
+  path: string;
   resolve: (result: { status: number; data: unknown }) => void;
   reject: (error: Error) => void;
   timeoutId: ReturnType<typeof setTimeout>;
@@ -32,6 +33,9 @@ type VrfHostMessage =
     status?: number;
     data?: unknown;
     error?: string;
+    vrfAttached?: boolean;
+    vrfLength?: number;
+    protected?: boolean;
   };
 
 export interface MangaFireVrfHostHandles {
@@ -110,11 +114,6 @@ function isCloudflareChallengeError(error: unknown): boolean {
   return message.includes('Cloudflare verification detected');
 }
 
-function requiresVrfToken(path: string): boolean {
-  const normalized = path.startsWith('/') ? path : `/${path}`;
-  return !normalized.startsWith('/top-titles');
-}
-
 /**
  * Capability-based MangaFire protection discovery.
  *
@@ -143,8 +142,12 @@ export const VRF_PROTECTION_HELPERS_JS = `
 
   var AUTH_PARAM_HINTS = ['vrf', 'token', 't', 'sig', 'sign', 'auth', 'key'];
 
+  // Title endpoints mint ~15-char tokens; chapters are longer. 16+ rejected
+  // valid One Piece /titles/{id} tokens and produced 403 Missing token.
+  var MIN_AUTH_TOKEN_LENGTH = 12;
+
   function looksLikeAuthToken(value) {
-    return typeof value === 'string' && value.length >= 16;
+    return typeof value === 'string' && value.length >= MIN_AUTH_TOKEN_LENGTH;
   }
 
   function extractAuthToken(params, baseline) {
@@ -387,19 +390,22 @@ export const VRF_PROTECTION_HELPERS_JS = `
     });
   }
 
+  function isMissingProtectionTokenError(error) {
+    var message = String(error && error.message ? error.message : error || '');
+    return (
+      message.indexOf('produced no auth token') !== -1 ||
+      message.indexOf('Protection token empty') !== -1
+    );
+  }
+
   function fetchProtectedJson(path, params) {
-    var vmz = findProtectionModule();
     var queryParams = Object.assign({}, params || {});
-    var protect = true;
-    if (vmz && typeof vmz.shouldProtect === 'function') {
-      try { protect = !!vmz.shouldProtect(path); } catch (e) { protect = true; }
-    }
-
-    var tokenPromise = protect
-      ? generateProtectionToken(path, queryParams)
-      : Promise.resolve(null);
-
-    return tokenPromise.then(function(vrf) {
+    // Always mint a VRF. MangaFire's shouldProtect() misses routes (title
+    // details, some /top-titles calls) and a missing token is 403.
+    return generateProtectionToken(path, queryParams).catch(function(error) {
+      if (isMissingProtectionTokenError(error)) return null;
+      throw error;
+    }).then(function(vrf) {
       var usp = new URLSearchParams();
       appendCanonicalParams(usp, queryParams);
       if (vrf) usp.append('vrf', String(vrf));
@@ -415,7 +421,13 @@ export const VRF_PROTECTION_HELPERS_JS = `
         return response.text().then(function(text) {
           var data = text;
           try { data = JSON.parse(text); } catch (e) {}
-          return { status: response.status, data: data };
+          return {
+            status: response.status,
+            data: data,
+            vrfAttached: !!vrf,
+            vrfLength: vrf ? String(vrf).length : 0,
+            protected: true
+          };
         });
       });
     });
@@ -614,6 +626,35 @@ class MangaFireVrfBridge {
     }
   }
 
+  /** Fetch a same-origin MangaFire HTML document with the host WebView cookies. */
+  async fetchDocument(path: string): Promise<{ status: number; data: string }> {
+    if (useTestVrfToken) {
+      throw new Error('MangaFire host fetch is disabled in tests');
+    }
+    if (!path.startsWith('/') || path.startsWith('//')) {
+      throw new Error('MangaFire document path must be same-origin');
+    }
+
+    let recoveries = 0;
+    while (true) {
+      await this.waitUntilReady();
+      try {
+        return await this.performHostDocumentFetch(path);
+      } catch (error) {
+        if (
+          !isCloudflareChallengeError(error) ||
+          recoveries >= 2 ||
+          !this.hostAttached ||
+          this.challengeDismissed
+        ) {
+          throw error;
+        }
+        recoveries += 1;
+        await this.beginChallengeRecovery();
+      }
+    }
+  }
+
   private performHostFetch<T>(
     path: string,
     params?: Record<string, unknown>,
@@ -639,7 +680,10 @@ class MangaFireVrfBridge {
               type: 'api',
               id: requestId,
               status: result.status,
-              data: result.data
+              data: result.data,
+              vrfAttached: !!result.vrfAttached,
+              vrfLength: result.vrfLength || 0,
+              protected: result.protected
             }));
           })
           .catch(function(err) {
@@ -664,6 +708,7 @@ class MangaFireVrfBridge {
 
       this.pendingApi.push({
         id,
+        path,
         resolve: (result) => resolve(result as { status: number; data: T }),
         reject,
         timeoutId,
@@ -679,6 +724,77 @@ class MangaFireVrfBridge {
           error instanceof Error
             ? error
             : new Error('Failed to inject MangaFire API fetch script')
+        );
+      }
+    });
+  }
+
+  private performHostDocumentFetch(
+    path: string
+  ): Promise<{ status: number; data: string }> {
+    const injectJavaScript = this.webViewInject;
+    if (!injectJavaScript) {
+      return Promise.reject(new Error('MangaFire VRF host is not available'));
+    }
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const script = `
+      (function() {
+        var requestId = ${JSON.stringify(id)};
+        var path = ${JSON.stringify(path)};
+        fetch(path, {
+          credentials: 'include',
+          headers: { Accept: 'text/html,application/xhtml+xml' }
+        })
+          .then(function(response) {
+            return response.text().then(function(text) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'api',
+                id: requestId,
+                status: response.status,
+                data: text
+              }));
+            });
+          })
+          .catch(function(err) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'api',
+              id: requestId,
+              error: String(err && err.message ? err.message : err)
+            }));
+          });
+        return true;
+      })();
+    `;
+
+    return new Promise<{ status: number; data: string }>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        const index = this.pendingApi.findIndex((item) => item.id === id);
+        if (index !== -1) {
+          this.pendingApi.splice(index, 1);
+        }
+        reject(new Error('Timed out waiting for MangaFire document response'));
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pendingApi.push({
+        id,
+        path,
+        resolve: (result) =>
+          resolve(result as { status: number; data: string }),
+        reject,
+        timeoutId,
+        validateStatus: (status) => status >= 200 && status < 300,
+      });
+
+      try {
+        injectJavaScript(script);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        this.pendingApi = this.pendingApi.filter((item) => item.id !== id);
+        reject(
+          error instanceof Error
+            ? error
+            : new Error('Failed to inject MangaFire document fetch script')
         );
       }
     });
@@ -743,6 +859,10 @@ class MangaFireVrfBridge {
     const data = message.data;
 
     if (isCloudflareChallenge(data)) {
+      logger().warn('Network', 'MangaFire host API hit Cloudflare challenge', {
+        path: request.path,
+        status,
+      });
       request.reject(
         createHttpError(status || 403, data, 'Cloudflare verification detected')
       );
@@ -750,6 +870,20 @@ class MangaFireVrfBridge {
     }
 
     if (!request.validateStatus(status)) {
+      const body =
+        typeof data === 'string'
+          ? data.replace(/\s+/g, ' ').trim().slice(0, 240)
+          : data && typeof data === 'object'
+            ? JSON.stringify(data).slice(0, 240)
+            : undefined;
+      logger().warn('Network', 'MangaFire host API rejected', {
+        path: request.path,
+        status,
+        vrfAttached: message.vrfAttached ?? null,
+        vrfLength: message.vrfLength ?? null,
+        protected: message.protected ?? null,
+        ...(body ? { body } : {}),
+      });
       request.reject(createHttpError(status, data));
       return;
     }
@@ -761,10 +895,6 @@ class MangaFireVrfBridge {
     path: string,
     params?: Record<string, unknown>
   ): Promise<string | null> {
-    if (!requiresVrfToken(path)) {
-      return null;
-    }
-
     if (useTestVrfToken) {
       return 'test-vrf-token';
     }
@@ -776,10 +906,10 @@ class MangaFireVrfBridge {
       reportWait('vrf_module', Date.now() - moduleStartedAt);
     }
 
-    const vrfRequest: VrfRequest = { path };
-    if (params) {
-      vrfRequest.params = params;
-    }
+    const vrfRequest: VrfRequest = {
+      path,
+      params: params ?? {},
+    };
     const tokenStartedAt = Date.now();
     try {
       return await this.requestVrfToken(vrfRequest);

@@ -60,6 +60,22 @@ export interface RecentMangaItem {
   lastReadChapter?: string;
 }
 
+export interface MangaHeaderSnapshot {
+  id: string;
+  title: string;
+  alternativeTitle: string;
+  status: string;
+  description: string;
+  author: string[];
+  published: string;
+  genres: string[];
+  rating: string;
+  reviewCount: string;
+  bannerImage: string;
+  totalChapters?: number;
+  type?: string;
+}
+
 export interface MangaData {
   id: string;
   title: string;
@@ -70,6 +86,15 @@ export interface MangaData {
   lastNotifiedChapter?: string;
   lastUpdated: number;
   totalChapters?: number;
+  description?: string;
+  alternativeTitle?: string;
+  status?: string;
+  author?: string[];
+  published?: string;
+  genres?: string[];
+  rating?: string;
+  reviewCount?: string;
+  type?: string;
   // Download-related fields
   downloadedChapters?: string[];
   downloadStatus?: Record<string, DownloadProgress>;

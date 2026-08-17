@@ -6,10 +6,34 @@ import {
   isRateLimitError,
   RATE_LIMIT_NO_CACHE_MESSAGE,
   RATE_LIMIT_USING_CACHE_MESSAGE,
+  summarizeApiError,
   withApiRetry,
 } from '../httpErrors';
 
 describe('httpErrors', () => {
+  describe('summarizeApiError', () => {
+    it('includes status and JSON body from axios-style errors', () => {
+      expect(
+        summarizeApiError({
+          message: 'Request failed with status code 403',
+          response: { status: 403, data: { message: 'Missing token.' } },
+        })
+      ).toEqual({
+        message: 'Request failed with status code 403',
+        status: 403,
+        body: '{"message":"Missing token."}',
+      });
+    });
+
+    it('truncates HTML bodies', () => {
+      const summary = summarizeApiError({
+        message: 'Request failed with status code 403',
+        response: { status: 403, data: `<html>${'x'.repeat(400)}</html>` },
+      });
+      expect(summary.status).toBe(403);
+      expect(summary.body?.length).toBeLessThanOrEqual(240);
+    });
+  });
   describe('isRateLimitError', () => {
     it('detects axios 429 responses', () => {
       expect(isRateLimitError({ response: { status: 429 } })).toBe(true);

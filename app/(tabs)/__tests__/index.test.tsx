@@ -10,7 +10,7 @@ import type { HomeMangaData } from '@/services/mangaFireApi';
 const mockRouterNavigate = jest.fn();
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ navigate: mockRouterNavigate }),
+  useRouter: () => ({ navigate: mockRouterNavigate, push: mockRouterNavigate }),
   usePathname: () => '/',
   useFocusEffect: jest.fn((cb) => {
     cb();
@@ -30,6 +30,10 @@ jest.mock('@/services/readChapterService', () => ({
 
 jest.mock('@/services/mangaFireService', () => ({
   fetchHomeMangaData: jest.fn(),
+}));
+
+jest.mock('@/services/mangaFireApi', () => ({
+  fetchTitleDetails: jest.fn().mockResolvedValue({}),
 }));
 
 const mockFetchHomeMangaData = fetchHomeMangaData as jest.MockedFunction<

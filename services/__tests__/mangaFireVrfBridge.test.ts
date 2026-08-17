@@ -38,10 +38,14 @@ describe('mangaFireVrfBridge', () => {
     resetMangaFireVrfBridgeForTests({ useTestToken: true });
   });
 
-  it('skips vrf for top-titles endpoints', async () => {
+  it('attaches vrf on every API path including top-titles', async () => {
     await expect(
       appendVrfParams('/top-titles', { type: 'trending', limit: 5 })
-    ).resolves.toEqual({ type: 'trending', limit: 5 });
+    ).resolves.toEqual({
+      type: 'trending',
+      limit: 5,
+      vrf: 'test-vrf-token',
+    });
   });
 
   it('returns a test vrf token for protected endpoints in Jest', async () => {
@@ -68,6 +72,11 @@ describe('mangaFireVrfBridge', () => {
     expect(VRF_PROTECTION_HELPERS_JS).toContain('Object.getOwnPropertyNames');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('extendClient');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('fetchProtectedJson');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('generateProtectionToken(path, queryParams)');
+    expect(VRF_PROTECTION_HELPERS_JS).not.toContain('protect = !!vmz.shouldProtect');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('MIN_AUTH_TOKEN_LENGTH');
+    expect(VRF_PROTECTION_HELPERS_JS).toMatch(/MIN_AUTH_TOKEN_LENGTH = 12/);
+    expect(VRF_PROTECTION_HELPERS_JS).not.toContain('value.length >= 16');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('credentials');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('appendCanonicalParams');
     // No fixed module-name regex — discovery is shape/behavior based.
@@ -518,6 +527,7 @@ describe('mangaFireVrfBridge', () => {
     await flushPromises();
 
     expect(injectedScripts[0]).toContain('fetchProtectedJson');
+    expect(injectedScripts[0]).toContain('isMissingProtectionTokenError');
     expect(injectedScripts[0]).toContain('/titles');
 
     const requestId = extractRequestId(injectedScripts[0] ?? '');
@@ -533,6 +543,39 @@ describe('mangaFireVrfBridge', () => {
     await expect(fetchPromise).resolves.toEqual({
       status: 200,
       data: { items: ['ok'] },
+    });
+  });
+
+  it('fetches a title document through the authenticated host', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    const injectedScripts: string[] = [];
+    mangaFireVrfBridge.attachHost((script) => {
+      injectedScripts.push(script);
+    });
+    mangaFireVrfBridge.markReady();
+
+    const fetchPromise = mangaFireVrfBridge.fetchDocument(
+      '/title/one-piece.dkw'
+    );
+    await flushPromises();
+
+    expect(injectedScripts[0]).toContain("credentials: 'include'");
+    expect(injectedScripts[0]).toContain('/title/one-piece.dkw');
+    expect(injectedScripts[0]).not.toContain("'/api' + path");
+
+    const requestId = extractRequestId(injectedScripts[0] ?? '');
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({
+        type: 'api',
+        id: requestId,
+        status: 200,
+        data: '<h1 itemprop="name">One Piece</h1>',
+      })
+    );
+
+    await expect(fetchPromise).resolves.toEqual({
+      status: 200,
+      data: '<h1 itemprop="name">One Piece</h1>',
     });
   });
 

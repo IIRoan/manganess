@@ -1,10 +1,4 @@
-import {
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-  useMemo,
-} from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   TextInput,
@@ -29,11 +23,8 @@ import MangaCard from '@/components/MangaCard';
 import SearchSkeleton from '@/components/SearchSkeleton';
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
-import {
-  type MangaItem,
-  searchManga,
-} from '@/services/mangaFireService';
-import { getLastReadChapter } from '@/services/readChapterService';
+import { type MangaItem, searchManga } from '@/services/mangaFireService';
+import { getLastReadChapters } from '@/services/readChapterService';
 import {
   getSearchHistory,
   addSearchHistoryItem,
@@ -50,6 +41,7 @@ import { replaceBookmark } from '@/services/bookmarkService';
 import { getDefaultLayout } from '@/services/settingsService';
 import { hapticFeedback } from '@/utils/haptics';
 import { useToast } from '@/hooks/useToast';
+import { navigateToMangaDetails } from '@/utils/mangaOpenNavigation';
 
 /* Type Definitions */
 interface LastReadChapters {
@@ -260,10 +252,16 @@ export default function MangaSearchScreen() {
         return;
       }
 
-      router.navigate({
-        pathname: '/manga/[id]',
-        params: { id: item.id, title: item.title, bannerImage: item.banner },
-      });
+      navigateToMangaDetails(
+        router,
+        {
+          id: item.id,
+          title: item.title,
+          imageUrl: item.imageUrl,
+          banner: item.banner,
+        },
+        'search'
+      );
     },
     [isReplacementMode, router]
   );
@@ -293,14 +291,15 @@ export default function MangaSearchScreen() {
         type: 'success',
       });
 
-      router.navigate({
-        pathname: '/manga/[id]',
-        params: {
+      navigateToMangaDetails(
+        router,
+        {
           id: replacementCandidate.id,
           title: replacementCandidate.title,
-          bannerImage: replacementCandidate.banner,
+          banner: replacementCandidate.banner,
         },
-      });
+        'search'
+      );
     } catch (error) {
       logger().error('Storage', 'Failed to replace missing bookmark', {
         sourceId: normalizedReplacementSourceId,
@@ -353,16 +352,8 @@ export default function MangaSearchScreen() {
     const run = async () => {
       const ids = searchResults.map((it) => it.id);
       try {
-        const results = await Promise.all(
-          ids.map((id) => getLastReadChapter(id))
-        );
+        const chapters = await getLastReadChapters(ids);
         if (cancelled) return;
-        const chapters: LastReadChapters = {};
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i];
-          if (!id) continue;
-          chapters[id] = results[i] ?? null;
-        }
         setLastReadChapters(chapters);
       } catch {
         // ignore errors here; UI can render without last-read badges
@@ -768,7 +759,6 @@ export default function MangaSearchScreen() {
           bounces={false}
           overScrollMode="never"
         />
-
       </View>
 
       <AlertComponent

@@ -12,10 +12,20 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MangaDetails, MangaItem } from '@/types';
+import { RECENT_MANGA_HEADER_CACHE_LIMIT } from '@/constants/mangaCache';
 import { logger } from '@/utils/logger';
 import { imageCache } from '@/services/CacheImages';
+import { mergeMangaDetailsRefresh } from '@/utils/mangaDetailsMerge';
+import {
+  areCachedMangaHeadersEquivalent,
+  extractMangaHeader,
+  hasLoadedMangaHeader,
+  pruneMangaHeaderCache,
+  type CachedMangaHeader,
+} from '@/utils/mangaHeader';
 
 const OFFLINE_MANGA_CACHE_KEY = 'offline_manga_cache';
+const OFFLINE_MANGA_HEADER_CACHE_KEY = 'offline_manga_header_cache';
 const OFFLINE_SEARCH_CACHE_KEY = 'offline_search_cache';
 const OFFLINE_HOME_CACHE_KEY = 'offline_home_cache';
 
@@ -47,8 +57,14 @@ export interface CachedHomeData {
 class OfflineCacheService {
   private static instance: OfflineCacheService;
   private memoryCache: Record<string, CachedMangaDetails> | null = null;
+  private headerMemoryCache: Record<string, CachedMangaHeader> | null = null;
+  private detailsLoad: Promise<Record<string, CachedMangaDetails>> | null =
+    null;
+  private headerLoad: Promise<Record<string, CachedMangaHeader>> | null = null;
+  private detailsLoadGeneration = 0;
+  private headerLoadGeneration = 0;
 
-  private constructor() {}
+  private constructor() { }
 
   static getInstance(): OfflineCacheService {
     if (!OfflineCacheService.instance) {
@@ -64,13 +80,32 @@ class OfflineCacheService {
     isBookmarked: boolean = false
   ): Promise<void> {
     try {
+      const existingCache = await this.getAllCachedMangaDetails();
+      const existing = existingCache[mangaId];
+      const mergedDetails = mergeMangaDetailsRefresh(
+        existing ?? null,
+        details,
+        mangaId
+      );
       const cachedDetails: CachedMangaDetails = {
-        ...details,
+        ...mergedDetails,
         cachedAt: Date.now(),
-        isBookmarked,
+        isBookmarked: isBookmarked || existing?.isBookmarked === true,
       };
 
-      const existingCache = await this.getAllCachedMangaDetails();
+      if (this.areCachedDetailsEquivalent(existing, cachedDetails)) {
+        existingCache[mangaId] = cachedDetails;
+        this.memoryCache = existingCache;
+        await AsyncStorage.setItem(
+          OFFLINE_MANGA_CACHE_KEY,
+          JSON.stringify(existingCache)
+        );
+        await this.cacheMangaHeader(mangaId, cachedDetails, {
+          isBookmarked: cachedDetails.isBookmarked,
+        });
+        return;
+      }
+
       existingCache[mangaId] = cachedDetails;
       this.memoryCache = existingCache;
 
@@ -79,11 +114,15 @@ class OfflineCacheService {
         JSON.stringify(existingCache)
       );
 
+      await this.cacheMangaHeader(mangaId, cachedDetails, {
+        isBookmarked: cachedDetails.isBookmarked,
+      });
+
       // Cache the banner image permanently for offline access
-      if (details.bannerImage) {
+      if (cachedDetails.bannerImage) {
         try {
           await imageCache.getCachedImagePath(
-            details.bannerImage,
+            cachedDetails.bannerImage,
             'manga',
             mangaId
           );
@@ -91,15 +130,15 @@ class OfflineCacheService {
           logger().warn('Storage', 'Failed to cache manga banner image', {
             error: imageError,
             mangaId,
-            bannerUrl: details.bannerImage,
+            bannerUrl: cachedDetails.bannerImage,
           });
         }
       }
 
       logger().debug('Storage', 'Cached manga details', {
         mangaId,
-        title: details.title,
-        isBookmarked,
+        title: cachedDetails.title,
+        isBookmarked: cachedDetails.isBookmarked,
       });
     } catch (error) {
       logger().error('Storage', 'Failed to cache manga details', {
@@ -199,21 +238,244 @@ class OfflineCacheService {
       return this.memoryCache;
     }
 
+    if (!this.detailsLoad) {
+      const generation = this.detailsLoadGeneration;
+      this.detailsLoad = this.readDetailsCacheFromDisk()
+        .then((parsed) => {
+          if (generation === this.detailsLoadGeneration) {
+            this.memoryCache = parsed;
+          }
+          return this.memoryCache ?? parsed;
+        })
+        .finally(() => {
+          if (generation === this.detailsLoadGeneration) {
+            this.detailsLoad = null;
+          }
+        });
+    }
+
+    return this.detailsLoad;
+  }
+
+  private async readDetailsCacheFromDisk(): Promise<
+    Record<string, CachedMangaDetails>
+  > {
     try {
       const cached = await AsyncStorage.getItem(OFFLINE_MANGA_CACHE_KEY);
-      this.memoryCache = cached ? JSON.parse(cached) : {};
-      return this.memoryCache ?? {};
+      return cached ? JSON.parse(cached) : {};
     } catch (error) {
       logger().error('Storage', 'Failed to get all cached manga details', {
         error,
       });
-      this.memoryCache = {};
-      return this.memoryCache;
+      return {};
     }
   }
 
   invalidateMemoryCache(): void {
+    this.detailsLoadGeneration += 1;
+    this.headerLoadGeneration += 1;
     this.memoryCache = null;
+    this.headerMemoryCache = null;
+    this.detailsLoad = null;
+    this.headerLoad = null;
+  }
+
+  async getAllCachedMangaHeaders(): Promise<Record<string, CachedMangaHeader>> {
+    if (this.headerMemoryCache !== null) {
+      return this.headerMemoryCache;
+    }
+
+    if (!this.headerLoad) {
+      const generation = this.headerLoadGeneration;
+      this.headerLoad = this.readHeaderCacheFromDisk()
+        .then((parsed) => {
+          if (generation === this.headerLoadGeneration) {
+            this.headerMemoryCache = parsed;
+          }
+          return this.headerMemoryCache ?? parsed;
+        })
+        .finally(() => {
+          if (generation === this.headerLoadGeneration) {
+            this.headerLoad = null;
+          }
+        });
+    }
+
+    return this.headerLoad;
+  }
+
+  private async readHeaderCacheFromDisk(): Promise<
+    Record<string, CachedMangaHeader>
+  > {
+    try {
+      const cached = await AsyncStorage.getItem(OFFLINE_MANGA_HEADER_CACHE_KEY);
+      return cached ? JSON.parse(cached) : {};
+    } catch (error) {
+      logger().error('Storage', 'Failed to get manga header cache', { error });
+      return {};
+    }
+  }
+
+  private chapterListIdentity(
+    chapters: CachedMangaDetails['chapters'] | undefined
+  ): string {
+    if (!chapters?.length) {
+      return '';
+    }
+
+    return chapters
+      .map((chapter) => `${chapter.number}\0${chapter.url ?? ''}`)
+      .join('\n');
+  }
+
+  private areCachedDetailsEquivalent(
+    existing: CachedMangaDetails | undefined,
+    next: CachedMangaDetails
+  ): boolean {
+    if (!existing) {
+      return false;
+    }
+
+    return (
+      existing.title === next.title &&
+      existing.alternativeTitle === next.alternativeTitle &&
+      existing.status === next.status &&
+      existing.description === next.description &&
+      existing.published === next.published &&
+      existing.rating === next.rating &&
+      existing.reviewCount === next.reviewCount &&
+      existing.bannerImage === next.bannerImage &&
+      existing.totalChapters === next.totalChapters &&
+      existing.isBookmarked === next.isBookmarked &&
+      this.chapterListIdentity(existing.chapters) ===
+      this.chapterListIdentity(next.chapters) &&
+      (existing.author?.join('\0') ?? '') === (next.author?.join('\0') ?? '') &&
+      (existing.genres?.join('\0') ?? '') === (next.genres?.join('\0') ?? '')
+    );
+  }
+
+  private async persistHeaderCache(
+    cache: Record<string, CachedMangaHeader>
+  ): Promise<void> {
+    const pruned = pruneMangaHeaderCache(
+      cache,
+      RECENT_MANGA_HEADER_CACHE_LIMIT
+    );
+    this.headerMemoryCache = pruned;
+    await AsyncStorage.setItem(
+      OFFLINE_MANGA_HEADER_CACHE_KEY,
+      JSON.stringify(pruned)
+    );
+  }
+
+  async cacheMangaHeader(
+    mangaId: string,
+    details: MangaDetails,
+    options?: { isBookmarked?: boolean; opened?: boolean }
+  ): Promise<void> {
+    try {
+      const cache = await this.getAllCachedMangaHeaders();
+      const existing = cache[mangaId];
+      const now = Date.now();
+      const incomingHeader = extractMangaHeader(details, mangaId);
+      const shouldReplaceDescription = hasLoadedMangaHeader(incomingHeader);
+      const resolvedTotalChapters = Math.max(
+        incomingHeader.totalChapters && incomingHeader.totalChapters > 0
+          ? incomingHeader.totalChapters
+          : 0,
+        existing?.totalChapters && existing.totalChapters > 0
+          ? existing.totalChapters
+          : 0
+      );
+
+      const nextHeader: CachedMangaHeader = {
+        ...(existing ?? incomingHeader),
+        ...incomingHeader,
+        description: shouldReplaceDescription
+          ? incomingHeader.description
+          : (existing?.description ?? incomingHeader.description),
+        alternativeTitle:
+          incomingHeader.alternativeTitle.trim() ||
+          existing?.alternativeTitle ||
+          '',
+        status: incomingHeader.status.trim() || existing?.status || '',
+        author:
+          incomingHeader.author.length > 0
+            ? incomingHeader.author
+            : (existing?.author ?? []),
+        published: incomingHeader.published.trim() || existing?.published || '',
+        genres:
+          incomingHeader.genres.length > 0
+            ? incomingHeader.genres
+            : (existing?.genres ?? []),
+        rating: incomingHeader.rating.trim() || existing?.rating || '',
+        reviewCount:
+          incomingHeader.reviewCount.trim() || existing?.reviewCount || '',
+        bannerImage:
+          incomingHeader.bannerImage.trim() || existing?.bannerImage || '',
+        ...(resolvedTotalChapters > 0
+          ? { totalChapters: resolvedTotalChapters }
+          : {}),
+        cachedAt: now,
+        lastOpenedAt: options?.opened ? now : (existing?.lastOpenedAt ?? now),
+        isBookmarked: options?.isBookmarked ?? existing?.isBookmarked ?? false,
+      };
+
+      cache[mangaId] = nextHeader;
+      if (existing && areCachedMangaHeadersEquivalent(existing, nextHeader)) {
+        if (!options?.opened) {
+          cache[mangaId] = existing;
+          this.headerMemoryCache = cache;
+          return;
+        }
+
+        cache[mangaId] = { ...existing, lastOpenedAt: now };
+        await this.persistHeaderCache(cache);
+        return;
+      }
+
+      await this.persistHeaderCache(cache);
+
+      logger().debug('Storage', 'Cached manga header', {
+        mangaId,
+        title: nextHeader.title,
+        isBookmarked: nextHeader.isBookmarked,
+      });
+    } catch (error) {
+      logger().error('Storage', 'Failed to cache manga header', {
+        error,
+        mangaId,
+      });
+    }
+  }
+
+  async getCachedMangaHeader(
+    mangaId: string
+  ): Promise<CachedMangaHeader | null> {
+    try {
+      const cache = await this.getAllCachedMangaHeaders();
+      if (cache[mangaId]) {
+        return cache[mangaId];
+      }
+
+      const details = await this.getCachedMangaDetails(mangaId);
+      if (!details || !hasLoadedMangaHeader(details)) {
+        return null;
+      }
+
+      return {
+        ...extractMangaHeader(details, mangaId),
+        cachedAt: details.cachedAt,
+        lastOpenedAt: details.cachedAt,
+        isBookmarked: details.isBookmarked,
+      };
+    } catch (error) {
+      logger().error('Storage', 'Failed to get cached manga header', {
+        error,
+        mangaId,
+      });
+      return null;
+    }
   }
 
   async getBookmarkedMangaDetails(): Promise<CachedMangaDetails[]> {
@@ -265,6 +527,15 @@ class OfflineCacheService {
           mangaId,
           isBookmarked,
         });
+      }
+
+      const headers = await this.getAllCachedMangaHeaders();
+      if (headers[mangaId]) {
+        headers[mangaId] = {
+          ...headers[mangaId],
+          isBookmarked,
+        };
+        await this.persistHeaderCache(headers);
       }
     } catch (error) {
       logger().error('Storage', 'Failed to update manga bookmark status', {
@@ -439,10 +710,12 @@ class OfflineCacheService {
     try {
       await Promise.all([
         AsyncStorage.removeItem(OFFLINE_MANGA_CACHE_KEY),
+        AsyncStorage.removeItem(OFFLINE_MANGA_HEADER_CACHE_KEY),
         AsyncStorage.removeItem(OFFLINE_SEARCH_CACHE_KEY),
         AsyncStorage.removeItem(OFFLINE_HOME_CACHE_KEY),
       ]);
       this.memoryCache = null;
+      this.headerMemoryCache = null;
 
       logger().info('Storage', 'Cleared all offline cache');
     } catch (error) {

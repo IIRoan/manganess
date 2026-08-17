@@ -9,11 +9,12 @@ import { chapterStorageService } from '@/services/chapterStorageService';
 
 // Mock router with trackable push function
 const mockRouterPush = jest.fn();
+const mockRouterNavigate = jest.fn();
 const mockCheckMangaAvailability = jest.fn().mockResolvedValue('exists');
 
 // Mock all dependencies
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockRouterPush }),
+  useRouter: () => ({ push: mockRouterPush, navigate: mockRouterNavigate }),
   useFocusEffect: jest.fn((cb) => {
     cb();
   }),
@@ -26,6 +27,10 @@ jest.mock('@/hooks/useTheme', () => ({
 jest.mock('@/services/mangaFireService', () => ({
   checkMangaAvailability: (...args: any[]) =>
     mockCheckMangaAvailability(...args),
+}));
+
+jest.mock('@/services/mangaFireApi', () => ({
+  fetchTitleDetails: jest.fn().mockResolvedValue({}),
 }));
 
 jest.mock('@/services/chapterStorageService', () => ({
@@ -139,6 +144,7 @@ describe('BookmarksScreen', () => {
     jest.useFakeTimers();
     mockIsOffline = false;
     mockRouterPush.mockClear();
+    mockRouterNavigate.mockClear();
     mockCheckMangaAvailability.mockResolvedValue('exists');
 
     // Default mock setup - provide bookmark data via atom mock
@@ -1191,7 +1197,7 @@ describe('BookmarksScreen', () => {
     });
 
     expect(mockRouterPush).toHaveBeenCalledWith({
-      pathname: '/(tabs)/manga/[id]',
+      pathname: '/manga/[id]',
       params: {
         id: '1',
         title: 'Test Manga',

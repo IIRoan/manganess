@@ -73,6 +73,75 @@ describe('offlineCacheService', () => {
       expect(cached?.cachedAt).toBeDefined();
     });
 
+    it('refreshes cachedAt when the merged payload is otherwise unchanged', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      try {
+        await offlineCacheService.cacheMangaDetails(
+          'manga-1',
+          mockMangaDetails,
+          true
+        );
+        const first =
+          await offlineCacheService.getCachedMangaDetails('manga-1');
+
+        jest.setSystemTime(new Date('2026-01-01T00:01:00.000Z'));
+        await offlineCacheService.cacheMangaDetails(
+          'manga-1',
+          mockMangaDetails,
+          true
+        );
+        const second =
+          await offlineCacheService.getCachedMangaDetails('manga-1');
+
+        expect(second?.cachedAt).toBeGreaterThan(first?.cachedAt ?? 0);
+        expect(second?.title).toBe('Test Manga');
+        expect(second?.chapters[0]?.url).toBe('/ch/1');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('writes healed chapter URLs even when the list length is unchanged', async () => {
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        mockMangaDetails,
+        true
+      );
+
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        {
+          ...mockMangaDetails,
+          chapters: [
+            { ...mockMangaDetails.chapters[0]!, url: '/chapter/999' },
+            mockMangaDetails.chapters[1]!,
+          ],
+        },
+        true
+      );
+
+      const cached = await offlineCacheService.getCachedMangaDetails('manga-1');
+      expect(cached?.chapters[0]?.url).toBe('/chapter/999');
+    });
+
+    it('returns the same details for parallel cache reads after a cold load', async () => {
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        mockMangaDetails,
+        true
+      );
+      offlineCacheService.invalidateMemoryCache();
+
+      const [first, second] = await Promise.all([
+        offlineCacheService.getCachedMangaDetails('manga-1'),
+        offlineCacheService.getCachedMangaDetails('manga-1'),
+      ]);
+
+      expect(first?.title).toBe('Test Manga');
+      expect(second).toEqual(first);
+    });
+
     it('patches a chapter API id in the cached chapter list', async () => {
       await offlineCacheService.cacheMangaDetails(
         'manga-1',
@@ -240,6 +309,162 @@ describe('offlineCacheService', () => {
       const cached =
         await offlineCacheService.getCachedMangaDetails('non-existent');
       expect(cached).toBeNull();
+    });
+
+    it('keeps a longer cached chapter list when a later write only has page 1', async () => {
+      const longList = Array.from({ length: 8 }, (_, index) => ({
+        number: String(8 - index),
+        title: `Chapter ${8 - index}`,
+        url: `/ch/${8 - index}`,
+        date: '2024-01-01',
+      }));
+
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        { ...mockMangaDetails, chapters: longList },
+        true
+      );
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        {
+          ...mockMangaDetails,
+          title: 'Updated Title',
+          chapters: longList.slice(0, 2),
+        },
+        true
+      );
+
+      const cached = await offlineCacheService.getCachedMangaDetails('manga-1');
+      expect(cached?.title).toBe('Updated Title');
+      expect(cached?.chapters).toHaveLength(8);
+    });
+  });
+
+  describe('Manga header caching', () => {
+    it('stores a lightweight header snapshot for later opens', async () => {
+      await offlineCacheService.cacheMangaHeader('manga-1', mockMangaDetails, {
+        opened: true,
+        isBookmarked: true,
+      });
+
+      const header = await offlineCacheService.getCachedMangaHeader('manga-1');
+
+      expect(header).toMatchObject({
+        id: 'manga-1',
+        title: 'Test Manga',
+        description: 'A test manga description',
+        isBookmarked: true,
+      });
+      expect(header).not.toHaveProperty('chapters');
+    });
+
+    it('does not replace a saved description with an empty title-only write', async () => {
+      await offlineCacheService.cacheMangaHeader('manga-1', mockMangaDetails, {
+        opened: true,
+      });
+      await offlineCacheService.cacheMangaHeader(
+        'manga-1',
+        { ...mockMangaDetails, description: '' },
+        { opened: true }
+      );
+
+      const header = await offlineCacheService.getCachedMangaHeader('manga-1');
+      expect(header?.description).toBe('A test manga description');
+    });
+
+    it('keeps bookmarked headers and only the latest 30 recent opens', async () => {
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+        await offlineCacheService.cacheMangaHeader(
+          'bookmarked',
+          { ...mockMangaDetails, id: 'bookmarked', title: 'Bookmarked' },
+          { isBookmarked: true, opened: true }
+        );
+
+        for (let index = 0; index < 31; index += 1) {
+          jest.setSystemTime(new Date(Date.UTC(2026, 0, 1, 0, index + 1)));
+          await offlineCacheService.cacheMangaHeader(
+            `recent-${index}`,
+            {
+              ...mockMangaDetails,
+              id: `recent-${index}`,
+              title: `Recent ${index}`,
+            },
+            { opened: true }
+          );
+        }
+
+        const headers = await offlineCacheService.getAllCachedMangaHeaders();
+        const recentIds = Object.keys(headers).filter((id) =>
+          id.startsWith('recent-')
+        );
+
+        expect(headers.bookmarked?.title).toBe('Bookmarked');
+        expect(recentIds).toHaveLength(30);
+        expect(headers['recent-0']).toBeUndefined();
+        expect(headers['recent-30']).toBeDefined();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('persists lastOpenedAt when an unchanged header is opened again', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      try {
+        await offlineCacheService.cacheMangaHeader(
+          'manga-1',
+          mockMangaDetails,
+          {
+            opened: true,
+            isBookmarked: true,
+          }
+        );
+        const first = await offlineCacheService.getCachedMangaHeader('manga-1');
+
+        jest.setSystemTime(new Date('2026-01-02T00:00:00.000Z'));
+        await offlineCacheService.cacheMangaHeader(
+          'manga-1',
+          mockMangaDetails,
+          {
+            opened: true,
+            isBookmarked: true,
+          }
+        );
+        const second =
+          await offlineCacheService.getCachedMangaHeader('manga-1');
+
+        expect(second?.cachedAt).toBe(first?.cachedAt);
+        expect(second?.lastOpenedAt).toBeGreaterThan(first?.lastOpenedAt ?? 0);
+        expect(second?.description).toBe('A test manga description');
+
+        offlineCacheService.invalidateMemoryCache();
+        const persisted =
+          await offlineCacheService.getCachedMangaHeader('manga-1');
+        expect(persisted?.lastOpenedAt).toBe(second?.lastOpenedAt);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('does not persist a backfill read from the full details cache', async () => {
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        mockMangaDetails,
+        true
+      );
+      offlineCacheService.invalidateMemoryCache();
+      await AsyncStorage.removeItem('offline_manga_header_cache');
+      offlineCacheService.invalidateMemoryCache();
+
+      const header = await offlineCacheService.getCachedMangaHeader('manga-1');
+
+      expect(header?.description).toBe('A test manga description');
+      expect(
+        await AsyncStorage.getItem('offline_manga_header_cache')
+      ).toBeNull();
     });
   });
 

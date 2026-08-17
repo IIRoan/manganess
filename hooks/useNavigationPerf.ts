@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { InteractionManager } from 'react-native';
 import { usePathname } from 'expo-router';
 import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
@@ -29,7 +28,7 @@ export function useNavigationPerf() {
     }
 
     requestAnimationFrame(() => {
-      InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
         const start =
           startRef.current ??
           (globalThis as { performance?: { now?: () => number } }).performance

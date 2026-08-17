@@ -121,4 +121,21 @@ describe('useMarkInteractive', () => {
       route: '/manga/[id]/chapter/[n]',
     });
   });
+
+  it('measures TTI from an explicit press timestamp when provided', () => {
+    const { rerender } = renderHook(
+      ({ ready }: { ready: boolean }) =>
+        useMarkInteractive(ready, { startedAt: 9_500 }),
+      { initialProps: { ready: false } }
+    );
+
+    now = 10_400;
+    rerender({ ready: true });
+
+    expect(reportMetric).toHaveBeenCalledWith({
+      name: 'tti',
+      durationMs: 900,
+      route: '/manga/[id]',
+    });
+  });
 });

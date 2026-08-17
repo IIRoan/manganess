@@ -67,9 +67,35 @@ export function mergeMangaDetailsRefresh(
     chapters.length
   );
 
+  const incomingAuthors = incoming.author ?? [];
+  const incomingGenres = incoming.genres ?? [];
+
   return {
     ...incoming,
     id: mangaId,
+    title: incoming.title?.trim() || previous?.title || incoming.title,
+    alternativeTitle:
+      incoming.alternativeTitle?.trim() || previous?.alternativeTitle || '',
+    status: incoming.status?.trim() || previous?.status || incoming.status,
+    description:
+      incoming.description?.trim() ||
+      previous?.description ||
+      incoming.description,
+    author:
+      incomingAuthors.length > 0 ? incomingAuthors : (previous?.author ?? []),
+    published:
+      incoming.published?.trim() || previous?.published || incoming.published,
+    genres:
+      incomingGenres.length > 0 ? incomingGenres : (previous?.genres ?? []),
+    rating: incoming.rating?.trim() || previous?.rating || incoming.rating,
+    reviewCount:
+      incoming.reviewCount?.trim() ||
+      previous?.reviewCount ||
+      incoming.reviewCount,
+    bannerImage:
+      incoming.bannerImage?.trim() ||
+      previous?.bannerImage ||
+      incoming.bannerImage,
     chapters,
     ...(mergedTotal > 0 ? { totalChapters: mergedTotal } : {}),
   };

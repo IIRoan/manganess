@@ -9,8 +9,9 @@ import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useMemo, useState } from 'react';
-import { useColorScheme, StatusBar } from 'react-native';
+import { Platform, useColorScheme, StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { Colors, type ColorScheme } from '@/constants/Colors';
 import ErrorBoundary from '../components/ErrorBoundary';
 import BatchDownloadHost from '@/components/BatchDownloadHost';
 import MangaFireVrfHost from '@/components/MangaFireVrfHost';
@@ -27,6 +28,10 @@ import { downloadManagerService } from '@/services/downloadManager';
 import { createEcosystem, EcosystemProvider } from '@zedux/react';
 import { StartupMigrationHost } from '@/components/StartupMigrationHost';
 import { AppUpdateHost } from '@/components/AppUpdateHost';
+import {
+  NATIVE_STACK_SCREEN_OPTIONS,
+  shouldForceRootStatusBarVisible,
+} from '@/constants/navigation';
 
 SplashScreen.preventAutoHideAsync();
 errorLogService.installGlobalHandlers();
@@ -37,29 +42,44 @@ function RootLayoutNav() {
   const { theme } = useTheme();
   const colorScheme = useColorScheme();
   const activeTheme = theme === 'system' ? colorScheme : theme;
+  const colorSchemeName: ColorScheme =
+    activeTheme === 'light' ? 'light' : 'dark';
+  const stackBackground = Colors[colorSchemeName].card;
   const pathname = usePathname();
 
-  // Ensure status bar is always visible on non-chapter pages
-  const isChapterPage = pathname.includes('/chapter/');
+  // Chapter pages own status-bar visibility from reader controls. This layout
+  // only restores it when leaving a chapter — never hides it from above.
+  const showRootStatusBar = shouldForceRootStatusBarVisible(pathname);
 
   useEffect(() => {
-    if (!isChapterPage) {
-      // Force status bar to be visible on all non-chapter pages
-      StatusBar.setHidden(false);
+    if (!showRootStatusBar) {
+      return;
+    }
+    StatusBar.setHidden(false);
+    if (Platform.OS === 'android') {
       StatusBar.setTranslucent(true);
       StatusBar.setBackgroundColor('transparent');
     }
-  }, [isChapterPage, pathname]);
+  }, [showRootStatusBar]);
 
   return (
     <>
-      <StatusBar translucent backgroundColor="transparent" hidden={false} />
+      {showRootStatusBar ? (
+        <StatusBar translucent backgroundColor="transparent" hidden={false} />
+      ) : null}
       <NavigationThemeProvider
         value={activeTheme === 'dark' ? DarkTheme : DefaultTheme}
       >
         <ErrorBoundary>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack
+            screenOptions={{
+              ...NATIVE_STACK_SCREEN_OPTIONS,
+              contentStyle: { backgroundColor: stackBackground },
+            }}
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="manga/[id]" />
+            <Stack.Screen name="manga/[id]/chapter/[chapterNumber]" />
             <Stack.Screen
               name="cloudflare"
               options={{
@@ -68,13 +88,7 @@ function RootLayoutNav() {
                 presentation: 'modal',
               }}
             />
-            <Stack.Screen
-              name="downloads"
-              options={{
-                headerShown: false,
-                title: 'Downloads',
-              }}
-            />
+            <Stack.Screen name="downloads" />
           </Stack>
         </ErrorBoundary>
         <BatchDownloadHost />

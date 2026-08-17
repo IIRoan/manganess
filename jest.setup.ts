@@ -245,6 +245,7 @@ jest.mock('@react-native-community/netinfo', () => {
 });
 
 const mockOfflineCacheStore = new Map<string, any>();
+const mockOfflineHeaderStore = new Map<string, any>();
 
 jest.mock('@/services/offlineCacheService', () => {
   const buildEntry = (details: any, isBookmarked: boolean) => ({
@@ -260,6 +261,31 @@ jest.mock('@/services/offlineCacheService', () => {
           mockOfflineCacheStore.set(id, buildEntry(details, isBookmarked));
         }
       ),
+      cacheMangaHeader: jest.fn(
+        async (
+          id: string,
+          details: any,
+          options?: { isBookmarked?: boolean; opened?: boolean }
+        ) => {
+          mockOfflineHeaderStore.set(id, {
+            ...details,
+            id,
+            cachedAt: Date.now(),
+            lastOpenedAt: Date.now(),
+            isBookmarked: options?.isBookmarked ?? false,
+          });
+        }
+      ),
+      getCachedMangaHeader: jest.fn(
+        async (id: string) => mockOfflineHeaderStore.get(id) ?? null
+      ),
+      getAllCachedMangaHeaders: jest.fn(async () => {
+        const entries: Record<string, any> = {};
+        mockOfflineHeaderStore.forEach((value, key) => {
+          entries[key] = value;
+        });
+        return entries;
+      }),
       getCachedMangaDetails: jest.fn(
         async (id: string) => mockOfflineCacheStore.get(id) ?? null
       ),
@@ -293,7 +319,15 @@ jest.mock('@/services/offlineCacheService', () => {
         }
       ),
       mergeCachedChapters: jest.fn(
-        async (id: string, incoming: Array<{ number: string; url?: string; title?: string; date?: string }>) => {
+        async (
+          id: string,
+          incoming: Array<{
+            number: string;
+            url?: string;
+            title?: string;
+            date?: string;
+          }>
+        ) => {
           const existing = mockOfflineCacheStore.get(id);
           if (!existing) {
             return false;
@@ -358,6 +392,7 @@ jest.mock('@/services/offlineCacheService', () => {
       getCachedHomeData: jest.fn(async () => null),
       clearAllCache: jest.fn(async () => {
         mockOfflineCacheStore.clear();
+        mockOfflineHeaderStore.clear();
       }),
       getCacheStats: jest.fn(async () => ({
         mangaCount: mockOfflineCacheStore.size,
@@ -385,15 +420,13 @@ jest.mock('@/services/chapterStorageService', () => {
           return downloads.get(mangaId)?.has(chapterNumber) ?? false;
         }
       ),
-      getChapterImages: jest.fn(async (mangaId: string, chapterNumber: string) => {
-        return downloads.get(mangaId)?.get(chapterNumber) ?? null;
-      }),
+      getChapterImages: jest.fn(
+        async (mangaId: string, chapterNumber: string) => {
+          return downloads.get(mangaId)?.get(chapterNumber) ?? null;
+        }
+      ),
       downloadAndSaveImage: jest.fn(
-        async (
-          mangaId: string,
-          chapterNumber: string,
-          image: any
-        ) => {
+        async (mangaId: string, chapterNumber: string, image: any) => {
           const saved = {
             ...image,
             localPath: `file://mock/${mangaId}/${chapterNumber}/${image.pageNumber}.jpg`,

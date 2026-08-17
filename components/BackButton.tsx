@@ -53,10 +53,7 @@ import NavigationHistoryPanel from './NavigationHistoryPanel';
 
 type BackButtonVariant = 'simple' | 'smart' | 'enhanced' | 'floating';
 type BackButtonPosition =
-  | 'top-left'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-right';
+  'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 interface BackButtonProps {
   // Appearance
@@ -150,12 +147,11 @@ const BackButton: React.FC<BackButtonProps> = ({
     setBackLabel(determineBackLabel());
   }, [pathname, navigationState, variant, showLabel]);
 
-  const handlePress = async () => {
+  const handlePress = () => {
     if (isDisabled) return;
 
     haptics.onPress();
 
-    // Animate button press for enhanced variants
     if (variant === 'smart' || variant === 'enhanced') {
       Animated.sequence([
         Animated.timing(scaleAnim, {
@@ -173,13 +169,14 @@ const BackButton: React.FC<BackButtonProps> = ({
 
     if (customOnPress) {
       customOnPress();
-    } else {
-      try {
-        await handleBackPress('tap');
-      } catch (error) {
-        console.error('Back navigation failed:', error);
-        router.replace('/');
-      }
+      return;
+    }
+
+    try {
+      handleBackPress('tap');
+    } catch (error) {
+      console.error('Back navigation failed:', error);
+      router.replace('/');
     }
   };
 

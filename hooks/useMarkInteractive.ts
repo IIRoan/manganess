@@ -8,6 +8,8 @@ export type MarkInteractiveOptions = {
   /** `appStart` is only for splash hide. Screens should use mount (default). */
   from?: 'mount' | 'appStart';
   metric?: string;
+  /** When set, TTI is measured from this timestamp instead of mount. */
+  startedAt?: number;
 };
 
 function nowMs(): number {
@@ -30,6 +32,7 @@ export function useMarkInteractive(
   const pathname = usePathname();
   const from = options?.from ?? 'mount';
   const metric = options?.metric ?? 'tti';
+  const startedAt = options?.startedAt;
   const sentFor = useRef<string | null>(null);
   const trackedPath = useRef(pathname);
   const mountTs = useRef(nowMs());
@@ -50,11 +53,12 @@ export function useMarkInteractive(
       return;
     }
     sentFor.current = key;
-    const start = from === 'appStart' ? appStartTs : mountTs.current;
+    const start =
+      from === 'appStart' ? appStartTs : (startedAt ?? mountTs.current);
     reportMetric({
       name: metric,
       durationMs: Math.round(nowMs() - start),
       route: sanitizeTelemetryRoute(pathname),
     });
-  }, [ready, pathname, from, metric]);
+  }, [ready, pathname, from, metric, startedAt]);
 }
