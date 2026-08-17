@@ -331,6 +331,7 @@ export default function MangaDetailScreen() {
     setIsLoading(true);
     // Only reset when the manga id changes — title/imageUrl param churn was
     // restarting loads and re-crawling every /chapters page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- routePreview/fetchedDetails would retrigger on param churn
   }, [id, previewId]);
 
   useEffect(() => {

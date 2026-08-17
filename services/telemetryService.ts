@@ -174,13 +174,17 @@ async function postEvent(
 }
 
 function enqueue(event: TelemetryEvent): void {
-  const payload: TelemetryEvent = {
-    ...collectTelemetryRuntime(),
-    ...event,
-  };
-  void postEvent(payload).catch(() => {
-    // Offline or server down — local error log still has the record.
-  });
+  try {
+    const payload: TelemetryEvent = {
+      ...collectTelemetryRuntime(),
+      ...event,
+    };
+    void postEvent(payload).catch(() => {
+      // Offline or server down — local error log still has the record.
+    });
+  } catch {
+    // Telemetry must never take down logger.error or other callers.
+  }
 }
 
 export function reportErrorEvent(event: Omit<TelemetryEvent, 'kind'>): void {
