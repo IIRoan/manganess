@@ -31,6 +31,7 @@ import {
   saveBookmark,
   removeBookmark,
 } from '@/services/bookmarkService';
+import { useBookmarks } from '@/hooks/useBookmarks';
 import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '@/hooks/useToast';
 
@@ -65,23 +66,17 @@ const MangaCard: React.FC<EnhancedMangaCardProps> = ({
   const scaleAnim = useSharedValue(1);
   const haptics = useHapticFeedback();
   const { isOffline } = useOffline();
+  const { bookmarks } = useBookmarks();
   const { showToast } = useToast();
 
-  // Load bookmark status when component mounts or mangaId changes
   useEffect(() => {
-    const loadBookmarkStatus = async () => {
-      if (mangaId) {
-        try {
-          const mangaData = await getMangaData(mangaId);
-          setBookmarkStatus(mangaData?.bookmarkStatus || null);
-        } catch (error) {
-          console.error('Error loading bookmark status:', error);
-        }
-      }
-    };
-
-    loadBookmarkStatus();
-  }, [mangaId]);
+    if (!mangaId) {
+      setBookmarkStatus(null);
+      return;
+    }
+    const match = bookmarks.find((bookmark) => bookmark.id === mangaId);
+    setBookmarkStatus(match?.bookmarkStatus || null);
+  }, [bookmarks, mangaId]);
 
   // Use appropriate caching strategy based on context
   const searchCachedPath = useImageCache(imageUrl, context, mangaId);

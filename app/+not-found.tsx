@@ -8,8 +8,10 @@ import {
 } from 'react-native';
 import { useTheme, Theme } from 'expo-router/react-navigation';
 import { Ionicons } from '@expo/vector-icons';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 
 export default function NotFoundScreen() {
+  useMarkInteractive();
   const { colors } = useTheme();
   const styles = getStyles(colors);
 

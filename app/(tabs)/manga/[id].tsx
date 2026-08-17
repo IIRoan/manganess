@@ -77,6 +77,7 @@ import { useHapticFeedback } from '@/utils/haptics';
 import { useToast } from '@/hooks/useToast';
 import getStyles from './[id].styles';
 import { logger } from '@/utils/logger';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 import { useMangaImageCache } from '@/services/CacheImages';
 import { useOffline } from '@/hooks/useOffline';
 import { offlineCacheService } from '@/services/offlineCacheService';
@@ -293,6 +294,7 @@ export default function MangaDetailScreen() {
   }, [id, previewId]);
 
   const [isLoading, setIsLoading] = useState(true);
+  useMarkInteractive(!isLoading);
   const [error, setError] = useState<string | null>(null);
   const [readChapters, setReadChapters] = useState<string[]>([]);
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);

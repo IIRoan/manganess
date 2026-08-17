@@ -8,7 +8,7 @@ import {
 import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useColorScheme, StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -21,6 +21,7 @@ import { installNetworkMonitor } from '@/utils/networkMonitor';
 import { useNavigationPerf } from '@/hooks/useNavigationPerf';
 import { logger } from '@/utils/logger';
 import { errorLogService } from '@/services/errorLogService';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 import Constants from 'expo-constants';
 import { downloadManagerService } from '@/services/downloadManager';
 import { createEcosystem, EcosystemProvider } from '@zedux/react';
@@ -123,11 +124,16 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const [isInteractive, setIsInteractive] = useState(false);
+  useMarkInteractive(isInteractive, { from: 'appStart', metric: 'app.tti' });
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    if (!loaded) {
+      return;
     }
+    void SplashScreen.hideAsync().finally(() => {
+      setIsInteractive(true);
+    });
   }, [loaded]);
 
   if (!loaded) {

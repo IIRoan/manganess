@@ -38,6 +38,7 @@ import { MangaItem, RecentMangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
 import { useOffline } from '@/hooks/useOffline';
 import { useCachedData } from '@/hooks/useCachedData';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 import { useLibraryRefresh } from '@/hooks/useLibraryRefresh';
 import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
 
@@ -99,6 +100,7 @@ export default function HomeScreen() {
   );
   const [isRecentMangaLoading, setIsRecentMangaLoading] =
     useState<boolean>(true);
+  useMarkInteractive(!isLoading);
 
   const { scrollY, scrollHandler } = useParallaxScroll();
 

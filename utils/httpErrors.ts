@@ -43,6 +43,10 @@ export function isNotFoundError(error: unknown): boolean {
   );
 }
 
+export function isCloudflareError(error: unknown): boolean {
+  return getErrorMessage(error).includes('Cloudflare verification');
+}
+
 export function getApiRetryDelayMs(error: unknown, attempt: number): number {
   if (isRateLimitError(error)) {
     const retryAfter = (
@@ -122,6 +126,10 @@ export async function withApiRetry<T>(
       return await operation();
     } catch (error) {
       if (isNotFoundError(error)) {
+        throw error;
+      }
+
+      if (isCloudflareError(error)) {
         throw error;
       }
 

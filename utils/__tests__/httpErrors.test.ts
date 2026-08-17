@@ -104,16 +104,16 @@ describe('httpErrors', () => {
       expect(operation).toHaveBeenCalledTimes(2);
     });
 
-    it('does not retry 404 errors', async () => {
-      const error404 = Object.assign(
-        new Error('Request failed with status code 404'),
-        {
-          response: { status: 404 },
-        }
+    it('does not retry Cloudflare verification errors', async () => {
+      const error = Object.assign(
+        new Error('Cloudflare verification detected'),
+        { response: { status: 403 } }
       );
-      const operation = jest.fn().mockRejectedValue(error404);
+      const operation = jest.fn().mockRejectedValue(error);
 
-      await expect(withApiRetry(operation)).rejects.toThrow('404');
+      await expect(withApiRetry(operation)).rejects.toThrow(
+        'Cloudflare verification detected'
+      );
       expect(operation).toHaveBeenCalledTimes(1);
     });
 

@@ -9,10 +9,18 @@ export type ErrorLogSource =
 export interface ErrorLogRuntimeContext {
   platform: string;
   platformVersion: string;
+  model?: string;
   appVersion?: string;
+  build?: string;
+  sdkVersion?: string;
+  variant?: string;
   updateId?: string;
   channel?: string;
   runtimeVersion?: string;
+  updateCreatedAt?: string;
+  launch?: string;
+  executionEnv?: string;
+  jsEngine?: string;
 }
 
 export interface PersistedErrorEntry extends ErrorLogRuntimeContext {

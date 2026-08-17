@@ -1,4 +1,5 @@
 import { isLikelyLegacyMangaId } from '@/services/mangaIdMigrationService';
+import { reportWait } from '@/services/telemetryService';
 import type { MangaData } from '@/types/manga';
 import {
   getBookmarkProgressFromMangaData,
@@ -101,9 +102,7 @@ export function planMangaDetailLoad(options: {
   }
 
   const shouldBlockOnNetwork =
-    !options.isOffline &&
-    !options.hasCachedChapters &&
-    !canRenderFromCache;
+    !options.isOffline && !options.hasCachedChapters && !canRenderFromCache;
 
   phases.push({
     phase: MANGA_DETAIL_LOAD_PHASES.NETWORK_DETAILS,
@@ -119,19 +118,22 @@ export function planMangaDetailLoad(options: {
       phase: MANGA_DETAIL_LOAD_PHASES.READ_PROGRESS,
       blocking: false,
       deferred: true,
-      reason: 'Should reuse mangaData from hydration instead of re-reading storage',
+      reason:
+        'Should reuse mangaData from hydration instead of re-reading storage',
     },
     {
       phase: MANGA_DETAIL_LOAD_PHASES.BOOKMARK_STATUS,
       blocking: false,
       deferred: true,
-      reason: 'Should reuse mangaData from hydration instead of re-reading storage',
+      reason:
+        'Should reuse mangaData from hydration instead of re-reading storage',
     },
     {
       phase: MANGA_DETAIL_LOAD_PHASES.LAST_READ_CHAPTER,
       blocking: false,
       deferred: true,
-      reason: 'Should reuse mangaData from hydration instead of re-reading storage',
+      reason:
+        'Should reuse mangaData from hydration instead of re-reading storage',
     },
     {
       phase: MANGA_DETAIL_LOAD_PHASES.DOWNLOAD_STATE,
@@ -173,8 +175,10 @@ export async function measurePhase(
 ): Promise<void> {
   const startedAt = Date.now();
   await operation();
+  const durationMs = Date.now() - startedAt;
   timings.push({
     phase,
-    durationMs: Date.now() - startedAt,
+    durationMs,
   });
+  reportWait(phase, durationMs, '/manga/[id]');
 }
