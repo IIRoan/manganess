@@ -48,7 +48,7 @@
       }
     },
     "owner": "astralgrove",
-    "runtimeVersion": "1.16.0",
+    "runtimeVersion": "1.15.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
