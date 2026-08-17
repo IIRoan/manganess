@@ -1,10 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -17,6 +11,8 @@ import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import Reanimated from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { scheduleIdle } from '@/utils/scheduleIdle';
+import { RECENT_READ_FOCUS_THROTTLE_MS } from '@/constants/navigation';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -41,6 +37,7 @@ import { useCachedData } from '@/hooks/useCachedData';
 import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 import { useLibraryRefresh } from '@/hooks/useLibraryRefresh';
 import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
+import { navigateToMangaDetails } from '@/utils/mangaOpenNavigation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -64,15 +61,7 @@ export default function HomeScreen() {
       banner?: string;
       bannerImage?: string;
     }) => {
-      router.navigate({
-        pathname: '/(tabs)/manga/[id]',
-        params: {
-          id: item.id,
-          title: item.title,
-          imageUrl: item.imageUrl || item.banner || item.bannerImage || '',
-          previewId: item.id,
-        },
-      });
+      navigateToMangaDetails(router, item, 'home');
     },
     [router]
   );
@@ -257,7 +246,10 @@ export default function HomeScreen() {
     };
   }, [clearHomeAutoRetry]);
 
+  const lastRecentReadFetchAtRef = useRef(0);
+
   const fetchRecentlyReadManga = useCallback(async (showLoading = true) => {
+    lastRecentReadFetchAtRef.current = Date.now();
     try {
       if (showLoading) {
         setIsRecentMangaLoading(true);
@@ -291,7 +283,12 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchRecentlyReadManga(false);
+      return scheduleIdle(() => {
+        if (Date.now() - lastRecentReadFetchAtRef.current < RECENT_READ_FOCUS_THROTTLE_MS) {
+          return;
+        }
+        void fetchRecentlyReadManga(false);
+      });
     }, [fetchRecentlyReadManga])
   );
 

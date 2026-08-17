@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getReadChapters,
   getLastReadChapter,
+  getLastReadChapters,
   markChapterAsRead,
   markChapterAsUnread,
   setLastReadManga,
@@ -38,6 +39,30 @@ describe('readChapterService', () => {
 
     (getMangaData as jest.Mock).mockResolvedValue({ readChapters: ['1', '3'] });
     expect(await getLastReadChapter('1')).toBe('Chapter 3');
+  });
+
+  it('bulk-loads last read chapters with one storage request', async () => {
+    await AsyncStorage.multiSet([
+      ['manga_1', JSON.stringify({ readChapters: ['1', '12'] })],
+      ['manga_2', JSON.stringify({ readChapters: [] })],
+    ]);
+    await expect(getLastReadChapters(['1', '2'])).resolves.toEqual({
+      '1': 'Chapter 12',
+      '2': 'Not started',
+    });
+    expect(AsyncStorage.multiGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps other last-read badges when one stored record is corrupt', async () => {
+    await AsyncStorage.multiSet([
+      ['manga_1', JSON.stringify({ readChapters: ['4'] })],
+      ['manga_2', '{not-json'],
+    ]);
+
+    await expect(getLastReadChapters(['1', '2'])).resolves.toEqual({
+      '1': 'Chapter 4',
+      '2': null,
+    });
   });
 
   it('marks chapter as read and updates metadata', async () => {
@@ -185,9 +210,7 @@ describe('readChapterService', () => {
         .mockRejectedValueOnce(new Error('Storage error'));
 
       // Should not throw
-      await expect(
-        setLastReadManga('m1', 'Title', '1')
-      ).resolves.not.toThrow();
+      await expect(setLastReadManga('m1', 'Title', '1')).resolves.not.toThrow();
     });
 
     it('returns empty array when getRecentlyReadManga throws', async () => {
@@ -350,7 +373,10 @@ describe('readChapterService', () => {
       };
 
       await AsyncStorage.setItem('manga_a', JSON.stringify(manga));
-      await AsyncStorage.setItem('manga_a_read_chapters', JSON.stringify(['1', '2']));
+      await AsyncStorage.setItem(
+        'manga_a_read_chapters',
+        JSON.stringify(['1', '2'])
+      );
 
       const result = await getRecentlyReadManga();
       expect(result.length).toBe(1);

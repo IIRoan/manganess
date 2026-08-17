@@ -247,6 +247,15 @@ const getStyles = (colors: typeof Colors.light) =>
     fabIcon: {
       zIndex: 2,
     },
+    fabIconLayer: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     progressContainer: {
       backgroundColor: colors.card,
       borderRadius: 15,
