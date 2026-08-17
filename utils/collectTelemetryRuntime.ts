@@ -27,46 +27,58 @@ function put<K extends keyof TelemetryRuntime>(
   target[key] = next as TelemetryRuntime[K];
 }
 
+function fallbackPlatformVersion(): string {
+  try {
+    return trim(Platform.Version) || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 function osContext(): Pick<TelemetryRuntime, 'platformVersion' | 'model'> {
-  if (Platform.OS === 'ios') {
-    const constants = Platform.constants as {
-      osVersion?: string;
-      interfaceIdiom?: string;
-    };
-    const out: Pick<TelemetryRuntime, 'platformVersion' | 'model'> = {
-      platformVersion: trim(constants.osVersion) || String(Platform.Version),
-    };
-    const model = trim(constants.interfaceIdiom);
-    if (model) {
-      out.model = model;
+  try {
+    if (Platform.OS === 'ios') {
+      const constants = (Platform.constants ?? {}) as {
+        osVersion?: string;
+        interfaceIdiom?: string;
+      };
+      const out: Pick<TelemetryRuntime, 'platformVersion' | 'model'> = {
+        platformVersion: trim(constants.osVersion) || fallbackPlatformVersion(),
+      };
+      const model = trim(constants.interfaceIdiom);
+      if (model) {
+        out.model = model;
+      }
+      return out;
     }
-    return out;
-  }
-  if (Platform.OS === 'android') {
-    const constants = Platform.constants as {
-      Brand?: string;
-      Model?: string;
-      Release?: string;
-      Version?: number;
-    };
-    const api = trim(constants.Version ?? Platform.Version);
-    const release = trim(constants.Release);
-    const out: Pick<TelemetryRuntime, 'platformVersion' | 'model'> = {
-      platformVersion: release
-        ? `${release} (API ${api})`
-        : api
-          ? `API ${api}`
-          : String(Platform.Version),
-    };
-    const model = [trim(constants.Brand), trim(constants.Model)]
-      .filter(Boolean)
-      .join(' ');
-    if (model) {
-      out.model = model;
+    if (Platform.OS === 'android') {
+      const constants = (Platform.constants ?? {}) as {
+        Brand?: string;
+        Model?: string;
+        Release?: string;
+        Version?: number;
+      };
+      const api = trim(constants.Version ?? Platform.Version);
+      const release = trim(constants.Release);
+      const out: Pick<TelemetryRuntime, 'platformVersion' | 'model'> = {
+        platformVersion: release
+          ? `${release} (API ${api})`
+          : api
+            ? `API ${api}`
+            : fallbackPlatformVersion(),
+      };
+      const model = [trim(constants.Brand), trim(constants.Model)]
+        .filter(Boolean)
+        .join(' ');
+      if (model) {
+        out.model = model;
+      }
+      return out;
     }
-    return out;
+  } catch {
+    // Platform.constants can be missing in tests and some runtimes.
   }
-  return { platformVersion: String(Platform.Version) };
+  return { platformVersion: fallbackPlatformVersion() };
 }
 
 /**
@@ -74,7 +86,7 @@ function osContext(): Pick<TelemetryRuntime, 'platformVersion' | 'model'> {
  */
 export function collectTelemetryRuntime(): TelemetryRuntime {
   const runtime: TelemetryRuntime = {
-    platform: Platform.OS,
+    platform: trim(Platform.OS) || 'unknown',
     ...osContext(),
   };
 

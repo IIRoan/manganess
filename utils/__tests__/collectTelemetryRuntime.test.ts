@@ -48,4 +48,24 @@ describe('collectTelemetryRuntime', () => {
     expect(runtime.jsEngine).toMatch(/hermes|jsc/);
     expect(runtime).not.toHaveProperty('mangaId');
   });
+
+  it('does not throw when Platform.constants is missing', () => {
+    const originalConstants = Platform.constants;
+    Object.defineProperty(Platform, 'constants', {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      expect(() => collectTelemetryRuntime()).not.toThrow();
+      const runtime = collectTelemetryRuntime();
+      expect(runtime.platform).toBe(Platform.OS);
+      expect(runtime.platformVersion.length).toBeGreaterThan(0);
+    } finally {
+      Object.defineProperty(Platform, 'constants', {
+        configurable: true,
+        value: originalConstants,
+      });
+    }
+  });
 });

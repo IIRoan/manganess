@@ -371,7 +371,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
     ),
-    [router, themeColors.primary]
+    [openMangaDetails, themeColors.primary]
   );
 
   const renderRecentlyReadItem = useCallback(
@@ -400,7 +400,7 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [router, themeColors.text]
+    [openMangaDetails, themeColors.text]
   );
 
   const renderNewReleaseGrid = useCallback(() => {
@@ -435,7 +435,7 @@ export default function HomeScreen() {
         ))}
       </View>
     );
-  }, [newReleases, router, themeColors.text]);
+  }, [newReleases, openMangaDetails, themeColors.text]);
 
   const renderContinueReadingSection = useCallback(() => {
     if (isRecentMangaLoading) {
@@ -539,7 +539,13 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
     );
-  }, [featuredManga, insets.top, router, themeColors.primary, scrollY]);
+  }, [
+    featuredManga,
+    insets.top,
+    openMangaDetails,
+    themeColors.primary,
+    scrollY,
+  ]);
 
   if (isLoading) {
     return (

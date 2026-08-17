@@ -70,14 +70,18 @@ jest.mock('@/services/bookmarkService', () => {
 
 jest.mock('@/components/BottomPopup', () => {
   const { View, Pressable, Text } = require('react-native');
-  return ({
+  function MockBottomPopup({
     visible,
     options,
   }: {
     visible: boolean;
     options: { text: string; onPress: () => void }[];
-  }) =>
-    visible ? (
+  }) {
+    if (!visible) {
+      return null;
+    }
+
+    return (
       <View testID="bookmark-popup">
         {options.map((option) => (
           <Pressable
@@ -89,7 +93,10 @@ jest.mock('@/components/BottomPopup', () => {
           </Pressable>
         ))}
       </View>
-    ) : null;
+    );
+  }
+  MockBottomPopup.displayName = 'MockBottomPopup';
+  return MockBottomPopup;
 });
 
 const mockGetMangaData = getMangaData as jest.MockedFunction<

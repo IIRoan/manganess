@@ -331,10 +331,10 @@ export default function BookmarksScreen() {
         }
         lastAvailabilityCheckRef.current = now;
 
-        const results: Array<{
+        const results: {
           id: string;
           status: Awaited<ReturnType<typeof checkMangaAvailability>>;
-        }> = [];
+        }[] = [];
 
         for (const bookmark of atomBookmarks) {
           if (isCancelled) {
