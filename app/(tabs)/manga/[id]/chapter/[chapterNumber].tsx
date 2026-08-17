@@ -63,6 +63,7 @@ import { ChapterImage } from '@/types/download';
 import { useTheme } from '@/hooks/useTheme';
 import { Colors, ColorScheme } from '@/constants/Colors';
 import { useOffline } from '@/hooks/useOffline';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 import {
   ChapterGuideOverlay,
   hasSeenChapterGuide,
@@ -439,6 +440,7 @@ export default function ReadChapterScreen() {
   const { isOffline } = useOffline();
 
   const [isLoadingImages, setIsLoadingImages] = useState(true);
+  useMarkInteractive(!isLoadingImages);
   const [loadError, setLoadError] = useState<ChapterLoadErrorInfo | null>(
     null
   );

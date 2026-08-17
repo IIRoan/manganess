@@ -31,6 +31,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { logger } from '@/utils/logger';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 
 interface MangaDownloadInfo {
   mangaId: string;
@@ -53,6 +54,7 @@ export default function DownloadsScreen() {
   const { showToast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
+  useMarkInteractive(!isLoading);
   const [storageStats, setStorageStats] = useState<any>(null);
   const [mangaDownloads, setMangaDownloads] = useState<MangaDownloadInfo[]>([]);
   const [deletingManga, setDeletingManga] = useState<Set<string>>(new Set());

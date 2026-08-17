@@ -1,10 +1,8 @@
-import { Platform } from 'react-native';
 import {
   File as FSFile,
   Directory as FSDirectory,
   Paths,
 } from 'expo-file-system';
-import Constants from 'expo-constants';
 import type {
   ErrorLogFile,
   ErrorLogLevel,
@@ -14,6 +12,8 @@ import type {
   PersistedErrorEntry,
 } from '@/types/errorLog';
 import type { LogScope } from '@/types/logging';
+import { reportErrorEvent } from '@/services/telemetryService';
+import { collectTelemetryRuntime } from '@/utils/collectTelemetryRuntime';
 
 const LOG_DIR = new FSDirectory(Paths.document, 'debug');
 const LOG_FILE = new FSFile(LOG_DIR, 'error-log.json');
@@ -91,41 +91,7 @@ export function serializeErrorData(value: unknown): unknown {
 }
 
 function getRuntimeContext(): ErrorLogRuntimeContext {
-  const context: ErrorLogRuntimeContext = {
-    platform: Platform.OS,
-    platformVersion: String(Platform.Version),
-  };
-
-  try {
-    const appVersion = Constants.expoConfig?.version;
-    if (appVersion) {
-      context.appVersion = appVersion;
-    }
-  } catch {
-    // Constants can be unavailable in some test environments
-  }
-
-  try {
-    // Lazy require so tests that don't mock expo-updates still work
-    const Updates = require('expo-updates') as {
-      updateId?: string | null;
-      channel?: string | null;
-      runtimeVersion?: string | null;
-    };
-    if (Updates.updateId) {
-      context.updateId = Updates.updateId;
-    }
-    if (Updates.channel) {
-      context.channel = Updates.channel;
-    }
-    if (Updates.runtimeVersion) {
-      context.runtimeVersion = Updates.runtimeVersion;
-    }
-  } catch {
-    // expo-updates is optional at persist time
-  }
-
-  return context;
+  return collectTelemetryRuntime();
 }
 
 function createId(): string {
@@ -148,7 +114,7 @@ function formatEntry(entry: PersistedErrorEntry): string {
     }
   }
   lines.push(
-    `platform=${entry.platform} ${entry.platformVersion} app=${entry.appVersion ?? 'unknown'} channel=${entry.channel ?? 'none'} updateId=${entry.updateId ?? 'none'}`
+    `platform=${entry.platform} ${entry.platformVersion} model=${entry.model ?? 'unknown'} app=${entry.appVersion ?? 'unknown'} build=${entry.build ?? 'none'} runtime=${entry.runtimeVersion ?? 'none'} channel=${entry.channel ?? 'none'} updateId=${entry.updateId ?? 'none'} launch=${entry.launch ?? 'unknown'} js=${entry.jsEngine ?? 'unknown'} env=${entry.executionEnv ?? 'unknown'} variant=${entry.variant ?? 'none'}`
   );
   return lines.join('\n');
 }
@@ -194,6 +160,17 @@ class ErrorLogService {
           : undefined;
     const stack = nestedError?.stack;
 
+    if (level === 'error') {
+      reportErrorEvent({
+        name: 'app.error',
+        level,
+        message,
+        scope,
+        source: 'logger',
+        ...(stack ? { stack: truncate(stack) } : {}),
+      });
+    }
+
     void this.append({
       level,
       source: 'logger',
@@ -218,13 +195,22 @@ class ErrorLogService {
       options.message ||
       (error instanceof Error ? error.message : String(error));
     const stack = error instanceof Error ? error.stack : undefined;
+    const fatal = options.fatal ?? false;
+
+    reportErrorEvent({
+      name: 'app.exception',
+      level: fatal ? 'fatal' : 'error',
+      message,
+      source: options.source,
+      ...(stack ? { stack: truncate(stack) } : {}),
+    });
 
     void this.append({
       level: 'error',
       source: options.source,
       message,
       data: {
-        fatal: options.fatal ?? false,
+        fatal,
         error: serialized,
         ...(options.data ? { extra: serializeErrorData(options.data) } : {}),
       },
@@ -411,16 +397,23 @@ class ErrorLogService {
           : entries;
       this.cache = trimmed;
       await this.writeFile(trimmed);
+    }).catch((error) => {
+      // Recording is fire-and-forget. Swallow here so a disk failure cannot
+      // become an unhandled rejection (that would recurse through the
+      // global handler). Callers that must have a durable file await
+      // getPersistedFileUri() or clear(), which still reject.
+      console.warn('[errorLog] Failed to persist error log', error);
     });
   }
 
   private enqueue(task: () => Promise<void>): Promise<void> {
     const run = this.writeChain.then(task, task);
+    // Recover the queue after a failed write so later flushes can retry.
     this.writeChain = run.then(
       () => undefined,
       () => undefined
     );
-    return run.catch(() => undefined);
+    return run;
   }
 
   private async loadEntries(): Promise<PersistedErrorEntry[]> {

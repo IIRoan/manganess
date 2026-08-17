@@ -94,6 +94,10 @@ describe('updateService', () => {
       Constants.executionEnvironment = 'standalone';
       Updates.isEnabled = false;
       expect(areUpdatesAvailable()).toBe(false);
+
+      Updates.isEnabled = true;
+      (globalThis as any).__DEV__ = true;
+      expect(areUpdatesAvailable()).toBe(false);
     });
 
     it('provides reason when updates unavailable', () => {
@@ -107,6 +111,10 @@ describe('updateService', () => {
       Updates.isEnabled = true;
       Constants.executionEnvironment = 'storeClient';
       expect(getUnavailableReason()).toContain('Expo Go');
+
+      Constants.executionEnvironment = 'standalone';
+      (globalThis as any).__DEV__ = true;
+      expect(getUnavailableReason()).toContain('development');
     });
   });
 
@@ -140,6 +148,15 @@ describe('updateService', () => {
       const result = await checkForUpdate();
       expect(result.success).toBe(false);
       expect(result.message).toContain('Expo Go');
+      expect(Updates.checkForUpdateAsync).not.toHaveBeenCalled();
+    });
+
+    it('short-circuits in development builds', async () => {
+      (globalThis as any).__DEV__ = true;
+
+      const result = await checkForUpdate();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('development');
       expect(Updates.checkForUpdateAsync).not.toHaveBeenCalled();
     });
 

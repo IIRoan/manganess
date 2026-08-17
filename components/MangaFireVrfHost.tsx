@@ -19,6 +19,7 @@ import { logger } from '@/utils/logger';
 import { isDebugEnabled } from '@/constants/env';
 
 const MAX_HOST_RELOADS = 2;
+const HOST_RELOAD_WINDOW_MS = 60_000;
 
 const MangaFireVrfHost: React.FC = () => {
   const log = logger();
@@ -27,18 +28,24 @@ const MangaFireVrfHost: React.FC = () => {
   const insets = useSafeAreaInsets();
   const styles = getStyles(colors, insets.top);
   const webViewRef = useRef<WebView>(null);
-  const reloadCountRef = useRef(0);
+  const reloadAtRef = useRef<number[]>([]);
   const [challengeVisible, setChallengeVisible] = useState(false);
   const readinessScript = useMemo(() => buildVrfScript(), []);
 
   const reloadWebView = useCallback(() => {
-    if (reloadCountRef.current >= MAX_HOST_RELOADS) {
+    const now = Date.now();
+    const recent = reloadAtRef.current.filter(
+      (ts) => now - ts < HOST_RELOAD_WINDOW_MS
+    );
+    if (recent.length >= MAX_HOST_RELOADS) {
+      reloadAtRef.current = recent;
       log.warn('Service', 'MangaFire VRF host reload limit reached');
       return;
     }
-    reloadCountRef.current += 1;
+    recent.push(now);
+    reloadAtRef.current = recent;
     log.warn('Service', 'Reloading MangaFire VRF host WebView', {
-      attempt: reloadCountRef.current,
+      attempt: recent.length,
     });
     webViewRef.current?.reload();
   }, [log]);
@@ -74,7 +81,7 @@ const MangaFireVrfHost: React.FC = () => {
       try {
         const parsed = JSON.parse(payload) as { type?: string };
         if (parsed.type === 'ready') {
-          reloadCountRef.current = 0;
+          reloadAtRef.current = [];
         }
       } catch {
         // Bridge ignores malformed payloads too

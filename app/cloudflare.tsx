@@ -17,8 +17,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebViewNavigation } from 'react-native-webview';
 
 import { useCloudflareDetection } from '@/hooks/useCloudflareDetection';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 
 export default function CloudflarePage() {
+  useMarkInteractive();
   const router = useRouter();
   const { theme } = useTheme();
   const systemColorScheme = useColorScheme() as ColorScheme;

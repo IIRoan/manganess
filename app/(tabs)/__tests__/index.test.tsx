@@ -11,6 +11,7 @@ const mockRouterNavigate = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockRouterNavigate }),
+  usePathname: () => '/',
   useFocusEffect: jest.fn((cb) => {
     cb();
   }),

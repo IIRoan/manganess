@@ -292,6 +292,45 @@ jest.mock('@/services/offlineCacheService', () => {
           return true;
         }
       ),
+      mergeCachedChapters: jest.fn(
+        async (id: string, incoming: Array<{ number: string; url?: string; title?: string; date?: string }>) => {
+          const existing = mockOfflineCacheStore.get(id);
+          if (!existing) {
+            return false;
+          }
+          const byNumber = new Map(
+            (existing.chapters ?? []).map((chapter: any) => [
+              chapter.number,
+              chapter,
+            ])
+          );
+          let changed = false;
+          for (const chapter of incoming) {
+            const previous = byNumber.get(chapter.number);
+            if (!previous) {
+              byNumber.set(chapter.number, chapter);
+              changed = true;
+              continue;
+            }
+            if (
+              chapter.url &&
+              chapter.url !== (previous as { url?: string }).url
+            ) {
+              byNumber.set(chapter.number, { ...previous, ...chapter });
+              changed = true;
+            }
+          }
+          if (!changed) {
+            return false;
+          }
+          mockOfflineCacheStore.set(id, {
+            ...existing,
+            chapters: Array.from(byNumber.values()),
+            cachedAt: Date.now(),
+          });
+          return true;
+        }
+      ),
       getBookmarkedMangaDetails: jest.fn(async () =>
         Array.from(mockOfflineCacheStore.values()).filter(
           (entry: any) => entry.isBookmarked
@@ -414,6 +453,21 @@ jest.mock('expo-constants', () => {
 jest.mock('expo-web-browser', () => ({
   openBrowserAsync: jest.fn(),
 }));
+
+jest.mock('expo-secure-store', () => {
+  const memory = new Map<string, string>();
+  return {
+    AFTER_FIRST_UNLOCK: 'AFTER_FIRST_UNLOCK',
+    isAvailableAsync: jest.fn(async () => true),
+    getItemAsync: jest.fn(async (key: string) => memory.get(key) ?? null),
+    setItemAsync: jest.fn(async (key: string, value: string) => {
+      memory.set(key, value);
+    }),
+    deleteItemAsync: jest.fn(async (key: string) => {
+      memory.delete(key);
+    }),
+  };
+});
 
 jest.mock('expo-font', () => ({
   loadAsync: jest.fn(() => Promise.resolve()),

@@ -144,6 +144,57 @@ describe('MangaFireVrfHost', () => {
     reportSpy.mockRestore();
   });
 
+  it('stops reload loops, then allows another reload after the cooldown window', () => {
+    let now = 1_000_000;
+    const dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+
+    try {
+      render(<MangaFireVrfHost />);
+      mockReload.mockClear();
+
+      act(() => {
+        latestWebViewProps.onContentProcessDidTerminate?.();
+        latestWebViewProps.onContentProcessDidTerminate?.();
+        latestWebViewProps.onContentProcessDidTerminate?.();
+      });
+
+      expect(mockReload).toHaveBeenCalledTimes(2);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Service',
+        'MangaFire VRF host reload limit reached'
+      );
+
+      now += 60_001;
+      act(() => {
+        latestWebViewProps.onContentProcessDidTerminate?.();
+      });
+
+      expect(mockReload).toHaveBeenCalledTimes(3);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
+  it('resets the reload budget when the host becomes ready', () => {
+    render(<MangaFireVrfHost />);
+    mockReload.mockClear();
+
+    act(() => {
+      latestWebViewProps.onContentProcessDidTerminate?.();
+      latestWebViewProps.onContentProcessDidTerminate?.();
+    });
+    expect(mockReload).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      latestWebViewProps.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ type: 'ready' }) },
+      });
+      latestWebViewProps.onContentProcessDidTerminate?.();
+    });
+
+    expect(mockReload).toHaveBeenCalledTimes(3);
+  });
+
   it('keeps the webview on-screen so iOS will run its javascript', () => {
     render(<MangaFireVrfHost />);
 
@@ -178,8 +229,31 @@ describe('MangaFireVrfHost', () => {
     expect(latestWebViewProps.scrollEnabled).toBe(false);
   });
 
+  it('shows the security check if Cloudflare challenges the host after it was ready', () => {
+    const { getByText, queryByText } = render(<MangaFireVrfHost />);
+
+    act(() => {
+      latestWebViewProps.onMessage?.({
+        nativeEvent: { data: JSON.stringify({ type: 'ready' }) },
+      });
+    });
+
+    expect(queryByText('Security check')).toBeNull();
+
+    act(() => {
+      latestWebViewProps.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({ type: 'challenge', title: 'Just a moment...' }),
+        },
+      });
+    });
+
+    expect(getByText('Security check')).toBeTruthy();
+    expect(latestWebViewProps.scrollEnabled).toBe(true);
+  });
+
   it('treats Cloudflare 403 responses as a challenge, not a fatal load error', () => {
-    render(<MangaFireVrfHost />);
+    const { getByText } = render(<MangaFireVrfHost />);
 
     act(() => {
       latestWebViewProps.onHttpError?.({
@@ -201,6 +275,7 @@ describe('MangaFireVrfHost', () => {
       'MangaFire VRF host received Cloudflare 403',
       expect.objectContaining({ url: 'https://mangafire.to/' })
     );
+    expect(getByText('Security check')).toBeTruthy();
   });
 
   it('logs when debug mode is enabled', () => {

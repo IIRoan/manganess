@@ -10,6 +10,11 @@ jest.mock('expo-updates', () => ({
   runtimeVersion: '1.15',
 }));
 
+jest.mock('../telemetryService', () => ({
+  reportErrorEvent: jest.fn(),
+  reportMetric: jest.fn(),
+}));
+
 jest.mock('promise/setimmediate/rejection-tracking', () => ({
   enable: jest.fn(),
   disable: jest.fn(),
@@ -78,6 +83,18 @@ describe('errorLogService', () => {
         message: 'Timed out waiting for MangaFire protection module',
       },
     });
+
+    const { reportErrorEvent } = require('../telemetryService') as {
+      reportErrorEvent: jest.Mock;
+    };
+    expect(reportErrorEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'app.error',
+        message: 'Failed to load manga details',
+        scope: 'Service',
+      })
+    );
+    expect(reportErrorEvent.mock.calls[0][0].data).toBeUndefined();
   });
 
   it('flushes pending writes before returning a shareable file URI', async () => {
@@ -126,6 +143,51 @@ describe('errorLogService', () => {
     expect(await errorLogService.getText()).toBe('No errors recorded.');
   });
 
+  it('surfaces disk write failures when flushing a shareable file', async () => {
+    const { File } = require('expo-file-system') as {
+      File: { prototype: { write: (...args: unknown[]) => Promise<void> } };
+    };
+    const writeSpy = jest
+      .spyOn(File.prototype, 'write')
+      .mockRejectedValue(new Error('ENOSPC'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
+
+    try {
+      errorLogService.recordFromLogger('error', 'Service', 'boom');
+      await expect(errorLogService.getEntries()).resolves.toHaveLength(1);
+      await expect(errorLogService.getPersistedFileUri()).rejects.toThrow(
+        'ENOSPC'
+      );
+    } finally {
+      writeSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('keeps accepting writes after a persist failure', async () => {
+    const { File } = require('expo-file-system') as {
+      File: { prototype: { write: (...args: unknown[]) => Promise<void> } };
+    };
+    const writeSpy = jest.spyOn(File.prototype, 'write');
+    writeSpy.mockRejectedValueOnce(new Error('ENOSPC'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
+
+    try {
+      errorLogService.recordFromLogger('error', 'Service', 'first');
+      await expect(errorLogService.getEntries()).resolves.toHaveLength(1);
+
+      errorLogService.recordFromLogger('error', 'Service', 'second');
+      const entries = await errorLogService.getEntries();
+      expect(entries.map((entry) => entry.message)).toEqual([
+        'first',
+        'second',
+      ]);
+    } finally {
+      writeSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
   it('records uncaught exceptions with source metadata', async () => {
     errorLogService.recordException(new Error('WebView crashed'), {
       source: 'global',
@@ -159,6 +221,18 @@ describe('errorLogService', () => {
     const entries = await errorLogService.getEntries();
     expect(entries[0]?.source).toBe('global');
     expect(previousHandler).toHaveBeenCalled();
+
+    const { reportErrorEvent } = require('../telemetryService') as {
+      reportErrorEvent: jest.Mock;
+    };
+    expect(reportErrorEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'app.exception',
+        level: 'fatal',
+        message: 'native fatal',
+        source: 'global',
+      })
+    );
   });
 
   it('installs Hermes rejection tracking even when addEventListener exists', async () => {

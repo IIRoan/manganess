@@ -17,6 +17,10 @@ jest.mock('@/constants/env', () => ({
   isDebugEnabled: () => true,
 }));
 
+jest.mock('@/services/telemetryService', () => ({
+  reportMetric: jest.fn(),
+}));
+
 jest.mock('react-native', () => ({
   InteractionManager: {
     runAfterInteractions: (cb: () => void) => cb(),
