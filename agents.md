@@ -201,7 +201,6 @@ const getStyles = (colors: typeof Colors.light) =>
 ### Navigation Hooks
 
 - **useNavigationHistory** - History management (`hooks/useNavigationHistory.ts`)
-- **useSwipeBack** - Gesture-based navigation (`hooks/useSwipeBack.ts`)
 
 ### Theme Hooks
 
@@ -233,7 +232,7 @@ const getStyles = (colors: typeof Colors.light) =>
 
 - **Components**: PascalCase (e.g., `MangaCard.tsx`)
 - **Services**: camelCase with suffix (e.g., `mangaFireService.ts`)
-- **Hooks**: camelCase with `use` prefix (e.g., `useSwipeBack.ts`)
+- **Hooks**: camelCase with `use` prefix (e.g., `useTheme.ts`)
 - **Types**: camelCase (e.g., `manga.ts`)
 - **Utils**: camelCase (e.g., `logger.ts`)
 

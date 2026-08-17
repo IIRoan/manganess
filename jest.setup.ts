@@ -21,7 +21,7 @@ afterAll(() => {
 jest.mock('react-native-reanimated', () => {
   const ReactNative = require('react-native');
   const ID = <T>(value: T) => value;
-  const NOOP = () => {};
+  const NOOP = () => { };
   const animationBuilder = {
     delay: () => animationBuilder,
     duration: () => animationBuilder,
@@ -142,8 +142,8 @@ jest.mock('expo-modules-core', () => {
     addListener() {
       return { remove: jest.fn() };
     }
-    removeAllListeners() {}
-    removeSubscription() {}
+    removeAllListeners() { }
+    removeSubscription() { }
   }
 
   return {
@@ -159,6 +159,8 @@ jest.mock('expo-modules-core', () => {
 });
 
 jest.mock('expo-file-system', () => {
+  const mockFsContents = new Map<string, string>();
+
   class MockFile {
     uri: string;
     constructor(dir: any, name?: string) {
@@ -172,10 +174,17 @@ jest.mock('expo-file-system', () => {
     get exists() {
       return true;
     }
-    async write() {}
-    async delete() {}
+    async write(contents?: string) {
+      mockFsContents.set(this.uri, String(contents ?? ''));
+    }
+    async delete() {
+      mockFsContents.delete(this.uri);
+    }
     async read() {
-      return '';
+      return mockFsContents.get(this.uri) ?? '';
+    }
+    async text() {
+      return mockFsContents.get(this.uri) ?? '';
     }
     info() {
       return { exists: true, size: 0, uri: this.uri };
@@ -200,8 +209,8 @@ jest.mock('expo-file-system', () => {
     get exists() {
       return true;
     }
-    async create() {}
-    delete() {}
+    async create() { }
+    delete() { }
     list() {
       return [];
     }
@@ -236,6 +245,7 @@ jest.mock('@react-native-community/netinfo', () => {
 });
 
 const mockOfflineCacheStore = new Map<string, any>();
+const mockOfflineHeaderStore = new Map<string, any>();
 
 jest.mock('@/services/offlineCacheService', () => {
   const buildEntry = (details: any, isBookmarked: boolean) => ({
@@ -251,6 +261,31 @@ jest.mock('@/services/offlineCacheService', () => {
           mockOfflineCacheStore.set(id, buildEntry(details, isBookmarked));
         }
       ),
+      cacheMangaHeader: jest.fn(
+        async (
+          id: string,
+          details: any,
+          options?: { isBookmarked?: boolean; opened?: boolean }
+        ) => {
+          mockOfflineHeaderStore.set(id, {
+            ...details,
+            id,
+            cachedAt: Date.now(),
+            lastOpenedAt: Date.now(),
+            isBookmarked: options?.isBookmarked ?? false,
+          });
+        }
+      ),
+      getCachedMangaHeader: jest.fn(
+        async (id: string) => mockOfflineHeaderStore.get(id) ?? null
+      ),
+      getAllCachedMangaHeaders: jest.fn(async () => {
+        const entries: Record<string, any> = {};
+        mockOfflineHeaderStore.forEach((value, key) => {
+          entries[key] = value;
+        });
+        return entries;
+      }),
       getCachedMangaDetails: jest.fn(
         async (id: string) => mockOfflineCacheStore.get(id) ?? null
       ),
@@ -283,6 +318,53 @@ jest.mock('@/services/offlineCacheService', () => {
           return true;
         }
       ),
+      mergeCachedChapters: jest.fn(
+        async (
+          id: string,
+          incoming: Array<{
+            number: string;
+            url?: string;
+            title?: string;
+            date?: string;
+          }>
+        ) => {
+          const existing = mockOfflineCacheStore.get(id);
+          if (!existing) {
+            return false;
+          }
+          const byNumber = new Map(
+            (existing.chapters ?? []).map((chapter: any) => [
+              chapter.number,
+              chapter,
+            ])
+          );
+          let changed = false;
+          for (const chapter of incoming) {
+            const previous = byNumber.get(chapter.number);
+            if (!previous) {
+              byNumber.set(chapter.number, chapter);
+              changed = true;
+              continue;
+            }
+            if (
+              chapter.url &&
+              chapter.url !== (previous as { url?: string }).url
+            ) {
+              byNumber.set(chapter.number, { ...previous, ...chapter });
+              changed = true;
+            }
+          }
+          if (!changed) {
+            return false;
+          }
+          mockOfflineCacheStore.set(id, {
+            ...existing,
+            chapters: Array.from(byNumber.values()),
+            cachedAt: Date.now(),
+          });
+          return true;
+        }
+      ),
       getBookmarkedMangaDetails: jest.fn(async () =>
         Array.from(mockOfflineCacheStore.values()).filter(
           (entry: any) => entry.isBookmarked
@@ -310,6 +392,7 @@ jest.mock('@/services/offlineCacheService', () => {
       getCachedHomeData: jest.fn(async () => null),
       clearAllCache: jest.fn(async () => {
         mockOfflineCacheStore.clear();
+        mockOfflineHeaderStore.clear();
       }),
       getCacheStats: jest.fn(async () => ({
         mangaCount: mockOfflineCacheStore.size,
@@ -337,15 +420,13 @@ jest.mock('@/services/chapterStorageService', () => {
           return downloads.get(mangaId)?.has(chapterNumber) ?? false;
         }
       ),
-      getChapterImages: jest.fn(async (mangaId: string, chapterNumber: string) => {
-        return downloads.get(mangaId)?.get(chapterNumber) ?? null;
-      }),
+      getChapterImages: jest.fn(
+        async (mangaId: string, chapterNumber: string) => {
+          return downloads.get(mangaId)?.get(chapterNumber) ?? null;
+        }
+      ),
       downloadAndSaveImage: jest.fn(
-        async (
-          mangaId: string,
-          chapterNumber: string,
-          image: any
-        ) => {
+        async (mangaId: string, chapterNumber: string, image: any) => {
           const saved = {
             ...image,
             localPath: `file://mock/${mangaId}/${chapterNumber}/${image.pageNumber}.jpg`,
@@ -405,6 +486,21 @@ jest.mock('expo-constants', () => {
 jest.mock('expo-web-browser', () => ({
   openBrowserAsync: jest.fn(),
 }));
+
+jest.mock('expo-secure-store', () => {
+  const memory = new Map<string, string>();
+  return {
+    AFTER_FIRST_UNLOCK: 'AFTER_FIRST_UNLOCK',
+    isAvailableAsync: jest.fn(async () => true),
+    getItemAsync: jest.fn(async (key: string) => memory.get(key) ?? null),
+    setItemAsync: jest.fn(async (key: string, value: string) => {
+      memory.set(key, value);
+    }),
+    deleteItemAsync: jest.fn(async (key: string) => {
+      memory.delete(key);
+    }),
+  };
+});
 
 jest.mock('expo-font', () => ({
   loadAsync: jest.fn(() => Promise.resolve()),

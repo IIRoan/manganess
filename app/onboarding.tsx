@@ -15,8 +15,10 @@ import { Colors } from '@/constants/Colors';
 import { setOnboardingCompleted } from '@/services/settingsService';
 import { useRouter } from 'expo-router';
 import { logger } from '@/utils/logger';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 
 export default function OnboardingScreen() {
+  useMarkInteractive();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const systemColorScheme = useColorScheme();

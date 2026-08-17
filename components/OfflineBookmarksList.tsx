@@ -19,6 +19,8 @@ import {
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { useMangaImageCache } from '@/services/CacheImages';
 import { logger } from '@/utils/logger';
+import { startMangaOpen } from '@/services/mangaOpenTrace';
+import { navigateToMangaDetails, prefetchMangaOpen } from '@/utils/mangaOpenNavigation';
 
 interface OfflineBookmarksListProps {
   onMangaPress?: (mangaId: string) => void;
@@ -92,18 +94,21 @@ export const OfflineBookmarksList: React.FC<OfflineBookmarksListProps> = ({
   const handleMangaPress = useCallback(
     (manga: CachedMangaDetails) => {
       if (onMangaPress) {
+        startMangaOpen(manga.id, 'offline');
+        prefetchMangaOpen(manga.id);
         onMangaPress(manga.id);
-      } else {
-        router.navigate({
-          pathname: '/(tabs)/manga/[id]',
-          params: {
-            id: manga.id,
-            title: manga.title,
-            imageUrl: manga.bannerImage,
-            previewId: manga.id,
-          },
-        });
+        return;
       }
+
+      navigateToMangaDetails(
+        router,
+        {
+          id: manga.id,
+          title: manga.title,
+          imageUrl: manga.bannerImage,
+        },
+        'offline'
+      );
     },
     [onMangaPress, router]
   );

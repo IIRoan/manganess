@@ -1,5 +1,5 @@
 import { render, fireEvent } from '@testing-library/react-native';
-import SwipeableChapterItem from '../SwipeChapterItem';
+import SwipeableChapterItem, { CHAPTER_ROW_HEIGHT } from '../SwipeChapterItem';
 import { Colors } from '@/constants/Colors';
 
 // Mock gesture handler
@@ -151,5 +151,9 @@ describe('SwipeableChapterItem', () => {
 
     const button = getByRole('button');
     expect(button.props.accessibilityHint).toContain('Read chapter');
+  });
+
+  it('keeps a fixed row height so FlashList does not relayout while scrolling', () => {
+    expect(CHAPTER_ROW_HEIGHT).toBe(65);
   });
 });

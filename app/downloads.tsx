@@ -31,6 +31,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import { logger } from '@/utils/logger';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
+import { navigateToMangaDetails } from '@/utils/mangaOpenNavigation';
 
 interface MangaDownloadInfo {
   mangaId: string;
@@ -53,6 +55,7 @@ export default function DownloadsScreen() {
   const { showToast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
+  useMarkInteractive(!isLoading);
   const [storageStats, setStorageStats] = useState<any>(null);
   const [mangaDownloads, setMangaDownloads] = useState<MangaDownloadInfo[]>([]);
   const [deletingManga, setDeletingManga] = useState<Set<string>>(new Set());
@@ -1081,7 +1084,13 @@ export default function DownloadsScreen() {
                   <View key={manga.mangaId} style={styles.mangaCard}>
                     <TouchableOpacity
                       style={styles.mangaInfo}
-                      onPress={() => router.push(`/manga/${manga.mangaId}`)}
+                      onPress={() => {
+                        navigateToMangaDetails(
+                          router,
+                          { id: manga.mangaId },
+                          'downloads'
+                        );
+                      }}
                     >
                       <View style={styles.mangaDetails}>
                         <Text style={styles.mangaId} numberOfLines={1}>

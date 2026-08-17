@@ -10,7 +10,7 @@ import {
 } from '@/services/searchHistoryService';
 import { getDefaultLayout } from '@/services/settingsService';
 import { searchManga } from '@/services/mangaFireService';
-import { getLastReadChapter } from '@/services/readChapterService';
+import { getLastReadChapters } from '@/services/readChapterService';
 import { offlineCacheService } from '@/services/offlineCacheService';
 
 // Mock router
@@ -55,7 +55,7 @@ jest.mock('@/services/mangaFireService', () => ({
 }));
 
 jest.mock('@/services/readChapterService', () => ({
-  getLastReadChapter: jest.fn(),
+  getLastReadChapters: jest.fn(),
 }));
 
 jest.mock('@/services/offlineCacheService', () => ({
@@ -172,7 +172,7 @@ describe('MangaSearchScreen', () => {
     (getSearchHistory as jest.Mock).mockResolvedValue([]);
     (getDefaultLayout as jest.Mock).mockResolvedValue('list');
     (searchManga as jest.Mock).mockResolvedValue([]);
-    (getLastReadChapter as jest.Mock).mockResolvedValue(null);
+    (getLastReadChapters as jest.Mock).mockResolvedValue({});
     (addSearchHistoryItem as jest.Mock).mockResolvedValue(undefined);
     (removeSearchHistoryItem as jest.Mock).mockResolvedValue(undefined);
     (clearSearchHistory as jest.Mock).mockResolvedValue(undefined);
@@ -554,7 +554,7 @@ describe('MangaSearchScreen', () => {
   it('fetches last read chapters for search results', async () => {
     // This requires full VRF flow simulation
     // Verifying the hook is available
-    expect(getLastReadChapter).toBeDefined();
+    expect(getLastReadChapters).toBeDefined();
   });
 
   it('caches search results for offline use', async () => {

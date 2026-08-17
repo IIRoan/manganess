@@ -44,6 +44,55 @@ export const getLastReadChapter = async (
   }
 };
 
+/** Load search-result progress with one native storage operation. */
+export const getLastReadChapters = async (
+  mangaIds: string[]
+): Promise<Record<string, string | null>> => {
+  const ids = Array.from(
+    new Set(mangaIds.map((id) => id.trim()).filter(Boolean))
+  );
+  if (ids.length === 0) {
+    return {};
+  }
+
+  try {
+    const entries = await AsyncStorage.multiGet(ids.map((id) => `manga_${id}`));
+    const chapters: Record<string, string | null> = {};
+
+    entries.forEach(([, raw], index) => {
+      const id = ids[index];
+      if (!id) {
+        return;
+      }
+
+      try {
+        const mangaData = raw ? (JSON.parse(raw) as MangaData) : null;
+        if (!mangaData?.readChapters?.length) {
+          chapters[id] = 'Not started';
+          return;
+        }
+
+        const highestChapter = Math.max(
+          ...mangaData.readChapters.map((chapter) => Number.parseFloat(chapter))
+        );
+        chapters[id] = Number.isFinite(highestChapter)
+          ? `Chapter ${highestChapter}`
+          : null;
+      } catch {
+        chapters[id] = null;
+      }
+    });
+
+    return chapters;
+  } catch (error) {
+    logger().warn('Storage', 'Failed to bulk-load last read chapters', {
+      error,
+      mangaCount: ids.length,
+    });
+    return {};
+  }
+};
+
 export const markChapterAsRead = async (
   mangaId: string,
   chapterNumber: string,

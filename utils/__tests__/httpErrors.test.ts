@@ -6,10 +6,34 @@ import {
   isRateLimitError,
   RATE_LIMIT_NO_CACHE_MESSAGE,
   RATE_LIMIT_USING_CACHE_MESSAGE,
+  summarizeApiError,
   withApiRetry,
 } from '../httpErrors';
 
 describe('httpErrors', () => {
+  describe('summarizeApiError', () => {
+    it('includes status and JSON body from axios-style errors', () => {
+      expect(
+        summarizeApiError({
+          message: 'Request failed with status code 403',
+          response: { status: 403, data: { message: 'Missing token.' } },
+        })
+      ).toEqual({
+        message: 'Request failed with status code 403',
+        status: 403,
+        body: '{"message":"Missing token."}',
+      });
+    });
+
+    it('truncates HTML bodies', () => {
+      const summary = summarizeApiError({
+        message: 'Request failed with status code 403',
+        response: { status: 403, data: `<html>${'x'.repeat(400)}</html>` },
+      });
+      expect(summary.status).toBe(403);
+      expect(summary.body?.length).toBeLessThanOrEqual(240);
+    });
+  });
   describe('isRateLimitError', () => {
     it('detects axios 429 responses', () => {
       expect(isRateLimitError({ response: { status: 429 } })).toBe(true);
@@ -104,16 +128,16 @@ describe('httpErrors', () => {
       expect(operation).toHaveBeenCalledTimes(2);
     });
 
-    it('does not retry 404 errors', async () => {
-      const error404 = Object.assign(
-        new Error('Request failed with status code 404'),
-        {
-          response: { status: 404 },
-        }
+    it('does not retry Cloudflare verification errors', async () => {
+      const error = Object.assign(
+        new Error('Cloudflare verification detected'),
+        { response: { status: 403 } }
       );
-      const operation = jest.fn().mockRejectedValue(error404);
+      const operation = jest.fn().mockRejectedValue(error);
 
-      await expect(withApiRetry(operation)).rejects.toThrow('404');
+      await expect(withApiRetry(operation)).rejects.toThrow(
+        'Cloudflare verification detected'
+      );
       expect(operation).toHaveBeenCalledTimes(1);
     });
 

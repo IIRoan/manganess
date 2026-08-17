@@ -1,10 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -17,6 +11,8 @@ import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
 import Reanimated from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { scheduleIdle } from '@/utils/scheduleIdle';
+import { RECENT_READ_FOCUS_THROTTLE_MS } from '@/constants/navigation';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
@@ -38,8 +34,10 @@ import { MangaItem, RecentMangaItem } from '@/types';
 import { getRecentlyReadManga } from '@/services/readChapterService';
 import { useOffline } from '@/hooks/useOffline';
 import { useCachedData } from '@/hooks/useCachedData';
+import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 import { useLibraryRefresh } from '@/hooks/useLibraryRefresh';
 import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
+import { navigateToMangaDetails } from '@/utils/mangaOpenNavigation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -63,15 +61,7 @@ export default function HomeScreen() {
       banner?: string;
       bannerImage?: string;
     }) => {
-      router.navigate({
-        pathname: '/(tabs)/manga/[id]',
-        params: {
-          id: item.id,
-          title: item.title,
-          imageUrl: item.imageUrl || item.banner || item.bannerImage || '',
-          previewId: item.id,
-        },
-      });
+      navigateToMangaDetails(router, item, 'home');
     },
     [router]
   );
@@ -99,6 +89,7 @@ export default function HomeScreen() {
   );
   const [isRecentMangaLoading, setIsRecentMangaLoading] =
     useState<boolean>(true);
+  useMarkInteractive(!isLoading);
 
   const { scrollY, scrollHandler } = useParallaxScroll();
 
@@ -216,7 +207,10 @@ export default function HomeScreen() {
         resetHomeAutoRetry();
       }
     } catch (error) {
-      logger().error('Service', 'Error fetching manga data', { error });
+      logger().error('Service', 'Failed to load home manga data', {
+        error,
+        offline: isOffline,
+      });
 
       // Only show error if we don't have any cached data to display
       const hasNoData =
@@ -252,7 +246,10 @@ export default function HomeScreen() {
     };
   }, [clearHomeAutoRetry]);
 
+  const lastRecentReadFetchAtRef = useRef(0);
+
   const fetchRecentlyReadManga = useCallback(async (showLoading = true) => {
+    lastRecentReadFetchAtRef.current = Date.now();
     try {
       if (showLoading) {
         setIsRecentMangaLoading(true);
@@ -286,7 +283,12 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchRecentlyReadManga(false);
+      return scheduleIdle(() => {
+        if (Date.now() - lastRecentReadFetchAtRef.current < RECENT_READ_FOCUS_THROTTLE_MS) {
+          return;
+        }
+        void fetchRecentlyReadManga(false);
+      });
     }, [fetchRecentlyReadManga])
   );
 
@@ -369,7 +371,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
     ),
-    [router, themeColors.primary]
+    [openMangaDetails, themeColors.primary]
   );
 
   const renderRecentlyReadItem = useCallback(
@@ -398,7 +400,7 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [router, themeColors.text]
+    [openMangaDetails, themeColors.text]
   );
 
   const renderNewReleaseGrid = useCallback(() => {
@@ -433,7 +435,7 @@ export default function HomeScreen() {
         ))}
       </View>
     );
-  }, [newReleases, router, themeColors.text]);
+  }, [newReleases, openMangaDetails, themeColors.text]);
 
   const renderContinueReadingSection = useCallback(() => {
     if (isRecentMangaLoading) {
@@ -537,7 +539,13 @@ export default function HomeScreen() {
         </LinearGradient>
       </TouchableOpacity>
     );
-  }, [featuredManga, insets.top, router, themeColors.primary, scrollY]);
+  }, [
+    featuredManga,
+    insets.top,
+    openMangaDetails,
+    themeColors.primary,
+    scrollY,
+  ]);
 
   if (isLoading) {
     return (

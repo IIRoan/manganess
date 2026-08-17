@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
+import { errorLogService } from '@/services/errorLogService';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -33,6 +34,10 @@ class ErrorBoundary extends React.Component<
 
   override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    errorLogService.recordException(error, {
+      source: 'react',
+      data: { componentStack: errorInfo.componentStack },
+    });
     this.setState({ error, errorInfo });
   }
 

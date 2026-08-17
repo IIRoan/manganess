@@ -5,6 +5,7 @@ import {
   getErrorMessage,
   isForbiddenError,
   isRateLimitError,
+  summarizeApiError,
   withApiRetry,
 } from '@/utils/httpErrors';
 import { stripHtmlToText } from '@/utils/stripHtmlToText';
@@ -77,11 +78,17 @@ export interface ApiTitleDetails extends ApiTitleSummary {
   ratingCount?: number | string;
   follows?: number;
   languages?: string[];
-  genres?: Array<{ id?: number; name: string; slug?: string } | string>;
-  themes?: Array<{ id?: number; name: string; slug?: string } | string>;
-  demographics?: Array<{ id?: number; name: string; slug?: string } | string>;
-  authors?: Array<{ id?: number; name: string } | string>;
-  artists?: Array<{ id?: number; name: string } | string>;
+  genres?: Array<
+    { id?: number; name?: string; title?: string; slug?: string } | string
+  >;
+  themes?: Array<
+    { id?: number; name?: string; title?: string; slug?: string } | string
+  >;
+  demographics?: Array<
+    { id?: number; name?: string; title?: string; slug?: string } | string
+  >;
+  authors?: Array<{ id?: number; name?: string; title?: string } | string>;
+  artists?: Array<{ id?: number; name?: string; title?: string } | string>;
   contentRating?: string;
 }
 
@@ -114,68 +121,91 @@ export interface ApiChapterPage {
 async function apiRequest<T>(
   path: string,
   params?: Record<string, unknown>,
-  config?: AxiosRequestConfig
+  config?: AxiosRequestConfig,
+  requestOptions: { retry?: boolean } = {}
 ): Promise<{ status: number; data: T }> {
   const log = logger();
   const validateStatus = config?.validateStatus;
-
-  return withApiRetry(
-    async () =>
-      withMangaFireRateLimit(async () => {
-        if (shouldProxyMangaFireApi()) {
-          return mangaFireVrfBridge.fetchJson<T>(path, params, {
-            ...(validateStatus ? { validateStatus } : {}),
-          });
-        }
-
-        let requestParams: Record<string, unknown> | undefined;
-        try {
-          // Fresh VRF on every attempt — stale tokens commonly cause 403s
-          requestParams = await appendVrfParams(path, params);
-        } catch (error) {
-          logVrfFailure(path, error);
-          throw error;
-        }
-
-        const response = await axios.get<T>(`${API_BASE}${path}`, {
-          headers: DEFAULT_HEADERS,
-          timeout: 20000,
-          params: requestParams,
-          ...config,
+  const operation = async () =>
+    withMangaFireRateLimit(async () => {
+      if (shouldProxyMangaFireApi()) {
+        return mangaFireVrfBridge.fetchJson<T>(path, params, {
+          ...(validateStatus ? { validateStatus } : {}),
         });
-        return { status: response.status, data: response.data };
-      }),
-    {
-      onRetry: ({ attempt, delayMs, error }) => {
-        log.warn('Network', 'MangaFire API retry scheduled', {
-          path,
-          attempt,
-          delayMs,
-          forbidden: isForbiddenError(error),
-          rateLimited: isRateLimitError(error),
-          error: getErrorMessage(error),
-        });
-      },
-    }
-  );
+      }
+
+      let requestParams: Record<string, unknown> | undefined;
+      try {
+        // Fresh VRF on every attempt — stale tokens commonly cause 403s
+        requestParams = await appendVrfParams(path, params);
+      } catch (error) {
+        logVrfFailure(path, error);
+        throw error;
+      }
+
+      const response = await axios.get<T>(`${API_BASE}${path}`, {
+        headers: DEFAULT_HEADERS,
+        timeout: 20000,
+        params: requestParams,
+        ...config,
+      });
+      return { status: response.status, data: response.data };
+    });
+
+  if (requestOptions.retry === false) {
+    return operation();
+  }
+
+  return withApiRetry(operation, {
+    onRetry: ({ attempt, delayMs, error }) => {
+      log.warn('Network', 'MangaFire API retry scheduled', {
+        path,
+        attempt,
+        delayMs,
+        forbidden: isForbiddenError(error),
+        rateLimited: isRateLimitError(error),
+        ...summarizeApiError(error),
+      });
+    },
+  });
 }
 
 async function apiGet<T>(
   path: string,
   params?: Record<string, unknown>,
-  config?: AxiosRequestConfig
+  config?: AxiosRequestConfig,
+  requestOptions?: { retry?: boolean }
 ): Promise<T> {
-  const { data } = await apiRequest<T>(path, params, config);
+  const { data } = await apiRequest<T>(path, params, config, requestOptions);
   return data;
 }
 
 function mapNames(
-  values?: Array<{ name?: string } | string>
+  values?: Array<{ name?: string; title?: string } | string>
 ): string[] {
   if (!values?.length) return [];
   return values
-    .map((value) => (typeof value === 'string' ? value : value.name || ''))
+    .map((value) =>
+      typeof value === 'string' ? value : value.name || value.title || ''
+    )
     .filter(Boolean);
+}
+
+/** Official rows first — mixed lists duplicate One Piece to 2,400+ items. */
+export const PREFERRED_CHAPTER_LIST_TYPE = 'official';
+
+const chapterListTypeByHid = new Map<string, string | undefined>();
+
+export function resetMangaFireChapterTypeCacheForTests(): void {
+  chapterListTypeByHid.clear();
+}
+
+function peekChapterListType(hid: string): string | undefined {
+  return chapterListTypeByHid.get(hid);
+}
+
+function rememberChapterListType(hid: string, type: string | undefined): void {
+  chapterListTypeByHid.set(hid, type);
 }
 
 export function mapApiTitleToMangaItem(
@@ -225,7 +255,10 @@ export async function fetchLatestTitles(limit = 30): Promise<MangaItem[]> {
   return (data.items || []).map((item) => mapApiTitleToMangaItem(item));
 }
 
-export async function searchTitles(keyword: string, limit = 40): Promise<MangaItem[]> {
+export async function searchTitles(
+  keyword: string,
+  limit = 40
+): Promise<MangaItem[]> {
   const normalizedKeyword = keyword.trim().toLowerCase();
   return scheduleMangaFireRequest(
     `search:${normalizedKeyword}:${limit}`,
@@ -257,18 +290,60 @@ export async function fetchTitlesByGenre(
   );
 }
 
-export async function fetchTitleDetails(hid: string): Promise<ApiTitleDetails> {
+export function titleDetailsCacheKey(
+  hid: string,
+  options: { retry?: boolean } = {}
+): string {
   const normalizedHid = hid.trim();
-  return scheduleMangaFireRequest(
-    `title:${normalizedHid}`,
-    async () => {
-      const data = await apiGet<{ data: ApiTitleDetails }>(
-        `/titles/${normalizedHid}`
-      );
-      return data.data;
-    },
-    { ttlMs: REQUEST_HUB_TTLS.mangaDetails }
-  );
+  return options.retry === false
+    ? `title:${normalizedHid}:no-retry`
+    : `title:${normalizedHid}`;
+}
+
+export function titleChaptersCacheKey(
+  hid: string,
+  language = 'en',
+  preferOfficial = true
+): string {
+  return `chapters:${hid.trim()}:${language}:${preferOfficial ? 'official' : 'all'}`;
+}
+
+export async function fetchTitleDetails(
+  hid: string,
+  options: { retry?: boolean } = {}
+): Promise<ApiTitleDetails> {
+  const normalizedHid = hid.trim();
+  const log = logger();
+  log.info('Service', 'fetchTitleDetails:start', { id: normalizedHid });
+  try {
+    const title = await scheduleMangaFireRequest(
+      titleDetailsCacheKey(normalizedHid, options),
+      async () => {
+        const data = await apiGet<{ data: ApiTitleDetails }>(
+          `/titles/${normalizedHid}`,
+          undefined,
+          undefined,
+          options
+        );
+        return data.data;
+      },
+      { ttlMs: REQUEST_HUB_TTLS.mangaDetails }
+    );
+    log.info('Service', 'fetchTitleDetails:done', {
+      id: normalizedHid,
+      hasSynopsis: Boolean(title.synopsisHtml?.trim()),
+      synopsisLength: title.synopsisHtml?.trim().length ?? 0,
+      authorCount: Array.isArray(title.authors) ? title.authors.length : 0,
+      genreCount: Array.isArray(title.genres) ? title.genres.length : 0,
+    });
+    return title;
+  } catch (error) {
+    log.warn('Service', 'fetchTitleDetails:failed', {
+      id: normalizedHid,
+      ...summarizeApiError(error),
+    });
+    throw error;
+  }
 }
 
 export async function fetchTitleDetailsIfExists(
@@ -307,15 +382,53 @@ export async function fetchTitleDetailsIfExists(
 async function fetchTitleChaptersPage(
   hid: string,
   page: number,
-  language = 'en'
+  language = 'en',
+  type?: string
 ): Promise<ApiPaginated<ApiChapterSummary>> {
   return apiGet<ApiPaginated<ApiChapterSummary>>(
     `/titles/${hid.trim()}/chapters`,
     {
       language,
       page,
+      ...(type ? { type } : {}),
     }
   );
+}
+
+/**
+ * MangaFire lists official + unofficial scans together. One Piece is 2,432
+ * mixed rows vs ~1,228 official. Prefer official when that list is non-empty.
+ */
+async function resolveChapterListType(
+  hid: string,
+  language: string,
+  preferOfficial: boolean
+): Promise<{
+  type: string | undefined;
+  firstPage?: ApiPaginated<ApiChapterSummary>;
+}> {
+  if (chapterListTypeByHid.has(hid)) {
+    return { type: peekChapterListType(hid) };
+  }
+
+  if (!preferOfficial) {
+    rememberChapterListType(hid, undefined);
+    return { type: undefined };
+  }
+
+  const officialPage = await fetchTitleChaptersPage(
+    hid,
+    1,
+    language,
+    PREFERRED_CHAPTER_LIST_TYPE
+  );
+  if ((officialPage.items || []).length > 0) {
+    rememberChapterListType(hid, PREFERRED_CHAPTER_LIST_TYPE);
+    return { type: PREFERRED_CHAPTER_LIST_TYPE, firstPage: officialPage };
+  }
+
+  rememberChapterListType(hid, undefined);
+  return { type: undefined };
 }
 
 function shouldContinueChapterPagination(
@@ -323,16 +436,28 @@ function shouldContinueChapterPagination(
   data: ApiPaginated<ApiChapterSummary>
 ): boolean {
   const items = data.items || [];
-  const lastPage = data.meta?.lastPage;
-  const pastLastPage = typeof lastPage === 'number' && page >= lastPage;
   const emptyPage = items.length === 0;
+  if (emptyPage || !data.meta) {
+    return false;
+  }
 
-  return (
-    Boolean(data.meta?.hasNext) &&
-    !pastLastPage &&
-    !emptyPage &&
-    Boolean(data.meta)
-  );
+  const lastPage = data.meta.lastPage;
+  if (typeof lastPage === 'number' && lastPage > 0) {
+    return page < lastPage;
+  }
+
+  const total = data.meta.total;
+  const perPage = data.meta.perPage;
+  if (
+    typeof total === 'number' &&
+    total > 0 &&
+    typeof perPage === 'number' &&
+    perPage > 0
+  ) {
+    return page * perPage < total;
+  }
+
+  return data.meta.hasNext === true;
 }
 
 export interface FetchTitleChaptersOptions {
@@ -341,6 +466,13 @@ export interface FetchTitleChaptersOptions {
   maxPages?: number;
   /** Return true to stop pagination early (e.g. screen unmounted). */
   shouldCancel?: () => boolean;
+  /**
+   * MangaFire chapter `type` filter. `official` avoids duplicate unofficial
+   * rows on long series. Omit to auto-prefer official when available.
+   */
+  type?: string;
+  /** When false, skip the official-first probe. Default true. */
+  preferOfficial?: boolean;
   /** Called after each page so UIs can render before the full list is ready. */
   onPage?: (
     chaptersSoFar: ApiChapterSummary[],
@@ -358,6 +490,7 @@ async function fetchTitleChaptersUncached(
   options: FetchTitleChaptersOptions = {}
 ): Promise<ApiChapterSummary[]> {
   const language = options.language ?? 'en';
+  const preferOfficial = options.preferOfficial !== false;
   const chapters: ApiChapterSummary[] = [];
   let page = 1;
   let apiHasMore = true;
@@ -366,6 +499,21 @@ async function fetchTitleChaptersUncached(
     typeof options.maxPages === 'number' && options.maxPages > 0
       ? Math.min(options.maxPages, hardCap)
       : hardCap;
+
+  let listType = options.type;
+  let firstPage: ApiPaginated<ApiChapterSummary> | undefined;
+
+  if (options.type != null) {
+    rememberChapterListType(hid, options.type);
+  } else {
+    const resolved = await resolveChapterListType(
+      hid,
+      language,
+      preferOfficial
+    );
+    listType = resolved.type;
+    firstPage = resolved.firstPage;
+  }
 
   while (apiHasMore && page <= maxPages) {
     if (options.shouldCancel?.()) {
@@ -377,7 +525,10 @@ async function fetchTitleChaptersUncached(
       break;
     }
 
-    const data = await fetchTitleChaptersPage(hid, page, language);
+    const data =
+      page === 1 && firstPage
+        ? firstPage
+        : await fetchTitleChaptersPage(hid, page, language, listType);
     chapters.push(...(data.items || []));
 
     apiHasMore = shouldContinueChapterPagination(page, data);
@@ -411,6 +562,7 @@ export async function fetchTitleChapters(
       ? { language: languageOrOptions }
       : languageOrOptions;
   const language = options.language ?? 'en';
+  const preferOfficial = options.preferOfficial !== false;
 
   // Limited / cancellable / progressive loads bypass the shared cache entry.
   if (options.shouldCancel || options.onPage || options.maxPages) {
@@ -418,10 +570,23 @@ export async function fetchTitleChapters(
   }
 
   return scheduleMangaFireRequest(
-    `chapters:${normalizedHid}:${language}`,
-    () => fetchTitleChaptersUncached(normalizedHid, { language }),
+    titleChaptersCacheKey(normalizedHid, language, preferOfficial),
+    () =>
+      fetchTitleChaptersUncached(normalizedHid, { language, preferOfficial }),
     { ttlMs: REQUEST_HUB_TTLS.chapters }
   );
+}
+
+async function fetchTitleChaptersPageWithType(
+  hid: string,
+  page: number,
+  language: string
+): Promise<ApiPaginated<ApiChapterSummary>> {
+  const resolved = await resolveChapterListType(hid, language, true);
+  if (page === 1 && resolved.firstPage) {
+    return resolved.firstPage;
+  }
+  return fetchTitleChaptersPage(hid, page, language, resolved.type);
 }
 
 /** Fetch a single chapter list page, mapped for the UI. */
@@ -436,7 +601,7 @@ export async function fetchMappedTitleChaptersPage(
   lastPage?: number;
   total?: number;
 }> {
-  const data = await fetchTitleChaptersPage(hid.trim(), page, language);
+  const data = await fetchTitleChaptersPageWithType(hid.trim(), page, language);
   const lastPage = data.meta?.lastPage;
   const total = data.meta?.total;
   return {
@@ -494,7 +659,7 @@ export function mapApiTitleToMangaDetails(
     reviewCount: title.ratingCount != null ? String(title.ratingCount) : '0',
     bannerImage: poster,
     chapters: mappedChapters,
-    totalChapters: reportedTotal,
+    ...(reportedTotal > 0 ? { totalChapters: reportedTotal } : {}),
     type: title.type,
   };
 }
@@ -566,10 +731,10 @@ export async function resolveChapterApiId(
   if (!normalizedTarget) return null;
 
   const normalizedHid = titleHid.trim();
-  const chaptersCacheKey = `chapters:${normalizedHid}:${language}`;
+  const chaptersCacheKey = titleChaptersCacheKey(normalizedHid, language);
 
   if (options?.force) {
-    invalidateMangaFireRequestCache(chaptersCacheKey);
+    invalidateMangaFireRequestCache(`chapters:${normalizedHid}:${language}`);
   } else {
     const cachedChapters = peekFreshCache<ApiChapterSummary[]>(
       chaptersCacheKey,
@@ -603,8 +768,7 @@ export async function resolveChapterApiId(
     }
 
     const lastPage = data.meta?.lastPage;
-    const pastLastPage =
-      typeof lastPage === 'number' && page >= lastPage;
+    const pastLastPage = typeof lastPage === 'number' && page >= lastPage;
     const emptyPage = !data.items?.length;
 
     hasNext =

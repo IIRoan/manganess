@@ -1331,8 +1331,9 @@ export default function SettingsScreen() {
             />
           </View>
           <Text style={styles.settingHint}>
-            Adds a Debug tab for network logs and diagnostics. Restart the app
-            after changing this.
+            Adds a Debug tab with Expo update info and a saved error log you
+            can copy or share after a failed manga load. Restart the app after
+            changing this.
           </Text>
         </Reanimated.View>
       </Reanimated.ScrollView>
