@@ -23,6 +23,12 @@ import { Alert } from 'react-native';
 import { offlineCacheService } from './offlineCacheService';
 import { logger } from '@/utils/logger';
 import {
+  applyHeaderToMangaData,
+  extractMangaHeader,
+  hasLoadedMangaHeader,
+} from '@/utils/mangaHeader';
+import type { MangaDetails } from '@/types/manga';
+import {
   BookmarkStatus,
   MangaData,
   IconName,
@@ -98,7 +104,26 @@ const resolveLastReadChapter = (
 //   return updateAniListStatus(mangaTitle, status, readChapters, totalChapters);
 // };
 
-export const getMangaData = async (id: string): Promise<MangaData | null> => {
+const inflightMangaData = new Map<string, Promise<MangaData | null>>();
+const mangaDataWriteChains = new Map<string, Promise<unknown>>();
+
+function enqueueMangaDataWrite<T>(
+  mangaId: string,
+  task: () => Promise<T>
+): Promise<T> {
+  const previous = mangaDataWriteChains.get(mangaId) ?? Promise.resolve();
+  const next = previous.then(task, task);
+  mangaDataWriteChains.set(
+    mangaId,
+    next.then(
+      () => undefined,
+      () => undefined
+    )
+  );
+  return next;
+}
+
+async function readMangaDataRecord(id: string): Promise<MangaData | null> {
   try {
     const value = await AsyncStorage.getItem(`${MANGA_STORAGE_PREFIX}${id}`);
     return value ? JSON.parse(value) : null;
@@ -106,9 +131,32 @@ export const getMangaData = async (id: string): Promise<MangaData | null> => {
     console.error('Error reading manga data:', e);
     return null;
   }
+}
+
+export const getMangaData = async (id: string): Promise<MangaData | null> => {
+  const pendingWrite = mangaDataWriteChains.get(id);
+  if (pendingWrite) {
+    await pendingWrite;
+  }
+
+  const existing = inflightMangaData.get(id);
+  if (existing) {
+    return existing;
+  }
+
+  const pending = readMangaDataRecord(id);
+
+  inflightMangaData.set(id, pending);
+  try {
+    return await pending;
+  } finally {
+    inflightMangaData.delete(id);
+  }
 };
 
-export async function removeBookmarkKeyFromIndex(mangaId: string): Promise<void> {
+export async function removeBookmarkKeyFromIndex(
+  mangaId: string
+): Promise<void> {
   const normalizedId = mangaId.trim();
   if (!normalizedId) {
     return;
@@ -170,28 +218,89 @@ export async function pruneStaleBookmarkIndexEntries(): Promise<number> {
   }
 }
 
-export const setMangaData = async (data: MangaData): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(
-      `${MANGA_STORAGE_PREFIX}${data.id}`,
-      JSON.stringify(data)
-    );
-    // Update bookmarkKeys for backwards compatibility and listing
-    const keys = await AsyncStorage.getItem(BOOKMARK_KEYS_KEY);
-    const bookmarkKeys = keys ? JSON.parse(keys) : [];
-    if (data.bookmarkStatus && !bookmarkKeys.includes(`bookmark_${data.id}`)) {
-      bookmarkKeys.push(`bookmark_${data.id}`);
-      await AsyncStorage.setItem(
-        BOOKMARK_KEYS_KEY,
-        JSON.stringify(bookmarkKeys)
-      );
-    }
-    // Set the bookmark changed flag
-    await AsyncStorage.setItem(BOOKMARK_CHANGED_KEY, 'true');
-  } catch (e) {
-    console.error('Error saving manga data:', e);
+async function persistMangaDataRecord(data: MangaData): Promise<void> {
+  await AsyncStorage.setItem(
+    `${MANGA_STORAGE_PREFIX}${data.id}`,
+    JSON.stringify(data)
+  );
+  const keys = await AsyncStorage.getItem(BOOKMARK_KEYS_KEY);
+  const bookmarkKeys = keys ? JSON.parse(keys) : [];
+  if (data.bookmarkStatus && !bookmarkKeys.includes(`bookmark_${data.id}`)) {
+    bookmarkKeys.push(`bookmark_${data.id}`);
+    await AsyncStorage.setItem(BOOKMARK_KEYS_KEY, JSON.stringify(bookmarkKeys));
   }
+  await AsyncStorage.setItem(BOOKMARK_CHANGED_KEY, 'true');
+}
+
+export const setMangaData = async (data: MangaData): Promise<void> => {
+  await enqueueMangaDataWrite(data.id, async () => {
+    try {
+      await persistMangaDataRecord(data);
+    } catch (e) {
+      console.error('Error saving manga data:', e);
+    }
+  });
 };
+
+export async function updateMangaData(
+  id: string,
+  updater: (
+    existing: MangaData | null
+  ) => MangaData | null | Promise<MangaData | null>
+): Promise<MangaData | null> {
+  return enqueueMangaDataWrite(id, async () => {
+    const existing = await readMangaDataRecord(id);
+    const next = await updater(existing);
+    if (!next || next === existing) {
+      return existing;
+    }
+    await persistMangaDataRecord(next);
+    return next;
+  });
+}
+
+export async function syncMangaDataHeader(
+  mangaId: string,
+  details: MangaDetails
+): Promise<void> {
+  try {
+    if (!hasLoadedMangaHeader(details)) {
+      return;
+    }
+
+    await enqueueMangaDataWrite(mangaId, async () => {
+      const existing = await readMangaDataRecord(mangaId);
+      if (!existing) {
+        return;
+      }
+
+      const next = applyHeaderToMangaData(
+        existing,
+        extractMangaHeader(details, mangaId)
+      );
+      if (
+        next.description === existing.description &&
+        next.alternativeTitle === existing.alternativeTitle &&
+        next.status === existing.status &&
+        next.bannerImage === existing.bannerImage &&
+        next.totalChapters === existing.totalChapters
+      ) {
+        return;
+      }
+
+      await persistMangaDataRecord(next);
+    });
+  } catch (error) {
+    logger().warn(
+      'Storage',
+      'Failed to persist manga header onto bookmark data',
+      {
+        mangaId,
+        error,
+      }
+    );
+  }
+}
 
 export const fetchBookmarkStatus = async (
   id: string
@@ -249,15 +358,52 @@ export const saveBookmark = async (
   setReadChapters: (chapters: string[]) => void
 ) => {
   try {
-    const mangaData: MangaData = {
-      id,
-      title: decode(mangaDetails?.title || ''),
-      bannerImage: mangaDetails?.bannerImage || '',
-      bookmarkStatus: status,
-      readChapters,
-      lastUpdated: Date.now(),
-      totalChapters: mangaDetails?.chapters?.length,
-    };
+    const existing = await getMangaData(id);
+    const headerSnapshot = extractMangaHeader(
+      {
+        id,
+        title: decode(mangaDetails?.title || existing?.title || ''),
+        bannerImage: mangaDetails?.bannerImage || existing?.bannerImage || '',
+        alternativeTitle: mangaDetails?.alternativeTitle ?? '',
+        status: mangaDetails?.status ?? '',
+        description: mangaDetails?.description ?? '',
+        author: mangaDetails?.author ?? [],
+        published: mangaDetails?.published ?? '',
+        genres: mangaDetails?.genres ?? [],
+        rating: mangaDetails?.rating ?? '',
+        reviewCount: mangaDetails?.reviewCount ?? '',
+        totalChapters:
+          mangaDetails?.totalChapters ?? mangaDetails?.chapters?.length,
+        type: mangaDetails?.type,
+      },
+      id
+    );
+    const mangaData = applyHeaderToMangaData(
+      {
+        ...(existing ?? {
+          id,
+          title: headerSnapshot.title,
+          bannerImage: headerSnapshot.bannerImage,
+          bookmarkStatus: status,
+          readChapters,
+          lastUpdated: Date.now(),
+        }),
+        id,
+        title: headerSnapshot.title,
+        bannerImage: headerSnapshot.bannerImage,
+        bookmarkStatus: status,
+        readChapters,
+        lastUpdated: Date.now(),
+        ...(typeof headerSnapshot.totalChapters === 'number'
+          ? { totalChapters: headerSnapshot.totalChapters }
+          : typeof existing?.totalChapters === 'number'
+            ? { totalChapters: existing.totalChapters }
+            : {}),
+      },
+      headerSnapshot
+    );
+    mangaData.bookmarkStatus = status;
+    mangaData.readChapters = readChapters;
 
     if (status === 'Reading' && mangaDetails?.chapters?.length > 0) {
       mangaData.lastNotifiedChapter = mangaDetails.chapters[0].number;
@@ -524,14 +670,14 @@ export const getBookmarkPopupConfig = (
       : `Bookmark "${displayTitle}"`,
     options: bookmarkStatus
       ? [
-          ...baseOptions,
-          {
-            text: 'Unbookmark',
-            onPress: handleRemoveBookmark,
-            icon: 'close-circle-outline' as IconName,
-            isSelected: false,
-          },
-        ]
+        ...baseOptions,
+        {
+          text: 'Unbookmark',
+          onPress: handleRemoveBookmark,
+          icon: 'close-circle-outline' as IconName,
+          isSelected: false,
+        },
+      ]
       : baseOptions,
   };
 };
@@ -554,7 +700,7 @@ export const getChapterLongPressAlertConfig = (
       options: [
         {
           text: 'Cancel',
-          onPress: () => {},
+          onPress: () => { },
         },
         {
           text: 'Yes',

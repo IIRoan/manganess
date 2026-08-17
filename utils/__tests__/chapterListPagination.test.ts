@@ -127,6 +127,41 @@ describe('chapterListPagination', () => {
       expect(result.hasMore).toBe(true);
       expect(result.chapters.map((c) => c.number)).toEqual(['100', '98']);
     });
+
+    it('progressively handles a 1190-chapter series', async () => {
+      const pageSize = 60;
+      const total = 1190;
+      const lastPage = Math.ceil(total / pageSize);
+      const fetchPage = jest.fn(async (page: number) => {
+        const start = total - (page - 1) * pageSize;
+        const count = Math.min(pageSize, start);
+        return {
+          page,
+          lastPage,
+          hasMore: page < lastPage,
+          total,
+          chapters: Array.from({ length: count }, (_, index) =>
+            chapter(String(start - index))
+          ),
+        };
+      });
+
+      const firstPage = Array.from({ length: pageSize }, (_, index) =>
+        chapter(String(total - index))
+      );
+      const result = await loadRemainingChapterPages({
+        currentChapters: firstPage,
+        nextPage: 2,
+        hasMore: true,
+        fetchPage,
+      });
+
+      expect(fetchPage).toHaveBeenCalledTimes(lastPage - 1);
+      expect(result.hasMore).toBe(false);
+      expect(result.chapters).toHaveLength(total);
+      expect(result.chapters.at(-1)?.number).toBe('1');
+      expect(fetchPage).toHaveBeenLastCalledWith(20);
+    });
   });
 
   describe('resolveOldestChapter', () => {

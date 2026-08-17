@@ -1,5 +1,9 @@
 import {
   parseChapterNumber,
+  compareChapterNumbers,
+  chapterNumbersMatch,
+  findNextChapterInList,
+  findPreviousChapterInList,
   sortChaptersByNumber,
   filterChaptersUpTo,
   filterChaptersInRange,
@@ -48,6 +52,40 @@ describe('chapterOrdering', () => {
     });
   });
 
+  describe('compareChapterNumbers', () => {
+    it('orders prologue and decimal extras before the next whole chapter', () => {
+      expect(compareChapterNumbers('0', '0.1')).toBeLessThan(0);
+      expect(compareChapterNumbers('0.1', '0.5')).toBeLessThan(0);
+      expect(compareChapterNumbers('0.5', '1')).toBeLessThan(0);
+      expect(compareChapterNumbers('1', '1.1')).toBeLessThan(0);
+      expect(compareChapterNumbers('1.1', '1.10')).toBeLessThan(0);
+      expect(compareChapterNumbers('1.10', '2')).toBeLessThan(0);
+    });
+
+    it('treats trailing .0 as the same chapter', () => {
+      expect(compareChapterNumbers('1', '1.0')).toBe(0);
+      expect(chapterNumbersMatch('1', '1.0')).toBe(true);
+      expect(chapterNumbersMatch('0', '0.1')).toBe(false);
+    });
+  });
+
+  describe('findNextChapterInList / findPreviousChapterInList', () => {
+    it('finds 0.1 after chapter 0 regardless of newest-first order', () => {
+      const chapters = [
+        { number: '1' },
+        { number: '0.5' },
+        { number: '0.1' },
+        { number: '0' },
+      ];
+
+      expect(findNextChapterInList(chapters, '0')?.number).toBe('0.1');
+      expect(findNextChapterInList(chapters, '0.1')?.number).toBe('0.5');
+      expect(findNextChapterInList(chapters, '0.5')?.number).toBe('1');
+      expect(findPreviousChapterInList(chapters, '0.1')?.number).toBe('0');
+      expect(findPreviousChapterInList(chapters, '0')).toBeUndefined();
+    });
+  });
+
   describe('sortChaptersByNumber', () => {
     it('sorts chapters in ascending order', () => {
       const chapters = [
@@ -61,17 +99,16 @@ describe('chapterOrdering', () => {
       expect(sorted.map((c) => c.number)).toEqual(['1', '2', '3']);
     });
 
-    it('handles decimal chapter numbers', () => {
+    it('sorts 1.10 after 1.1', () => {
       const chapters = [
-        { number: '2' },
-        { number: '1.5' },
-        { number: '1' },
+        { number: '1.10' },
         { number: '1.1' },
+        { number: '1' },
       ];
 
       const sorted = sortChaptersByNumber(chapters);
 
-      expect(sorted.map((c) => c.number)).toEqual(['1', '1.1', '1.5', '2']);
+      expect(sorted.map((c) => c.number)).toEqual(['1', '1.1', '1.10']);
     });
 
     it('does not mutate original array', () => {

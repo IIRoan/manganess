@@ -81,9 +81,9 @@ describe('mergeMangaDetailsRefresh', () => {
       totalChapters: 10,
     });
 
-    expect(mergeMangaDetailsRefresh(previous, incoming, 'abc12').chapters).toHaveLength(
-      5
-    );
+    expect(
+      mergeMangaDetailsRefresh(previous, incoming, 'abc12').chapters
+    ).toHaveLength(5);
   });
 
   it('preserves the highest reported total chapter count', () => {
@@ -103,12 +103,44 @@ describe('mergeMangaDetailsRefresh', () => {
     ).toBe(120);
   });
 
+  it('keeps a previous description when a refresh only has title and banner', () => {
+    const previous = details({
+      id: 'abc12',
+      title: 'Old',
+      description: 'Saved synopsis',
+      author: ['Oda'],
+      chapters: [chapter('1')],
+    });
+    const incoming = details({
+      id: 'abc12',
+      title: 'Fresh title',
+      description: '',
+      chapters: [chapter('1')],
+    });
+
+    const merged = mergeMangaDetailsRefresh(previous, incoming, 'abc12');
+
+    expect(merged.title).toBe('Fresh title');
+    expect(merged.description).toBe('Saved synopsis');
+    expect(merged.author).toEqual(['Oda']);
+  });
+
   it('refreshes overlapping chapter URLs when keeping a longer cached list', () => {
     const previous = details({
       id: 'z1my2',
       chapters: [
-        { number: '261', title: 'Chapter 261', date: '', url: '/chapter/7333615' },
-        { number: '260', title: 'Chapter 260', date: '', url: '/chapter/old-260' },
+        {
+          number: '261',
+          title: 'Chapter 261',
+          date: '',
+          url: '/chapter/7333615',
+        },
+        {
+          number: '260',
+          title: 'Chapter 260',
+          date: '',
+          url: '/chapter/old-260',
+        },
         { number: '1', title: 'Chapter 1', date: '', url: '/chapter/1' },
       ],
       totalChapters: 261,

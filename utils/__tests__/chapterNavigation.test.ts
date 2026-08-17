@@ -1,5 +1,6 @@
 import type { Chapter } from '@/types/manga';
 import {
+  resolveAdjacentChapterNumber,
   resolveHasNextChapter,
   resolveHasPreviousChapter,
 } from '@/utils/chapterNavigation';
@@ -76,6 +77,34 @@ describe('chapterNavigation', () => {
         })
       ).toBe(false);
     });
+
+    it('enables next on chapter 0 when 0.1 or 0.5 exists', () => {
+      const chapters = [
+        chapter('1'),
+        chapter('0.5'),
+        chapter('0.1'),
+        chapter('0'),
+      ];
+
+      expect(
+        resolveHasNextChapter({
+          currentChapterIndex: 3,
+          chapterNumber: '0',
+          chapters,
+        })
+      ).toBe(true);
+    });
+
+    it('enables next on chapter 0 when absent from a newest-first page', () => {
+      expect(
+        resolveHasNextChapter({
+          currentChapterIndex: -1,
+          chapterNumber: '0',
+          chapters: [chapter('100'), chapter('99')],
+          totalChapters: 100,
+        })
+      ).toBe(true);
+    });
   });
 
   describe('resolveHasPreviousChapter', () => {
@@ -109,6 +138,76 @@ describe('chapterNavigation', () => {
           totalChapters: 2427,
         })
       ).toBe(true);
+    });
+
+    it('allows previous from 0.1 when chapter 0 is in the list', () => {
+      expect(
+        resolveHasPreviousChapter({
+          currentChapterIndex: 2,
+          chapterNumber: '0.1',
+          chapters: [chapter('1'), chapter('0.5'), chapter('0.1'), chapter('0')],
+        })
+      ).toBe(true);
+    });
+  });
+
+  describe('resolveAdjacentChapterNumber', () => {
+    const extras = [
+      chapter('1'),
+      chapter('0.5'),
+      chapter('0.1'),
+      chapter('0'),
+    ];
+
+    it('goes 0 → 0.1 → 0.5 → 1 instead of incrementing by 1', () => {
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '0',
+          chapters: extras,
+          currentChapterIndex: 3,
+        })
+      ).toBe('0.1');
+
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '0.1',
+          chapters: extras,
+          currentChapterIndex: 2,
+        })
+      ).toBe('0.5');
+
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '0.5',
+          chapters: extras,
+          currentChapterIndex: 1,
+        })
+      ).toBe('1');
+    });
+
+    it('does not invent chapter 1.1 from 0.1 when extras are missing from page 1', () => {
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '0.1',
+          chapters: [chapter('100'), chapter('99')],
+          currentChapterIndex: -1,
+        })
+      ).toBeNull();
+    });
+
+    it('still uses sequential numbering in the middle of a long series', () => {
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '100',
+          chapters: [chapter('2427'), chapter('2426')],
+          currentChapterIndex: -1,
+        })
+      ).toBe('101');
     });
   });
 });

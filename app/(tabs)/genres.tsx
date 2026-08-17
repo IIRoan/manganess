@@ -18,6 +18,7 @@ import { fetchTitlesByGenre } from '@/services/mangaFireApi';
 import { router } from 'expo-router';
 import MangaCard from '@/components/MangaCard';
 import { logger } from '@/utils/logger';
+import { navigateToMangaDetails } from '@/utils/mangaOpenNavigation';
 
 interface Genre {
   name: string;
@@ -110,15 +111,15 @@ export default function GenresScreen() {
   };
 
   const handleMangaPress = (manga: MangaItem) => {
-    router.push({
-      pathname: '/(tabs)/manga/[id]',
-      params: {
+    navigateToMangaDetails(
+      router,
+      {
         id: manga.id,
         title: manga.title,
         imageUrl: manga.imageUrl || manga.banner || '',
-        previewId: manga.id,
       },
-    });
+      'genres'
+    );
   };
 
   const renderGenreItem = ({ item }: { item: Genre }) => (

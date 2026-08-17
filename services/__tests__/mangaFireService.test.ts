@@ -1,4 +1,12 @@
 import axios from 'axios';
+import {
+  fetchMappedTitleChaptersPage,
+  resetMangaFireChapterTypeCacheForTests,
+  titleChaptersCacheKey,
+  titleDetailsCacheKey,
+  type ApiTitleDetails,
+} from '../mangaFireApi';
+import { mangaFireVrfBridge } from '../mangaFireVrfBridge';
 
 import {
   parseSearchResults,
@@ -7,6 +15,7 @@ import {
   getVrfToken,
   normalizeChapterNumber,
   fetchMangaDetails,
+  parseMangaDetails,
   checkMangaAvailability,
   getChapterUrl,
   markChapterAsRead,
@@ -143,9 +152,9 @@ const sampleChapterPages = {
 
 function mockMangaApiGet(
   overrides: {
-    title?: Partial<typeof sampleApiTitle>;
+    title?: Partial<ApiTitleDetails>;
     chapters?: typeof sampleApiChapters;
-    searchItems?: typeof sampleApiTitleSummary[];
+    searchItems?: (typeof sampleApiTitleSummary)[];
     chapterPages?: typeof sampleChapterPages;
     onRequest?: (url: string) => void;
   } = {}
@@ -188,16 +197,33 @@ function mockMangaApiGet(
   });
 }
 
-import {
-  resetMangaFireRequestHubForTests,
-} from '../mangaFireRequestHub';
+import { resetMangaFireRequestHubForTests } from '../mangaFireRequestHub';
 
 describe('mangaFireService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetMangaFireRequestHubForTests();
+    resetMangaFireChapterTypeCacheForTests();
     resetChapterApiIdOverridesForTests();
     setVrfToken('');
+  });
+
+  describe('request hub keys', () => {
+    it('keeps retry-less title fetches off the retried in-flight key', () => {
+      expect(titleDetailsCacheKey('abc12')).toBe('title:abc12');
+      expect(titleDetailsCacheKey('abc12', { retry: false })).toBe(
+        'title:abc12:no-retry'
+      );
+    });
+
+    it('includes official vs all in chapter cache keys', () => {
+      expect(titleChaptersCacheKey('abc12', 'en')).toBe(
+        'chapters:abc12:en:official'
+      );
+      expect(titleChaptersCacheKey('abc12', 'en', false)).toBe(
+        'chapters:abc12:en:all'
+      );
+    });
   });
 
   describe('parseSearchResults', () => {
@@ -358,8 +384,12 @@ describe('mangaFireService', () => {
 
   describe('fetchMangaDetails', () => {
     it('throws error for empty ID', async () => {
-      await expect(fetchMangaDetails('')).rejects.toThrow('Manga ID is required');
-      await expect(fetchMangaDetails('  ')).rejects.toThrow('Manga ID is required');
+      await expect(fetchMangaDetails('')).rejects.toThrow(
+        'Manga ID is required'
+      );
+      await expect(fetchMangaDetails('  ')).rejects.toThrow(
+        'Manga ID is required'
+      );
     });
 
     it('parses manga details from the JSON API', async () => {
@@ -402,6 +432,417 @@ describe('mangaFireService', () => {
       expect(details.title).toBe('Minimal Title');
       expect(details.description).toBe('No description available');
       expect(details.chapters).toEqual([]);
+    });
+
+    it('emits title metadata through onPartial before chapter pages resolve', async () => {
+      let resolveChapters: (value: unknown) => void = () => { };
+      const chaptersDeferred = new Promise((resolve) => {
+        resolveChapters = resolve;
+      });
+
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('/titles/') && url.includes('/chapters')) {
+          return chaptersDeferred as Promise<any>;
+        }
+        if (url.includes('/titles/')) {
+          return Promise.resolve({
+            data: { data: sampleApiTitle },
+          });
+        }
+        return Promise.resolve({ data: {} });
+      });
+
+      const onPartial = jest.fn();
+      const pending = fetchMangaDetails('test-manga', {
+        onPartial,
+        maxChapterPages: 1,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      expect(onPartial).toHaveBeenCalled();
+      expect(onPartial.mock.calls[0]?.[0].title).toBe('Test Manga');
+      expect(onPartial.mock.calls[0]?.[0].description).toContain(
+        'This is the description'
+      );
+      expect(onPartial.mock.calls[0]?.[0].chapters).toEqual([]);
+
+      resolveChapters({ data: sampleApiChapters });
+      const details = await pending;
+      expect(details.chapters.length).toBeGreaterThan(0);
+    });
+
+    it('loads chapters from route metadata when the title endpoint fails', async () => {
+      jest.useFakeTimers();
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('/titles/') && url.includes('/chapters')) {
+          return Promise.resolve({
+            data: {
+              items: [{ id: 1, number: 1122, createdAt: 1704067200 }],
+              meta: {
+                hasNext: true,
+                page: 1,
+                lastPage: 19,
+                total: 1122,
+              },
+            },
+          });
+        }
+        if (url.includes('/titles/')) {
+          return Promise.reject(
+            new Error('Protection interceptor produced no auth token')
+          );
+        }
+        return Promise.resolve({ data: {} });
+      });
+
+      const pending = fetchMangaDetails('dkw', {
+        maxChapterPages: 1,
+        fallbackDetails: {
+          id: 'dkw',
+          title: 'One Piece',
+          alternativeTitle: '',
+          status: '',
+          description: '',
+          author: [],
+          published: '',
+          genres: [],
+          rating: '',
+          reviewCount: '',
+          bannerImage: 'one-piece.jpg',
+          chapters: [],
+        },
+      });
+      await jest.advanceTimersByTimeAsync(500);
+      expect(
+        mockedAxios.get.mock.calls.some(([url]) =>
+          String(url).includes('/titles/dkw/chapters')
+        )
+      ).toBe(true);
+      await jest.runAllTimersAsync();
+      const details = await pending;
+      jest.useRealTimers();
+
+      expect(details).toMatchObject({
+        id: 'dkw',
+        title: 'One Piece',
+        totalChapters: 1122,
+        chapters: [{ number: '1122' }],
+      });
+      expect(
+        mockedAxios.get.mock.calls.filter(([url]) =>
+          String(url).endsWith('/titles/dkw')
+        ).length
+      ).toBeGreaterThanOrEqual(1);
+    });
+
+    it('maps author and genre title fields from the JSON API', async () => {
+      mockMangaApiGet({
+        title: {
+          authors: [{ title: 'Oda Eiichirou (尾田栄一郎)' }],
+          genres: [{ title: 'Action' }, { title: 'Adventure' }],
+          synopsisHtml: 'Gol D. Roger confirms the existence of One Piece.',
+        },
+      });
+
+      const details = await fetchMangaDetails('dkw');
+
+      expect(details.author).toEqual(['Oda Eiichirou (尾田栄一郎)']);
+      expect(details.genres).toEqual(['Action', 'Adventure']);
+      expect(details.description).toContain('Gol D. Roger');
+    });
+
+    it('prefers official chapter pages so mixed One Piece lists stay unique', async () => {
+      mockedAxios.get.mockImplementation((url: string, config?: any) => {
+        if (String(url).includes('/chapters')) {
+          expect(config?.params?.type).toBe('official');
+          return Promise.resolve({
+            status: 200,
+            data: {
+              items: [
+                {
+                  id: 9350763,
+                  number: 1190,
+                  type: 'official',
+                  createdAt: 1704067200,
+                },
+              ],
+              meta: {
+                page: 1,
+                lastPage: 21,
+                total: 1228,
+                hasNext: true,
+              },
+            },
+          });
+        }
+        return Promise.resolve({ status: 200, data: { data: sampleApiTitle } });
+      });
+
+      const page = await fetchMappedTitleChaptersPage('dkw', 1);
+
+      expect(page).toMatchObject({
+        page: 1,
+        hasMore: true,
+        lastPage: 21,
+        total: 1228,
+      });
+      expect(page.chapters).toHaveLength(1);
+    });
+
+    it('falls back to the unfiltered chapter list when official is empty', async () => {
+      mockedAxios.get.mockImplementation((url: string, config?: any) => {
+        if (String(url).includes('/chapters')) {
+          if (config?.params?.type === 'official') {
+            return Promise.resolve({
+              status: 200,
+              data: {
+                items: [],
+                meta: { page: 1, lastPage: 1, total: 0, hasNext: false },
+              },
+            });
+          }
+          return Promise.resolve({
+            status: 200,
+            data: {
+              items: [
+                {
+                  id: 22,
+                  number: 10,
+                  type: 'unofficial',
+                  createdAt: 1704067200,
+                },
+              ],
+              meta: { page: 1, lastPage: 1, total: 1, hasNext: false },
+            },
+          });
+        }
+        return Promise.resolve({ status: 200, data: { data: sampleApiTitle } });
+      });
+
+      const page = await fetchMappedTitleChaptersPage('rare-scan', 1);
+
+      expect(page.chapters).toEqual([
+        expect.objectContaining({ number: '10' }),
+      ]);
+    });
+
+    it('continues a 1190-chapter list when pagination totals contradict hasNext', async () => {
+      mockedAxios.get.mockResolvedValue({
+        status: 200,
+        data: {
+          items: Array.from({ length: 60 }, (_, index) => ({
+            id: 1190 - index,
+            number: 1190 - index,
+            createdAt: 1704067200,
+          })),
+          meta: {
+            page: 1,
+            perPage: 60,
+            lastPage: 20,
+            total: 1190,
+            hasNext: false,
+          },
+        },
+      });
+
+      const page = await fetchMappedTitleChaptersPage('dkw', 1);
+
+      expect(page).toMatchObject({
+        page: 1,
+        hasMore: true,
+        lastPage: 20,
+        total: 1190,
+      });
+      expect(page.chapters).toHaveLength(60);
+    });
+
+    it('recovers the description from the title page when title JSON is forbidden', async () => {
+      jest.useFakeTimers();
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.endsWith('/titles/dkw/chapters')) {
+          return Promise.resolve({
+            status: 200,
+            data: {
+              items: [{ id: 1190, number: 1190, createdAt: 1704067200 }],
+              meta: { page: 1, lastPage: 21, total: 1228 },
+            },
+          });
+        }
+        if (url.endsWith('/titles/dkw')) {
+          return Promise.reject({
+            message: 'Request failed with status code 403',
+            response: { status: 403 },
+          });
+        }
+        return Promise.resolve({ status: 200, data: {} });
+      });
+      const fetchDocument = jest.fn().mockResolvedValue({
+        status: 200,
+        data: [
+          '<h1 class="title-detail__title">One Piece</h1>',
+          '<div class="title-detail__synopsis">',
+          "<p>A pirate searches for the world's greatest treasure.</p>",
+          '<button type="button">Read more</button>',
+          '</div>',
+        ].join(''),
+      });
+      const originalFetchDocument = (mangaFireVrfBridge as any).fetchDocument;
+      (mangaFireVrfBridge as any).fetchDocument = fetchDocument;
+      const onPartial = jest.fn();
+
+      const pending = fetchMangaDetails('dkw', {
+        maxChapterPages: 1,
+        fallbackDetails: {
+          id: 'dkw',
+          title: 'One Piece',
+          alternativeTitle: '',
+          status: '',
+          description: '',
+          author: [],
+          published: '',
+          genres: [],
+          rating: '',
+          reviewCount: '',
+          bannerImage: 'one-piece.jpg',
+          chapters: [],
+        },
+        onPartial,
+      });
+      await jest.runAllTimersAsync();
+      await pending;
+      await jest.runAllTimersAsync();
+      (mangaFireVrfBridge as any).fetchDocument = originalFetchDocument;
+      jest.useRealTimers();
+
+      expect(fetchDocument).toHaveBeenCalledWith('/title/dkw');
+      expect(
+        onPartial.mock.calls.some(([details]) =>
+          details.description.includes('greatest treasure')
+        )
+      ).toBe(true);
+    });
+
+    it('stops waiting on the header when title JSON and HTML recovery both fail', async () => {
+      jest.useFakeTimers();
+      mockedAxios.get.mockImplementation((url: string) => {
+        if (url.includes('/chapters')) {
+          return Promise.resolve({
+            status: 200,
+            data: {
+              items: [{ id: 1, number: 1190, createdAt: 1704067200 }],
+              meta: { page: 1, lastPage: 21, total: 1228 },
+            },
+          });
+        }
+        if (url.endsWith('/titles/dkw')) {
+          return Promise.reject({
+            message: 'Request failed with status code 403',
+            response: { status: 403, data: { message: 'Missing token.' } },
+          });
+        }
+        return Promise.resolve({ status: 200, data: { items: [] } });
+      });
+      const onPartial = jest.fn();
+
+      const pending = fetchMangaDetails('dkw', {
+        maxChapterPages: 1,
+        fallbackDetails: {
+          id: 'dkw',
+          title: 'One Piece',
+          alternativeTitle: '',
+          status: '',
+          description: '',
+          author: [],
+          published: '',
+          genres: [],
+          rating: '',
+          reviewCount: '',
+          bannerImage: 'one-piece.jpg',
+          chapters: [],
+        },
+        onPartial,
+      });
+      await jest.runAllTimersAsync();
+      await pending;
+      await jest.runAllTimersAsync();
+      jest.useRealTimers();
+
+      expect(
+        onPartial.mock.calls.some(
+          ([details]) => details.description.trim() === ''
+        )
+      ).toBe(true);
+      expect(
+        onPartial.mock.calls.some(
+          ([details]) => details.description === 'No description available'
+        )
+      ).toBe(false);
+    });
+  });
+
+  describe('parseMangaDetails', () => {
+    it('reads synopsis and credits from the current title-detail markup', () => {
+      const html = [
+        '<div class="title-detail__badges">MANGA RELEASING 1997 SUGGESTIVE</div>',
+        '<div class="title-detail__poster"><img src="https://cdn.example/one-piece.jpg" alt="One Piece"></div>',
+        '<h1 class="title-detail__title">One Piece</h1>',
+        '<span class="title-detail__alt-text">ワンピース</span>',
+        '<a class="title-detail__tag" href="/browse?genre=action">Action</a>',
+        '<a class="title-detail__tag" href="/browse?genre=adventure">Adventure</a>',
+        '<div class="title-detail__credits">Author <strong><a>Oda Eiichirou</a></strong></div>',
+        '<span class="title-detail__stat"><strong>9.8</strong><span class="title-detail__stat-muted">/10 (556)</span></span>',
+        '<div class="title-detail__synopsis"><p>Gol D. Roger was the Pirate King.</p><button type="button">Read more</button></div>',
+      ].join('');
+
+      const details = parseMangaDetails(html);
+
+      expect(details.title).toBe('One Piece');
+      expect(details.alternativeTitle).toContain('ワンピース');
+      expect(details.status).toBe('releasing');
+      expect(details.published).toBe('1997');
+      expect(details.author).toEqual(['Oda Eiichirou']);
+      expect(details.genres).toEqual(['Action', 'Adventure']);
+      expect(details.rating).toBe('9.8');
+      expect(details.reviewCount).toBe('556');
+      expect(details.bannerImage).toBe('https://cdn.example/one-piece.jpg');
+      expect(details.description).toContain('Pirate King');
+      expect(details.description).not.toContain('Read more');
+      expect(details.type).toBe('MANGA');
+    });
+
+    it('collects every author in the credits Author row', () => {
+      const html = [
+        '<h1 class="title-detail__title">Coauthored</h1>',
+        '<div class="title-detail__credits">Author <a>First</a> <a>Second</a> Artist <a>Inker</a></div>',
+      ].join('');
+
+      expect(parseMangaDetails(html).author).toEqual(['First', 'Second']);
+    });
+
+    it('does not treat a later Author label as part of an Artist-only credits block', () => {
+      const html = [
+        '<h1 class="title-detail__title">Illustrated</h1>',
+        '<div class="title-detail__credits">Artist <a>Only Artist</a></div>',
+        '<span>Author:</span><span><a>Legacy Author</a></span>',
+      ].join('');
+
+      const authors = parseMangaDetails(html).author;
+      expect(authors).not.toContain('Only Artist');
+      expect(authors.join(' ')).toContain('Legacy Author');
+    });
+
+    it('still reads the legacy synopsis modal markup', () => {
+      const html = [
+        '<h1 itemprop="name">One Piece</h1>',
+        '<div class="modal fade" id="synopsis">',
+        '<div class="modal-content p-4">',
+        '<div class="modal-close">Close</div>',
+        '<p>Legacy synopsis text.</p>',
+        '</div></div>',
+      ].join('');
+
+      expect(parseMangaDetails(html).description).toContain('Legacy synopsis');
     });
   });
 
@@ -452,7 +893,11 @@ describe('mangaFireService', () => {
 
       await markChapterAsRead('manga1', '2', 'Test Manga');
 
-      expect(setLastReadManga).toHaveBeenCalledWith('manga1', 'Test Manga', '2');
+      expect(setLastReadManga).toHaveBeenCalledWith(
+        'manga1',
+        'Test Manga',
+        '2'
+      );
       expect(setMangaData).toHaveBeenCalledWith(
         expect.objectContaining({
           readChapters: expect.arrayContaining(['1', '2']),
@@ -648,7 +1093,9 @@ describe('mangaFireService', () => {
       await promise;
 
       expect(thrownError).toBeDefined();
-      expect(thrownError?.message).toContain('No pages found for chapter 12345');
+      expect(thrownError?.message).toContain(
+        'No pages found for chapter 12345'
+      );
       jest.useRealTimers();
     });
 
@@ -833,9 +1280,9 @@ describe('mangaFireService', () => {
     it('throws error when chapter ID cannot be extracted', async () => {
       mockLegacyChapterHtmlPage('<html></html>');
 
-      await expect(
-        fetchChapterImagesFromUrl(legacyChapterUrl)
-      ).rejects.toThrow('Could not extract chapter ID');
+      await expect(fetchChapterImagesFromUrl(legacyChapterUrl)).rejects.toThrow(
+        'Could not extract chapter ID'
+      );
     });
   });
 
@@ -902,33 +1349,44 @@ describe('mangaFireService', () => {
 
   describe('getVrfTokenFromChapterPage', () => {
     it('extracts VRF token from form input', async () => {
-      const html = '<input name="vrf" value="test-vrf-token-12345678901234567890-abcdef">';
+      const html =
+        '<input name="vrf" value="test-vrf-token-12345678901234567890-abcdef">';
       mockedAxios.get.mockResolvedValue({ data: html });
 
-      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      const token = await getVrfTokenFromChapterPage(
+        '/read/manga/en/chapter-1'
+      );
       expect(token).toBe('test-vrf-token-12345678901234567890-abcdef');
     });
 
     it('extracts VRF token from alternate form input format', async () => {
-      const html = '<input value="test-vrf-value-12345678901234567890-xyz" name="vrf">';
+      const html =
+        '<input value="test-vrf-value-12345678901234567890-xyz" name="vrf">';
       mockedAxios.get.mockResolvedValue({ data: html });
 
-      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      const token = await getVrfTokenFromChapterPage(
+        '/read/manga/en/chapter-1'
+      );
       expect(token).toBe('test-vrf-value-12345678901234567890-xyz');
     });
 
     it('falls back to extractVrfTokenFromHtml when form input not found', async () => {
-      const html = 'const vrf = "FALLBACKVRFTOKENVALUE123456789012345678901234567890"';
+      const html =
+        'const vrf = "FALLBACKVRFTOKENVALUE123456789012345678901234567890"';
       mockedAxios.get.mockResolvedValue({ data: html });
 
-      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      const token = await getVrfTokenFromChapterPage(
+        '/read/manga/en/chapter-1'
+      );
       expect(token).toBe('FALLBACKVRFTOKENVALUE123456789012345678901234567890');
     });
 
     it('handles full URLs', async () => {
       mockedAxios.get.mockResolvedValue({ data: '<html></html>' });
 
-      await getVrfTokenFromChapterPage('https://mangafire.to/read/manga/en/chapter-1');
+      await getVrfTokenFromChapterPage(
+        'https://mangafire.to/read/manga/en/chapter-1'
+      );
       expect(mockedAxios.get).toHaveBeenCalledWith(
         'https://mangafire.to/read/manga/en/chapter-1',
         expect.any(Object)
@@ -938,7 +1396,9 @@ describe('mangaFireService', () => {
     it('returns null on network error', async () => {
       mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
-      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      const token = await getVrfTokenFromChapterPage(
+        '/read/manga/en/chapter-1'
+      );
       expect(token).toBeNull();
     });
 
@@ -946,7 +1406,9 @@ describe('mangaFireService', () => {
       const html = '<input name="vrf" value="short">';
       mockedAxios.get.mockResolvedValue({ data: html });
 
-      const token = await getVrfTokenFromChapterPage('/read/manga/en/chapter-1');
+      const token = await getVrfTokenFromChapterPage(
+        '/read/manga/en/chapter-1'
+      );
       expect(token).toBeNull();
     });
   });
@@ -974,7 +1436,9 @@ describe('mangaFireService', () => {
         '12345',
         'vrf-token',
         '/read/manga/en/chapter-1'
-      ).catch(e => { thrownError = e; });
+      ).catch((e) => {
+        thrownError = e;
+      });
 
       await jest.runAllTimersAsync();
       await promise;
@@ -993,19 +1457,22 @@ describe('mangaFireService', () => {
     });
 
     it('finds VRF token with const declaration', () => {
-      const html = 'const vrf = "CONSTVRFTOKENVALUE12345678901234567890123456789"';
+      const html =
+        'const vrf = "CONSTVRFTOKENVALUE12345678901234567890123456789"';
       const token = extractVrfTokenFromHtml(html);
       expect(token).toBe('CONSTVRFTOKENVALUE12345678901234567890123456789');
     });
 
     it('finds VRF token in JSON format', () => {
-      const html = '{"vrf": "JSONVRFTOKENVALUE1234567890123456789012345678901"}';
+      const html =
+        '{"vrf": "JSONVRFTOKENVALUE1234567890123456789012345678901"}';
       const token = extractVrfTokenFromHtml(html);
       expect(token).toBe('JSONVRFTOKENVALUE1234567890123456789012345678901');
     });
 
     it('finds vrfToken format', () => {
-      const html = 'vrfToken: "VRFTOKENFORMAT1234567890123456789012345678901234"';
+      const html =
+        'vrfToken: "VRFTOKENFORMAT1234567890123456789012345678901234"';
       const token = extractVrfTokenFromHtml(html);
       expect(token).toBe('VRFTOKENFORMAT1234567890123456789012345678901234');
     });
@@ -1019,16 +1486,20 @@ describe('mangaFireService', () => {
 
     it('finds base64 fallback when no other pattern matches', () => {
       // Long base64-like string that doesn't match other patterns
-      const html = 'randomfield: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678901234567890+/="';
+      const html =
+        'randomfield: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678901234567890+/="';
       const token = extractVrfTokenFromHtml(html);
       expect(token).not.toBeNull();
       expect(token!.length).toBeGreaterThan(40);
     });
 
     it('prefers longer base64 match', () => {
-      const html = 'token1: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" token2: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"';
+      const html =
+        'token1: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" token2: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"';
       const token = extractVrfTokenFromHtml(html);
-      expect(token).toBe('BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB');
+      expect(token).toBe(
+        'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
+      );
     });
   });
 
@@ -1080,9 +1551,7 @@ describe('mangaFireService', () => {
     it('handles full URL input', async () => {
       mockLegacyChapterHtmlPage('var chapterId = 1111111;');
 
-      await getChapterIdFromPage(
-        `https://mangafire.to${legacyChapterUrl}`
-      );
+      await getChapterIdFromPage(`https://mangafire.to${legacyChapterUrl}`);
       expect(mockedAxios.get).toHaveBeenCalledWith(
         `https://mangafire.to${legacyChapterUrl}`,
         expect.any(Object)
@@ -1204,11 +1673,9 @@ describe('mangaFireService', () => {
       jest.useFakeTimers();
       const error403 = new Error('Request failed with status code 403');
       (error403 as any).response = { status: 403 };
-      mockedAxios.get
-        .mockRejectedValueOnce(error403)
-        .mockResolvedValueOnce({
-          data: { items: [] },
-        });
+      mockedAxios.get.mockRejectedValueOnce(error403).mockResolvedValueOnce({
+        data: { items: [] },
+      });
 
       const promise = searchManga('test');
       await jest.runAllTimersAsync();
@@ -1223,7 +1690,7 @@ describe('mangaFireService', () => {
       const networkError = new Error('Network error');
       mockedAxios.get.mockRejectedValue(networkError);
 
-      const promise = searchManga('test').catch(() => {});
+      const promise = searchManga('test').catch(() => { });
       await jest.runAllTimersAsync();
       await promise;
 
@@ -1507,7 +1974,9 @@ describe('mangaFireService', () => {
       setLastReadManga.mockResolvedValue(undefined);
 
       // Should not throw, just log error
-      await expect(markChapterAsRead('manga1', '2', 'Test')).resolves.toBeUndefined();
+      await expect(
+        markChapterAsRead('manga1', '2', 'Test')
+      ).resolves.toBeUndefined();
     });
   });
 

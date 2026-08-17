@@ -5,12 +5,14 @@ import {
   searchTitles,
   fetchTitleDetails,
   fetchTitleChapters,
+  mapApiChapters,
   mapApiTitleToMangaDetails,
   fetchChapterPageUrls,
   resolveChapterApiId,
   extractChapterIdFromUrl,
   parseLegacyChapterUrl,
   titleExists,
+  titleChaptersCacheKey,
   type FetchTitleChaptersOptions,
   type ApiChapterSummary,
 } from '@/services/mangaFireApi';
@@ -33,9 +35,10 @@ import {
   invalidateMangaFireRequestCache,
 } from '@/services/mangaFireRequestHub';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import { mangaFireVrfBridge } from '@/services/mangaFireVrfBridge';
 import type { Chapter } from '@/types/manga';
 import { ChapterImage, ImageDownloadStatus } from '@/types/download';
-import { isNotFoundError } from '@/utils/httpErrors';
+import { isNotFoundError, summarizeApiError } from '@/utils/httpErrors';
 
 export class CloudflareDetectedError extends Error {
   html: string;
@@ -121,7 +124,10 @@ export function getVrfToken(): string | null {
   return sessionVrfToken;
 }
 
-export { fetchHomeMangaData, extractChapterIdFromUrl } from '@/services/mangaFireApi';
+export {
+  fetchHomeMangaData,
+  extractChapterIdFromUrl,
+} from '@/services/mangaFireApi';
 
 export const searchManga = async (
   keyword: string,
@@ -195,6 +201,8 @@ export function parseSearchResults(html: string): MangaItem[] {
 
 export interface FetchMangaDetailsOptions {
   force?: boolean;
+  /** Trusted route/search metadata used when the title endpoint is unavailable. */
+  fallbackDetails?: MangaDetails;
   /** Stop chapter pagination early (screen left / manga id changed). */
   shouldCancel?: () => boolean;
   /** Deliver a usable MangaDetails as soon as the first chapter page arrives. */
@@ -213,6 +221,122 @@ export interface FetchMangaDetailsOptions {
   maxChapterPages?: number;
 }
 
+function describeTitleHtml(html: string): {
+  htmlLength: number;
+  hasAppRoot: boolean;
+  hasModernSynopsis: boolean;
+  hasLegacySynopsis: boolean;
+  titleTag: string;
+  snippet: string;
+} {
+  return {
+    htmlLength: html.length,
+    hasAppRoot: /id=["']app-root["']/.test(html),
+    hasModernSynopsis: html.includes('title-detail__synopsis'),
+    hasLegacySynopsis: html.includes('id="synopsis"'),
+    titleTag: (html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || '')
+      .trim()
+      .slice(0, 80),
+    snippet: html.replace(/\s+/g, ' ').trim().slice(0, 180),
+  };
+}
+
+async function recoverMangaDetailsFromTitlePage(
+  mangaId: string,
+  fallbackDetails: MangaDetails,
+  chapters: ApiChapterSummary[],
+  totalChapters?: number
+): Promise<MangaDetails> {
+  const log = logger();
+  const providerOrigin = new URL(MANGA_API_URL).origin;
+  const paths = new Set<string>([`/title/${mangaId}`]);
+
+  if (fallbackDetails.title.trim()) {
+    try {
+      const candidates = await searchTitles(fallbackDetails.title);
+      const candidate = candidates.find((item) => item.id === mangaId);
+      log.info('Service', 'titlePageRecover:search', {
+        mangaId,
+        query: fallbackDetails.title,
+        candidateCount: candidates.length,
+        matched: Boolean(candidate?.link),
+        link: candidate?.link ?? null,
+      });
+      if (candidate?.link) {
+        const titleUrl = new URL(candidate.link, MANGA_API_URL);
+        if (titleUrl.origin === providerOrigin) {
+          paths.add(`${titleUrl.pathname}${titleUrl.search}`);
+        }
+      }
+    } catch (searchError) {
+      log.warn('Service', 'titlePageRecover:search-failed', {
+        mangaId,
+        ...summarizeApiError(searchError),
+      });
+    }
+  }
+
+  let lastError: unknown;
+  for (const path of paths) {
+    log.info('Service', 'titlePageRecover:try', { mangaId, path });
+    try {
+      const response = await mangaFireVrfBridge.fetchDocument(path);
+      const html = response.data;
+      const parsed = parseMangaDetails(html);
+      const description = parsed.description.trim();
+      if (!description || description === 'No description available') {
+        lastError = new Error(
+          'MangaFire title page did not contain a description'
+        );
+        log.warn('Service', 'titlePageRecover:no-synopsis', {
+          mangaId,
+          path,
+          status: response.status,
+          parsedTitle: parsed.title,
+          ...describeTitleHtml(html),
+        });
+        continue;
+      }
+
+      log.info('Service', 'titlePageRecover:done', {
+        mangaId,
+        path,
+        descriptionLength: description.length,
+        authorCount: parsed.author.length,
+        genreCount: parsed.genres.length,
+      });
+
+      const mappedChapters = mapApiChapters(chapters);
+      return {
+        ...fallbackDetails,
+        ...parsed,
+        id: mangaId,
+        title:
+          parsed.title && parsed.title !== 'Unknown Title'
+            ? parsed.title
+            : fallbackDetails.title,
+        bannerImage: parsed.bannerImage || fallbackDetails.bannerImage,
+        chapters: mappedChapters,
+        totalChapters:
+          typeof totalChapters === 'number' && totalChapters > 0
+            ? Math.max(totalChapters, mappedChapters.length)
+            : mappedChapters.length,
+      };
+    } catch (error) {
+      lastError = error;
+      log.warn('Service', 'titlePageRecover:document-failed', {
+        mangaId,
+        path,
+        ...summarizeApiError(error),
+      });
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('MangaFire title page was not found in search results');
+}
+
 export const fetchMangaDetails = async (
   id: string,
   options?: FetchMangaDetailsOptions
@@ -225,8 +349,7 @@ export const fetchMangaDetails = async (
   const normalizedId = id.trim();
   const detailsCacheKey = `details:${normalizedId}`;
   const isPartialChapterLoad =
-    typeof options?.maxChapterPages === 'number' &&
-    options.maxChapterPages > 0;
+    typeof options?.maxChapterPages === 'number' && options.maxChapterPages > 0;
 
   if (isDebugEnabled()) {
     log.info('Service', 'fetchMangaDetails:start', {
@@ -254,44 +377,162 @@ export const fetchMangaDetails = async (
   }
 
   const loadDetails = async (): Promise<MangaDetails> => {
-      const title = await fetchTitleDetails(normalizedId);
-      const chapterFetchOptions: FetchTitleChaptersOptions = {};
-      let knownTotalChapters: number | undefined;
+    const fallbackDetails = options?.fallbackDetails;
+    let title: Awaited<ReturnType<typeof fetchTitleDetails>> | null = null;
+    let latestChapters: ApiChapterSummary[] = [];
+    let knownTotalChapters: number | undefined;
 
-      if (options?.shouldCancel) {
-        chapterFetchOptions.shouldCancel = options.shouldCancel;
-      }
-      if (typeof options?.maxChapterPages === 'number') {
-        chapterFetchOptions.maxPages = options.maxChapterPages;
-      }
-      if (options?.onPartial || options?.onChapterPagination) {
-        chapterFetchOptions.onPage = (chaptersSoFar, meta) => {
-          if (typeof meta.total === 'number' && meta.total > 0) {
-            knownTotalChapters = meta.total;
-          }
-          options.onChapterPagination?.(meta);
-          if (options.onPartial && (meta.page === 1 || !meta.hasMore)) {
-            options.onPartial(
-              mapApiTitleToMangaDetails(title, chaptersSoFar, {
-                ...(knownTotalChapters != null
-                  ? { totalChapters: knownTotalChapters }
-                  : {}),
-              })
-            );
-          }
-        };
-      }
-
-      const chapters = await fetchTitleChapters(
-        normalizedId,
-        chapterFetchOptions
+    const reportTitleError = (titleError: unknown, recoveryError?: unknown) => {
+      log.warn(
+        'Service',
+        'Title details unavailable — settling header without synopsis',
+        {
+          mangaId: normalizedId,
+          json: summarizeApiError(titleError),
+          ...(recoveryError
+            ? { recovery: summarizeApiError(recoveryError) }
+            : {}),
+        }
       );
+    };
 
-      return mapApiTitleToMangaDetails(title, chapters, {
+    const applyResolvedTitle = (
+      resolvedTitle: Awaited<ReturnType<typeof fetchTitleDetails>>
+    ) => {
+      title = resolvedTitle;
+      const mapped = mapApiTitleToMangaDetails(resolvedTitle, latestChapters, {
         ...(knownTotalChapters != null
           ? { totalChapters: knownTotalChapters }
           : {}),
       });
+      log.info('Service', 'titleDetails:applied', {
+        mangaId: normalizedId,
+        hasSynopsis: Boolean(mapped.description.trim()),
+        descriptionLength: mapped.description.trim().length,
+        authorCount: mapped.author.length,
+        genreCount: mapped.genres.length,
+        chapterCount: mapped.chapters.length,
+      });
+      options?.onPartial?.(mapped);
+    };
+
+    const settleHeaderWithoutSynopsis = (preview: MangaDetails) => {
+      const mappedChapters = mapApiChapters(latestChapters);
+      const settled: MangaDetails = {
+        ...preview,
+        id: normalizedId,
+        chapters: mappedChapters.length ? mappedChapters : preview.chapters,
+        description: preview.description.trim(),
+        totalChapters:
+          knownTotalChapters ?? preview.totalChapters ?? mappedChapters.length,
+      };
+      log.warn('Service', 'titleDetails:settled-without-synopsis', {
+        mangaId: normalizedId,
+        chapterCount: settled.chapters.length,
+      });
+      options?.onPartial?.(settled);
+    };
+
+    const enrichTitleInBackground = (preview: MangaDetails) => {
+      void (async () => {
+        log.info('Service', 'titleDetails:enrich-start', {
+          mangaId: normalizedId,
+          previewTitle: preview.title,
+        });
+        try {
+          // Title JSON is the only source for synopsis on the current SPA.
+          applyResolvedTitle(await fetchTitleDetails(normalizedId));
+          return;
+        } catch (titleError) {
+          log.warn('Service', 'titleDetails:json-failed', {
+            mangaId: normalizedId,
+            ...summarizeApiError(titleError),
+          });
+          try {
+            const recovered = await recoverMangaDetailsFromTitlePage(
+              normalizedId,
+              preview,
+              latestChapters,
+              knownTotalChapters
+            );
+            options?.onPartial?.(recovered);
+            return;
+          } catch (recoveryError) {
+            reportTitleError(titleError, recoveryError);
+            settleHeaderWithoutSynopsis(preview);
+          }
+        }
+      })();
+    };
+
+    if (fallbackDetails) {
+      options?.onPartial?.({
+        ...fallbackDetails,
+        id: normalizedId,
+        chapters: [],
+      });
+      enrichTitleInBackground(fallbackDetails);
+    } else {
+      title = await fetchTitleDetails(normalizedId);
+    }
+
+    const mapDetails = (
+      chapters: ApiChapterSummary[],
+      totalChapters?: number
+    ): MangaDetails => {
+      if (title) {
+        return mapApiTitleToMangaDetails(title, chapters, {
+          ...(totalChapters != null ? { totalChapters } : {}),
+        });
+      }
+
+      const mappedChapters = mapApiChapters(chapters);
+      return {
+        ...fallbackDetails!,
+        id: normalizedId,
+        chapters: mappedChapters,
+        totalChapters:
+          typeof totalChapters === 'number' && totalChapters > 0
+            ? Math.max(totalChapters, mappedChapters.length)
+            : mappedChapters.length,
+      };
+    };
+
+    if (options?.onPartial && !fallbackDetails) {
+      options.onPartial(mapDetails([]));
+    }
+
+    const chapterFetchOptions: FetchTitleChaptersOptions = {};
+
+    if (options?.shouldCancel) {
+      chapterFetchOptions.shouldCancel = options.shouldCancel;
+    }
+    if (typeof options?.maxChapterPages === 'number') {
+      chapterFetchOptions.maxPages = options.maxChapterPages;
+    }
+    if (
+      options?.onPartial ||
+      options?.onChapterPagination ||
+      isPartialChapterLoad
+    ) {
+      chapterFetchOptions.onPage = (chaptersSoFar, meta) => {
+        latestChapters = chaptersSoFar;
+        if (typeof meta.total === 'number' && meta.total > 0) {
+          knownTotalChapters = meta.total;
+        }
+        options.onChapterPagination?.(meta);
+        if (options.onPartial && (meta.page === 1 || !meta.hasMore)) {
+          options.onPartial(mapDetails(chaptersSoFar, knownTotalChapters));
+        }
+      };
+    }
+
+    const chapters = await fetchTitleChapters(
+      normalizedId,
+      chapterFetchOptions
+    );
+
+    return mapDetails(chapters, knownTotalChapters);
   };
 
   const useUncachedPath =
@@ -302,21 +543,21 @@ export const fetchMangaDetails = async (
 
   const details = useUncachedPath
     ? await performanceMonitor.measureAsync(
-        `fetchMangaDetails:${normalizedId}`,
-        loadDetails
-      )
+      `fetchMangaDetails:${normalizedId}`,
+      loadDetails
+    )
     : await scheduleMangaFireRequest(
-        detailsCacheKey,
-        () =>
-          performanceMonitor.measureAsync(
-            `fetchMangaDetails:${normalizedId}`,
-            loadDetails
-          ),
-        {
-          ttlMs: REQUEST_HUB_TTLS.mangaDetails,
-          ...(options?.force ? { force: true } : {}),
-        }
-      );
+      detailsCacheKey,
+      () =>
+        performanceMonitor.measureAsync(
+          `fetchMangaDetails:${normalizedId}`,
+          loadDetails
+        ),
+      {
+        ttlMs: REQUEST_HUB_TTLS.mangaDetails,
+        ...(options?.force ? { force: true } : {}),
+      }
+    );
 
   // Only prime the full-details cache when we fetched every chapter page.
   if (
@@ -363,56 +604,149 @@ export const checkMangaAvailability = async (
   }
 };
 
-export const parseMangaDetails = (html: string): MangaDetails => {
-  const title = decode(
-    html.match(/<h1 itemprop="name">(.*?)<\/h1>/)?.[1] || 'Unknown Title'
-  );
-  const alternativeTitle = decode(html.match(/<h6>(.*?)<\/h6>/)?.[1] || '');
-  const status = html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
+const CREDIT_ROW_LABELS = 'Artist|Producer|Serialization|Magazine|Studio';
 
-  const descriptionMatch = html.match(
-    /<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/
+function parseModernCreditsAuthors(html: string): string[] {
+  const creditsBlocks = [
+    ...(html.matchAll(
+      /<[^>]*class="[^"]*\btitle-detail__credits\b[^"]*"[^>]*>([\s\S]*?)<\/(?:div|section|ul)>/gi
+    ) ?? []),
+  ].map((match) => match[1] ?? '');
+
+  const authors: string[] = [];
+  for (const block of creditsBlocks) {
+    const authorRow = block.match(
+      new RegExp(`Author\\b([\\s\\S]*?)(?=(?:${CREDIT_ROW_LABELS})\\b|$)`, 'i')
+    )?.[1];
+    if (!authorRow) {
+      continue;
+    }
+
+    authors.push(
+      ...[...(authorRow.matchAll(/<a[^>]*>([\s\S]*?)<\/a>/gi) ?? [])]
+        .map((match) => stripHtmlToText(match[1] ?? ''))
+        .filter(Boolean)
+    );
+  }
+
+  return authors;
+}
+
+export const parseMangaDetails = (html: string): MangaDetails => {
+  const firstMatch = (...patterns: RegExp[]): string => {
+    for (const pattern of patterns) {
+      const value = html.match(pattern)?.[1];
+      if (value?.trim()) {
+        return value;
+      }
+    }
+    return '';
+  };
+
+  const title = decode(
+    stripHtmlToText(
+      firstMatch(
+        /<h1[^>]*class="[^"]*\btitle-detail__title\b[^"]*"[^>]*>([\s\S]*?)<\/h1>/i,
+        /<h1 itemprop="name">(.*?)<\/h1>/
+      )
+    ) || 'Unknown Title'
   );
-  let description = descriptionMatch?.[1]
-    ? decode(descriptionMatch[1].trim()) || 'No description available'
+
+  const alternativeTitle = decode(
+    stripHtmlToText(
+      firstMatch(
+        /<span[^>]*class="[^"]*\btitle-detail__alt-text\b[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
+        /<h6>(.*?)<\/h6>/
+      )
+    )
+  );
+
+  const badgesBlock = html.match(
+    /<div[^>]*class="[^"]*\btitle-detail__badges\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+  )?.[1];
+  const statusFromBadges = badgesBlock
+    ?.match(/\b(RELEASING|ONGOING|FINISHED|COMPLETED|HIATUS|UPCOMING)\b/i)?.[1]
+    ?.toLowerCase();
+  const status =
+    statusFromBadges || html.match(/<p>(.*?)<\/p>/)?.[1] || 'Unknown Status';
+
+  const modernSynopsis = html.match(
+    /<div[^>]*class="[^"]*\btitle-detail__synopsis\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+  )?.[1];
+  const legacySynopsis = html.match(
+    /<div class="modal fade" id="synopsis">[\s\S]*?<div class="modal-content p-4">\s*<div class="modal-close"[^>]*>[\s\S]*?<\/div>\s*([\s\S]*?)\s*<\/div>/
+  )?.[1];
+  const synopsisHtml = (modernSynopsis || legacySynopsis || '')
+    .replace(/<button[\s\S]*?<\/button>/gi, '')
+    .trim();
+  let description = synopsisHtml
+    ? decode(synopsisHtml) || 'No description available'
     : 'No description available';
 
   description = stripHtmlToText(description);
 
+  const modernAuthors = parseModernCreditsAuthors(html);
   const authorMatch = html.match(
     /<span>Author:<\/span>.*?<span>(.*?)<\/span>/s
   );
-  const authors = authorMatch?.[1]
-    ? authorMatch[1]
+  const authors = modernAuthors.length
+    ? modernAuthors
+    : authorMatch?.[1]
+      ? authorMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
         ?.map((a) => stripHtmlToText(a)) || []
-    : [];
+      : [];
 
+  const publishedFromBadges = badgesBlock?.match(/\b((?:19|20)\d{2})\b/)?.[1];
   const published =
+    publishedFromBadges ||
     html.match(/<span>Published:<\/span>.*?<span>(.*?)<\/span>/s)?.[1] ||
     'Unknown';
 
+  const modernGenres = [
+    ...(html.matchAll(
+      /<a[^>]*class="[^"]*\btitle-detail__tag\b[^"]*"[^>]*>([\s\S]*?)<\/a>/gi
+    ) ?? []),
+  ]
+    .map((match) => stripHtmlToText(match[1] ?? ''))
+    .filter(Boolean);
   const genresMatch = html.match(
     /<span>Genres:<\/span>.*?<span>(.*?)<\/span>/s
   );
-  const genres = genresMatch?.[1]
-    ? genresMatch[1]
+  const genres = modernGenres.length
+    ? modernGenres
+    : genresMatch?.[1]
+      ? genresMatch[1]
         .match(/<a[^>]*>(.*?)<\/a>/g)
         ?.map((a) => stripHtmlToText(a)) || []
-    : [];
+      : [];
 
   const rating =
     html.match(
+      /<span[^>]*class="[^"]*\btitle-detail__stat\b[^"]*"[^>]*>[\s\S]*?<strong>([\d.]+)<\/strong>/i
+    )?.[1] ||
+    html.match(
       /<span class="live-score" itemprop="ratingValue">(.*?)<\/span>/
-    )?.[1] || 'N/A';
+    )?.[1] ||
+    'N/A';
   const reviewCount =
-    html.match(/<span itemprop="reviewCount".*?>(.*?)<\/span>/)?.[1] || '0';
-  const bannerImageMatch = html.match(
-    /<div class="poster">.*?<img src="(.*?)" itemprop="image"/s
-  );
+    html.match(
+      /<span[^>]*class="[^"]*\btitle-detail__stat-muted\b[^"]*"[^>]*>\/10\s*\((\d+)\)/i
+    )?.[1] ||
+    html.match(/<span itemprop="reviewCount".*?>(.*?)<\/span>/)?.[1] ||
+    '0';
+  const bannerImageMatch =
+    html.match(
+      /<div[^>]*class="[^"]*\btitle-detail__poster\b[^"]*"[^>]*>\s*<img[^>]*src="([^"]+)"/i
+    ) ||
+    html.match(
+      /<img[^>]*class="[^"]*\btitle-detail__banner-img\b[^"]*"[^>]*src="([^"]+)"/i
+    ) ||
+    html.match(/<div class="poster">.*?<img src="(.*?)" itemprop="image"/s);
   const bannerImage = bannerImageMatch ? bannerImageMatch[1] : '';
 
   const typeMatch =
+    badgesBlock?.match(/\b(MANGA|MANHWA|MANHUA|ONE-SHOT|NOVEL)\b/i) ||
     html.match(/<span[^>]*class="[^"]*\btype\b[^"]*"[^>]*>(.*?)<\/span>/i) ||
     html.match(/itemprop="additionalType"[^>]*content="([^"]+)"/i);
   const type = typeMatch?.[1] ? stripHtmlToText(typeMatch[1]) : undefined;
@@ -575,20 +909,40 @@ function getChapterApiIdOverride(
   );
 }
 
+function peekCachedTitleChapters(
+  mangaId: string,
+  language: string
+): { cacheKey: string; cached: ApiChapterSummary[] } | null {
+  const keys = [
+    titleChaptersCacheKey(mangaId, language, true),
+    titleChaptersCacheKey(mangaId, language, false),
+  ];
+
+  for (const cacheKey of keys) {
+    const cached = peekFreshCache<ApiChapterSummary[]>(
+      cacheKey,
+      REQUEST_HUB_TTLS.chapters
+    );
+    if (cached?.length) {
+      return { cacheKey, cached };
+    }
+  }
+
+  return null;
+}
+
 function patchHubChapterApiId(
   mangaId: string,
   chapterNumber: string,
   chapterApiId: string,
   language = 'en'
 ) {
-  const cacheKey = `chapters:${mangaId.trim()}:${language}`;
-  const cached = peekFreshCache<ApiChapterSummary[]>(
-    cacheKey,
-    REQUEST_HUB_TTLS.chapters
-  );
-  if (!cached?.length) {
+  const entry = peekCachedTitleChapters(mangaId, language);
+  if (!entry) {
     return;
   }
+
+  const { cacheKey, cached } = entry;
 
   const normalized = normalizeChapterNumber(chapterNumber);
   const numericId = Number(chapterApiId);

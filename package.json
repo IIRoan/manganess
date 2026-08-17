@@ -1,9 +1,9 @@
 {
   "name": "manganess",
   "main": "expo-router/entry",
-  "version": "1.15",
+  "version": "1.16",
   "expo": {
-    "version": "1.15",
+    "version": "1.16",
     "install": {
       "exclude": [
         "typescript"
@@ -63,6 +63,7 @@
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.6",
     "expo-router": "~57.0.13",
+    "expo-secure-store": "~57.0.1",
     "expo-sharing": "~57.0.12",
     "expo-splash-screen": "~57.0.6",
     "expo-system-ui": "~57.0.2",

@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  TextStyle,
-  LayoutAnimation,
+  type NativeSyntheticEvent,
+  type TextLayoutEventData,
+  type TextStyle,
 } from 'react-native';
 
 interface ExpandableTextProps {
@@ -23,33 +24,28 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
+  const textRef = useRef(text);
+
+  useEffect(() => {
+    if (textRef.current === text) {
+      return;
+    }
+    textRef.current = text;
+    setIsExpanded(false);
+    setIsTruncated(false);
+  }, [text]);
 
   const onFullTextLayout = useCallback(
-    (e: any) => {
+    (e: NativeSyntheticEvent<TextLayoutEventData>) => {
       const lineCount = e.nativeEvent.lines.length;
-      console.log(`Full text layout: ${lineCount} lines`);
-      if (lineCount > initialLines) {
-        setIsTruncated(true);
-        console.log('Text needs truncation');
-      }
+      setIsTruncated((prev) => prev || lineCount > initialLines);
     },
     [initialLines]
   );
 
-  const onTruncatedTextLayout = useCallback((e: any) => {
-    const lineCount = e.nativeEvent.lines.length;
-    console.log(`Truncated text layout: ${lineCount} lines`);
-  }, []);
-
   const toggleExpand = useCallback(() => {
-    console.log('Toggle expand pressed, isTruncated:', isTruncated);
     if (!isTruncated) return;
-
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsExpanded((prev) => {
-      console.log('Toggling from', prev, 'to', !prev);
-      return !prev;
-    });
+    setIsExpanded((prev) => !prev);
   }, [isTruncated]);
 
   return (
@@ -59,10 +55,11 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
       activeOpacity={0.7}
       style={styles.container}
     >
-      {/* Hidden text to measure full height */}
+      {/* Hidden text to measure full height without affecting layout */}
       <Text
         style={[styles.text, style, styles.hiddenText]}
         onTextLayout={onFullTextLayout}
+        pointerEvents="none"
       >
         {text}
       </Text>
@@ -70,7 +67,6 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
       {/* Visible text */}
       <Text
         numberOfLines={isExpanded ? undefined : initialLines}
-        onTextLayout={onTruncatedTextLayout}
         style={[styles.text, style, isExpanded && expandedStyle]}
       >
         {text}
@@ -100,6 +96,9 @@ const styles = StyleSheet.create({
   hiddenText: {
     position: 'absolute',
     opacity: 0,
+    left: 0,
+    right: 0,
+    top: 0,
     zIndex: -1,
   },
   truncatedText: {

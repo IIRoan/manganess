@@ -17,10 +17,8 @@ jest.mock('@/constants/env', () => ({
   isDebugEnabled: () => true,
 }));
 
-jest.mock('react-native', () => ({
-  InteractionManager: {
-    runAfterInteractions: (cb: () => void) => cb(),
-  },
+jest.mock('@/services/telemetryService', () => ({
+  reportMetric: jest.fn(),
 }));
 
 import { useNavigationPerf } from '../useNavigationPerf';

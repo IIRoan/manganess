@@ -30,6 +30,7 @@ const SWIPE_ACTION_WIDTH = 80;
 const SWIPE_THRESHOLD = 20; // Lower threshold for easier opening
 const SWIPE_FRICTION = 2; // Higher friction for smoother feel
 const SWIPE_OVERSHOOT_FRICTION = 8;
+export const CHAPTER_ROW_HEIGHT = 65;
 
 /**
  * Chapter data structure
@@ -571,13 +572,13 @@ const s = StyleSheet.create({
   swipeContainer: {
     marginHorizontal: 14,
     marginVertical: 0,
+    height: CHAPTER_ROW_HEIGHT,
     borderBottomWidth: 1,
     backgroundColor: 'transparent',
     overflow: 'hidden',
   },
   lastItem: {
-    marginBottom: 8,
-    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
   },
   childrenContainer: {
     overflow: 'hidden',
@@ -591,7 +592,7 @@ const s = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 64,
+    height: CHAPTER_ROW_HEIGHT,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 0,

@@ -25,6 +25,42 @@ export function getHttpStatus(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 
+function summarizeBody(body: unknown): string | undefined {
+  if (body == null) {
+    return undefined;
+  }
+  if (typeof body === 'string') {
+    return body.replace(/\s+/g, ' ').trim().slice(0, 240);
+  }
+  if (typeof body === 'object') {
+    try {
+      return JSON.stringify(body).slice(0, 240);
+    } catch {
+      return String(body);
+    }
+  }
+  return String(body);
+}
+
+/** Compact fields for title-detail / VRF 403 debugging. */
+export function summarizeApiError(error: unknown): {
+  message: string;
+  status?: number;
+  body?: string;
+} {
+  const body =
+    error && typeof error === 'object'
+      ? (error as { response?: { data?: unknown } }).response?.data
+      : undefined;
+  const status = getHttpStatus(error);
+  const bodyText = summarizeBody(body);
+  return {
+    message: getErrorMessage(error),
+    ...(status != null ? { status } : {}),
+    ...(bodyText ? { body: bodyText } : {}),
+  };
+}
+
 export function isRateLimitError(error: unknown): boolean {
   return (
     getHttpStatus(error) === 429 || getErrorMessage(error).includes('429')
@@ -41,6 +77,10 @@ export function isNotFoundError(error: unknown): boolean {
   return (
     getHttpStatus(error) === 404 || getErrorMessage(error).includes('404')
   );
+}
+
+export function isCloudflareError(error: unknown): boolean {
+  return getErrorMessage(error).includes('Cloudflare verification');
 }
 
 export function getApiRetryDelayMs(error: unknown, attempt: number): number {
@@ -122,6 +162,10 @@ export async function withApiRetry<T>(
       return await operation();
     } catch (error) {
       if (isNotFoundError(error)) {
+        throw error;
+      }
+
+      if (isCloudflareError(error)) {
         throw error;
       }
 

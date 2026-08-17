@@ -10,6 +10,7 @@ npm-debug.*
 *.orig.*
 web-build/
 .env
+.env*.local
 # macOS
 .DS_Store
 
@@ -24,4 +25,3 @@ env.ts
 !constants/env.ts
 .idea/
 coverage
-.env.local

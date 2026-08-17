@@ -4,6 +4,7 @@ import {
   buildVrfScript,
   logVrfFailure,
   mangaFireVrfBridge,
+  MANGA_FIRE_VRF_CHALLENGE_WAIT_MS,
   resetMangaFireVrfBridgeForTests,
   setMangaFireVrfBridgeProductionModeForTests,
   shouldProxyMangaFireApi,
@@ -37,10 +38,14 @@ describe('mangaFireVrfBridge', () => {
     resetMangaFireVrfBridgeForTests({ useTestToken: true });
   });
 
-  it('skips vrf for top-titles endpoints', async () => {
+  it('attaches vrf on every API path including top-titles', async () => {
     await expect(
       appendVrfParams('/top-titles', { type: 'trending', limit: 5 })
-    ).resolves.toEqual({ type: 'trending', limit: 5 });
+    ).resolves.toEqual({
+      type: 'trending',
+      limit: 5,
+      vrf: 'test-vrf-token',
+    });
   });
 
   it('returns a test vrf token for protected endpoints in Jest', async () => {
@@ -67,10 +72,22 @@ describe('mangaFireVrfBridge', () => {
     expect(VRF_PROTECTION_HELPERS_JS).toContain('Object.getOwnPropertyNames');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('extendClient');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('fetchProtectedJson');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('generateProtectionToken(path, queryParams)');
+    expect(VRF_PROTECTION_HELPERS_JS).not.toContain('protect = !!vmz.shouldProtect');
+    expect(VRF_PROTECTION_HELPERS_JS).toContain('MIN_AUTH_TOKEN_LENGTH');
+    expect(VRF_PROTECTION_HELPERS_JS).toMatch(/MIN_AUTH_TOKEN_LENGTH = 12/);
+    expect(VRF_PROTECTION_HELPERS_JS).not.toContain('value.length >= 16');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('credentials');
     expect(VRF_PROTECTION_HELPERS_JS).toContain('appendCanonicalParams');
     // No fixed module-name regex — discovery is shape/behavior based.
     expect(VRF_PROTECTION_HELPERS_JS).not.toContain('/^vm[OoZz]_/');
+  });
+
+  it('reports Cloudflare challenge pages from the host probe', () => {
+    const script = buildVrfScript();
+    expect(script).toContain('looksLikeChallenge');
+    expect(script).toContain("type: 'challenge'");
+    expect(script).toContain("type: 'probe'");
   });
 
   it('logs vrf acquisition failures', () => {
@@ -236,6 +253,183 @@ describe('mangaFireVrfBridge', () => {
     );
   });
 
+  it('reloads the host webview if the protection module stays unready', async () => {
+    jest.useFakeTimers();
+    setMangaFireVrfBridgeProductionModeForTests();
+    const reload = jest.fn();
+    mangaFireVrfBridge.attachHost(() => { }, { reload });
+
+    const vrfPromise = appendVrfParams('/titles/example');
+    await act(async () => {
+      jest.advanceTimersByTime(10000);
+    });
+
+    expect(reload).toHaveBeenCalled();
+    mangaFireVrfBridge.detachHost();
+    await expect(vrfPromise).rejects.toThrow('MangaFire VRF host detached');
+    jest.useRealTimers();
+  });
+
+  it('includes challenge state in the ready timeout', async () => {
+    jest.useFakeTimers();
+    setMangaFireVrfBridgeProductionModeForTests();
+    mangaFireVrfBridge.attachHost(() => { });
+
+    const vrfPromise = appendVrfParams('/titles/example');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({ type: 'challenge', title: 'Just a moment...' })
+    );
+
+    const timedOutEarly = jest.fn();
+    vrfPromise.catch(timedOutEarly);
+
+    await act(async () => {
+      jest.advanceTimersByTime(20000);
+    });
+    expect(timedOutEarly).not.toHaveBeenCalled();
+
+    const expectation = expect(vrfPromise).rejects.toThrow(
+      'Cloudflare challenge still active'
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(MANGA_FIRE_VRF_CHALLENGE_WAIT_MS);
+    });
+
+    await expectation;
+    jest.useRealTimers();
+  });
+
+  it('reopens the security overlay when a challenge arrives after ready', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    const injectedScripts: string[] = [];
+    mangaFireVrfBridge.attachHost((script) => {
+      injectedScripts.push(script);
+    });
+    const listener = jest.fn();
+    mangaFireVrfBridge.subscribeHostUi(listener);
+
+    mangaFireVrfBridge.handleMessage(JSON.stringify({ type: 'ready' }));
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: false,
+      ready: true,
+    });
+
+    listener.mockClear();
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({ type: 'challenge', title: 'Just a moment...' })
+    );
+
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: true,
+      ready: false,
+    });
+
+    const vrfPromise = appendVrfParams('/titles/example');
+    await flushPromises();
+    expect(injectedScripts).toHaveLength(0);
+
+    mangaFireVrfBridge.handleMessage(JSON.stringify({ type: 'ready' }));
+    await flushPromises();
+
+    expect(injectedScripts).toHaveLength(1);
+    const requestId = extractRequestId(injectedScripts[0] ?? '');
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({
+        type: 'vrf',
+        id: requestId,
+        vrf: 'after-challenge-token',
+      })
+    );
+
+    await expect(vrfPromise).resolves.toEqual({
+      vrf: 'after-challenge-token',
+    });
+  });
+
+  it('notifies UI listeners when a Cloudflare challenge appears', () => {
+    const listener = jest.fn();
+    const unsubscribe = mangaFireVrfBridge.subscribeHostUi(listener);
+    listener.mockClear();
+
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({ type: 'challenge', title: 'Just a moment...' })
+    );
+
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: true,
+      ready: false,
+    });
+
+    mangaFireVrfBridge.dismissChallenge();
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: false,
+      ready: false,
+    });
+    unsubscribe();
+  });
+
+  it('rejects in-flight waiters when the security check is dismissed', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    mangaFireVrfBridge.attachHost(() => { });
+
+    const vrfPromise = appendVrfParams('/titles/example');
+    await flushPromises();
+
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({ type: 'challenge', title: 'Just a moment...' })
+    );
+    mangaFireVrfBridge.dismissChallenge();
+
+    await expect(vrfPromise).rejects.toThrow(
+      'Cloudflare verification dismissed'
+    );
+  });
+
+  it('re-shows the security check and keeps the challenge timeout after dismiss', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    mangaFireVrfBridge.attachHost(() => { });
+    const listener = jest.fn();
+    mangaFireVrfBridge.subscribeHostUi(listener);
+
+    const firstLoad = appendVrfParams('/titles/example');
+    await flushPromises();
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({ type: 'challenge', title: 'Just a moment...' })
+    );
+    mangaFireVrfBridge.dismissChallenge();
+    await expect(firstLoad).rejects.toThrow(
+      'Cloudflare verification dismissed'
+    );
+
+    listener.mockClear();
+    jest.useFakeTimers();
+    const secondLoad = appendVrfParams('/titles/example');
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: true,
+      ready: false,
+    });
+
+    const timedOutEarly = jest.fn();
+    secondLoad.catch(timedOutEarly);
+
+    await act(async () => {
+      jest.advanceTimersByTime(20000);
+    });
+    expect(timedOutEarly).not.toHaveBeenCalled();
+
+    mangaFireVrfBridge.detachHost();
+    await expect(secondLoad).rejects.toThrow('MangaFire VRF host detached');
+    jest.useRealTimers();
+  });
+
   it('times out when the protection module never becomes ready', async () => {
     jest.useFakeTimers();
     setMangaFireVrfBridgeProductionModeForTests();
@@ -333,6 +527,7 @@ describe('mangaFireVrfBridge', () => {
     await flushPromises();
 
     expect(injectedScripts[0]).toContain('fetchProtectedJson');
+    expect(injectedScripts[0]).toContain('isMissingProtectionTokenError');
     expect(injectedScripts[0]).toContain('/titles');
 
     const requestId = extractRequestId(injectedScripts[0] ?? '');
@@ -351,7 +546,7 @@ describe('mangaFireVrfBridge', () => {
     });
   });
 
-  it('rejects proxied fetches that hit a Cloudflare challenge page', async () => {
+  it('fetches a title document through the authenticated host', async () => {
     setMangaFireVrfBridgeProductionModeForTests();
     const injectedScripts: string[] = [];
     mangaFireVrfBridge.attachHost((script) => {
@@ -359,24 +554,82 @@ describe('mangaFireVrfBridge', () => {
     });
     mangaFireVrfBridge.markReady();
 
-    const fetchPromise = mangaFireVrfBridge.fetchJson('/top-titles', {
-      type: 'trending',
-    });
+    const fetchPromise = mangaFireVrfBridge.fetchDocument(
+      '/title/one-piece.dkw'
+    );
     await flushPromises();
+
+    expect(injectedScripts[0]).toContain("credentials: 'include'");
+    expect(injectedScripts[0]).toContain('/title/one-piece.dkw');
+    expect(injectedScripts[0]).not.toContain("'/api' + path");
 
     const requestId = extractRequestId(injectedScripts[0] ?? '');
     mangaFireVrfBridge.handleMessage(
       JSON.stringify({
         type: 'api',
         id: requestId,
+        status: 200,
+        data: '<h1 itemprop="name">One Piece</h1>',
+      })
+    );
+
+    await expect(fetchPromise).resolves.toEqual({
+      status: 200,
+      data: '<h1 itemprop="name">One Piece</h1>',
+    });
+  });
+
+  it('retries a proxied fetch after the Cloudflare challenge is solved', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    const injectedScripts: string[] = [];
+    const reload = jest.fn();
+    const listener = jest.fn();
+    mangaFireVrfBridge.attachHost((script) => {
+      injectedScripts.push(script);
+    }, { reload });
+    mangaFireVrfBridge.subscribeHostUi(listener);
+    mangaFireVrfBridge.markReady();
+    listener.mockClear();
+
+    const fetchPromise = mangaFireVrfBridge.fetchJson<{ ok: boolean }>(
+      '/titles/x11xq'
+    );
+    await flushPromises();
+
+    const firstId = extractRequestId(injectedScripts[0] ?? '');
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({
+        type: 'api',
+        id: firstId,
         status: 403,
         data: '<html><title>Just a moment...</title></html>',
       })
     );
+    await flushPromises();
 
-    await expect(fetchPromise).rejects.toMatchObject({
-      message: 'Cloudflare verification detected',
-      response: { status: 403 },
+    expect(reload).toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: true,
+      ready: false,
+    });
+
+    mangaFireVrfBridge.handleMessage(JSON.stringify({ type: 'ready' }));
+    await flushPromises();
+
+    const secondId = extractRequestId(injectedScripts[1] ?? '');
+    expect(secondId).toBeTruthy();
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({
+        type: 'api',
+        id: secondId,
+        status: 200,
+        data: { ok: true },
+      })
+    );
+
+    await expect(fetchPromise).resolves.toEqual({
+      status: 200,
+      data: { ok: true },
     });
   });
 });

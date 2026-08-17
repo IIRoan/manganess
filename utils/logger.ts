@@ -1,5 +1,7 @@
 import { appStartTs, isDebugEnabled } from '@/constants/env';
+import { errorLogService } from '@/services/errorLogService';
 import type { LogEntry, LogLevel, LogScope, Logger } from '@/types';
+import type { ErrorLogLevel } from '@/types/errorLog';
 
 const MAX_BUFFER = 500;
 
@@ -18,6 +20,13 @@ class DebugLogger implements Logger {
     return `[+${ms}ms][${scope}][${level}]`;
   }
 
+  private shouldPersist(level: LogLevel, scope: LogScope): boolean {
+    if (level === 'error') {
+      return true;
+    }
+    return level === 'warn' && (scope === 'Network' || scope === 'Service');
+  }
+
   private log(
     level: LogLevel,
     scope: LogScope,
@@ -25,6 +34,14 @@ class DebugLogger implements Logger {
     data?: unknown,
     durationMs?: number
   ) {
+    if (this.shouldPersist(level, scope)) {
+      errorLogService.recordFromLogger(
+        level as ErrorLogLevel,
+        scope,
+        msg,
+        data
+      );
+    }
     if (!this.enabled) return;
     const ts = Date.now();
     const now = (globalThis as any).performance?.now?.() ?? ts;

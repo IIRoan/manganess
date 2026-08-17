@@ -61,6 +61,7 @@ export const isDevelopment = (): boolean => {
 export const areUpdatesAvailable = (): boolean => {
   if (Platform.OS === 'web') return false;
   if (isExpoGo()) return false;
+  if (isDevelopment()) return false;
   return Updates.isEnabled;
 };
 
@@ -74,11 +75,36 @@ export const getUnavailableReason = (): string | null => {
   if (isExpoGo()) {
     return 'Updates are not available in Expo Go. Use a development or production build.';
   }
+  if (isDevelopment()) {
+    return 'Updates are not available in development builds.';
+  }
   if (!Updates.isEnabled) {
     return 'Updates are not enabled in this environment (Metro / expo start).';
   }
   return null;
 };
+
+function isExpectedDevClientUpdateError(error: unknown): boolean {
+  const name = error instanceof Error ? error.name : '';
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    name === 'NotAvailableInDevClientException' ||
+    message.includes('NotAvailableInDevClientException') ||
+    message.includes('not supported in development builds')
+  );
+}
+
+function logUpdateFailure(message: string, data?: unknown): void {
+  const error =
+    data && typeof data === 'object' && 'error' in data
+      ? (data as { error?: unknown }).error
+      : data;
+  if (isExpectedDevClientUpdateError(error) || isDevelopment()) {
+    logger().debug('Service', message, data);
+    return;
+  }
+  logger().error('Service', message, data);
+}
 
 // ============================================================================
 // Update Lock (prevents duplicate simultaneous checks)
@@ -176,7 +202,7 @@ export const checkForUpdate = async (): Promise<UpdateResult> => {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    logger().error('Service', 'Error checking for update', {
+    logUpdateFailure('Error checking for update', {
       error: errorMessage,
       channel: Updates.channel,
     });
@@ -223,7 +249,7 @@ export const downloadUpdate = async (): Promise<UpdateResult> => {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    logger().error('Service', 'Error downloading update', {
+    logUpdateFailure('Error downloading update', {
       error: errorMessage,
     });
     return {
@@ -258,7 +284,7 @@ export const applyUpdate = async (): Promise<UpdateResult> => {
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    logger().error('Service', 'Error applying update', { error: errorMessage });
+    logUpdateFailure('Error applying update', { error: errorMessage });
     return {
       success: false,
       message: `Error applying update: ${errorMessage}`,
@@ -387,7 +413,7 @@ export const performFullUpdateFlow = async (
       error: silent ? null : errorMessage,
     });
 
-    logger().error('Service', 'Update flow failed', { error: errorMessage });
+    logUpdateFailure('Update flow failed', { error: errorMessage });
 
     return {
       success: false,

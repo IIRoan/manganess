@@ -49,6 +49,7 @@ import {
 import { imageCache } from '@/services/CacheImages';
 import { getDefaultLayout, setDefaultLayout } from '@/services/settingsService';
 import { checkMangaAvailability } from '@/services/mangaFireService';
+import { navigateToMangaDetails } from '@/utils/mangaOpenNavigation';
 
 // Constants
 const SECTIONS: BookmarkStatus[] = ['Reading', 'To Read', 'On Hold', 'Read'];
@@ -330,10 +331,10 @@ export default function BookmarksScreen() {
         }
         lastAvailabilityCheckRef.current = now;
 
-        const results: Array<{
+        const results: {
           id: string;
           status: Awaited<ReturnType<typeof checkMangaAvailability>>;
-        }> = [];
+        }[] = [];
 
         for (const bookmark of atomBookmarks) {
           if (isCancelled) {
@@ -468,15 +469,15 @@ export default function BookmarksScreen() {
         return;
       }
 
-      router.push({
-        pathname: '/(tabs)/manga/[id]',
-        params: {
+      navigateToMangaDetails(
+        router,
+        {
           id: item.id,
           title: item.title,
           imageUrl: item.imageUrl,
-          previewId: item.id,
         },
-      });
+        'bookmarks'
+      );
     },
     [bookmarkAvailability, handleMissingBookmarkPress, router]
   );
