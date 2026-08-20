@@ -34,6 +34,8 @@ export interface Chapter {
   title: string;
   date: string;
   url: string;
+  /** MangaFire scan source when known — used for prefer-official merges. */
+  sourceType?: string;
 }
 
 export interface ChapterExtended extends Chapter {
@@ -99,6 +101,11 @@ export interface MangaData {
   downloadedChapters?: string[];
   downloadStatus?: Record<string, DownloadProgress>;
   totalDownloadSize?: number;
+  /**
+   * When true, hide half-chapters / extras (3.1, 3.5, …) from the chapter list.
+   * Default false — show every unique chapter number.
+   */
+  hideExtraChapters?: boolean;
 }
 
 export interface MangaDataExtended extends MangaData {

@@ -35,6 +35,10 @@ export function pickOldestChapter(chapters: Chapter[]): Chapter | null {
   return oldest;
 }
 
+function isOfficialSource(type: string | null | undefined): boolean {
+  return String(type ?? '').trim().toLowerCase() === 'official';
+}
+
 /** Append newly fetched pages while preserving newest-first order and deduping. */
 export function appendUniqueChapters(
   existing: Chapter[],
@@ -44,20 +48,48 @@ export function appendUniqueChapters(
     return existing;
   }
 
-  const seen = new Set(existing.map((chapter) => chapter.number));
-  const appended = incoming.filter((chapter) => {
-    if (seen.has(chapter.number)) {
-      return false;
-    }
-    seen.add(chapter.number);
-    return true;
-  });
+  if (!existing.length) {
+    const seen = new Set<string>();
+    return incoming.filter((chapter) => {
+      if (!chapter.number || seen.has(chapter.number)) {
+        return false;
+      }
+      seen.add(chapter.number);
+      return true;
+    });
+  }
 
-  if (!appended.length) {
+  const byNumber = new Map(
+    existing.map((chapter) => [chapter.number, chapter] as const)
+  );
+  const order = existing.map((chapter) => chapter.number);
+  let changed = false;
+
+  for (const chapter of incoming) {
+    if (!chapter.number) {
+      continue;
+    }
+    const prior = byNumber.get(chapter.number);
+    if (!prior) {
+      byNumber.set(chapter.number, chapter);
+      order.push(chapter.number);
+      changed = true;
+      continue;
+    }
+    if (
+      !isOfficialSource(prior.sourceType) &&
+      isOfficialSource(chapter.sourceType)
+    ) {
+      byNumber.set(chapter.number, chapter);
+      changed = true;
+    }
+  }
+
+  if (!changed) {
     return existing;
   }
 
-  return [...existing, ...appended];
+  return order.map((number) => byNumber.get(number)!);
 }
 
 export interface LoadRemainingChaptersResult {
