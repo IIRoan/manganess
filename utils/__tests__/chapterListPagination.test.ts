@@ -1,10 +1,13 @@
 import type { Chapter } from '@/types/manga';
 import {
   appendUniqueChapters,
+  chapterListReachesSeriesStart,
   getReportedChapterCount,
+  isChapterListCacheComplete,
   loadRemainingChapterPages,
   pickOldestChapter,
   resolveCachedChapterPagination,
+  resolveFinishedChapterPagination,
   resolveOldestChapter,
   type MappedChapterPage,
 } from '@/utils/chapterListPagination';
@@ -272,7 +275,147 @@ describe('chapterListPagination', () => {
     });
   });
 
+  describe('isChapterListCacheComplete', () => {
+    it('treats hasMore:false pagination as a durable full list', () => {
+      expect(
+        isChapterListCacheComplete({
+          chapters: Array.from({ length: 120 }, (_, i) => chapter(String(i + 1))),
+          totalChapters: 2432,
+          chapterPagination: { hasMore: false, nextPage: 42, lastPage: 41 },
+        })
+      ).toBe(true);
+    });
+
+    it('does not treat a page-1 preview as complete', () => {
+      expect(
+        isChapterListCacheComplete({
+          chapters: Array.from({ length: 60 }, (_, i) => chapter(String(60 - i))),
+          totalChapters: 1241,
+          chapterPagination: { hasMore: true, nextPage: 2 },
+        })
+      ).toBe(false);
+    });
+
+    it('rejects truncated mid-series windows even when sealed hasMore:false', () => {
+      expect(
+        isChapterListCacheComplete({
+          chapters: Array.from({ length: 51 }, (_, i) =>
+            chapter(String(90 - i))
+          ),
+          totalChapters: 51,
+          chapterPagination: { hasMore: false, nextPage: 2 },
+        })
+      ).toBe(false);
+    });
+
+    it('rejects self-fulfilling page-1 totals that skip early chapters', () => {
+      expect(
+        isChapterListCacheComplete({
+          chapters: Array.from({ length: 51 }, (_, i) =>
+            chapter(String(90 - i))
+          ),
+          totalChapters: 51,
+        })
+      ).toBe(false);
+    });
+  });
+
+  describe('chapterListReachesSeriesStart', () => {
+    it('allows lists that reach chapter 1 or a prologue', () => {
+      expect(
+        chapterListReachesSeriesStart([
+          chapter('3'),
+          chapter('2'),
+          chapter('1'),
+        ])
+      ).toBe(true);
+      expect(
+        chapterListReachesSeriesStart([chapter('2'), chapter('0.5')])
+      ).toBe(true);
+    });
+
+    it('rejects lists that start around chapter 40', () => {
+      expect(
+        chapterListReachesSeriesStart([
+          chapter('90'),
+          chapter('50'),
+          chapter('40'),
+        ])
+      ).toBe(false);
+    });
+  });
+
+  describe('buildCompleteChapterPagination', () => {
+    it('marks the list complete after a full crawl', () => {
+      expect(
+        resolveFinishedChapterPagination({
+          chapters: Array.from({ length: 120 }, (_, i) =>
+            chapter(String(120 - i))
+          ),
+          apiHasMore: false,
+          nextPage: 42,
+          lastPage: 41,
+        })
+      ).toEqual({
+        hasMore: false,
+        nextPage: 42,
+        lastPage: 41,
+      });
+    });
+
+    it('keeps crawling when the finished page still starts mid-series', () => {
+      expect(
+        resolveFinishedChapterPagination({
+          chapters: Array.from({ length: 51 }, (_, i) =>
+            chapter(String(90 - i))
+          ),
+          apiHasMore: false,
+          nextPage: 2,
+        })
+      ).toEqual({
+        hasMore: true,
+        nextPage: 2,
+      });
+    });
+  });
+
   describe('resolveCachedChapterPagination', () => {
+    it('does not reopen a crawl when chapterPagination.hasMore is false', () => {
+      expect(
+        resolveCachedChapterPagination({
+          chapters: Array.from({ length: 120 }, (_, i) => chapter(String(i + 1))),
+          totalChapters: 2432,
+          chapterPagination: {
+            hasMore: false,
+            nextPage: 42,
+            lastPage: 41,
+          },
+        })
+      ).toEqual({
+        hasMore: false,
+        nextPage: 42,
+        lastPage: 41,
+      });
+    });
+
+    it('reopens a crawl for sealed caches that skip early chapters', () => {
+      expect(
+        resolveCachedChapterPagination({
+          chapters: Array.from({ length: 51 }, (_, i) =>
+            chapter(String(90 - i))
+          ),
+          totalChapters: 51,
+          chapterPagination: {
+            hasMore: false,
+            nextPage: 2,
+          },
+        })
+      ).toEqual({
+        hasMore: true,
+        nextPage: 2,
+      });
+    });
+
     it('uses stored pagination metadata when present on cached details', () => {
       expect(
         resolveCachedChapterPagination({
@@ -314,10 +457,24 @@ describe('chapterListPagination', () => {
       ).toEqual({
         hasMore: false,
         nextPage: 2,
+        lastPage: 1,
       });
     });
 
-    it('does not assume more pages when totalChapters is unknown', () => {
+    it('keeps crawling page-sized lists that do not reach chapter 1', () => {
+      expect(
+        resolveCachedChapterPagination({
+          chapters: Array.from({ length: 60 }, (_, index) =>
+            chapter(String(90 - index))
+          ),
+        })
+      ).toEqual({
+        hasMore: true,
+        nextPage: 2,
+      });
+    });
+
+    it('does not assume more pages when a short unknown-total list reaches chapter 1', () => {
       expect(
         resolveCachedChapterPagination({
           chapters: Array.from({ length: 60 }, (_, index) =>

@@ -125,6 +125,97 @@ describe('offlineCacheService', () => {
       expect(cached?.chapters[0]?.url).toBe('/chapter/999');
     });
 
+    it('persists complete chapter pagination and refuses page-1 incomplete overwrites', async () => {
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        {
+          ...mockMangaDetails,
+          chapters: Array.from({ length: 120 }, (_, i) => ({
+            number: String(120 - i),
+            title: `Chapter ${120 - i}`,
+            date: '',
+            url: `/ch/${120 - i}`,
+          })),
+          totalChapters: 2432,
+          chapterPagination: {
+            hasMore: false,
+            nextPage: 42,
+            lastPage: 41,
+          },
+        },
+        false
+      );
+
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        {
+          ...mockMangaDetails,
+          chapters: mockMangaDetails.chapters,
+          totalChapters: 2432,
+          chapterPagination: {
+            hasMore: true,
+            nextPage: 2,
+            lastPage: 41,
+          },
+        },
+        false
+      );
+
+      const cached = await offlineCacheService.getCachedMangaDetails('manga-1');
+      expect(cached?.chapterPagination).toEqual({
+        hasMore: false,
+        nextPage: 42,
+        lastPage: 41,
+      });
+      expect(cached?.chapters).toHaveLength(120);
+    });
+
+    it('allows reopening a crawl when a sealed cache skips early chapters', async () => {
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        {
+          ...mockMangaDetails,
+          chapters: Array.from({ length: 51 }, (_, i) => ({
+            number: String(90 - i),
+            title: `Chapter ${90 - i}`,
+            date: '',
+            url: `/ch/${90 - i}`,
+          })),
+          totalChapters: 51,
+          chapterPagination: {
+            hasMore: false,
+            nextPage: 2,
+          },
+        },
+        false
+      );
+
+      await offlineCacheService.cacheMangaDetails(
+        'manga-1',
+        {
+          ...mockMangaDetails,
+          chapters: Array.from({ length: 51 }, (_, i) => ({
+            number: String(90 - i),
+            title: `Chapter ${90 - i}`,
+            date: '',
+            url: `/ch/${90 - i}`,
+          })),
+          totalChapters: 90,
+          chapterPagination: {
+            hasMore: true,
+            nextPage: 2,
+          },
+        },
+        false
+      );
+
+      const cached = await offlineCacheService.getCachedMangaDetails('manga-1');
+      expect(cached?.chapterPagination).toEqual({
+        hasMore: true,
+        nextPage: 2,
+      });
+    });
+
     it('returns the same details for parallel cache reads after a cold load', async () => {
       await offlineCacheService.cacheMangaDetails(
         'manga-1',

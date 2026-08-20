@@ -213,6 +213,8 @@ export interface FetchMangaDetailsOptions {
     hasMore: boolean;
     lastPage?: number;
     total?: number;
+    /** Unique chapters loaded so far after this page. */
+    chapterCount?: number;
   }) => void;
   /**
    * Cap how many /chapters pages to pull.
@@ -491,10 +493,11 @@ export const fetchMangaDetails = async (
         ...fallbackDetails!,
         id: normalizedId,
         chapters: mappedChapters,
-        totalChapters:
-          typeof totalChapters === 'number' && totalChapters > 0
-            ? Math.max(totalChapters, mappedChapters.length)
-            : mappedChapters.length,
+        ...(typeof totalChapters === 'number' && totalChapters > 0
+          ? {
+            totalChapters: Math.max(totalChapters, mappedChapters.length),
+          }
+          : {}),
       };
     };
 
@@ -520,7 +523,10 @@ export const fetchMangaDetails = async (
         if (typeof meta.total === 'number' && meta.total > 0) {
           knownTotalChapters = meta.total;
         }
-        options.onChapterPagination?.(meta);
+        options.onChapterPagination?.({
+          ...meta,
+          chapterCount: chaptersSoFar.length,
+        });
         if (options.onPartial && (meta.page === 1 || !meta.hasMore)) {
           options.onPartial(mapDetails(chaptersSoFar, knownTotalChapters));
         }
