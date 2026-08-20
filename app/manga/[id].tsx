@@ -50,6 +50,7 @@ import {
   resolveCachedChapterPagination,
   resolveOldestChapter,
 } from '@/utils/chapterListPagination';
+import { filterOutExtraChapters } from '@/utils/chapterListDedupe';
 import { mergeMangaDetailsRefresh } from '@/utils/mangaDetailsMerge';
 import {
   attemptLegacyMangaMigration,
@@ -349,6 +350,8 @@ export default function MangaDetailScreen() {
     setNextChapterPage(2);
     setLastChapterPage(undefined);
     setIsLoadingMoreChapters(false);
+    setHideExtraChapters(false);
+    hideExtraChaptersRef.current = false;
     setIsJumpingToBottom(false);
     setSettledChapterMangaId(null);
 
@@ -456,6 +459,18 @@ export default function MangaDetailScreen() {
       title: '',
       options: [],
     });
+  const [hideExtraChapters, setHideExtraChapters] = useState(false);
+  const hideExtraChaptersRef = useRef(false);
+
+  useEffect(() => {
+    hideExtraChaptersRef.current = hideExtraChapters;
+  }, [hideExtraChapters]);
+
+  const visibleChapters = useMemo(
+    () =>
+      filterOutExtraChapters(mangaDetails?.chapters ?? [], hideExtraChapters),
+    [mangaDetails?.chapters, hideExtraChapters]
+  );
 
   // Handle sending user back up/down
   const flashListRef = useRef<FlashListRef<Chapter> | null>(null);
@@ -933,6 +948,11 @@ export default function MangaDetailScreen() {
           if (progress.lastReadChapter) {
             setLastReadChapter(progress.lastReadChapter);
           }
+          const savedHideExtras = Boolean(
+            hydration.mangaData.hideExtraChapters
+          );
+          setHideExtraChapters(savedHideExtras);
+          hideExtraChaptersRef.current = savedHideExtras;
         }
       } catch (hydrationError) {
         log.warn('Storage', 'Failed to hydrate manga before network fetch', {
@@ -1553,6 +1573,47 @@ export default function MangaDetailScreen() {
     }
   }, [id, hasMoreChapters, nextChapterPage, isOffline]);
 
+  const handleHideExtraChaptersToggle = useCallback(async () => {
+    if (typeof id !== 'string') {
+      return;
+    }
+
+    const nextValue = !hideExtraChaptersRef.current;
+    setHideExtraChapters(nextValue);
+    hideExtraChaptersRef.current = nextValue;
+
+    try {
+      await updateMangaData(id, (existing) => {
+        const base = existing ?? {
+          id,
+          title: mangaDetails?.title || id,
+          bannerImage: mangaDetails?.bannerImage || '',
+          bookmarkStatus: null,
+          readChapters: [],
+          lastUpdated: Date.now(),
+        };
+        return {
+          ...base,
+          hideExtraChapters: nextValue,
+          lastUpdated: Date.now(),
+        };
+      });
+    } catch (error) {
+      logger().warn('Storage', 'Failed to persist hide-extra-chapters setting', {
+        mangaId: id,
+        hideExtraChapters: nextValue,
+        error,
+      });
+    }
+
+    showToast({
+      type: 'success',
+      message: nextValue
+        ? 'Hiding extra chapters (3.1, 3.5, …)'
+        : 'Showing all chapters',
+    });
+  }, [id, mangaDetails?.title, mangaDetails?.bannerImage, showToast]);
+
   /** Load every remaining chapter page so end-of-list actions use the real first chapter. */
   const ensureAllChaptersLoaded = useCallback(async (): Promise<boolean> => {
     if (typeof id !== 'string' || isOffline || !isScreenMountedRef.current) {
@@ -1758,10 +1819,14 @@ export default function MangaDetailScreen() {
     [downloadingChapters]
   );
 
-  const totalChapterCount = useMemo(
-    () => getReportedChapterCount(mangaDetails),
-    [mangaDetails]
-  );
+  const totalChapterCount = useMemo(() => {
+    if (hideExtraChapters) {
+      return visibleChapters.length > 0
+        ? visibleChapters.length
+        : getReportedChapterCount(mangaDetails);
+    }
+    return getReportedChapterCount(mangaDetails);
+  }, [hideExtraChapters, visibleChapters.length, mangaDetails]);
 
   const readingProgress = useMemo(() => {
     if (!mangaDetails || totalChapterCount === 0) {
@@ -2173,11 +2238,37 @@ export default function MangaDetailScreen() {
             </View>
           </View>
           <View style={styles.chaptersContainer}>
-            <Text style={styles.sectionTitle}>Chapters</Text>
+            <View style={styles.chaptersHeaderRow}>
+              <Text style={[styles.sectionTitle, styles.chaptersSectionTitle]}>
+                Chapters
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  void handleHideExtraChaptersToggle();
+                }}
+                style={styles.chapterListModeButton}
+                accessibilityRole="button"
+                accessibilityState={{ selected: hideExtraChapters }}
+                accessibilityLabel={
+                  hideExtraChapters
+                    ? 'Extra chapters hidden. Tap to show half chapters like 3.1 and 3.5'
+                    : 'Showing all chapters. Tap to hide half chapters like 3.1 and 3.5'
+                }
+              >
+                <Ionicons
+                  name={hideExtraChapters ? 'eye-off-outline' : 'eye-outline'}
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.chapterListModeButtonText}>
+                  {hideExtraChapters ? 'Extras hidden' : 'Hide extras'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <BatchDownloadBar
               mangaId={id as string}
               mangaTitle={mangaDetails.title}
-              chapters={mangaDetails.chapters}
+              chapters={visibleChapters}
               downloadedChapters={downloadedChapters}
               onDownloadsChanged={refreshDownloadedChapters}
             />
@@ -2198,6 +2289,9 @@ export default function MangaDetailScreen() {
       styles,
       handleLastReadChapterPress,
       isOffline,
+      hideExtraChapters,
+      handleHideExtraChaptersToggle,
+      visibleChapters,
     ]
   );
 
@@ -2321,11 +2415,11 @@ export default function MangaDetailScreen() {
                 }}
                 getItemType={() => 'chapter'}
                 ListHeaderComponent={ListHeader}
-                data={mangaDetails.chapters}
+                data={visibleChapters}
                 extraData={chapterListExtraData}
                 keyExtractor={chapterKeyExtractor}
                 renderItem={
-                  mangaDetails.chapters.length === 0
+                  visibleChapters.length === 0
                     ? () => <ChapterItemPlaceholder colors={colors} />
                     : renderChapterItem
                 }

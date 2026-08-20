@@ -159,6 +159,82 @@ describe('chapterNavigation', () => {
       chapter('0'),
     ];
 
+    it('goes 3.5 → 4 → 4.5 instead of adding 1 to the decimal', () => {
+      const chapters = [
+        chapter('5'),
+        chapter('4.5'),
+        chapter('4'),
+        chapter('3.5'),
+        chapter('3'),
+      ];
+
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '3.5',
+          chapters,
+          currentChapterIndex: 3,
+        })
+      ).toBe('4');
+
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '4',
+          chapters,
+          currentChapterIndex: 2,
+        })
+      ).toBe('4.5');
+
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'previous',
+          chapterNumber: '4.5',
+          chapters,
+          currentChapterIndex: 1,
+        })
+      ).toBe('4');
+    });
+
+    it('finds 4 after 3.5 even when 3.5 is missing from the loaded list', () => {
+      const chapters = [
+        chapter('5'),
+        chapter('4.5'),
+        chapter('4'),
+        chapter('3'),
+      ];
+
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '3.5',
+          chapters,
+          currentChapterIndex: -1,
+        })
+      ).toBe('4');
+    });
+
+    it('steps decimals to the next whole chapter when outside the loaded window', () => {
+      // Zom 100: reading 3.5 while only the newest page (~90–30) is loaded.
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '3.5',
+          chapters: [chapter('90'), chapter('89'), chapter('30')],
+          currentChapterIndex: -1,
+        })
+      ).toBe('4');
+
+      expect(
+        resolveAdjacentChapterNumber({
+          direction: 'next',
+          chapterNumber: '100.5',
+          chapters: [],
+          currentChapterIndex: -1,
+        })
+      ).toBe('101');
+    });
+
     it('goes 0 → 0.1 → 0.5 → 1 instead of incrementing by 1', () => {
       expect(
         resolveAdjacentChapterNumber({
@@ -188,7 +264,7 @@ describe('chapterNavigation', () => {
       ).toBe('1');
     });
 
-    it('does not invent chapter 1.1 from 0.1 when extras are missing from page 1', () => {
+    it('steps 0.1 to chapter 1 when extras are missing from page 1 (not 1.1)', () => {
       expect(
         resolveAdjacentChapterNumber({
           direction: 'next',
@@ -196,7 +272,7 @@ describe('chapterNavigation', () => {
           chapters: [chapter('100'), chapter('99')],
           currentChapterIndex: -1,
         })
-      ).toBeNull();
+      ).toBe('1');
     });
 
     it('still uses sequential numbering in the middle of a long series', () => {

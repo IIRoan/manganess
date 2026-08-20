@@ -80,9 +80,10 @@ export function resolveHasPreviousChapter(options: {
 /**
  * Pick the chapter to open for next/previous.
  *
- * When the current chapter is in the loaded list, use true numeric neighbors
- * (0 → 0.1 → 0.5 → 1 → 1.1) instead of ±1. Sequential ±1 is only a fallback
- * for the middle of a long series whose oldest chapters are not loaded yet.
+ * Prefer the true numeric neighbor in the loaded list (3.5 → 4 → 4.5), never
+ * invent decimal+1. When the current chapter sits outside a partial
+ * newest-first window (Zom 100 ch.3.5 while only ~90–30 are loaded), step to
+ * the next whole chapter (3.5 → 4) so Next still works.
  */
 export function resolveAdjacentChapterNumber(options: {
   direction: 'next' | 'previous';
@@ -92,54 +93,67 @@ export function resolveAdjacentChapterNumber(options: {
 }): string | null {
   const chapters = options.chapters ?? [];
   const current = options.chapterNumber;
+  const currentValue = parseChapterNumber(current);
+  if (currentValue === Number.MAX_SAFE_INTEGER) {
+    return null;
+  }
+
   const inList = isCurrentChapterInList({
     currentChapterIndex: options.currentChapterIndex ?? -1,
     chapterNumber: current,
     chapters,
   });
 
+  const adjacentInList =
+    options.direction === 'next'
+      ? findNextChapterInList(chapters, current)
+      : findPreviousChapterInList(chapters, current);
+
   if (inList) {
-    const adjacent =
-      options.direction === 'next'
-        ? findNextChapterInList(chapters, current)
-        : findPreviousChapterInList(chapters, current);
-    return adjacent?.number ?? null;
+    return adjacentInList?.number ?? null;
   }
 
-  const currentValue = parseChapterNumber(current);
-  if (currentValue === Number.MAX_SAFE_INTEGER) {
-    return null;
-  }
-
-  if (chapters.length) {
+  if (chapters.length && adjacentInList) {
     let oldest = Number.POSITIVE_INFINITY;
+    let newest = Number.NEGATIVE_INFINITY;
     for (const chapter of chapters) {
       const value = parseChapterNumber(chapter.number);
+      if (!Number.isFinite(value) || value === Number.MAX_SAFE_INTEGER) {
+        continue;
+      }
       if (value < oldest) {
         oldest = value;
       }
+      if (value > newest) {
+        newest = value;
+      }
     }
 
-    // Prologue / decimal chapters live on the oldest API page. Do not invent
-    // 0+1=1 or 0.1+1=1.1 while that page is still missing.
-    const isDecimalOrPrologue =
-      currentValue < 1 || !Number.isInteger(currentValue);
+    // Inside the loaded numeric window: trust list neighbors even when the
+    // current chapter id is missing (e.g. 3.5 absent but 4 is present).
     if (
       Number.isFinite(oldest) &&
-      currentValue < oldest &&
-      isDecimalOrPrologue
+      Number.isFinite(newest) &&
+      currentValue >= oldest &&
+      currentValue <= newest
     ) {
-      return null;
+      return adjacentInList.number;
     }
   }
 
-  const targetValue =
-    currentValue + (options.direction === 'next' ? 1 : -1);
-  if (targetValue < 0) {
-    return null;
+  // Outside the loaded window (or empty list): step to the next whole chapter.
+  // 3.5 → 4 (not 4.5); 4 → 5. This keeps Next working on Zom 100 ch.3.5 while
+  // only the newest API page is loaded.
+  if (options.direction === 'next') {
+    const ceiling = Math.ceil(currentValue);
+    const target = ceiling > currentValue ? ceiling : currentValue + 1;
+    return Number.isInteger(target) ? String(target) : String(target);
   }
 
-  return Number.isInteger(targetValue)
-    ? String(targetValue)
-    : String(targetValue);
+  const floor = Math.floor(currentValue);
+  const target = floor < currentValue ? floor : currentValue - 1;
+  if (target < 0) {
+    return null;
+  }
+  return Number.isInteger(target) ? String(target) : String(target);
 }
