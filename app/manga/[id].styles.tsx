@@ -200,6 +200,33 @@ const getStyles = (colors: typeof Colors.light) =>
       paddingTop: 20,
       backgroundColor: colors.card,
     },
+    chaptersHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginBottom: 10,
+    },
+    chaptersSectionTitle: {
+      marginBottom: 0,
+      flexShrink: 1,
+    },
+    chapterListModeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: colors.background,
+      maxWidth: '58%',
+    },
+    chapterListModeButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.primary,
+      flexShrink: 1,
+    },
 
     // Chapter item visual styles are now self-contained in SwipeChapterItem
     // These are kept as pass-through for backward compat (component ignores them)

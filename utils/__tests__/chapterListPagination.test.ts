@@ -64,6 +64,31 @@ describe('chapterListPagination', () => {
       const result = appendUniqueChapters(existing, [chapter('100')]);
       expect(result).toBe(existing);
     });
+
+    it('replaces an unofficial row when an official row arrives later', () => {
+      const existing = [
+        {
+          ...chapter('10'),
+          sourceType: 'unofficial',
+          url: '/chapter/unofficial',
+        },
+      ];
+      const incoming = [
+        {
+          ...chapter('10'),
+          sourceType: 'official',
+          url: '/chapter/official',
+        },
+      ];
+
+      expect(appendUniqueChapters(existing, incoming)).toEqual([
+        expect.objectContaining({
+          number: '10',
+          sourceType: 'official',
+          url: '/chapter/official',
+        }),
+      ]);
+    });
   });
 
   describe('loadRemainingChapterPages', () => {

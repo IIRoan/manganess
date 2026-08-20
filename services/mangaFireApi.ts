@@ -24,6 +24,10 @@ import {
 } from '@/services/mangaFireVrfBridge';
 import type { MangaItem } from '@/types/manga';
 import type { Chapter, MangaDetails } from '@/types/manga';
+import {
+  dedupeChaptersPreferringOfficial,
+  resolveReportedChapterTotal,
+} from '@/utils/chapterListDedupe';
 
 function normalizeChapterNumber(value: string | null | undefined): string {
   if (!value) return '';
@@ -191,21 +195,11 @@ function mapNames(
     .filter(Boolean);
 }
 
-/** Official rows first — mixed lists duplicate One Piece to 2,400+ items. */
+/** @deprecated No longer probes official-only lists. */
 export const PREFERRED_CHAPTER_LIST_TYPE = 'official';
 
-const chapterListTypeByHid = new Map<string, string | undefined>();
-
 export function resetMangaFireChapterTypeCacheForTests(): void {
-  chapterListTypeByHid.clear();
-}
-
-function peekChapterListType(hid: string): string | undefined {
-  return chapterListTypeByHid.get(hid);
-}
-
-function rememberChapterListType(hid: string, type: string | undefined): void {
-  chapterListTypeByHid.set(hid, type);
+  // Kept for test compatibility.
 }
 
 export function mapApiTitleToMangaItem(
@@ -300,12 +294,8 @@ export function titleDetailsCacheKey(
     : `title:${normalizedHid}`;
 }
 
-export function titleChaptersCacheKey(
-  hid: string,
-  language = 'en',
-  preferOfficial = true
-): string {
-  return `chapters:${hid.trim()}:${language}:${preferOfficial ? 'official' : 'all'}`;
+export function titleChaptersCacheKey(hid: string, language = 'en'): string {
+  return `chapters:${hid.trim()}:${language}:all`;
 }
 
 export async function fetchTitleDetails(
@@ -382,53 +372,15 @@ export async function fetchTitleDetailsIfExists(
 async function fetchTitleChaptersPage(
   hid: string,
   page: number,
-  language = 'en',
-  type?: string
+  language = 'en'
 ): Promise<ApiPaginated<ApiChapterSummary>> {
   return apiGet<ApiPaginated<ApiChapterSummary>>(
     `/titles/${hid.trim()}/chapters`,
     {
       language,
       page,
-      ...(type ? { type } : {}),
     }
   );
-}
-
-/**
- * MangaFire lists official + unofficial scans together. One Piece is 2,432
- * mixed rows vs ~1,228 official. Prefer official when that list is non-empty.
- */
-async function resolveChapterListType(
-  hid: string,
-  language: string,
-  preferOfficial: boolean
-): Promise<{
-  type: string | undefined;
-  firstPage?: ApiPaginated<ApiChapterSummary>;
-}> {
-  if (chapterListTypeByHid.has(hid)) {
-    return { type: peekChapterListType(hid) };
-  }
-
-  if (!preferOfficial) {
-    rememberChapterListType(hid, undefined);
-    return { type: undefined };
-  }
-
-  const officialPage = await fetchTitleChaptersPage(
-    hid,
-    1,
-    language,
-    PREFERRED_CHAPTER_LIST_TYPE
-  );
-  if ((officialPage.items || []).length > 0) {
-    rememberChapterListType(hid, PREFERRED_CHAPTER_LIST_TYPE);
-    return { type: PREFERRED_CHAPTER_LIST_TYPE, firstPage: officialPage };
-  }
-
-  rememberChapterListType(hid, undefined);
-  return { type: undefined };
 }
 
 function shouldContinueChapterPagination(
@@ -466,13 +418,6 @@ export interface FetchTitleChaptersOptions {
   maxPages?: number;
   /** Return true to stop pagination early (e.g. screen unmounted). */
   shouldCancel?: () => boolean;
-  /**
-   * MangaFire chapter `type` filter. `official` avoids duplicate unofficial
-   * rows on long series. Omit to auto-prefer official when available.
-   */
-  type?: string;
-  /** When false, skip the official-first probe. Default true. */
-  preferOfficial?: boolean;
   /** Called after each page so UIs can render before the full list is ready. */
   onPage?: (
     chaptersSoFar: ApiChapterSummary[],
@@ -490,7 +435,6 @@ async function fetchTitleChaptersUncached(
   options: FetchTitleChaptersOptions = {}
 ): Promise<ApiChapterSummary[]> {
   const language = options.language ?? 'en';
-  const preferOfficial = options.preferOfficial !== false;
   const chapters: ApiChapterSummary[] = [];
   let page = 1;
   let apiHasMore = true;
@@ -499,21 +443,6 @@ async function fetchTitleChaptersUncached(
     typeof options.maxPages === 'number' && options.maxPages > 0
       ? Math.min(options.maxPages, hardCap)
       : hardCap;
-
-  let listType = options.type;
-  let firstPage: ApiPaginated<ApiChapterSummary> | undefined;
-
-  if (options.type != null) {
-    rememberChapterListType(hid, options.type);
-  } else {
-    const resolved = await resolveChapterListType(
-      hid,
-      language,
-      preferOfficial
-    );
-    listType = resolved.type;
-    firstPage = resolved.firstPage;
-  }
 
   while (apiHasMore && page <= maxPages) {
     if (options.shouldCancel?.()) {
@@ -525,22 +454,26 @@ async function fetchTitleChaptersUncached(
       break;
     }
 
-    const data =
-      page === 1 && firstPage
-        ? firstPage
-        : await fetchTitleChaptersPage(hid, page, language, listType);
+    const data = await fetchTitleChaptersPage(hid, page, language);
     chapters.push(...(data.items || []));
+    const visible = dedupeChaptersPreferringOfficial(chapters);
 
     apiHasMore = shouldContinueChapterPagination(page, data);
-    options.onPage?.(chapters, {
+    const reportedTotal = resolveReportedChapterTotal({
+      rawCount: chapters.length,
+      uniqueCount: visible.length,
+      ...(typeof data.meta?.total === 'number'
+        ? { apiTotal: data.meta.total }
+        : {}),
+      hasMore: apiHasMore,
+    });
+    options.onPage?.(visible, {
       page,
       hasMore: apiHasMore,
       ...(typeof data.meta?.lastPage === 'number'
         ? { lastPage: data.meta.lastPage }
         : {}),
-      ...(typeof data.meta?.total === 'number'
-        ? { total: data.meta.total }
-        : {}),
+      ...(typeof reportedTotal === 'number' ? { total: reportedTotal } : {}),
     });
     page += 1;
 
@@ -549,7 +482,7 @@ async function fetchTitleChaptersUncached(
     }
   }
 
-  return chapters;
+  return dedupeChaptersPreferringOfficial(chapters);
 }
 
 export async function fetchTitleChapters(
@@ -562,7 +495,6 @@ export async function fetchTitleChapters(
       ? { language: languageOrOptions }
       : languageOrOptions;
   const language = options.language ?? 'en';
-  const preferOfficial = options.preferOfficial !== false;
 
   // Limited / cancellable / progressive loads bypass the shared cache entry.
   if (options.shouldCancel || options.onPage || options.maxPages) {
@@ -570,23 +502,10 @@ export async function fetchTitleChapters(
   }
 
   return scheduleMangaFireRequest(
-    titleChaptersCacheKey(normalizedHid, language, preferOfficial),
-    () =>
-      fetchTitleChaptersUncached(normalizedHid, { language, preferOfficial }),
+    titleChaptersCacheKey(normalizedHid, language),
+    () => fetchTitleChaptersUncached(normalizedHid, { language }),
     { ttlMs: REQUEST_HUB_TTLS.chapters }
   );
-}
-
-async function fetchTitleChaptersPageWithType(
-  hid: string,
-  page: number,
-  language: string
-): Promise<ApiPaginated<ApiChapterSummary>> {
-  const resolved = await resolveChapterListType(hid, language, true);
-  if (page === 1 && resolved.firstPage) {
-    return resolved.firstPage;
-  }
-  return fetchTitleChaptersPage(hid, page, language, resolved.type);
 }
 
 /** Fetch a single chapter list page, mapped for the UI. */
@@ -601,12 +520,21 @@ export async function fetchMappedTitleChaptersPage(
   lastPage?: number;
   total?: number;
 }> {
-  const data = await fetchTitleChaptersPageWithType(hid.trim(), page, language);
+  const data = await fetchTitleChaptersPage(hid.trim(), page, language);
+  const items = dedupeChaptersPreferringOfficial(data.items || []);
   const lastPage = data.meta?.lastPage;
-  const total = data.meta?.total;
+  const hasMore = shouldContinueChapterPagination(page, data);
+  const total = resolveReportedChapterTotal({
+    rawCount: (data.items || []).length,
+    uniqueCount: items.length,
+    ...(typeof data.meta?.total === 'number'
+      ? { apiTotal: data.meta.total }
+      : {}),
+    hasMore,
+  });
   return {
-    chapters: mapApiChapters(data.items || []),
-    hasMore: shouldContinueChapterPagination(page, data),
+    chapters: mapApiChapters(items),
+    hasMore,
     page,
     ...(typeof lastPage === 'number' ? { lastPage } : {}),
     ...(typeof total === 'number' ? { total } : {}),
@@ -618,6 +546,7 @@ export function mapApiChapters(chapters: ApiChapterSummary[]): Chapter[] {
     .map((chapter) => {
       const number = normalizeChapterNumber(String(chapter.number));
       const name = chapter.name?.trim();
+      const sourceType = chapter.type?.trim();
       return {
         number,
         title: name ? `Chapter ${number}: ${name}` : `Chapter ${number}`,
@@ -625,6 +554,7 @@ export function mapApiChapters(chapters: ApiChapterSummary[]): Chapter[] {
           ? new Date(chapter.createdAt * 1000).toLocaleDateString()
           : '',
         url: `/chapter/${chapter.id}`,
+        ...(sourceType ? { sourceType } : {}),
       };
     })
     .filter((chapter) => chapter.number && chapter.url);

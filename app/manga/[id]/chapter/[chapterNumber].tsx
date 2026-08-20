@@ -44,9 +44,12 @@ import {
   loadOnlineChapterImages,
 } from '@/services/mangaFireService';
 import {
+  resolveAdjacentChapterNumber,
   resolveHasNextChapter,
   resolveHasPreviousChapter,
 } from '@/utils/chapterNavigation';
+import { chapterNumbersMatch } from '@/utils/chapterOrdering';
+import { filterOutExtraChapters } from '@/utils/chapterListDedupe';
 import { mergeMangaDetailsRefresh } from '@/utils/mangaDetailsMerge';
 import {
   horizontalPageIndexFromOffset,
@@ -448,6 +451,7 @@ export default function ReadChapterScreen() {
   const [mangaDetails, setMangaDetails] = useState<MangaDetailsType | null>(
     null
   );
+  const [hideExtraChapters, setHideExtraChapters] = useState(false);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -589,18 +593,29 @@ export default function ReadChapterScreen() {
     effectiveLayout === 'ltr' || effectiveLayout === 'rtl';
   const isInvertedLayout = effectiveLayout === 'rtl';
 
+  const navigationChapters = useMemo(
+    () =>
+      filterOutExtraChapters(
+        mangaDetails?.chapters ?? [],
+        hideExtraChapters
+      ),
+    [mangaDetails?.chapters, hideExtraChapters]
+  );
+
   const supportsWorklets =
     typeof (Animated as any).useWorkletCallback === 'function';
   const currentChapterIndex = useMemo(() => {
-    if (!mangaDetails?.chapters) {
+    if (!navigationChapters.length) {
       return -1;
     }
 
-    return mangaDetails.chapters.findIndex(
-      (chapter) =>
-        normalizeChapterNumber(chapter.number) === normalizedChapterParam
+    return navigationChapters.findIndex((chapter) =>
+      chapterNumbersMatch(
+        normalizeChapterNumber(chapter.number) || chapter.number,
+        normalizedChapterParam
+      )
     );
-  }, [mangaDetails?.chapters, normalizedChapterParam]);
+  }, [navigationChapters, normalizedChapterParam]);
 
   const offlineChapterRenderKey = useMemo(() => {
     const chapterId = normalizedChapterParam || chapterNumber || 'unknown';
@@ -610,9 +625,7 @@ export default function ReadChapterScreen() {
   const hasNextChapter = resolveHasNextChapter({
     currentChapterIndex,
     chapterNumber: normalizedChapterParam || String(chapterNumber ?? ''),
-    ...(mangaDetails?.chapters
-      ? { chapters: mangaDetails.chapters }
-      : {}),
+    ...(navigationChapters.length ? { chapters: navigationChapters } : {}),
     ...(typeof mangaDetails?.totalChapters === 'number'
       ? { totalChapters: mangaDetails.totalChapters }
       : {}),
@@ -621,9 +634,7 @@ export default function ReadChapterScreen() {
   const hasPreviousChapter = resolveHasPreviousChapter({
     currentChapterIndex,
     chapterNumber: normalizedChapterParam || String(chapterNumber ?? ''),
-    ...(mangaDetails?.chapters
-      ? { chapters: mangaDetails.chapters }
-      : {}),
+    ...(navigationChapters.length ? { chapters: navigationChapters } : {}),
     ...(typeof mangaDetails?.totalChapters === 'number'
       ? { totalChapters: mangaDetails.totalChapters }
       : {}),
@@ -1055,6 +1066,9 @@ export default function ReadChapterScreen() {
         if (hydration.details) {
           setMangaDetails(hydration.details);
           setMangaTitle(hydration.details.title);
+        }
+        if (hydration.mangaData) {
+          setHideExtraChapters(Boolean(hydration.mangaData.hideExtraChapters));
         }
       } catch (hydrationError) {
         logger().warn('Storage', 'Failed to hydrate chapter reader metadata', {
@@ -1885,9 +1899,9 @@ export default function ReadChapterScreen() {
 
       navigationTimestampRef.current = Date.now();
       lastNavigatedChapterRef.current = targetChapter;
-      router.push(
-        `/manga/${id}/chapter/${encodeURIComponent(targetChapter)}`
-      );
+      // Update the current reader route in place — no stack push / page slide.
+      // Opening a chapter from the manga detail screen still uses router.push.
+      router.setParams({ chapterNumber: targetChapter });
     },
     [id, router]
   );
@@ -1902,35 +1916,24 @@ export default function ReadChapterScreen() {
   };
 
   const navigateChapter = (chapterOffset: number) => {
-    if (mangaDetails?.chapters && currentChapterIndex >= 0) {
-      const newChapter =
-        mangaDetails.chapters[currentChapterIndex + chapterOffset];
-      if (newChapter?.number) {
-        const targetChapter = normalizeChapterNumber(newChapter.number);
-        if (!targetChapter) {
-          return;
-        }
-        navigateToChapter(targetChapter);
-        return;
-      }
-    }
-
-    // Partial chapter lists (page-1 only) often omit the chapter being read.
-    // Fall back to sequential numbering: -1 offset = next/newer, +1 = previous/older.
-    const current = Number.parseFloat(
-      normalizedChapterParam || String(chapterNumber)
-    );
-    if (!Number.isFinite(current)) {
+    const direction = chapterOffset < 0 ? 'next' : 'previous';
+    const current = normalizedChapterParam || String(chapterNumber ?? '');
+    const adjacent = resolveAdjacentChapterNumber({
+      direction,
+      chapterNumber: current,
+      ...(navigationChapters.length
+        ? { chapters: navigationChapters }
+        : {}),
+      currentChapterIndex,
+    });
+    if (!adjacent) {
       return;
     }
-    const targetValue = current + (chapterOffset < 0 ? 1 : -1);
-    if (targetValue <= 0) {
+    const targetChapter = normalizeChapterNumber(adjacent);
+    if (!targetChapter) {
       return;
     }
-    const targetChapter = normalizeChapterNumber(String(targetValue));
-    if (targetChapter) {
-      navigateToChapter(targetChapter);
-    }
+    navigateToChapter(targetChapter);
   };
 
   const handleNextChapter = () => navigateChapter(-1);
@@ -2549,7 +2552,7 @@ export default function ReadChapterScreen() {
                   <Text style={styles.currentChapterTitle}>
                     Current: Chapter {chapterNumber}
                   </Text>
-                  {mangaDetails?.chapters?.map((chapter) => {
+                  {navigationChapters.map((chapter) => {
                     const normalizedChapterId = normalizeChapterNumber(
                       chapter.number
                     );
@@ -2621,7 +2624,7 @@ export default function ReadChapterScreen() {
                     </Text>
                   </View>
                   <FlatList
-                    data={mangaDetails?.chapters || []}
+                    data={navigationChapters}
                     scrollEnabled={true}
                     nestedScrollEnabled={true}
                     showsVerticalScrollIndicator={true}
