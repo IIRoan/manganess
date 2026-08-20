@@ -79,7 +79,17 @@ function RootLayoutNav() {
           >
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="manga/[id]" />
-            <Stack.Screen name="manga/[id]/chapter/[chapterNumber]" />
+            <Stack.Screen
+              name="manga/[id]/chapter/[chapterNumber]"
+              getId={({ params }) => {
+                // One reader screen per manga so next/prev updates in place
+                // instead of stacking animated chapter pages.
+                const mangaId = params?.id;
+                return typeof mangaId === 'string' && mangaId
+                  ? `reader-${mangaId}`
+                  : undefined;
+              }}
+            />
             <Stack.Screen
               name="cloudflare"
               options={{

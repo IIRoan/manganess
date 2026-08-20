@@ -216,12 +216,12 @@ describe('mangaFireService', () => {
       );
     });
 
-    it('includes official vs all in chapter cache keys', () => {
+    it('includes chapter list language in chapter cache keys', () => {
       expect(titleChaptersCacheKey('abc12', 'en')).toBe(
-        'chapters:abc12:en:official'
-      );
-      expect(titleChaptersCacheKey('abc12', 'en', false)).toBe(
         'chapters:abc12:en:all'
+      );
+      expect(titleChaptersCacheKey('abc12', 'ja')).toBe(
+        'chapters:abc12:ja:all'
       );
     });
   });
@@ -552,10 +552,10 @@ describe('mangaFireService', () => {
       expect(details.description).toContain('Gol D. Roger');
     });
 
-    it('prefers official chapter pages so mixed One Piece lists stay unique', async () => {
+    it('dedupes mixed chapter pages preferring official without dropping extras', async () => {
       mockedAxios.get.mockImplementation((url: string, config?: any) => {
         if (String(url).includes('/chapters')) {
-          expect(config?.params?.type).toBe('official');
+          expect(config?.params?.type).toBeUndefined();
           return Promise.resolve({
             status: 200,
             data: {
@@ -566,11 +566,24 @@ describe('mangaFireService', () => {
                   type: 'official',
                   createdAt: 1704067200,
                 },
+                {
+                  id: 9346346,
+                  number: 1190,
+                  type: 'unofficial',
+                  createdAt: 1704067200,
+                },
+                {
+                  id: 100,
+                  number: '25.5',
+                  type: 'unofficial',
+                  name: 'Extra',
+                  createdAt: 1704067200,
+                },
               ],
               meta: {
                 page: 1,
-                lastPage: 21,
-                total: 1228,
+                lastPage: 41,
+                total: 2432,
                 hasNext: true,
               },
             },
@@ -584,24 +597,18 @@ describe('mangaFireService', () => {
       expect(page).toMatchObject({
         page: 1,
         hasMore: true,
-        lastPage: 21,
-        total: 1228,
+        lastPage: 41,
       });
-      expect(page.chapters).toHaveLength(1);
+      // Mixed API totals are not trusted while duplicates are present.
+      expect(page.total).toBeUndefined();
+      expect(page.chapters.map((c) => c.number)).toEqual(['1190', '25.5']);
+      expect(page.chapters[0]?.sourceType).toBe('official');
     });
 
-    it('falls back to the unfiltered chapter list when official is empty', async () => {
+    it('keeps unofficial-only titles when no official rows exist', async () => {
       mockedAxios.get.mockImplementation((url: string, config?: any) => {
         if (String(url).includes('/chapters')) {
-          if (config?.params?.type === 'official') {
-            return Promise.resolve({
-              status: 200,
-              data: {
-                items: [],
-                meta: { page: 1, lastPage: 1, total: 0, hasNext: false },
-              },
-            });
-          }
+          expect(config?.params?.type).toBeUndefined();
           return Promise.resolve({
             status: 200,
             data: {
@@ -623,7 +630,7 @@ describe('mangaFireService', () => {
       const page = await fetchMappedTitleChaptersPage('rare-scan', 1);
 
       expect(page.chapters).toEqual([
-        expect.objectContaining({ number: '10' }),
+        expect.objectContaining({ number: '10', sourceType: 'unofficial' }),
       ]);
     });
 

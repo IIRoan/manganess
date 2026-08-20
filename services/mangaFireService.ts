@@ -914,8 +914,11 @@ function peekCachedTitleChapters(
   language: string
 ): { cacheKey: string; cached: ApiChapterSummary[] } | null {
   const keys = [
-    titleChaptersCacheKey(mangaId, language, true),
-    titleChaptersCacheKey(mangaId, language, false),
+    titleChaptersCacheKey(mangaId, language),
+    // Legacy keys from older official-probe / mode variants
+    `chapters:${mangaId}:${language}:smart`,
+    `chapters:${mangaId}:${language}:official`,
+    `chapters:${mangaId}:${language}:unofficial`,
   ];
 
   for (const cacheKey of keys) {
