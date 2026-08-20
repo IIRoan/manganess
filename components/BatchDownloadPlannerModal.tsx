@@ -23,13 +23,6 @@ import {
 
 type PlannerMode = 'all' | 'upto' | 'range';
 type PlannerTab = 'download' | 'manage';
-type SortOption = 'number-asc' | 'number-desc' | 'size-asc' | 'size-desc';
-type ModeOption = {
-  value: PlannerMode;
-  title: string;
-  description: string;
-  icon: keyof typeof Ionicons.glyphMap;
-};
 
 interface BatchDownloadPlannerModalProps {
   visible: boolean;
@@ -94,7 +87,7 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
   const [selectedDeletes, setSelectedDeletes] = useState<Set<string>>(
     new Set()
   );
-  const [sortOption, setSortOption] = useState<SortOption>('number-asc');
+  const [sortDesc, setSortDesc] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -107,11 +100,10 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
       setRangeEnd('');
       setError(null);
       setSelectedDeletes(new Set());
-      setSortOption('number-asc');
+      setSortDesc(false);
     }
   }, [visible, downloadedChaptersSorted.length, initialTab]);
 
-  // Auto-switch to download tab if all downloads are removed while managing
   useEffect(() => {
     if (
       visible &&
@@ -147,25 +139,15 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
     onClose();
   };
 
-  const getSortedDownloadedChapters = useMemo(() => {
-    let sorted = [...downloadedChaptersSorted];
-
-    if (sortOption.startsWith('number')) {
-      sorted.sort((a, b) => {
-        const numA = parseChapterNumber(a.number);
-        const numB = parseChapterNumber(b.number);
-        return sortOption === 'number-asc' ? numA - numB : numB - numA;
-      });
-    } else if (sortOption.startsWith('size')) {
-      sorted.sort((a, b) => {
-        const sizeA = (a as any).fileSize ?? 0;
-        const sizeB = (b as any).fileSize ?? 0;
-        return sortOption === 'size-asc' ? sizeA - sizeB : sizeB - sizeA;
-      });
-    }
-
+  const managedChapters = useMemo(() => {
+    const sorted = [...downloadedChaptersSorted];
+    sorted.sort((a, b) => {
+      const numA = parseChapterNumber(a.number);
+      const numB = parseChapterNumber(b.number);
+      return sortDesc ? numB - numA : numA - numB;
+    });
     return sorted;
-  }, [downloadedChaptersSorted, sortOption]);
+  }, [downloadedChaptersSorted, sortDesc]);
 
   const toggleDeleteSelection = (chapterNumber: string) => {
     setSelectedDeletes((prev) => {
@@ -285,79 +267,20 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
     closeModal();
   };
 
-  const renderTabButton = (
-    label: string,
-    value: PlannerTab,
-    icon: keyof typeof Ionicons.glyphMap
-  ) => {
-    const isActive = activeTab === value;
-    return (
-      <TouchableOpacity
-        key={value}
-        style={[styles.tabButton, isActive && styles.tabButtonActive]}
-        onPress={() => {
-          setActiveTab(value);
-          setError(null);
-        }}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name={icon}
-          size={16}
-          color={isActive ? '#FFF' : colors.text}
-        />
-        <Text
-          style={[styles.tabButtonText, isActive && styles.tabButtonTextActive]}
-        >
-          {label}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderSortButton = (
-    label: string,
-    value: SortOption,
-    icon: keyof typeof Ionicons.glyphMap
-  ) => {
-    const isActive = sortOption === value;
-    return (
-      <TouchableOpacity
-        key={value}
-        style={[styles.sortChip, isActive && styles.sortChipActive]}
-        onPress={() => setSortOption(value)}
-        activeOpacity={0.8}
-      >
-        <Text
-          style={[styles.sortChipText, isActive && styles.sortChipTextActive]}
-        >
-          {label}
-        </Text>
-        <Ionicons
-          name={icon}
-          size={12}
-          color={isActive ? '#FFF' : colors.tabIconDefault}
-        />
-      </TouchableOpacity>
-    );
-  };
-
   const totalChapters = sortedChapters.length;
-  const headerTitle = 'Offline downloads';
-
-  const subtitleText =
-    activeTab === 'manage'
-      ? downloadedChaptersSorted.length
-        ? 'Tap chapters you no longer need offline.'
-        : 'No offline chapters yet. Download some to manage them here.'
-      : totalChapters
-        ? `Pick how many chapters to keep offline — ${
-            sortedChapters[0]?.number ?? '—'
-          } to ${sortedChapters[totalChapters - 1]?.number ?? '—'} available.`
-        : 'Choose chapters to download for offline reading.';
+  const chapterSpan =
+    totalChapters > 0
+      ? `${sortedChapters[0]?.number ?? '—'}–${
+          sortedChapters[totalChapters - 1]?.number ?? '—'
+        }`
+      : null;
 
   const confirmLabel =
-    activeTab === 'manage' ? 'Remove selected' : 'Start download';
+    activeTab === 'manage'
+      ? selectedDeletes.size > 0
+        ? `Remove ${selectedDeletes.size}`
+        : 'Remove'
+      : 'Download';
 
   const confirmDisabled =
     isProcessing ||
@@ -365,31 +288,11 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
       ? selectedDeletes.size === 0 || downloadedChaptersSorted.length === 0
       : false);
 
-  const modeOptions: ModeOption[] = useMemo(
-    () => [
-      {
-        value: 'all',
-        title: 'Entire series',
-        description: totalChapters
-          ? `Download all ${totalChapters} chapters`
-          : 'Download every available chapter',
-        icon: 'albums-outline',
-      },
-      {
-        value: 'upto',
-        title: 'Up to a chapter',
-        description: 'Stop at a specific chapter number',
-        icon: 'flag-outline',
-      },
-      {
-        value: 'range',
-        title: 'Custom window',
-        description: 'Pick an exact start and end range',
-        icon: 'options-outline',
-      },
-    ],
-    [totalChapters]
-  );
+  const modes: Array<{ value: PlannerMode; label: string }> = [
+    { value: 'all', label: 'All' },
+    { value: 'upto', label: 'Up to' },
+    { value: 'range', label: 'Range' },
+  ];
 
   return (
     <Modal
@@ -409,308 +312,251 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
             activeOpacity={1}
           />
         </View>
-        <View style={styles.contentWrapper}>
-          <View style={styles.handleBar} />
 
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>{headerTitle}</Text>
-              <Text style={styles.subtitle}>{subtitleText}</Text>
+        <View style={styles.sheet}>
+          <View style={styles.handle} />
+
+          <View style={styles.header}>
+            <View style={styles.headerTextBlock}>
+              <Text style={styles.title}>Offline</Text>
+              <Text style={styles.subtitle}>
+                {activeTab === 'manage'
+                  ? downloadedChaptersSorted.length
+                    ? `${downloadedChaptersSorted.length} saved`
+                    : 'Nothing saved yet'
+                  : chapterSpan
+                    ? `${totalChapters} chapters · ${chapterSpan}`
+                    : 'No chapters available'}
+              </Text>
             </View>
             <TouchableOpacity
               onPress={closeModal}
               accessibilityRole="button"
               disabled={isProcessing}
               style={styles.closeButton}
+              hitSlop={8}
             >
-              <Ionicons name="close" size={20} color={colors.tabIconDefault} />
+              <Ionicons name="close" size={18} color={colors.tabIconDefault} />
             </TouchableOpacity>
           </View>
 
           {downloadedChaptersSorted.length > 0 ? (
-            <View style={styles.tabSwitcher}>
-              {renderTabButton('Download', 'download', 'download-outline')}
-              {renderTabButton('Manage', 'manage', 'trash-outline')}
+            <View style={styles.tabs}>
+              {(
+                [
+                  { value: 'download', label: 'Download' },
+                  { value: 'manage', label: 'Manage' },
+                ] as const
+              ).map((tab) => {
+                const active = activeTab === tab.value;
+                return (
+                  <TouchableOpacity
+                    key={tab.value}
+                    style={[styles.tab, active && styles.tabActive]}
+                    onPress={() => {
+                      setActiveTab(tab.value);
+                      setError(null);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[styles.tabText, active && styles.tabTextActive]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : null}
 
           <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={{ paddingBottom: 24 }}
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
             {activeTab === 'download' ? (
-              <View style={styles.downloadTabContent}>
-                {modeOptions.map((option) => {
-                  const isActive = mode === option.value;
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[
-                        styles.modeCard,
-                        isActive && styles.modeCardActive,
-                      ]}
-                      onPress={() => {
-                        setMode(option.value);
-                        setError(null);
-                      }}
-                      activeOpacity={0.9}
-                    >
-                      <View style={styles.modeCardHeader}>
-                        <View
+              <View style={styles.section}>
+                <View style={styles.segment}>
+                  {modes.map((option) => {
+                    const active = mode === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.segmentItem,
+                          active && styles.segmentItemActive,
+                        ]}
+                        onPress={() => {
+                          setMode(option.value);
+                          setError(null);
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <Text
                           style={[
-                            styles.modeCardIconWrapper,
-                            isActive && styles.modeCardIconWrapperActive,
+                            styles.segmentText,
+                            active && styles.segmentTextActive,
                           ]}
                         >
-                          <Ionicons
-                            name={option.icon}
-                            size={20}
-                            color={isActive ? '#FFF' : colors.primary}
-                          />
-                        </View>
-                        <View style={styles.modeCardTextContainer}>
-                          <Text
-                            style={[
-                              styles.modeCardTitle,
-                              isActive && styles.modeCardTitleActive,
-                            ]}
-                          >
-                            {option.title}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.modeCardDescription,
-                              isActive && styles.modeCardDescriptionActive,
-                            ]}
-                          >
-                            {option.description}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.radioButton,
-                            isActive && styles.radioButtonActive,
-                          ]}
-                        >
-                          {isActive && <View style={styles.radioButtonInner} />}
-                        </View>
-                      </View>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-                      {isActive && option.value === 'upto' && (
-                        <View style={styles.cardInputContainer}>
-                          <TextInput
-                            value={upperLimit}
-                            onChangeText={(val) =>
-                              setUpperLimit(sanitizeNumberInput(val))
-                            }
-                            keyboardType="numeric"
-                            placeholder="Enter chapter number..."
-                            placeholderTextColor={colors.tabIconDefault}
-                            style={styles.cardInput}
-                            autoFocus
-                          />
-                        </View>
-                      )}
-
-                      {isActive && option.value === 'range' && (
-                        <View style={styles.cardInputContainer}>
-                          <View style={styles.rangeRow}>
-                            <View style={styles.rangeInputWrapper}>
-                              <Text style={styles.rangeLabel}>From</Text>
-                              <TextInput
-                                value={rangeStart}
-                                onChangeText={(val) =>
-                                  setRangeStart(sanitizeNumberInput(val))
-                                }
-                                keyboardType="numeric"
-                                placeholder="Start"
-                                placeholderTextColor={colors.tabIconDefault}
-                                style={styles.cardInput}
-                                autoFocus
-                              />
-                            </View>
-                            <View style={styles.rangeDivider} />
-                            <View style={styles.rangeInputWrapper}>
-                              <Text style={styles.rangeLabel}>To</Text>
-                              <TextInput
-                                value={rangeEnd}
-                                onChangeText={(val) =>
-                                  setRangeEnd(sanitizeNumberInput(val))
-                                }
-                                keyboardType="numeric"
-                                placeholder="End"
-                                placeholderTextColor={colors.tabIconDefault}
-                                style={styles.cardInput}
-                              />
-                            </View>
-                          </View>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-
-                <View style={styles.helperRow}>
-                  <Ionicons
-                    name="information-circle"
-                    size={18}
-                    color={colors.primary}
-                  />
-                  <Text style={styles.helperText}>
-                    Downloads start from the earliest chapter.
+                {mode === 'all' ? (
+                  <Text style={styles.hint}>
+                    Saves every available chapter for offline reading.
                   </Text>
+                ) : null}
+
+                {mode === 'upto' ? (
+                  <View style={styles.fieldBlock}>
+                    <Text style={styles.fieldLabel}>Through chapter</Text>
+                    <TextInput
+                      value={upperLimit}
+                      onChangeText={(val) =>
+                        setUpperLimit(sanitizeNumberInput(val))
+                      }
+                      keyboardType="numeric"
+                      placeholder={
+                        maxChapter ? String(maxChapter) : 'Chapter number'
+                      }
+                      placeholderTextColor={colors.tabIconDefault}
+                      style={styles.input}
+                      autoFocus
+                    />
+                  </View>
+                ) : null}
+
+                {mode === 'range' ? (
+                  <View style={styles.rangeFields}>
+                    <View style={styles.fieldBlockGrow}>
+                      <Text style={styles.fieldLabel}>From</Text>
+                      <TextInput
+                        value={rangeStart}
+                        onChangeText={(val) =>
+                          setRangeStart(sanitizeNumberInput(val))
+                        }
+                        keyboardType="numeric"
+                        placeholder={
+                          minChapter ? String(minChapter) : 'Start'
+                        }
+                        placeholderTextColor={colors.tabIconDefault}
+                        style={styles.input}
+                        autoFocus
+                      />
+                    </View>
+                    <View style={styles.fieldBlockGrow}>
+                      <Text style={styles.fieldLabel}>To</Text>
+                      <TextInput
+                        value={rangeEnd}
+                        onChangeText={(val) =>
+                          setRangeEnd(sanitizeNumberInput(val))
+                        }
+                        keyboardType="numeric"
+                        placeholder={maxChapter ? String(maxChapter) : 'End'}
+                        placeholderTextColor={colors.tabIconDefault}
+                        style={styles.input}
+                      />
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            ) : downloadedChaptersSorted.length ? (
+              <View style={styles.section}>
+                <View style={styles.manageToolbar}>
+                  <TouchableOpacity
+                    onPress={toggleSelectAll}
+                    activeOpacity={0.7}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.toolbarAction}>
+                      {selectedDeletes.size === downloadedChaptersSorted.length
+                        ? 'Deselect all'
+                        : 'Select all'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSortDesc((value) => !value)}
+                    activeOpacity={0.7}
+                    style={styles.sortButton}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.toolbarAction}>Number</Text>
+                    <Ionicons
+                      name={sortDesc ? 'arrow-down' : 'arrow-up'}
+                      size={14}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.manageList}>
+                  {managedChapters.map((chapter) => {
+                    const isSelected = selectedDeletes.has(chapter.number);
+                    return (
+                      <TouchableOpacity
+                        key={chapter.number}
+                        style={styles.manageRow}
+                        onPress={() => toggleDeleteSelection(chapter.number)}
+                        activeOpacity={0.7}
+                      >
+                        <View
+                          style={[
+                            styles.checkbox,
+                            isSelected && styles.checkboxSelected,
+                          ]}
+                        >
+                          {isSelected ? (
+                            <Ionicons
+                              name="checkmark"
+                              size={12}
+                              color={colors.background}
+                            />
+                          ) : null}
+                        </View>
+                        <View style={styles.manageRowText}>
+                          <Text style={styles.manageTitle}>
+                            Chapter {chapter.number}
+                          </Text>
+                          {chapter.title ? (
+                            <Text
+                              style={styles.manageSubtitle}
+                              numberOfLines={1}
+                            >
+                              {chapter.title}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
             ) : (
-              <>
-                {downloadedChaptersSorted.length ? (
-                  <>
-                    <View style={styles.manageHeaderSection}>
-                      <View style={styles.manageToolbar}>
-                        <Text style={styles.manageSectionTitle}>
-                          {downloadedChaptersSorted.length} Items
-                        </Text>
-                        <TouchableOpacity
-                          onPress={toggleSelectAll}
-                          activeOpacity={0.7}
-                          style={styles.selectAllButton}
-                        >
-                          <Text style={styles.selectAllText}>
-                            {selectedDeletes.size ===
-                            downloadedChaptersSorted.length
-                              ? 'Deselect All'
-                              : 'Select All'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.sortRow}>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={styles.sortChipsContainer}
-                        >
-                          {renderSortButton('Number', 'number-asc', 'arrow-up')}
-                          {renderSortButton(
-                            'Number',
-                            'number-desc',
-                            'arrow-down'
-                          )}
-                          {renderSortButton('Size', 'size-asc', 'arrow-up')}
-                          {renderSortButton('Size', 'size-desc', 'arrow-down')}
-                        </ScrollView>
-                      </View>
-                    </View>
-
-                    <View style={styles.manageList}>
-                      {getSortedDownloadedChapters.map((chapter) => {
-                        const isSelected = selectedDeletes.has(chapter.number);
-                        // Mock file size if not present, or format it
-                        const fileSize = (chapter as any).fileSize
-                          ? ((chapter as any).fileSize / 1024 / 1024).toFixed(
-                              1
-                            ) + ' MB'
-                          : null;
-
-                        return (
-                          <TouchableOpacity
-                            key={chapter.number}
-                            style={[
-                              styles.manageItem,
-                              isSelected && styles.manageItemSelected,
-                            ]}
-                            onPress={() =>
-                              toggleDeleteSelection(chapter.number)
-                            }
-                            activeOpacity={0.7}
-                          >
-                            <View style={styles.manageItemContent}>
-                              <View style={styles.manageItemTopRow}>
-                                <Text
-                                  style={[
-                                    styles.manageItemTitle,
-                                    isSelected &&
-                                      styles.manageItemTitleSelected,
-                                  ]}
-                                >
-                                  Chapter {chapter.number}
-                                </Text>
-                                {fileSize != null ? (
-                                  <View style={styles.sizeBadge}>
-                                    <Text style={styles.sizeBadgeText}>
-                                      {fileSize}
-                                    </Text>
-                                  </View>
-                                ) : null}
-                              </View>
-
-                              {(chapter.title || !fileSize) && (
-                                <Text
-                                  style={styles.manageItemSubtitle}
-                                  numberOfLines={1}
-                                >
-                                  {chapter.title || 'Downloaded'}
-                                </Text>
-                              )}
-                            </View>
-
-                            <View
-                              style={[
-                                styles.checkbox,
-                                isSelected && styles.checkboxSelected,
-                              ]}
-                            >
-                              {isSelected && (
-                                <Ionicons
-                                  name="checkmark"
-                                  size={14}
-                                  color="#FFF"
-                                />
-                              )}
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.emptyState}>
-                    <View style={styles.emptyStateIcon}>
-                      <Ionicons
-                        name="cloud-download-outline"
-                        size={32}
-                        color={colors.tabIconDefault}
-                      />
-                    </View>
-                    <Text style={styles.emptyStateText}>
-                      Your offline list is empty.
-                    </Text>
-                    <Text style={styles.emptyStateHint}>
-                      Use the download tab to save chapters for later.
-                    </Text>
-                  </View>
-                )}
-              </>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>No offline chapters</Text>
+                <Text style={styles.emptyHint}>
+                  Download a range first, then manage it here.
+                </Text>
+              </View>
             )}
 
-            {error ? (
-              <View style={styles.errorBanner}>
-                <Ionicons name="alert-circle" size={18} color={colors.error} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
           </ScrollView>
 
-          <View style={styles.footerRow}>
+          <View style={styles.footer}>
             <TouchableOpacity
-              style={styles.secondaryButton}
+              style={styles.ghostButton}
               onPress={closeModal}
               activeOpacity={0.7}
               disabled={isProcessing}
             >
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
+              <Text style={styles.ghostButtonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -722,13 +568,6 @@ const BatchDownloadPlannerModal: React.FC<BatchDownloadPlannerModalProps> = ({
               disabled={confirmDisabled}
             >
               <Text style={styles.primaryButtonText}>{confirmLabel}</Text>
-              {!confirmDisabled && !isProcessing && (
-                <Ionicons
-                  name="arrow-forward"
-                  size={18}
-                  color={colors.background}
-                />
-              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -742,7 +581,7 @@ const getStyles = (colors: typeof Colors.light) =>
     overlay: {
       flex: 1,
       justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.6)',
+      backgroundColor: 'rgba(0,0,0,0.45)',
     },
     backdrop: {
       ...StyleSheet.absoluteFill,
@@ -750,320 +589,188 @@ const getStyles = (colors: typeof Colors.light) =>
     backdropTouchable: {
       flex: 1,
     },
-    contentWrapper: {
+    sheet: {
       backgroundColor: colors.card,
-      borderTopLeftRadius: 32,
-      borderTopRightRadius: 32,
-      paddingHorizontal: 24,
-      paddingTop: 12,
-      paddingBottom: 34,
-      maxHeight: '85%',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.1,
-      shadowRadius: 12,
-      elevation: 20,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+      maxHeight: '78%',
     },
-    handleBar: {
-      width: 48,
-      height: 5,
+    handle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
       backgroundColor: colors.border,
-      borderRadius: 3,
       alignSelf: 'center',
-      marginBottom: 20,
-      opacity: 0.6,
+      marginBottom: 14,
     },
-    headerRow: {
+    header: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: 20,
+      justifyContent: 'space-between',
+      gap: 12,
+      marginBottom: 16,
+    },
+    headerTextBlock: {
+      flex: 1,
+      gap: 2,
     },
     title: {
-      fontSize: 22,
-      fontWeight: '800',
+      fontSize: 20,
+      fontWeight: '700',
       color: colors.text,
-      marginBottom: 4,
-      letterSpacing: -0.5,
+      letterSpacing: -0.3,
     },
     subtitle: {
-      fontSize: 15,
+      fontSize: 13,
       color: colors.tabIconDefault,
-      lineHeight: 20,
     },
     closeButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.background,
+    },
+    tabs: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 16,
       padding: 4,
-      backgroundColor: colors.background,
-      borderRadius: 20,
-    },
-    scrollArea: {
-      maxHeight: 400,
-    },
-    tabSwitcher: {
-      flexDirection: 'row',
-      backgroundColor: colors.background,
-      padding: 6,
-      borderRadius: 16,
-      marginBottom: 24,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    tabButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 12,
       borderRadius: 12,
-    },
-    tabButtonActive: {
-      backgroundColor: colors.primary,
-    },
-    tabButtonText: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    tabButtonTextActive: {
-      color: '#FFF',
-      fontWeight: '700',
-    },
-    downloadTabContent: {
-      gap: 12,
-    },
-    modeCard: {
       backgroundColor: colors.background,
-      borderRadius: 16,
-      padding: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      overflow: 'hidden',
     },
-    modeCardActive: {
-      backgroundColor: colors.card,
-      borderColor: colors.primary,
-      borderWidth: 2,
-    },
-    modeCardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    modeCardIconWrapper: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+    tab: {
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
+      paddingVertical: 9,
+      borderRadius: 9,
+    },
+    tabActive: {
       backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
-    modeCardIconWrapperActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    modeCardTextContainer: {
-      flex: 1,
-    },
-    modeCardTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: colors.text,
-      marginBottom: 2,
-    },
-    modeCardTitleActive: {
-      color: colors.primary,
-    },
-    modeCardDescription: {
-      fontSize: 12,
+    tabText: {
+      fontSize: 13,
+      fontWeight: '600',
       color: colors.tabIconDefault,
     },
-    modeCardDescriptionActive: {
+    tabTextActive: {
       color: colors.text,
     },
-    radioButton: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      borderWidth: 2,
-      borderColor: colors.tabIconDefault,
+    scroll: {
+      maxHeight: 360,
+    },
+    scrollContent: {
+      paddingBottom: 8,
+    },
+    section: {
+      gap: 14,
+    },
+    segment: {
+      flexDirection: 'row',
+      gap: 6,
+      padding: 4,
+      borderRadius: 12,
+      backgroundColor: colors.background,
+    },
+    segmentItem: {
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
+      paddingVertical: 10,
+      borderRadius: 9,
     },
-    radioButtonActive: {
-      borderColor: colors.primary,
-    },
-    radioButtonInner: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
+    segmentItemActive: {
       backgroundColor: colors.primary,
     },
-    cardInputContainer: {
-      marginTop: 12,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
+    segmentText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.tabIconDefault,
     },
-    cardInput: {
-      backgroundColor: colors.background,
+    segmentTextActive: {
+      color: colors.background,
+    },
+    hint: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.tabIconDefault,
+    },
+    fieldBlock: {
+      gap: 6,
+    },
+    fieldBlockGrow: {
+      flex: 1,
+      gap: 6,
+    },
+    fieldLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.tabIconDefault,
+    },
+    input: {
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 10,
       paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingVertical: 11,
       fontSize: 15,
       color: colors.text,
+      backgroundColor: colors.background,
     },
-    rangeRow: {
+    rangeFields: {
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    rangeInputWrapper: {
-      flex: 1,
-      gap: 6,
-    },
-    rangeLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.tabIconDefault,
-    },
-    rangeDivider: {
-      width: 12,
-      height: 1,
-      backgroundColor: colors.border,
-      marginTop: 20, // Align with input center approx
-    },
-    helperRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
       gap: 10,
-      backgroundColor: colors.primary + '10', // 10% opacity
-      borderRadius: 12,
-      padding: 14,
-      marginTop: 8,
-      marginBottom: 16,
-    },
-    helperText: {
-      flex: 1,
-      fontSize: 13,
-      color: colors.text,
-      lineHeight: 18,
-    },
-    manageHeaderSection: {
-      marginBottom: 16,
-      paddingBottom: 4,
     },
     manageToolbar: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 12,
     },
-    manageSectionTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    selectAllButton: {
-      paddingVertical: 4,
-      paddingHorizontal: 8,
-    },
-    selectAllText: {
-      fontSize: 14,
+    toolbarAction: {
+      fontSize: 13,
       fontWeight: '600',
       color: colors.primary,
     },
-    sortRow: {
-      marginBottom: 8,
-    },
-    sortChipsContainer: {
-      gap: 8,
-      paddingRight: 16,
-    },
-    sortChip: {
+    sortButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 20,
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    sortChipActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    sortChipText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.tabIconDefault,
-    },
-    sortChipTextActive: {
-      color: '#FFF',
+      gap: 4,
     },
     manageList: {
-      gap: 10,
-      marginBottom: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
     },
-    manageItem: {
+    manageRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      gap: 12,
       paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 16,
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
     },
-    manageItemSelected: {
-      borderColor: colors.primary,
-      backgroundColor: colors.card,
-    },
-    manageItemContent: {
+    manageRowText: {
       flex: 1,
-      marginRight: 12,
+      gap: 2,
     },
-    manageItemTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 2,
-    },
-    manageItemTitle: {
+    manageTitle: {
       fontSize: 15,
       fontWeight: '600',
       color: colors.text,
     },
-    manageItemTitleSelected: {
-      color: colors.primary,
-    },
-    sizeBadge: {
-      backgroundColor: colors.border,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 6,
-    },
-    sizeBadgeText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: colors.tabIconDefault,
-    },
-    manageItemSubtitle: {
-      fontSize: 13,
+    manageSubtitle: {
+      fontSize: 12,
       color: colors.tabIconDefault,
     },
     checkbox: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      borderWidth: 2,
+      width: 20,
+      height: 20,
+      borderRadius: 6,
+      borderWidth: 1.5,
       borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1075,79 +782,54 @@ const getStyles = (colors: typeof Colors.light) =>
     },
     emptyState: {
       alignItems: 'center',
-      paddingVertical: 40,
+      paddingVertical: 28,
+      gap: 4,
     },
-    emptyStateIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: colors.background,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 16,
-    },
-    emptyStateText: {
-      fontSize: 16,
+    emptyTitle: {
+      fontSize: 15,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 4,
     },
-    emptyStateHint: {
-      fontSize: 14,
+    emptyHint: {
+      fontSize: 13,
       color: colors.tabIconDefault,
       textAlign: 'center',
-      maxWidth: 200,
-    },
-    errorBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: colors.error + '15',
-      padding: 12,
-      borderRadius: 12,
-      marginTop: 12,
     },
     errorText: {
-      color: colors.error,
-      fontSize: 14,
+      marginTop: 12,
+      fontSize: 13,
       fontWeight: '600',
-      flex: 1,
+      color: colors.error,
     },
-    footerRow: {
+    footer: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
-      gap: 16,
+      gap: 10,
       marginTop: 12,
     },
-    secondaryButton: {
-      paddingVertical: 16,
-      paddingHorizontal: 12,
+    ghostButton: {
+      paddingVertical: 14,
+      paddingHorizontal: 8,
     },
-    secondaryButtonText: {
-      fontSize: 16,
+    ghostButtonText: {
+      fontSize: 15,
       fontWeight: '600',
       color: colors.tabIconDefault,
     },
     primaryButton: {
       flex: 1,
-      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
       backgroundColor: colors.primary,
-      borderRadius: 16,
-      paddingHorizontal: 24,
-      paddingVertical: 16,
+      borderRadius: 12,
+      paddingVertical: 14,
     },
     primaryButtonDisabled: {
       backgroundColor: colors.border,
-      shadowOpacity: 0,
-      elevation: 0,
     },
     primaryButtonText: {
       color: colors.background,
-      fontSize: 16,
+      fontSize: 15,
       fontWeight: '700',
     },
   });

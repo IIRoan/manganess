@@ -1,13 +1,62 @@
 import type { Chapter, MangaDetails } from '@/types/manga';
+import { getOldestChapterNumber } from '@/utils/chapterListPagination';
 
 function chapterKey(number: string | undefined): string {
   return String(number ?? '').trim();
 }
 
-/**
- * Keep a longer cached chapter list, but overwrite URLs/titles for chapters
- * present in the fresh page so stale MangaFire chapter API IDs heal.
- */
+function mergeIncomingOverPrevious(
+  previousChapters: Chapter[],
+  incomingChapters: Chapter[]
+): Chapter[] {
+  const previousKeys = new Set<string>();
+  for (const chapter of previousChapters) {
+    const key = chapterKey(chapter.number);
+    if (key) {
+      previousKeys.add(key);
+    }
+  }
+
+  const incomingByNumber = new Map<string, Chapter>();
+  const brandNew: Chapter[] = [];
+  for (const chapter of incomingChapters) {
+    const key = chapterKey(chapter.number);
+    if (!key) {
+      continue;
+    }
+    incomingByNumber.set(key, chapter);
+    if (!previousKeys.has(key)) {
+      brandNew.push(chapter);
+    }
+  }
+
+  const updatedPrevious = previousChapters.map((chapter) => {
+    const key = chapterKey(chapter.number);
+    const fresh = key ? incomingByNumber.get(key) : undefined;
+    if (!fresh) {
+      return chapter;
+    }
+    if (
+      fresh.url === chapter.url &&
+      fresh.title === chapter.title &&
+      fresh.date === chapter.date &&
+      fresh.sourceType === chapter.sourceType
+    ) {
+      return chapter;
+    }
+    return {
+      ...chapter,
+      url: fresh.url || chapter.url,
+      title: fresh.title || chapter.title,
+      date: fresh.date || chapter.date,
+      ...(fresh.sourceType ? { sourceType: fresh.sourceType } : {}),
+    };
+  });
+
+  return brandNew.length ? [...brandNew, ...updatedPrevious] : updatedPrevious;
+}
+
+/** Keep a longer cached chapter list, but overwrite URLs/titles for chapters present in the fresh page so stale MangaFire chapter API IDs heal. Also prepend brand-new newest chapters from a shorter page-1 refresh (e.g. One Piece 1191 published while cache still ends at 1190). Never let a longer page-1 window (40–90) replace a shorter list that still contains early chapters (1–30). */
 export function mergeChapterListsPreferringLonger(
   previousChapters: Chapter[],
   incomingChapters: Chapter[]
@@ -19,34 +68,34 @@ export function mergeChapterListsPreferringLonger(
     return previousChapters;
   }
 
-  if (incomingChapters.length >= previousChapters.length) {
-    return incomingChapters;
+  if (incomingChapters.length > previousChapters.length) {
+    const previousOldest = getOldestChapterNumber(previousChapters);
+    const incomingOldest = getOldestChapterNumber(incomingChapters);
+    // Incoming is longer and reaches at least as far back — prefer it.
+    if (
+      previousOldest == null ||
+      incomingOldest == null ||
+      incomingOldest <= previousOldest + 0.001
+    ) {
+      return incomingChapters;
+    }
+
+    // Longer newest-first page must not wipe older chapters only in cache.
+    const incomingKeys = new Set(
+      incomingChapters
+        .map((chapter) => chapterKey(chapter.number))
+        .filter(Boolean)
+    );
+    const previousOnly = previousChapters.filter((chapter) => {
+      const key = chapterKey(chapter.number);
+      return key.length > 0 && !incomingKeys.has(key);
+    });
+    return previousOnly.length
+      ? [...incomingChapters, ...previousOnly]
+      : incomingChapters;
   }
 
-  const incomingByNumber = new Map<string, Chapter>();
-  for (const chapter of incomingChapters) {
-    const key = chapterKey(chapter.number);
-    if (key) {
-      incomingByNumber.set(key, chapter);
-    }
-  }
-
-  return previousChapters.map((chapter) => {
-    const key = chapterKey(chapter.number);
-    const fresh = key ? incomingByNumber.get(key) : undefined;
-    if (!fresh) {
-      return chapter;
-    }
-    if (fresh.url === chapter.url && fresh.title === chapter.title) {
-      return chapter;
-    }
-    return {
-      ...chapter,
-      url: fresh.url || chapter.url,
-      title: fresh.title || chapter.title,
-      date: fresh.date || chapter.date,
-    };
-  });
+  return mergeIncomingOverPrevious(previousChapters, incomingChapters);
 }
 
 export function mergeMangaDetailsRefresh(

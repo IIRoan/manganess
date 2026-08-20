@@ -44,10 +44,13 @@ import { fetchMangaDetails } from '@/services/mangaFireService';
 import { fetchMappedTitleChaptersPage } from '@/services/mangaFireApi';
 import {
   appendUniqueChapters,
+  chapterListReachesSeriesStart,
   getReportedChapterCount,
+  isChapterListCacheComplete,
   loadRemainingChapterPages,
   pickOldestChapter,
   resolveCachedChapterPagination,
+  resolveFinishedChapterPagination,
   resolveOldestChapter,
 } from '@/utils/chapterListPagination';
 import { filterOutExtraChapters } from '@/utils/chapterListDedupe';
@@ -269,8 +272,7 @@ export default function MangaDetailScreen() {
     [id]
   );
 
-  // Show the card's title/cover on the first paint — don't wait for layout
-  // effects or storage. Stale fetchedDetails from a previous manga are ignored.
+  // Show the card's title/cover on the first paint — don't wait for layout effects or storage. Stale fetchedDetails from a previous manga are ignored.
   const mangaDetails = useMemo(() => {
     if (typeof id !== 'string') {
       return null;
@@ -330,9 +332,7 @@ export default function MangaDetailScreen() {
 
     hasInstantContentRef.current = false;
     setIsLoading(true);
-    // Only reset when the manga id changes — title/imageUrl param churn was
-    // restarting loads and re-crawling every /chapters page.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- routePreview/fetchedDetails would retrigger on param churn
+    // Only reset when the manga id changes — title/imageUrl param churn was restarting loads and re-crawling every /chapters page. eslint-disable-next-line react-hooks/exhaustive-deps -- routePreview/fetchedDetails would retrigger on param churn
   }, [id, previewId]);
 
   useEffect(() => {
@@ -352,6 +352,8 @@ export default function MangaDetailScreen() {
     setIsLoadingMoreChapters(false);
     setHideExtraChapters(false);
     hideExtraChaptersRef.current = false;
+    setIsRefreshingChapters(false);
+    setChapterRefreshProgress(null);
     setIsJumpingToBottom(false);
     setSettledChapterMangaId(null);
 
@@ -439,6 +441,44 @@ export default function MangaDetailScreen() {
     lastPage: undefined as number | undefined,
   });
 
+  const applyCachedChapterPagination = useCallback(
+    (details: {
+      chapters?: Chapter[];
+      totalChapters?: number;
+      chapterPagination?: MangaDetails['chapterPagination'];
+    }) => {
+      const chapters = details.chapters;
+      if (!chapters?.length) {
+        return;
+      }
+
+      const cachedPagination = resolveCachedChapterPagination({
+        chapters,
+        ...(typeof details.totalChapters === 'number'
+          ? { totalChapters: details.totalChapters }
+          : {}),
+        ...(details.chapterPagination
+          ? { chapterPagination: details.chapterPagination }
+          : {}),
+      });
+      setHasMoreChapters(cachedPagination.hasMore);
+      setNextChapterPage(cachedPagination.nextPage);
+      if (typeof cachedPagination.lastPage === 'number') {
+        setLastChapterPage(cachedPagination.lastPage);
+      }
+      chapterPaginationRef.current = {
+        ...chapterPaginationRef.current,
+        chapters,
+        nextPage: cachedPagination.nextPage,
+        hasMore: cachedPagination.hasMore,
+        ...(typeof cachedPagination.lastPage === 'number'
+          ? { lastPage: cachedPagination.lastPage }
+          : {}),
+      };
+    },
+    []
+  );
+
   // State for the general alert (e.g., marking chapters as unread)
   const [isAlertVisible, setIsAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertConfig | null>(null);
@@ -461,6 +501,12 @@ export default function MangaDetailScreen() {
     });
   const [hideExtraChapters, setHideExtraChapters] = useState(false);
   const hideExtraChaptersRef = useRef(false);
+  const [isRefreshingChapters, setIsRefreshingChapters] = useState(false);
+  const [chapterRefreshProgress, setChapterRefreshProgress] = useState<{
+    page: number;
+    lastPage?: number;
+    chapterCount: number;
+  } | null>(null);
 
   useEffect(() => {
     hideExtraChaptersRef.current = hideExtraChapters;
@@ -582,9 +628,9 @@ export default function MangaDetailScreen() {
     }
   }, [id]);
 
-  // Stable refs for the detail-load effect — avoid restarting 40+ chapter page fetches
-  // when callback identities change mid-request.
+  // Stable refs for the detail-load effect — avoid restarting 40+ chapter page fetches when callback identities change mid-request.
   const applyMangaDetailsForIdRef = useRef(applyMangaDetailsForId);
+  const applyCachedChapterPaginationRef = useRef(applyCachedChapterPagination);
   const refreshDownloadedChaptersRef = useRef(refreshDownloadedChapters);
   const refreshDownloadingChaptersRef = useRef(refreshDownloadingChapters);
   const routerRef = useRef(router);
@@ -592,6 +638,7 @@ export default function MangaDetailScreen() {
   const routeImageUrlRef = useRef(imageUrl);
 
   applyMangaDetailsForIdRef.current = applyMangaDetailsForId;
+  applyCachedChapterPaginationRef.current = applyCachedChapterPagination;
   refreshDownloadedChaptersRef.current = refreshDownloadedChapters;
   refreshDownloadingChaptersRef.current = refreshDownloadingChapters;
   routerRef.current = router;
@@ -622,9 +669,29 @@ export default function MangaDetailScreen() {
         ? undefined
         : Boolean(bookmarkStatusRef.current);
     const hasChapters = (details.chapters?.length ?? 0) > 0;
+    const pagination = chapterPaginationRef.current;
+    const detailsWithPagination = {
+      ...details,
+      ...(hasChapters
+        ? {
+            chapterPagination: {
+              hasMore: pagination.hasMore,
+              nextPage: pagination.nextPage,
+              ...(typeof pagination.lastPage === 'number'
+                ? { lastPage: pagination.lastPage }
+                : {}),
+            },
+          }
+        : {}),
+    };
 
-    if (isBookmarked && hasChapters) {
-      void offlineCacheService.cacheMangaDetails(mangaId, details, true);
+    // Persist chapter lists whenever we have them — long series like One Piece should not re-crawl ~40 API pages on every open.
+    if (hasChapters) {
+      void offlineCacheService.cacheMangaDetails(
+        mangaId,
+        detailsWithPagination,
+        Boolean(isBookmarked)
+      );
     } else {
       void offlineCacheService.cacheMangaHeader(mangaId, details, {
         ...(typeof isBookmarked === 'boolean' ? { isBookmarked } : {}),
@@ -713,8 +780,7 @@ export default function MangaDetailScreen() {
     };
 
     const hydrateHeaderFromNetwork = async () => {
-      // Card/search routes already contain enough metadata for first paint. The
-      // main load enriches that preview after chapter page 1 succeeds.
+      // Card/search routes already contain enough metadata for first paint. The main load enriches that preview after chapter page 1 succeeds.
       if (isOfflineRef.current || routePreview) {
         return;
       }
@@ -734,8 +800,7 @@ export default function MangaDetailScreen() {
         setIsLoading(false);
         persistOpenedHeaderRef.current(id, details);
       } catch {
-        // The main detail load owns error and rate-limit handling. This path is
-        // only an opportunistic first-paint race.
+        // The main detail load owns error and rate-limit handling. This path is only an opportunistic first-paint race.
       }
     };
 
@@ -806,10 +871,33 @@ export default function MangaDetailScreen() {
           if (shouldCancelFetch()) {
             return;
           }
-          setHasMoreChapters(meta.hasMore);
-          setNextChapterPage(meta.page + 1);
-          if (typeof meta.lastPage === 'number') {
-            setLastChapterPage(meta.lastPage);
+          // A page-1 refresh must not reopen a full crawl when we already have a complete cached chapter list.
+          if (
+            !isChapterListCacheComplete({
+              chapters: chapterPaginationRef.current.chapters,
+              chapterPagination: {
+                hasMore: chapterPaginationRef.current.hasMore,
+                nextPage: chapterPaginationRef.current.nextPage,
+                ...(typeof chapterPaginationRef.current.lastPage === 'number'
+                  ? { lastPage: chapterPaginationRef.current.lastPage }
+                  : {}),
+              },
+            })
+          ) {
+            setHasMoreChapters(meta.hasMore);
+            setNextChapterPage(meta.page + 1);
+            if (typeof meta.lastPage === 'number') {
+              setLastChapterPage(meta.lastPage);
+            }
+            chapterPaginationRef.current = {
+              ...chapterPaginationRef.current,
+              nextPage: meta.page + 1,
+              hasMore: meta.hasMore,
+              lastPage:
+                typeof meta.lastPage === 'number'
+                  ? meta.lastPage
+                  : chapterPaginationRef.current.lastPage,
+            };
           }
           if (typeof meta.total === 'number' && meta.total > 0) {
             const reportedTotal = meta.total;
@@ -826,15 +914,6 @@ export default function MangaDetailScreen() {
               };
             });
           }
-          chapterPaginationRef.current = {
-            ...chapterPaginationRef.current,
-            nextPage: meta.page + 1,
-            hasMore: meta.hasMore,
-            lastPage:
-              typeof meta.lastPage === 'number'
-                ? meta.lastPage
-                : chapterPaginationRef.current.lastPage,
-          };
         },
       });
     };
@@ -935,6 +1014,7 @@ export default function MangaDetailScreen() {
 
         if (hydration.details) {
           applyMangaDetailsForIdRef.current(mangaId, hydration.details);
+          applyCachedChapterPaginationRef.current(hydration.details);
           hadInstantContent = true;
           hasInstantContentRef.current = true;
           setIsLoading(false);
@@ -986,6 +1066,7 @@ export default function MangaDetailScreen() {
         }
 
         applyMangaDetailsForIdRef.current(mangaId, cachedDetails);
+        applyCachedChapterPaginationRef.current(cachedDetails);
         persistOpenedHeaderRef.current(mangaId, cachedDetails);
         if ((cachedDetails.chapters?.length ?? 0) > 0) {
           setSettledChapterMangaId(mangaId);
@@ -1098,17 +1179,11 @@ export default function MangaDetailScreen() {
           );
           if (cachedDetails && !shouldCancelFetch()) {
             applyMangaDetailsForIdRef.current(mangaId, cachedDetails);
+            applyCachedChapterPaginationRef.current(cachedDetails);
             persistOpenedHeaderRef.current(mangaId, cachedDetails);
             setIsLoading(false);
             if ((cachedDetails.chapters?.length ?? 0) > 0) {
               setSettledChapterMangaId(mangaId);
-            }
-            const cachedPagination =
-              resolveCachedChapterPagination(cachedDetails);
-            setHasMoreChapters(cachedPagination.hasMore);
-            setNextChapterPage(cachedPagination.nextPage);
-            if (typeof cachedPagination.lastPage === 'number') {
-              setLastChapterPage(cachedPagination.lastPage);
             }
             void refreshDetailsInBackground();
           } else {
@@ -1614,6 +1689,242 @@ export default function MangaDetailScreen() {
     });
   }, [id, mangaDetails?.title, mangaDetails?.bannerImage, showToast]);
 
+  const handleRefreshChapters = useCallback(async () => {
+    if (
+      typeof id !== 'string' ||
+      isOffline ||
+      isRefreshingChapters ||
+      !isScreenMountedRef.current
+    ) {
+      return;
+    }
+
+    const mangaId = id;
+    const previousNewest = chapterPaginationRef.current.chapters[0]?.number;
+    const loadGeneration = loadGenerationRef.current;
+    const previousPagination = {
+      chapters: chapterPaginationRef.current.chapters,
+      hasMore: chapterPaginationRef.current.hasMore,
+      nextPage: chapterPaginationRef.current.nextPage,
+      lastPage: chapterPaginationRef.current.lastPage,
+    };
+
+    const restorePreviousPagination = () => {
+      setHasMoreChapters(previousPagination.hasMore);
+      setNextChapterPage(previousPagination.nextPage);
+      if (typeof previousPagination.lastPage === 'number') {
+        setLastChapterPage(previousPagination.lastPage);
+      }
+      chapterPaginationRef.current = {
+        ...chapterPaginationRef.current,
+        chapters: previousPagination.chapters,
+        hasMore: previousPagination.hasMore,
+        nextPage: previousPagination.nextPage,
+        lastPage: previousPagination.lastPage,
+      };
+      // Allow background crawl to resume if the list was still incomplete.
+      backgroundChapterLoadIdRef.current = null;
+    };
+
+    // Block the background page-by-page crawl from racing this full refresh.
+    backgroundChapterLoadIdRef.current = mangaId;
+    setIsRefreshingChapters(true);
+    setChapterRefreshProgress({ page: 0, chapterCount: 0 });
+    setHasMoreChapters(false);
+
+    try {
+      let lastPageFromMeta: number | undefined;
+      const freshDetails = await fetchMangaDetails(mangaId, {
+        force: true,
+        shouldCancel: () =>
+          !isScreenMountedRef.current ||
+          loadGeneration !== loadGenerationRef.current ||
+          typeof id !== 'string' ||
+          id !== mangaId,
+        onPartial: (partial) => {
+          if (
+            !isScreenMountedRef.current ||
+            loadGeneration !== loadGenerationRef.current ||
+            typeof id !== 'string' ||
+            id !== mangaId
+          ) {
+            return;
+          }
+          applyMangaDetailsForId(mangaId, partial);
+          if ((partial.chapters?.length ?? 0) > 0) {
+            setSettledChapterMangaId(mangaId);
+          }
+        },
+        onChapterPagination: (meta) => {
+          if (
+            !isScreenMountedRef.current ||
+            loadGeneration !== loadGenerationRef.current ||
+            typeof id !== 'string' ||
+            id !== mangaId
+          ) {
+            return;
+          }
+          if (typeof meta.lastPage === 'number') {
+            lastPageFromMeta = meta.lastPage;
+            setLastChapterPage(meta.lastPage);
+          }
+          setChapterRefreshProgress({
+            page: meta.page,
+            chapterCount: meta.chapterCount ?? 0,
+            ...(typeof meta.lastPage === 'number'
+              ? { lastPage: meta.lastPage }
+              : typeof lastPageFromMeta === 'number'
+                ? { lastPage: lastPageFromMeta }
+                : {}),
+          });
+          if (typeof meta.total === 'number' && meta.total > 0) {
+            const reportedTotal = meta.total;
+            setFetchedDetails((current) => {
+              if (!current || current.id !== mangaId) {
+                return current;
+              }
+              if (current.totalChapters === reportedTotal) {
+                return current;
+              }
+              return {
+                ...current,
+                totalChapters: reportedTotal,
+              };
+            });
+          }
+        },
+      });
+
+      if (
+        !isScreenMountedRef.current ||
+        loadGeneration !== loadGenerationRef.current ||
+        typeof id !== 'string' ||
+        id !== mangaId
+      ) {
+        restorePreviousPagination();
+        return;
+      }
+
+      const chapters = freshDetails.chapters ?? [];
+      const finishedPagination = resolveFinishedChapterPagination({
+        chapters,
+        apiHasMore: false,
+        nextPage:
+          typeof lastPageFromMeta === 'number'
+            ? lastPageFromMeta + 1
+            : typeof lastChapterPage === 'number'
+              ? lastChapterPage + 1
+              : 2,
+        ...(typeof lastPageFromMeta === 'number'
+          ? { lastPage: lastPageFromMeta }
+          : typeof lastChapterPage === 'number'
+            ? { lastPage: lastChapterPage }
+            : {}),
+      });
+
+      // Full manual refresh replaces the chapter list with the network result.
+      setFetchedDetails((previous) => {
+        const headerMerged = mergeMangaDetailsRefresh(
+          previous && previous.id === mangaId ? previous : null,
+          freshDetails,
+          mangaId
+        );
+        return {
+          ...headerMerged,
+          chapters,
+          totalChapters: Math.max(
+            headerMerged.totalChapters ?? 0,
+            freshDetails.totalChapters ?? 0,
+            chapters.length
+          ),
+        };
+      });
+      setHasMoreChapters(finishedPagination.hasMore);
+      setNextChapterPage(finishedPagination.nextPage);
+      if (typeof finishedPagination.lastPage === 'number') {
+        setLastChapterPage(finishedPagination.lastPage);
+      }
+      chapterPaginationRef.current = {
+        chapters,
+        hasMore: finishedPagination.hasMore,
+        nextPage: finishedPagination.nextPage,
+        lastPage: finishedPagination.lastPage,
+      };
+      setSettledChapterMangaId(mangaId);
+
+      void offlineCacheService.cacheMangaDetails(
+        mangaId,
+        {
+          ...freshDetails,
+          id: mangaId,
+          chapters,
+          totalChapters: Math.max(
+            freshDetails.totalChapters ?? 0,
+            chapters.length
+          ),
+          chapterPagination: {
+            hasMore: finishedPagination.hasMore,
+            nextPage: finishedPagination.nextPage,
+            ...(typeof finishedPagination.lastPage === 'number'
+              ? { lastPage: finishedPagination.lastPage }
+              : {}),
+          },
+        },
+        Boolean(bookmarkStatusRef.current)
+      );
+
+      const newest = chapters[0]?.number;
+      const reachedStart = chapterListReachesSeriesStart(chapters);
+      showToast({
+        type: 'success',
+        message: !reachedStart
+          ? `Loaded ${chapters.length} chapters — older chapters may still be missing`
+          : newest && previousNewest && newest !== previousNewest
+            ? `Refreshed ${chapters.length} chapters — latest is ${newest}`
+            : `Refreshed ${chapters.length} chapters`,
+      });
+
+      // Clear the pin so a future open/rehydrate can schedule work; hasMore already gates whether the idle crawl actually runs.
+      backgroundChapterLoadIdRef.current = null;
+    } catch (error) {
+      restorePreviousPagination();
+
+      if (isRateLimitError(error)) {
+        showToast({
+          type: 'error',
+          message: RATE_LIMIT_USING_CACHE_MESSAGE,
+        });
+        return;
+      }
+
+      logger().warn('Service', 'Failed to manually refresh chapters', {
+        mangaId,
+        error,
+      });
+      if (isScreenMountedRef.current) {
+        showToast({
+          type: 'error',
+          message: 'Could not refresh chapters',
+        });
+      }
+    } finally {
+      if (
+        isScreenMountedRef.current &&
+        loadGeneration === loadGenerationRef.current
+      ) {
+        setIsRefreshingChapters(false);
+        setChapterRefreshProgress(null);
+      }
+    }
+  }, [
+    id,
+    isOffline,
+    isRefreshingChapters,
+    applyMangaDetailsForId,
+    lastChapterPage,
+    showToast,
+  ]);
+
   /** Load every remaining chapter page so end-of-list actions use the real first chapter. */
   const ensureAllChaptersLoaded = useCallback(async (): Promise<boolean> => {
     if (typeof id !== 'string' || isOffline || !isScreenMountedRef.current) {
@@ -1706,6 +2017,62 @@ export default function MangaDetailScreen() {
         hasMore: result.hasMore,
       };
 
+      if (!result.hasMore && result.chapters.length > 0) {
+        const finishedPagination = resolveFinishedChapterPagination({
+          chapters: result.chapters,
+          apiHasMore: result.hasMore,
+          nextPage: result.nextPage,
+          ...(typeof chapterPaginationRef.current.lastPage === 'number'
+            ? { lastPage: chapterPaginationRef.current.lastPage }
+            : typeof lastChapterPage === 'number'
+              ? { lastPage: lastChapterPage }
+              : {}),
+        });
+        setHasMoreChapters(finishedPagination.hasMore);
+        setNextChapterPage(finishedPagination.nextPage);
+        if (typeof finishedPagination.lastPage === 'number') {
+          setLastChapterPage(finishedPagination.lastPage);
+        }
+        chapterPaginationRef.current = {
+          ...chapterPaginationRef.current,
+          chapters: result.chapters,
+          hasMore: finishedPagination.hasMore,
+          nextPage: finishedPagination.nextPage,
+          ...(typeof finishedPagination.lastPage === 'number'
+            ? { lastPage: finishedPagination.lastPage }
+            : {}),
+        };
+
+        setFetchedDetails((current) => {
+          if (!current || current.id !== mangaId) {
+            return current;
+          }
+          const nextDetails = {
+            ...current,
+            chapters: result.chapters,
+            totalChapters: Math.max(
+              current.totalChapters ?? 0,
+              result.chapters.length
+            ),
+          };
+          void offlineCacheService.cacheMangaDetails(
+            mangaId,
+            {
+              ...nextDetails,
+              chapterPagination: {
+                hasMore: finishedPagination.hasMore,
+                nextPage: finishedPagination.nextPage,
+                ...(typeof finishedPagination.lastPage === 'number'
+                  ? { lastPage: finishedPagination.lastPage }
+                  : {}),
+              },
+            },
+            Boolean(bookmarkStatusRef.current)
+          );
+          return nextDetails;
+        });
+      }
+
       return !result.hasMore;
     } catch (error) {
       logger().warn('Service', 'Failed to load all chapters', {
@@ -1721,11 +2088,9 @@ export default function MangaDetailScreen() {
         }
       }
     }
-  }, [id, isOffline]);
+  }, [id, isOffline, lastChapterPage]);
 
-  // Page 1 is enough for first paint. Once it is visible, fill the remainder
-  // sequentially in the background so long series become complete without the
-  // user having to reach the temporary end of every 60-item page.
+  // Page 1 is enough for first paint. Once it is visible, fill the remainder sequentially in the background so long series become complete without the user having to reach the temporary end of every 60-item page.
   useEffect(() => {
     if (
       typeof id !== 'string' ||
@@ -2238,40 +2603,154 @@ export default function MangaDetailScreen() {
             </View>
           </View>
           <View style={styles.chaptersContainer}>
-            <View style={styles.chaptersHeaderRow}>
-              <Text style={[styles.sectionTitle, styles.chaptersSectionTitle]}>
-                Chapters
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  void handleHideExtraChaptersToggle();
-                }}
-                style={styles.chapterListModeButton}
-                accessibilityRole="button"
-                accessibilityState={{ selected: hideExtraChapters }}
-                accessibilityLabel={
-                  hideExtraChapters
-                    ? 'Extra chapters hidden. Tap to show half chapters like 3.1 and 3.5'
-                    : 'Showing all chapters. Tap to hide half chapters like 3.1 and 3.5'
-                }
-              >
-                <Ionicons
-                  name={hideExtraChapters ? 'eye-off-outline' : 'eye-outline'}
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text style={styles.chapterListModeButtonText}>
-                  {hideExtraChapters ? 'Extras hidden' : 'Hide extras'}
-                </Text>
-              </TouchableOpacity>
-            </View>
             <BatchDownloadBar
               mangaId={id as string}
               mangaTitle={mangaDetails.title}
               chapters={visibleChapters}
               downloadedChapters={downloadedChapters}
               onDownloadsChanged={refreshDownloadedChapters}
-            />
+              buttonStyle={styles.chapterIconButton}
+            >
+              {({ button, progressBanner }) => (
+                <>
+                  <View style={styles.chaptersHeaderRow}>
+                    <Text
+                      style={[styles.sectionTitle, styles.chaptersSectionTitle]}
+                    >
+                      Chapters
+                    </Text>
+                    <View style={styles.chaptersHeaderActions}>
+                      {button}
+                      <TouchableOpacity
+                        onPress={() => {
+                          void handleRefreshChapters();
+                        }}
+                        disabled={isOffline || isRefreshingChapters}
+                        style={[
+                          styles.chapterIconButton,
+                          (isOffline || isRefreshingChapters) &&
+                            styles.chapterIconButtonDisabled,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityState={{
+                          disabled: isOffline || isRefreshingChapters,
+                          busy: isRefreshingChapters,
+                        }}
+                        accessibilityLabel="Refresh all chapters"
+                      >
+                        {isRefreshingChapters ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                        ) : (
+                          <Ionicons
+                            name="refresh-outline"
+                            size={18}
+                            color={colors.primary}
+                          />
+                        )}
+                        {isRefreshingChapters &&
+                        chapterRefreshProgress?.page ? (
+                          <View style={styles.chapterIconButtonBadge}>
+                            <Text style={styles.chapterIconButtonBadgeText}>
+                              {chapterRefreshProgress.lastPage
+                                ? `${chapterRefreshProgress.page}/${chapterRefreshProgress.lastPage}`
+                                : String(chapterRefreshProgress.page)}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => {
+                          void handleHideExtraChaptersToggle();
+                        }}
+                        style={[
+                          styles.chapterIconButton,
+                          hideExtraChapters && styles.chapterIconButtonActive,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: hideExtraChapters }}
+                        accessibilityLabel={
+                          hideExtraChapters
+                            ? 'Extra chapters hidden. Tap to show half chapters like 3.1 and 3.5'
+                            : 'Showing all chapters. Tap to hide half chapters like 3.1 and 3.5'
+                        }
+                      >
+                        <Ionicons
+                          name={
+                            hideExtraChapters
+                              ? 'eye-off-outline'
+                              : 'eye-outline'
+                          }
+                          size={18}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  {progressBanner}
+                  {isRefreshingChapters ? (
+                    <View
+                      style={styles.chapterRefreshProgress}
+                      accessibilityRole="progressbar"
+                      accessibilityLabel={
+                        chapterRefreshProgress?.lastPage
+                          ? `Refreshing chapters, page ${chapterRefreshProgress.page} of ${chapterRefreshProgress.lastPage}, ${chapterRefreshProgress.chapterCount} loaded`
+                          : `Refreshing chapters, page ${chapterRefreshProgress?.page ?? 0}, ${chapterRefreshProgress?.chapterCount ?? 0} loaded`
+                      }
+                    >
+                      <View style={styles.chapterRefreshProgressHeader}>
+                        <Text style={styles.chapterRefreshProgressLabel}>
+                          {chapterRefreshProgress?.page
+                            ? chapterRefreshProgress.lastPage
+                              ? `Refreshing page ${chapterRefreshProgress.page} of ${chapterRefreshProgress.lastPage}`
+                              : `Refreshing page ${chapterRefreshProgress.page}`
+                            : 'Starting full chapter refresh…'}
+                        </Text>
+                        {chapterRefreshProgress?.lastPage ? (
+                          <Text style={styles.chapterRefreshProgressPercent}>
+                            {Math.min(
+                              100,
+                              Math.round(
+                                (chapterRefreshProgress.page /
+                                  chapterRefreshProgress.lastPage) *
+                                  100
+                              )
+                            )}
+                            %
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.chapterRefreshProgressTrack}>
+                        <View
+                          style={[
+                            styles.chapterRefreshProgressFill,
+                            {
+                              width: chapterRefreshProgress?.lastPage
+                                ? `${Math.min(
+                                    100,
+                                    Math.round(
+                                      (chapterRefreshProgress.page /
+                                        chapterRefreshProgress.lastPage) *
+                                        100
+                                    )
+                                  )}%`
+                                : '12%',
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.chapterRefreshProgressHint}>
+                        {chapterRefreshProgress?.chapterCount
+                          ? `${chapterRefreshProgress.chapterCount} chapters loaded so far`
+                          : 'Fetching every chapter page…'}
+                      </Text>
+                    </View>
+                  ) : null}
+                </>
+              )}
+            </BatchDownloadBar>
           </View>
         </>
       ),
@@ -2291,6 +2770,9 @@ export default function MangaDetailScreen() {
       isOffline,
       hideExtraChapters,
       handleHideExtraChaptersToggle,
+      isRefreshingChapters,
+      chapterRefreshProgress,
+      handleRefreshChapters,
       visibleChapters,
     ]
   );

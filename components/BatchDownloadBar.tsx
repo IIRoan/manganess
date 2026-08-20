@@ -5,6 +5,8 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, type ColorScheme } from '@/constants/Colors';
@@ -23,6 +25,12 @@ interface BatchDownloadBarProps {
   chapters: Chapter[];
   downloadedChapters: string[];
   onDownloadsChanged?: () => void | Promise<void>;
+  /** Optional style override for the compact header trigger. */
+  buttonStyle?: StyleProp<ViewStyle>;
+  children: (slots: {
+    button: React.ReactNode;
+    progressBanner: React.ReactNode;
+  }) => React.ReactNode;
 }
 
 const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
@@ -31,6 +39,8 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   chapters,
   downloadedChapters,
   onDownloadsChanged,
+  buttonStyle,
+  children,
 }) => {
   const log = logger();
   const { theme, systemTheme } = useTheme();
@@ -63,11 +73,9 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
   });
 
   const [plannerVisible, setPlannerVisible] = useState(false);
-  const [planSummary, setPlanSummary] = useState<string | null>(null);
   const [isManagingDownloads, setIsManagingDownloads] = useState(false);
   const [previousStatus, setPreviousStatus] = useState<string>(state.status);
 
-  // Show toast when batch download completes
   useEffect(() => {
     if (
       previousStatus === 'downloading' &&
@@ -103,32 +111,25 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
     );
   }, [chapters, downloadedChapters]);
 
-  const totalChapters = chapters?.length ?? 0;
   const downloadedCount = downloadedChapters?.length ?? 0;
-  const missingCount = Math.max(totalChapters - downloadedCount, 0);
-
   const hasFailures = state.failedChapters.length > 0;
   const isBusy = state.status === 'preparing' || state.status === 'downloading';
   const isProcessing = isBusy || isManagingDownloads;
 
-  const plannerLabel = useMemo(() => {
-    if (state.status === 'preparing') return 'Preparing…';
-    if (state.status === 'downloading') return 'Downloading…';
-    if (isManagingDownloads) return 'Processing…';
-    return downloadedCount > 0 ? 'Manage downloads' : 'Configure downloads';
-  }, [downloadedCount, isManagingDownloads, state.status]);
-
-  const subtitle = useMemo(() => {
-    if (state.message) return state.message;
-    if (planSummary) return planSummary;
-    if (missingCount === 0) {
-      return 'All chapters are ready for offline reading.';
+  const buttonLabel = useMemo(() => {
+    if (state.status === 'preparing') return null;
+    if (state.status === 'downloading') {
+      return `${Math.max(0, Math.min(100, Math.round(state.progress)))}`;
     }
-    if (missingCount > 0) {
-      return `Ready to download ${missingCount} chapter${missingCount === 1 ? '' : 's'} for offline reading.`;
-    }
-    return 'Prepare all chapters for offline reading.';
-  }, [missingCount, planSummary, state.message]);
+    if (isManagingDownloads) return null;
+    if (hasFailures) return '!';
+    return null;
+  }, [
+    hasFailures,
+    isManagingDownloads,
+    state.progress,
+    state.status,
+  ]);
 
   const openPlanner = () => {
     if (isProcessing) return;
@@ -137,9 +138,8 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
 
   const handlePlannerDownloadConfirm = (
     selection: Chapter[],
-    summary: string
+    _summary: string
   ) => {
-    setPlanSummary(summary);
     setPlannerVisible(false);
     showToast({
       message: `Starting download of ${selection.length} chapter${selection.length === 1 ? '' : 's'}...`,
@@ -165,11 +165,6 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
         )
       );
 
-      setPlanSummary(
-        `Removed ${selection.length} offline chapter${
-          selection.length === 1 ? '' : 's'
-        }`
-      );
       showToast({
         message: `Deleted ${selection.length} chapter${selection.length === 1 ? '' : 's'}`,
         type: 'success',
@@ -183,7 +178,6 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
         chapterNumbers: selection.map((chapter) => chapter.number),
         error: error instanceof Error ? error.message : String(error),
       });
-      setPlanSummary('Failed to remove downloads');
       showToast({
         message: 'Failed to delete chapters',
         type: 'error',
@@ -195,92 +189,133 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Ionicons name="download-outline" size={20} color={colors.primary} />
-        <Text style={styles.headerText}>Offline download manager</Text>
-      </View>
-
-      <Text style={styles.subtitle}>{subtitle}</Text>
-
-      {state.status === 'downloading' ? (
-        <View style={styles.progressWrapper}>
-          <View style={styles.progressBackground}>
-            <View
-              style={[styles.progressFill, { width: `${state.progress}%` }]}
-            />
-          </View>
-          <View style={styles.progressStatsRow}>
-            <Text style={styles.progressStat}>
-              {state.completedChapters}/{state.totalChapters} completed
-            </Text>
-            <Text style={styles.progressStat}>
-              {remainingChapters} remaining
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
-      {state.status !== 'downloading' ? (
-        <View style={styles.statsRow}>
-          <Text style={styles.statText}>
-            Downloaded{' '}
-            <Text style={styles.statHighlight}>{downloadedCount}</Text> of{' '}
-            {totalChapters}
-          </Text>
-        </View>
-      ) : null}
-
-      {hasFailures ? (
-        <View style={styles.failureBadge}>
-          <Ionicons name="warning-outline" size={16} color={colors.error} />
-          <Text style={styles.failureText}>
-            {state.failedChapters.length} chapter
-            {state.failedChapters.length === 1 ? '' : 's'} failed
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={styles.actionsRow}>
-        <TouchableOpacity
+  const button = (
+    <TouchableOpacity
+      onPress={openPlanner}
+      disabled={isProcessing}
+      style={[
+        styles.triggerButton,
+        isProcessing && styles.triggerButtonDisabled,
+        buttonStyle,
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isProcessing, busy: isBusy }}
+      accessibilityLabel={
+        downloadedCount > 0
+          ? 'Manage offline downloads'
+          : 'Configure offline downloads'
+      }
+    >
+      {isProcessing && state.status !== 'downloading' ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : (
+        <Ionicons
+          name={
+            hasFailures
+              ? 'warning-outline'
+              : downloadedCount > 0
+                ? 'cloud-done-outline'
+                : 'download-outline'
+          }
+          size={18}
+          color={hasFailures ? colors.error : colors.primary}
+        />
+      )}
+      {buttonLabel ? (
+        <View
           style={[
-            styles.primaryButton,
-            isProcessing && styles.primaryButtonDisabled,
+            styles.triggerBadge,
+            hasFailures ? styles.triggerBadgeError : null,
           ]}
-          activeOpacity={0.85}
-          onPress={openPlanner}
-          disabled={isProcessing}
         >
-          {isProcessing ? (
-            <ActivityIndicator size="small" color={colors.background} />
-          ) : (
-            <Text style={styles.primaryButtonText}>{plannerLabel}</Text>
-          )}
-        </TouchableOpacity>
+          <Text style={styles.triggerBadgeText}>{buttonLabel}</Text>
+        </View>
+      ) : null}
+    </TouchableOpacity>
+  );
+
+  const progressBanner =
+    isBusy || hasFailures ? (
+      <View
+        style={styles.progressBanner}
+        accessibilityRole="progressbar"
+        accessibilityLabel={
+          state.status === 'downloading'
+            ? `Downloading chapters, ${state.completedChapters} of ${state.totalChapters} complete`
+            : hasFailures
+              ? `${state.failedChapters.length} chapter downloads failed`
+              : 'Preparing chapter downloads'
+        }
+      >
+        <View style={styles.progressBannerHeader}>
+          <Text style={styles.progressBannerLabel} numberOfLines={1}>
+            {state.status === 'preparing'
+              ? 'Preparing downloads…'
+              : state.status === 'downloading'
+                ? state.message ||
+                  `Downloading ${state.completedChapters}/${state.totalChapters}`
+                : hasFailures
+                  ? `${state.failedChapters.length} chapter${
+                      state.failedChapters.length === 1 ? '' : 's'
+                    } failed`
+                  : 'Download status'}
+          </Text>
+          {state.status === 'downloading' ? (
+            <Text style={styles.progressBannerPercent}>
+              {Math.max(0, Math.min(100, Math.round(state.progress)))}%
+            </Text>
+          ) : null}
+        </View>
 
         {state.status === 'downloading' ? (
+          <>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${Math.max(0, Math.min(100, state.progress))}%`,
+                  },
+                ]}
+              />
+            </View>
+            <View style={styles.progressBannerFooter}>
+              <Text style={styles.progressBannerHint}>
+                {remainingChapters} remaining
+              </Text>
+              <TouchableOpacity
+                onPress={cancelBatchDownload}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel batch download"
+                hitSlop={8}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
+
+        {hasFailures && state.status !== 'downloading' ? (
           <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={cancelBatchDownload}
-            activeOpacity={0.8}
+            style={styles.retryRow}
+            onPress={retryFailedChapters}
+            accessibilityRole="button"
+            accessibilityLabel="Retry failed chapter downloads"
           >
-            <Text style={styles.secondaryButtonText}>Cancel</Text>
+            <Ionicons
+              name="refresh-outline"
+              size={14}
+              color={colors.primary}
+            />
+            <Text style={styles.retryText}>Retry failed chapters</Text>
           </TouchableOpacity>
         ) : null}
       </View>
+    ) : null;
 
-      {hasFailures ? (
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={retryFailedChapters}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="refresh-outline" size={16} color={colors.primary} />
-          <Text style={styles.retryButtonText}>Retry failed chapters</Text>
-        </TouchableOpacity>
-      ) : null}
-
+  return (
+    <>
+      {children({ button, progressBanner })}
       <BatchDownloadPlannerModal
         visible={plannerVisible}
         onClose={() => setPlannerVisible(false)}
@@ -291,131 +326,103 @@ const BatchDownloadBar: React.FC<BatchDownloadBarProps> = ({
         initialTab={downloadedChapterDetails.length > 0 ? 'manage' : 'download'}
         isProcessing={isProcessing}
       />
-    </View>
+    </>
   );
 };
 
 const getStyles = (colors: typeof Colors.light) =>
   StyleSheet.create({
-    container: {
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 16,
-      shadowColor: '#000',
-      shadowOpacity: 0.05,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 3,
+    triggerButton: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+      backgroundColor: colors.background,
     },
-    headerRow: {
+    triggerButtonDisabled: {
+      opacity: 0.5,
+    },
+    triggerBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      minWidth: 18,
+      height: 16,
+      paddingHorizontal: 4,
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    triggerBadgeError: {
+      backgroundColor: colors.error,
+    },
+    triggerBadgeText: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: colors.background,
+    },
+    progressBanner: {
+      marginBottom: 10,
+      padding: 10,
+      borderRadius: 8,
+      backgroundColor: colors.background,
+      gap: 8,
+    },
+    progressBannerHeader: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       gap: 8,
-      marginBottom: 8,
     },
-    headerText: {
-      fontSize: 16,
+    progressBannerLabel: {
+      flex: 1,
+      fontSize: 12,
       fontWeight: '600',
       color: colors.text,
     },
-    subtitle: {
-      fontSize: 14,
-      color: colors.tabIconDefault,
-      marginBottom: 12,
+    progressBannerPercent: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.primary,
     },
-    progressWrapper: {
-      marginBottom: 12,
-    },
-    progressBackground: {
-      height: 8,
+    progressTrack: {
+      height: 6,
+      borderRadius: 999,
       backgroundColor: colors.border,
-      borderRadius: 4,
       overflow: 'hidden',
     },
     progressFill: {
       height: '100%',
+      borderRadius: 999,
       backgroundColor: colors.primary,
-      borderRadius: 4,
     },
-    progressStatsRow: {
+    progressBannerFooter: {
       flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'space-between',
-      marginTop: 6,
+      gap: 8,
     },
-    progressStat: {
-      fontSize: 12,
-      color: colors.tabIconDefault,
-    },
-    statsRow: {
-      flexDirection: 'row',
-      justifyContent: 'flex-start',
-      marginBottom: 12,
-    },
-    statText: {
-      fontSize: 13,
-      color: colors.tabIconDefault,
-    },
-    statHighlight: {
+    progressBannerHint: {
+      fontSize: 11,
       color: colors.text,
-      fontWeight: '600',
+      opacity: 0.7,
     },
-    failureBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      backgroundColor: colors.error + '14',
-      borderRadius: 12,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      marginBottom: 12,
-    },
-    failureText: {
+    cancelText: {
       fontSize: 12,
+      fontWeight: '700',
       color: colors.error,
-      fontWeight: '600',
     },
-    actionsRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    primaryButton: {
-      flex: 1,
-      backgroundColor: colors.primary,
-      borderRadius: 10,
-      paddingVertical: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    primaryButtonDisabled: {
-      backgroundColor: colors.border,
-    },
-    primaryButtonText: {
-      color: colors.background,
-      fontSize: 15,
-      fontWeight: '600',
-    },
-    secondaryButton: {
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-    },
-    secondaryButtonText: {
-      color: colors.error,
-      fontWeight: '600',
-    },
-    retryButton: {
+    retryRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      marginTop: 12,
     },
-    retryButtonText: {
-      color: colors.primary,
+    retryText: {
+      fontSize: 12,
       fontWeight: '600',
-      fontSize: 13,
+      color: colors.primary,
     },
   });
 
