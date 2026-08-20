@@ -117,6 +117,12 @@ describe('hydrateMangaFromLocal', () => {
         { number: '2', title: 'Chapter 2', date: '', url: '/ch/2' },
         { number: '1', title: 'Chapter 1', date: '', url: '/ch/1' },
       ],
+      totalChapters: 2432,
+      chapterPagination: {
+        hasMore: false,
+        nextPage: 42,
+        lastPage: 41,
+      },
       isBookmarked: true,
       cachedAt: Date.now(),
     });
@@ -126,6 +132,11 @@ describe('hydrateMangaFromLocal', () => {
     expect(hydration.hasCachedChapters).toBe(true);
     expect(hydration.details?.description).toBe('Cached synopsis');
     expect(hydration.details?.chapters).toHaveLength(2);
+    expect(hydration.details?.chapterPagination).toEqual({
+      hasMore: false,
+      nextPage: 42,
+      lastPage: 41,
+    });
   });
 
   it('falls back to bookmark manga data when no caches exist', async () => {

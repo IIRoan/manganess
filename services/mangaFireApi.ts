@@ -569,10 +569,11 @@ export function mapApiTitleToMangaDetails(
     title.poster?.large || title.poster?.medium || title.poster?.small || '';
 
   const mappedChapters = mapApiChapters(chapters);
+  // Never invent totalChapters from a partial page length — that made page-1 windows (40–90) look "complete" via count >= total.
   const reportedTotal =
     typeof options?.totalChapters === 'number' && options.totalChapters > 0
       ? options.totalChapters
-      : mappedChapters.length;
+      : undefined;
 
   return {
     id: title.hid,
@@ -589,7 +590,7 @@ export function mapApiTitleToMangaDetails(
     reviewCount: title.ratingCount != null ? String(title.ratingCount) : '0',
     bannerImage: poster,
     chapters: mappedChapters,
-    ...(reportedTotal > 0 ? { totalChapters: reportedTotal } : {}),
+    ...(typeof reportedTotal === 'number' ? { totalChapters: reportedTotal } : {}),
     type: title.type,
   };
 }

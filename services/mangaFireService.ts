@@ -213,11 +213,10 @@ export interface FetchMangaDetailsOptions {
     hasMore: boolean;
     lastPage?: number;
     total?: number;
+    /** Unique chapters loaded so far after this page. */
+    chapterCount?: number;
   }) => void;
-  /**
-   * Cap how many /chapters pages to pull.
-   * Use `1` on the manga details screen so opening One Piece does not spam 40+ requests.
-   */
+  /** Cap how many /chapters pages to pull. Use `1` on the manga details screen so opening One Piece does not spam 40+ requests. */
   maxChapterPages?: number;
 }
 
@@ -491,10 +490,11 @@ export const fetchMangaDetails = async (
         ...fallbackDetails!,
         id: normalizedId,
         chapters: mappedChapters,
-        totalChapters:
-          typeof totalChapters === 'number' && totalChapters > 0
-            ? Math.max(totalChapters, mappedChapters.length)
-            : mappedChapters.length,
+        ...(typeof totalChapters === 'number' && totalChapters > 0
+          ? {
+            totalChapters: Math.max(totalChapters, mappedChapters.length),
+          }
+          : {}),
       };
     };
 
@@ -520,7 +520,10 @@ export const fetchMangaDetails = async (
         if (typeof meta.total === 'number' && meta.total > 0) {
           knownTotalChapters = meta.total;
         }
-        options.onChapterPagination?.(meta);
+        options.onChapterPagination?.({
+          ...meta,
+          chapterCount: chaptersSoFar.length,
+        });
         if (options.onPartial && (meta.page === 1 || !meta.hasMore)) {
           options.onPartial(mapDetails(chaptersSoFar, knownTotalChapters));
         }
@@ -1039,8 +1042,7 @@ export async function loadOnlineChapterImages(
     }
 
     const recoveryPromise = (async (): Promise<ChapterImage[]> => {
-      // Offline/cache chapter lists can keep dead MangaFire chapter IDs after
-      // a chapter is re-uploaded. Force a live lookup and retry once.
+      // Offline/cache chapter lists can keep dead MangaFire chapter IDs after a chapter is re-uploaded. Force a live lookup and retry once.
       log.warn('Service', 'Chapter pages 404 — attempting stale-ID recovery', {
         mangaId: titleHid,
         chapterNumber: normalized,
@@ -1448,11 +1450,7 @@ export const fetchChapterImages = async (
   return result;
 };
 
-/**
- * Fetch chapter images using intercepted WebView request data
- * This is the preferred method for mobile as it doesn't require parsing HTML
- * or making additional requests to extract VRF tokens
- */
+/** Fetch chapter images using intercepted WebView request data This is the preferred method for mobile as it doesn't require parsing HTML or making additional requests to extract VRF tokens */
 export const fetchChapterImagesFromInterceptedRequest = async (
   chapterId: string,
   vrfToken: string,
