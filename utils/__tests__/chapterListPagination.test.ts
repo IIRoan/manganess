@@ -363,7 +363,7 @@ describe('chapterListPagination', () => {
       });
     });
 
-    it('keeps crawling when the finished page still starts mid-series', () => {
+    it('stops requesting pages when the API is exhausted even mid-series', () => {
       expect(
         resolveFinishedChapterPagination({
           chapters: Array.from({ length: 51 }, (_, i) =>
@@ -373,8 +373,25 @@ describe('chapterListPagination', () => {
           nextPage: 2,
         })
       ).toEqual({
-        hasMore: true,
+        hasMore: false,
         nextPage: 2,
+      });
+    });
+
+    it('keeps hasMore true while the API still has pages', () => {
+      expect(
+        resolveFinishedChapterPagination({
+          chapters: Array.from({ length: 51 }, (_, i) =>
+            chapter(String(90 - i))
+          ),
+          apiHasMore: true,
+          nextPage: 3,
+          lastPage: 5,
+        })
+      ).toEqual({
+        hasMore: true,
+        nextPage: 3,
+        lastPage: 5,
       });
     });
   });

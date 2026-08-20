@@ -272,8 +272,7 @@ export default function MangaDetailScreen() {
     [id]
   );
 
-  // Show the card's title/cover on the first paint — don't wait for layout
-  // effects or storage. Stale fetchedDetails from a previous manga are ignored.
+  // Show the card's title/cover on the first paint — don't wait for layout effects or storage. Stale fetchedDetails from a previous manga are ignored.
   const mangaDetails = useMemo(() => {
     if (typeof id !== 'string') {
       return null;
@@ -333,9 +332,7 @@ export default function MangaDetailScreen() {
 
     hasInstantContentRef.current = false;
     setIsLoading(true);
-    // Only reset when the manga id changes — title/imageUrl param churn was
-    // restarting loads and re-crawling every /chapters page.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- routePreview/fetchedDetails would retrigger on param churn
+    // Only reset when the manga id changes — title/imageUrl param churn was restarting loads and re-crawling every /chapters page. eslint-disable-next-line react-hooks/exhaustive-deps -- routePreview/fetchedDetails would retrigger on param churn
   }, [id, previewId]);
 
   useEffect(() => {
@@ -631,8 +628,7 @@ export default function MangaDetailScreen() {
     }
   }, [id]);
 
-  // Stable refs for the detail-load effect — avoid restarting 40+ chapter page fetches
-  // when callback identities change mid-request.
+  // Stable refs for the detail-load effect — avoid restarting 40+ chapter page fetches when callback identities change mid-request.
   const applyMangaDetailsForIdRef = useRef(applyMangaDetailsForId);
   const applyCachedChapterPaginationRef = useRef(applyCachedChapterPagination);
   const refreshDownloadedChaptersRef = useRef(refreshDownloadedChapters);
@@ -689,8 +685,7 @@ export default function MangaDetailScreen() {
         : {}),
     };
 
-    // Persist chapter lists whenever we have them — long series like One Piece
-    // should not re-crawl ~40 API pages on every open.
+    // Persist chapter lists whenever we have them — long series like One Piece should not re-crawl ~40 API pages on every open.
     if (hasChapters) {
       void offlineCacheService.cacheMangaDetails(
         mangaId,
@@ -785,8 +780,7 @@ export default function MangaDetailScreen() {
     };
 
     const hydrateHeaderFromNetwork = async () => {
-      // Card/search routes already contain enough metadata for first paint. The
-      // main load enriches that preview after chapter page 1 succeeds.
+      // Card/search routes already contain enough metadata for first paint. The main load enriches that preview after chapter page 1 succeeds.
       if (isOfflineRef.current || routePreview) {
         return;
       }
@@ -806,8 +800,7 @@ export default function MangaDetailScreen() {
         setIsLoading(false);
         persistOpenedHeaderRef.current(id, details);
       } catch {
-        // The main detail load owns error and rate-limit handling. This path is
-        // only an opportunistic first-paint race.
+        // The main detail load owns error and rate-limit handling. This path is only an opportunistic first-paint race.
       }
     };
 
@@ -878,8 +871,7 @@ export default function MangaDetailScreen() {
           if (shouldCancelFetch()) {
             return;
           }
-          // A page-1 refresh must not reopen a full crawl when we already have
-          // a complete cached chapter list.
+          // A page-1 refresh must not reopen a full crawl when we already have a complete cached chapter list.
           if (
             !isChapterListCacheComplete({
               chapters: chapterPaginationRef.current.chapters,
@@ -1710,6 +1702,29 @@ export default function MangaDetailScreen() {
     const mangaId = id;
     const previousNewest = chapterPaginationRef.current.chapters[0]?.number;
     const loadGeneration = loadGenerationRef.current;
+    const previousPagination = {
+      chapters: chapterPaginationRef.current.chapters,
+      hasMore: chapterPaginationRef.current.hasMore,
+      nextPage: chapterPaginationRef.current.nextPage,
+      lastPage: chapterPaginationRef.current.lastPage,
+    };
+
+    const restorePreviousPagination = () => {
+      setHasMoreChapters(previousPagination.hasMore);
+      setNextChapterPage(previousPagination.nextPage);
+      if (typeof previousPagination.lastPage === 'number') {
+        setLastChapterPage(previousPagination.lastPage);
+      }
+      chapterPaginationRef.current = {
+        ...chapterPaginationRef.current,
+        chapters: previousPagination.chapters,
+        hasMore: previousPagination.hasMore,
+        nextPage: previousPagination.nextPage,
+        lastPage: previousPagination.lastPage,
+      };
+      // Allow background crawl to resume if the list was still incomplete.
+      backgroundChapterLoadIdRef.current = null;
+    };
 
     // Block the background page-by-page crawl from racing this full refresh.
     backgroundChapterLoadIdRef.current = mangaId;
@@ -1786,6 +1801,7 @@ export default function MangaDetailScreen() {
         typeof id !== 'string' ||
         id !== mangaId
       ) {
+        restorePreviousPagination();
         return;
       }
 
@@ -1858,20 +1874,21 @@ export default function MangaDetailScreen() {
       );
 
       const newest = chapters[0]?.number;
+      const reachedStart = chapterListReachesSeriesStart(chapters);
       showToast({
         type: 'success',
-        message: finishedPagination.hasMore
-          ? `Loaded ${chapters.length} chapters — still fetching older ones…`
+        message: !reachedStart
+          ? `Loaded ${chapters.length} chapters — older chapters may still be missing`
           : newest && previousNewest && newest !== previousNewest
             ? `Refreshed ${chapters.length} chapters — latest is ${newest}`
             : `Refreshed ${chapters.length} chapters`,
       });
 
-      if (finishedPagination.hasMore) {
-        // Let the background crawl resume for older pages that are still missing.
-        backgroundChapterLoadIdRef.current = null;
-      }
+      // Clear the pin so a future open/rehydrate can schedule work; hasMore already gates whether the idle crawl actually runs.
+      backgroundChapterLoadIdRef.current = null;
     } catch (error) {
+      restorePreviousPagination();
+
       if (isRateLimitError(error)) {
         showToast({
           type: 'error',
@@ -2056,10 +2073,7 @@ export default function MangaDetailScreen() {
         });
       }
 
-      return (
-        !result.hasMore &&
-        chapterListReachesSeriesStart(result.chapters)
-      );
+      return !result.hasMore;
     } catch (error) {
       logger().warn('Service', 'Failed to load all chapters', {
         mangaId: id,
@@ -2076,9 +2090,7 @@ export default function MangaDetailScreen() {
     }
   }, [id, isOffline, lastChapterPage]);
 
-  // Page 1 is enough for first paint. Once it is visible, fill the remainder
-  // sequentially in the background so long series become complete without the
-  // user having to reach the temporary end of every 60-item page.
+  // Page 1 is enough for first paint. Once it is visible, fill the remainder sequentially in the background so long series become complete without the user having to reach the temporary end of every 60-item page.
   useEffect(() => {
     if (
       typeof id !== 'string' ||

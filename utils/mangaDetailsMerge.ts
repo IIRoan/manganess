@@ -56,15 +56,7 @@ function mergeIncomingOverPrevious(
   return brandNew.length ? [...brandNew, ...updatedPrevious] : updatedPrevious;
 }
 
-/**
- * Keep a longer cached chapter list, but overwrite URLs/titles for chapters
- * present in the fresh page so stale MangaFire chapter API IDs heal.
- * Also prepend brand-new newest chapters from a shorter page-1 refresh
- * (e.g. One Piece 1191 published while cache still ends at 1190).
- *
- * Never let a longer page-1 window (40–90) replace a shorter list that still
- * contains early chapters (1–30).
- */
+/** Keep a longer cached chapter list, but overwrite URLs/titles for chapters present in the fresh page so stale MangaFire chapter API IDs heal. Also prepend brand-new newest chapters from a shorter page-1 refresh (e.g. One Piece 1191 published while cache still ends at 1190). Never let a longer page-1 window (40–90) replace a shorter list that still contains early chapters (1–30). */
 export function mergeChapterListsPreferringLonger(
   previousChapters: Chapter[],
   incomingChapters: Chapter[]

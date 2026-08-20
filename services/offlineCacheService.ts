@@ -90,8 +90,7 @@ class OfflineCacheService {
         details,
         mangaId
       );
-      // Never let a page-1 refresh mark a durable full list incomplete again —
-      // but only trust seals that actually reach the series start (not 40–90).
+      // Never let a page-1 refresh mark a durable full list incomplete again — but only trust seals that actually reach the series start (not 40–90).
       const incomingPagination = details.chapterPagination;
       const existingPagination = existing?.chapterPagination;
       const existingIsTrustedComplete =
@@ -178,10 +177,7 @@ class OfflineCacheService {
     }
   }
 
-  /**
-   * Replace a chapter's MangaFire API id in the offline details cache.
-   * Used after stale-ID recovery so the next open does not 404 again.
-   */
+  /** Replace a chapter's MangaFire API id in the offline details cache. Used after stale-ID recovery so the next open does not 404 again. */
   async patchCachedChapterApiId(
     mangaId: string,
     chapterNumber: string,

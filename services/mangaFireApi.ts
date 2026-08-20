@@ -569,8 +569,7 @@ export function mapApiTitleToMangaDetails(
     title.poster?.large || title.poster?.medium || title.poster?.small || '';
 
   const mappedChapters = mapApiChapters(chapters);
-  // Never invent totalChapters from a partial page length — that made page-1
-  // windows (40–90) look "complete" via count >= total.
+  // Never invent totalChapters from a partial page length — that made page-1 windows (40–90) look "complete" via count >= total.
   const reportedTotal =
     typeof options?.totalChapters === 'number' && options.totalChapters > 0
       ? options.totalChapters
