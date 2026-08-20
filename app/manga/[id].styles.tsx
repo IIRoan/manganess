@@ -211,6 +211,43 @@ const getStyles = (colors: typeof Colors.light) =>
       marginBottom: 0,
       flexShrink: 1,
     },
+    chaptersHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexShrink: 0,
+    },
+    chapterIconButton: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+      backgroundColor: colors.background,
+    },
+    chapterIconButtonActive: {
+      backgroundColor: colors.primary + '18',
+    },
+    chapterIconButtonDisabled: {
+      opacity: 0.45,
+    },
+    chapterIconButtonBadge: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      minWidth: 18,
+      height: 16,
+      paddingHorizontal: 4,
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    chapterIconButtonBadgeText: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: colors.background,
+    },
     chapterListModeButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -219,13 +256,56 @@ const getStyles = (colors: typeof Colors.light) =>
       paddingVertical: 6,
       borderRadius: 8,
       backgroundColor: colors.background,
-      maxWidth: '58%',
+      flexShrink: 1,
+    },
+    chapterListModeButtonDisabled: {
+      opacity: 0.5,
     },
     chapterListModeButtonText: {
       fontSize: 12,
       fontWeight: '600',
       color: colors.primary,
       flexShrink: 1,
+    },
+    chapterRefreshProgress: {
+      marginBottom: 10,
+      padding: 10,
+      borderRadius: 8,
+      backgroundColor: colors.background,
+      gap: 8,
+    },
+    chapterRefreshProgressHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    chapterRefreshProgressLabel: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    chapterRefreshProgressPercent: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.primary,
+    },
+    chapterRefreshProgressTrack: {
+      height: 6,
+      borderRadius: 999,
+      backgroundColor: colors.border,
+      overflow: 'hidden',
+    },
+    chapterRefreshProgressFill: {
+      height: '100%',
+      borderRadius: 999,
+      backgroundColor: colors.primary,
+    },
+    chapterRefreshProgressHint: {
+      fontSize: 11,
+      color: colors.text,
+      opacity: 0.7,
     },
 
     // Chapter item visual styles are now self-contained in SwipeChapterItem

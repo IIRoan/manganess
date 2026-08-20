@@ -188,7 +188,13 @@ async function loadMangaFromLocal(
     }
 
     return {
-      details: { ...details, id: mangaId },
+      details: {
+        ...details,
+        id: mangaId,
+        ...(cachedDetails?.chapterPagination
+          ? { chapterPagination: cachedDetails.chapterPagination }
+          : {}),
+      },
       mangaData,
       hasInstantDetails: true,
       hasCachedChapters: cachedChapters.length > 0,

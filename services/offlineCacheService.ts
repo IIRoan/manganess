@@ -23,6 +23,7 @@ import {
   pruneMangaHeaderCache,
   type CachedMangaHeader,
 } from '@/utils/mangaHeader';
+import { isChapterListCacheComplete } from '@/utils/chapterListPagination';
 
 const OFFLINE_MANGA_CACHE_KEY = 'offline_manga_cache';
 const OFFLINE_MANGA_HEADER_CACHE_KEY = 'offline_manga_header_cache';
@@ -76,7 +77,9 @@ class OfflineCacheService {
   // Manga Details Caching
   async cacheMangaDetails(
     mangaId: string,
-    details: MangaDetails,
+    details: MangaDetails & {
+      chapterPagination?: CachedMangaDetails['chapterPagination'];
+    },
     isBookmarked: boolean = false
   ): Promise<void> {
     try {
@@ -87,10 +90,22 @@ class OfflineCacheService {
         details,
         mangaId
       );
+      // Never let a page-1 refresh mark a durable full list incomplete again —
+      // but only trust seals that actually reach the series start (not 40–90).
+      const incomingPagination = details.chapterPagination;
+      const existingPagination = existing?.chapterPagination;
+      const existingIsTrustedComplete =
+        existingPagination?.hasMore === false &&
+        isChapterListCacheComplete(existing);
+      const nextPagination =
+        existingIsTrustedComplete && incomingPagination?.hasMore === true
+          ? existingPagination
+          : (incomingPagination ?? existingPagination);
       const cachedDetails: CachedMangaDetails = {
         ...mergedDetails,
         cachedAt: Date.now(),
         isBookmarked: isBookmarked || existing?.isBookmarked === true,
+        ...(nextPagination ? { chapterPagination: nextPagination } : {}),
       };
 
       if (this.areCachedDetailsEquivalent(existing, cachedDetails)) {
@@ -349,6 +364,9 @@ class OfflineCacheService {
       existing.isBookmarked === next.isBookmarked &&
       this.chapterListIdentity(existing.chapters) ===
       this.chapterListIdentity(next.chapters) &&
+      existing.chapterPagination?.hasMore === next.chapterPagination?.hasMore &&
+      existing.chapterPagination?.nextPage === next.chapterPagination?.nextPage &&
+      existing.chapterPagination?.lastPage === next.chapterPagination?.lastPage &&
       (existing.author?.join('\0') ?? '') === (next.author?.join('\0') ?? '') &&
       (existing.genres?.join('\0') ?? '') === (next.genres?.join('\0') ?? '')
     );

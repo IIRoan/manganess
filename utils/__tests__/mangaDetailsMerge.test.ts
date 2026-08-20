@@ -49,12 +49,13 @@ describe('mergeMangaDetailsRefresh', () => {
       ),
       totalChapters: 2427,
     });
+    // Page-1 refresh overlaps the newest cached chapters (real MangaFire shape).
     const incoming = details({
       id: 'abc12',
       title: 'Updated title',
       description: 'New synopsis',
       chapters: Array.from({ length: 60 }, (_, index) =>
-        chapter(String(2427 - index))
+        chapter(String(120 - index))
       ),
       totalChapters: 2427,
     });
@@ -62,6 +63,8 @@ describe('mergeMangaDetailsRefresh', () => {
     const merged = mergeMangaDetailsRefresh(previous, incoming, 'abc12');
 
     expect(merged.chapters).toHaveLength(120);
+    expect(merged.chapters[0]?.number).toBe('120');
+    expect(merged.chapters[119]?.number).toBe('1');
     expect(merged.title).toBe('Updated title');
     expect(merged.description).toBe('New synopsis');
     expect(merged.totalChapters).toBe(2427);
@@ -84,6 +87,29 @@ describe('mergeMangaDetailsRefresh', () => {
     expect(
       mergeMangaDetailsRefresh(previous, incoming, 'abc12').chapters
     ).toHaveLength(5);
+  });
+
+  it('does not let a longer page-1 window drop early chapters', () => {
+    const previous = details({
+      id: 'abc12',
+      chapters: Array.from({ length: 30 }, (_, index) =>
+        chapter(String(30 - index))
+      ),
+      totalChapters: 90,
+    });
+    const incoming = details({
+      id: 'abc12',
+      chapters: Array.from({ length: 51 }, (_, index) =>
+        chapter(String(90 - index))
+      ),
+      totalChapters: 51,
+    });
+
+    const merged = mergeMangaDetailsRefresh(previous, incoming, 'abc12');
+
+    expect(merged.chapters.map((c) => c.number)).toContain('1');
+    expect(merged.chapters.map((c) => c.number)).toContain('90');
+    expect(merged.chapters.map((c) => c.number)).toContain('40');
   });
 
   it('preserves the highest reported total chapter count', () => {
@@ -123,6 +149,29 @@ describe('mergeMangaDetailsRefresh', () => {
     expect(merged.title).toBe('Fresh title');
     expect(merged.description).toBe('Saved synopsis');
     expect(merged.author).toEqual(['Oda']);
+  });
+
+  it('prepends newly published chapters when keeping a longer cached list', () => {
+    const previous = details({
+      id: 'dkw',
+      chapters: [chapter('1190'), chapter('1189'), chapter('1')],
+      totalChapters: 1190,
+    });
+    const incoming = details({
+      id: 'dkw',
+      chapters: [chapter('1191'), chapter('1190'), chapter('1189')],
+      totalChapters: 1191,
+    });
+
+    const merged = mergeMangaDetailsRefresh(previous, incoming, 'dkw');
+
+    expect(merged.chapters.map((c) => c.number)).toEqual([
+      '1191',
+      '1190',
+      '1189',
+      '1',
+    ]);
+    expect(merged.totalChapters).toBe(1191);
   });
 
   it('refreshes overlapping chapter URLs when keeping a longer cached list', () => {

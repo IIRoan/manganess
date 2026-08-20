@@ -27,6 +27,15 @@ export interface MangaDetails {
   totalChapters?: number;
   /** Provider type label, e.g. manga / manhwa / manhua. */
   type?: string;
+  /**
+   * Offline chapter-list pagination. When hasMore is false the list is durable
+   * and should not be re-crawled on every open (e.g. One Piece).
+   */
+  chapterPagination?: {
+    nextPage: number;
+    hasMore: boolean;
+    lastPage?: number;
+  };
 }
 
 export interface Chapter {
