@@ -75,15 +75,15 @@
     "lodash.debounce": "^4.0.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-native": "0.86.2",
+    "react-native": "0.87.0",
     "react-native-gesture-handler": "~2.32.0",
-    "react-native-reanimated": "4.5.1",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "~4.26.0",
-    "react-native-svg": "15.15.4",
+    "react-native-reanimated": "4.6.0",
+    "react-native-safe-area-context": "~5.9.0",
+    "react-native-screens": "~4.27.0",
+    "react-native-svg": "15.15.5",
     "react-native-web": "~0.21.0",
-    "react-native-webview": "13.16.1",
-    "react-native-worklets": "0.10.1"
+    "react-native-webview": "13.17.0",
+    "react-native-worklets": "0.12.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
