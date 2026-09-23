@@ -36,6 +36,23 @@ jest.mock('@/services/mangaFireApi', () => ({
   fetchTitleDetails: jest.fn().mockResolvedValue({}),
 }));
 
+const mockShowToast = jest.fn();
+jest.mock('@/hooks/useToast', () => ({
+  useToast: () => ({ showToast: mockShowToast, hideToast: jest.fn() }),
+}));
+
+jest.mock('@/utils/mangaFireHealth', () => ({
+  probeMangaFireOriginStatus: jest.fn().mockResolvedValue(null),
+}));
+
+jest.mock('@/services/mangaFireVrfBridge', () => ({
+  mangaFireVrfBridge: {
+    beginOriginRecheck: jest.fn(),
+    reportHostEvent: jest.fn(),
+    subscribeHostUi: jest.fn(() => () => {}),
+  },
+}));
+
 const mockFetchHomeMangaData = fetchHomeMangaData as jest.MockedFunction<
   typeof fetchHomeMangaData
 >;
@@ -259,7 +276,7 @@ describe('HomeScreen', () => {
   });
 
   it('shows error state on fetch failure', async () => {
-    mockFetchHomeMangaData.mockRejectedValue(new Error('Network error'));
+    mockFetchHomeMangaData.mockRejectedValue(new Error('Failed to parse homepage'));
     mockGetCachedHomeData.mockReturnValue(null);
 
     const { queryByText } = renderScreen();
@@ -282,7 +299,7 @@ describe('HomeScreen', () => {
 
   it('retries fetch when retry button is pressed', async () => {
     mockFetchHomeMangaData
-      .mockRejectedValueOnce(new Error('Network error'))
+      .mockRejectedValueOnce(new Error('Failed to parse homepage'))
       .mockResolvedValueOnce(defaultHomeData);
     mockGetCachedHomeData.mockReturnValue(null);
 
@@ -303,6 +320,26 @@ describe('HomeScreen', () => {
         expect(mockFetchHomeMangaData).toHaveBeenCalledTimes(2);
       });
     }
+  });
+
+  it('shows unreachable banner when MangaFire is down and cache exists', async () => {
+    mockFetchHomeMangaData.mockRejectedValue(new Error('Network error'));
+    mockGetCachedHomeData.mockReturnValue({
+      mostViewed: defaultHomeData.mostViewed,
+      newReleases: defaultHomeData.newReleases,
+      featuredManga: defaultHomeData.featuredManga,
+    });
+
+    const { queryByText } = renderScreen();
+
+    await waitFor(
+      () => {
+        expect(
+          queryByText(/MangaFire is currently unreachable/)
+        ).toBeTruthy();
+      },
+      { timeout: 3000 }
+    );
   });
 
   it('shows empty state for recently read section', async () => {

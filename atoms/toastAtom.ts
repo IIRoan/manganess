@@ -8,7 +8,8 @@ import { ToastAtomState, ToastConfig } from '@/types/atoms';
  *
  * Key behaviors:
  * - Showing a new toast while one is visible replaces it immediately
- * - Auto-hides after `config.duration` ms (default: 2500ms)
+ * - Auto-hides after `config.duration` ms (default: 2500ms), unless `persistent`
+ * - Persistent toasts stay until `hideToast()` is called
  * - Clearing the timeout on replacement prevents double-hide
  *
  * Dependencies: none
@@ -26,6 +27,10 @@ export const toastAtom = atom('toast', () => {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   const hideToast = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
     store.setState({
       config: null,
       isVisible: false,
@@ -45,8 +50,12 @@ export const toastAtom = atom('toast', () => {
       isVisible: true,
     });
 
-    // Auto-hide after duration
-    const duration = config.duration || 2500;
+    // Persistent toasts stay until hideToast() (e.g. provider still resolving).
+    if (config.persistent) {
+      return;
+    }
+
+    const duration = config.duration ?? 2500;
     timeoutId = setTimeout(() => {
       hideToast();
     }, duration);

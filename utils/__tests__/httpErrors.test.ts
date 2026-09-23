@@ -3,6 +3,7 @@ import {
   getForbiddenMaxRetries,
   isForbiddenError,
   isNotFoundError,
+  isProviderDownError,
   isRateLimitError,
   RATE_LIMIT_NO_CACHE_MESSAGE,
   RATE_LIMIT_USING_CACHE_MESSAGE,
@@ -156,6 +157,28 @@ describe('httpErrors', () => {
 
       expect(error).toMatchObject({ response: { status: 403 } });
       expect(operation).toHaveBeenCalledTimes(getForbiddenMaxRetries());
+    });
+  });
+
+  describe('isProviderDownError', () => {
+    it('flags timeouts, network failures and 5xx', () => {
+      expect(
+        isProviderDownError({ code: 'ECONNABORTED', message: 'timeout of 20000ms exceeded' })
+      ).toBe(true);
+      expect(isProviderDownError(new Error('Network Error'))).toBe(true);
+      expect(
+        isProviderDownError(new Error('Timed out waiting for MangaFire API response'))
+      ).toBe(true);
+      expect(isProviderDownError({ message: 'x', response: { status: 522 } })).toBe(true);
+      expect(isProviderDownError({ message: 'x', response: { status: 503 } })).toBe(true);
+    });
+
+    it('ignores 4xx, Cloudflare challenge and unrelated errors', () => {
+      expect(isProviderDownError({ message: 'x', response: { status: 403 } })).toBe(false);
+      expect(isProviderDownError({ message: 'x', response: { status: 429 } })).toBe(false);
+      expect(isProviderDownError(new Error('Cloudflare verification required'))).toBe(false);
+      expect(isProviderDownError(new Error('Failed to parse'))).toBe(false);
+      expect(isProviderDownError(undefined)).toBe(false);
     });
   });
 

@@ -25,7 +25,10 @@ export interface NetworkAtomState {
 export interface ToastConfig {
   message: string;
   icon?: string;
+  /** Auto-hide delay in ms. Ignored when `persistent` is true. Default 2500. */
   duration?: number;
+  /** Stay visible until hideToast() is called. */
+  persistent?: boolean;
   type?: 'success' | 'info' | 'warning' | 'error';
 }
 

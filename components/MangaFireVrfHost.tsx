@@ -32,8 +32,11 @@ const MangaFireVrfHost: React.FC = () => {
   const [challengeVisible, setChallengeVisible] = useState(false);
   const readinessScript = useMemo(() => buildVrfScript(), []);
 
-  const reloadWebView = useCallback(() => {
+  const reloadWebView = useCallback((options?: { force?: boolean }) => {
     const now = Date.now();
+    if (options?.force) {
+      reloadAtRef.current = [];
+    }
     const recent = reloadAtRef.current.filter(
       (ts) => now - ts < HOST_RELOAD_WINDOW_MS
     );
@@ -46,6 +49,7 @@ const MangaFireVrfHost: React.FC = () => {
     reloadAtRef.current = recent;
     log.warn('Service', 'Reloading MangaFire VRF host WebView', {
       attempt: recent.length,
+      force: !!options?.force,
     });
     webViewRef.current?.reload();
   }, [log]);
