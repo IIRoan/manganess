@@ -316,6 +316,7 @@ describe('mangaFireVrfBridge', () => {
     expect(listener).toHaveBeenCalledWith({
       challengeVisible: false,
       ready: true,
+      providerDown: false,
     });
 
     listener.mockClear();
@@ -326,6 +327,7 @@ describe('mangaFireVrfBridge', () => {
     expect(listener).toHaveBeenCalledWith({
       challengeVisible: true,
       ready: false,
+      providerDown: false,
     });
 
     const vrfPromise = appendVrfParams('/titles/example');
@@ -362,12 +364,14 @@ describe('mangaFireVrfBridge', () => {
     expect(listener).toHaveBeenCalledWith({
       challengeVisible: true,
       ready: false,
+      providerDown: false,
     });
 
     mangaFireVrfBridge.dismissChallenge();
     expect(listener).toHaveBeenCalledWith({
       challengeVisible: false,
       ready: false,
+      providerDown: false,
     });
     unsubscribe();
   });
@@ -415,6 +419,7 @@ describe('mangaFireVrfBridge', () => {
     expect(listener).toHaveBeenCalledWith({
       challengeVisible: true,
       ready: false,
+      providerDown: false,
     });
 
     const timedOutEarly = jest.fn();
@@ -611,6 +616,7 @@ describe('mangaFireVrfBridge', () => {
     expect(listener).toHaveBeenCalledWith({
       challengeVisible: true,
       ready: false,
+      providerDown: false,
     });
 
     mangaFireVrfBridge.handleMessage(JSON.stringify({ type: 'ready' }));
@@ -630,6 +636,68 @@ describe('mangaFireVrfBridge', () => {
     await expect(fetchPromise).resolves.toEqual({
       status: 200,
       data: { ok: true },
+    });
+  });
+
+  it('fails fast on Cloudflare origin 522 instead of waiting for VRF', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    const listener = jest.fn();
+    mangaFireVrfBridge.attachHost(() => { });
+    mangaFireVrfBridge.subscribeHostUi(listener);
+
+    const vrfPromise = appendVrfParams('/top-titles', { type: 'trending' });
+    await flushPromises();
+
+    listener.mockClear();
+    mangaFireVrfBridge.reportHostEvent({
+      type: 'httpError',
+      statusCode: 522,
+      url: 'https://mangafire.to/',
+    });
+
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: false,
+      ready: false,
+      providerDown: true,
+    });
+
+    await expect(vrfPromise).rejects.toMatchObject({
+      message: expect.stringContaining('unreachable'),
+      response: { status: 522 },
+    });
+
+    // Subsequent waits fail immediately while origin is down.
+    await expect(appendVrfParams('/titles/x')).rejects.toMatchObject({
+      response: { status: 522 },
+    });
+
+    mangaFireVrfBridge.beginOriginRecheck();
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: false,
+      ready: false,
+      providerDown: false,
+    });
+  });
+
+  it('marks origin down from a 522 error-page probe title', async () => {
+    setMangaFireVrfBridgeProductionModeForTests();
+    mangaFireVrfBridge.attachHost(() => { });
+    const listener = jest.fn();
+    mangaFireVrfBridge.subscribeHostUi(listener);
+    listener.mockClear();
+
+    mangaFireVrfBridge.handleMessage(
+      JSON.stringify({
+        type: 'probe',
+        title: 'mangafire.to | 522: Connection timed out',
+        snippet: '<title>522</title>',
+      })
+    );
+
+    expect(listener).toHaveBeenCalledWith({
+      challengeVisible: false,
+      ready: false,
+      providerDown: true,
     });
   });
 });

@@ -39,7 +39,7 @@ type VrfHostMessage =
   };
 
 export interface MangaFireVrfHostHandles {
-  reload?: () => void;
+  reload?: (options?: { force?: boolean }) => void;
 }
 
 export interface MangaFireVrfHostEvent {
@@ -61,6 +61,8 @@ export const MANGA_FIRE_VRF_CHALLENGE_WAIT_MS = 180000;
 export interface MangaFireVrfHostUiState {
   challengeVisible: boolean;
   ready: boolean;
+  /** Origin returned Cloudflare 52x / 5xx — fail fast, do not wait for VRF. */
+  providerDown: boolean;
 }
 let useTestVrfToken =
   process.env.NODE_ENV === 'test' || typeof jest !== 'undefined';
@@ -434,6 +436,16 @@ export const VRF_PROTECTION_HELPERS_JS = `
   }
 `;
 
+function isOriginDownHttpStatus(status?: number): boolean {
+  return status != null && status >= 500;
+}
+
+function originDownStatusFromTitle(title?: string): number | null {
+  if (!title) return null;
+  const match = title.match(/\b(52[123]|503|502|500)\b/);
+  return match ? Number(match[1]) : null;
+}
+
 class MangaFireVrfBridge {
   private ready = false;
   private hostAttached = false;
@@ -443,6 +455,8 @@ class MangaFireVrfBridge {
   private challengeSeen = false;
   private challengeDismissed = false;
   private lastHostEvent: string | null = null;
+  /** Set when Cloudflare returns origin-down (521–523) for the host document. */
+  private originDownStatus: number | null = null;
   private pending: PendingVrfRequest[] = [];
   private pendingApi: PendingApiRequest[] = [];
   private uiListeners = new Set<(state: MangaFireVrfHostUiState) => void>();
@@ -471,10 +485,28 @@ class MangaFireVrfBridge {
     this.challengeSeen = false;
     this.challengeDismissed = false;
     this.lastHostEvent = null;
+    this.originDownStatus = null;
     this.challengeRecovery = null;
     this.clearReloadTimer();
     this.notifyHostUi();
     this.rejectAllPending(new Error('MangaFire VRF host detached'));
+  }
+
+  /**
+   * Clear a prior origin-down flag and reload the host WebView so Refresh /
+   * auto-retry can re-probe MangaFire instead of failing instantly.
+   */
+  beginOriginRecheck() {
+    if (this.originDownStatus == null) {
+      return;
+    }
+    this.originDownStatus = null;
+    this.ready = false;
+    this.challengeSeen = false;
+    this.challengeDismissed = false;
+    this.clearReloadTimer();
+    this.notifyHostUi();
+    this.webViewReload?.({ force: true });
   }
 
   subscribeHostUi(
@@ -517,11 +549,46 @@ class MangaFireVrfBridge {
     // Document-level Cloudflare interstitials arrive as HTTP 403.
     if (event.type === 'httpError' && event.statusCode === 403) {
       this.markChallengeVisible('Cloudflare 403');
+      return;
     }
+
+    // Origin offline (Cloudflare 522 etc.) — fail immediately, do not wait
+    // for the protection module on the error HTML page.
+    if (
+      event.type === 'httpError' &&
+      isOriginDownHttpStatus(event.statusCode)
+    ) {
+      this.markOriginDown(event.statusCode ?? 522);
+      return;
+    }
+
+    if (event.type === 'error') {
+      this.markOriginDown(522);
+    }
+  }
+
+  private markOriginDown(status: number) {
+    if (this.originDownStatus === status && !this.readyWaiters.length && !this.pending.length && !this.pendingApi.length) {
+      return;
+    }
+    this.originDownStatus = status;
+    this.ready = false;
+    this.challengeSeen = false;
+    this.clearReloadTimer();
+    this.notifyHostUi();
+    logger().warn('Network', 'MangaFire origin unreachable', { status });
+    this.rejectAllPending(
+      createHttpError(
+        status,
+        null,
+        `MangaFire is currently unreachable (HTTP ${status})`
+      )
+    );
   }
 
   markReady() {
     this.ready = true;
+    this.originDownStatus = null;
     this.clearReloadTimer();
     this.flushReadyWaiters();
     this.notifyHostUi();
@@ -554,6 +621,11 @@ class MangaFireVrfBridge {
     }
 
     if (message.type === 'probe') {
+      const downStatus = originDownStatusFromTitle(message.title);
+      if (downStatus != null) {
+        this.markOriginDown(downStatus);
+        return;
+      }
       logger().warn('Network', 'MangaFire VRF host still waiting for protection module', {
         title: message.title,
         snippet: message.snippet,
@@ -919,6 +991,14 @@ class MangaFireVrfBridge {
   }
 
   private async waitUntilReady(): Promise<void> {
+    if (this.originDownStatus != null) {
+      throw createHttpError(
+        this.originDownStatus,
+        null,
+        `MangaFire is currently unreachable (HTTP ${this.originDownStatus})`
+      );
+    }
+
     if (this.ready && !this.challengeSeen) {
       return;
     }
@@ -967,6 +1047,7 @@ class MangaFireVrfBridge {
       challengeVisible:
         this.challengeSeen && !this.ready && !this.challengeDismissed,
       ready: this.ready,
+      providerDown: this.originDownStatus != null,
     };
   }
 
@@ -978,7 +1059,13 @@ class MangaFireVrfBridge {
   }
 
   private scheduleHostReloadIfNeeded() {
-    if (this.ready || this.challengeSeen || this.reloadTimer || !this.webViewReload) {
+    if (
+      this.ready ||
+      this.challengeSeen ||
+      this.originDownStatus != null ||
+      this.reloadTimer ||
+      !this.webViewReload
+    ) {
       return;
     }
 
