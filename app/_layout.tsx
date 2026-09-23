@@ -16,6 +16,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import BatchDownloadHost from '@/components/BatchDownloadHost';
 import MangaFireVrfHost from '@/components/MangaFireVrfHost';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
+import { ToastHost } from '@/components/ToastHost';
 import { isDebugEnabled } from '@/constants/env';
 import { enableAsyncStorageLogging } from '@/utils/asyncStorageMonitor';
 import { installNetworkMonitor } from '@/utils/networkMonitor';
@@ -169,6 +170,7 @@ export default function RootLayout() {
       <EcosystemProvider ecosystem={ecosystem}>
         <RootLayoutNav />
         <OfflineIndicator />
+        <ToastHost />
         <StartupMigrationHost />
         <AppUpdateHost />
       </EcosystemProvider>

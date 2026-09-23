@@ -16,8 +16,13 @@ export const useToast = () => {
     [instance]
   );
 
+  const hideToast = useCallback(() => {
+    instance.exports?.hideToast?.();
+  }, [instance]);
+
   return {
     showToast,
+    hideToast,
     isVisible: state.isVisible,
     config: state.config,
   };

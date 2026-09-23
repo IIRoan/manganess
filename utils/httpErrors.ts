@@ -83,6 +83,27 @@ export function isCloudflareError(error: unknown): boolean {
   return getErrorMessage(error).includes('Cloudflare verification');
 }
 
+export const PROVIDER_DOWN_MESSAGE =
+  'MangaFire is currently unreachable. The site may be down — try again in a bit.';
+
+const PROVIDER_DOWN_MESSAGE_PATTERN =
+  /timeout|timed out|network error|network request failed|failed to fetch|ECONNABORTED|ETIMEDOUT|ECONNREFUSED|ENOTFOUND/i;
+
+/** Origin unreachable (timeout, network failure, 5xx) — not Cloudflare challenge or 4xx. */
+export function isProviderDownError(error: unknown): boolean {
+  if (!error || isCloudflareError(error)) {
+    return false;
+  }
+  const status = getHttpStatus(error);
+  if (status != null) {
+    return status >= 500;
+  }
+  const code = (error as { code?: unknown }).code;
+  return PROVIDER_DOWN_MESSAGE_PATTERN.test(
+    `${typeof code === 'string' ? code : ''} ${getErrorMessage(error)}`
+  );
+}
+
 export function getApiRetryDelayMs(error: unknown, attempt: number): number {
   if (isRateLimitError(error)) {
     const retryAfter = (
@@ -166,6 +187,11 @@ export async function withApiRetry<T>(
       }
 
       if (isCloudflareError(error)) {
+        throw error;
+      }
+
+      // Origin down (522 etc.) — retrying just burns the timeout budget.
+      if (isProviderDownError(error)) {
         throw error;
       }
 

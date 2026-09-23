@@ -38,6 +38,14 @@ import { useMarkInteractive } from '@/hooks/useMarkInteractive';
 import { useLibraryRefresh } from '@/hooks/useLibraryRefresh';
 import { useParallaxScroll, ParallaxImage } from '@/components/ParallaxLayout';
 import { navigateToMangaDetails } from '@/utils/mangaOpenNavigation';
+import {
+  isProviderDownError,
+  PROVIDER_DOWN_MESSAGE,
+} from '@/utils/httpErrors';
+import { mangaFireVrfBridge } from '@/services/mangaFireVrfBridge';
+import { probeMangaFireOriginStatus } from '@/utils/mangaFireHealth';
+import { useToast } from '@/hooks/useToast';
+import { MANGA_API_URL } from '@/constants/Config';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -50,6 +58,8 @@ const DEFAULT_MANGA_COVER =
   'https://static.mangafire.to/default/img/no-image.jpg';
 
 const HOME_AUTO_RETRY_DELAYS_MS = [2000, 5000, 12000] as const;
+/** Show soft “having issues” feedback if home fetch is still pending. */
+const PROVIDER_SLOW_TOAST_MS = 2000;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -76,12 +86,14 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { isOffline } = useOffline();
   const { getCachedHomeData, cacheHomeData } = useCachedData();
+  const { showToast, hideToast } = useToast();
 
   const [mostViewedManga, setMostViewedManga] = useState<MangaItem[]>([]);
   const [newReleases, setNewReleases] = useState<MangaItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isProviderDown, setIsProviderDown] = useState(false);
   const [featuredManga, setFeaturedManga] = useState<MangaItem | null>(null);
 
   const [recentlyReadManga, setRecentlyReadManga] = useState<RecentMangaItem[]>(
@@ -98,6 +110,27 @@ export default function HomeScreen() {
   );
   const homeRetryAttemptRef = useRef(0);
   const fetchMangaDataRef = useRef<(() => Promise<void>) | null>(null);
+  const providerSlowTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const isProviderDownRef = useRef(false);
+  isProviderDownRef.current = isProviderDown;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const hideToastRef = useRef(hideToast);
+  hideToastRef.current = hideToast;
+
+  const clearProviderSlowTimer = useCallback(() => {
+    if (providerSlowTimeoutRef.current) {
+      clearTimeout(providerSlowTimeoutRef.current);
+      providerSlowTimeoutRef.current = null;
+    }
+  }, []);
+
+  const dismissProviderSlowToast = useCallback(() => {
+    clearProviderSlowTimer();
+    hideToastRef.current();
+  }, [clearProviderSlowTimer]);
 
   const clearHomeAutoRetry = useCallback(() => {
     if (homeRetryTimeoutRef.current) {
@@ -143,9 +176,15 @@ export default function HomeScreen() {
   const fetchMangaData = useCallback(async () => {
     try {
       setError(null);
+      clearProviderSlowTimer();
 
       if (isRefreshing) {
         resetHomeAutoRetry();
+      }
+
+      // Re-probe after a known outage (Refresh / auto-retry).
+      if (isProviderDownRef.current) {
+        mangaFireVrfBridge.beginOriginRecheck();
       }
 
       // 1. Load cached data immediately (Stale-while-revalidate)
@@ -162,6 +201,7 @@ export default function HomeScreen() {
 
       // If offline, stop here
       if (isOffline) {
+        dismissProviderSlowToast();
         if (!cachedData) {
           setError(
             'You are offline. Please connect to internet or view your saved manga.'
@@ -170,6 +210,32 @@ export default function HomeScreen() {
         return;
       }
 
+      // Sticky toast while VRF/WebView may still be spinning on a 522 page.
+      // Stays until success or the unreachable banner takes over.
+      providerSlowTimeoutRef.current = setTimeout(() => {
+        providerSlowTimeoutRef.current = null;
+        if (isProviderDownRef.current) {
+          return;
+        }
+        showToastRef.current({
+          message: 'Having trouble reaching MangaFire…',
+          type: 'warning',
+          icon: 'cloud-offline-outline',
+          persistent: true,
+        });
+      }, PROVIDER_SLOW_TOAST_MS);
+
+      // Native probe is usually faster than the hidden WebView load.
+      void probeMangaFireOriginStatus().then((status) => {
+        if (status != null && status >= 500) {
+          mangaFireVrfBridge.reportHostEvent({
+            type: 'httpError',
+            statusCode: status,
+            url: `${MANGA_API_URL}/`,
+          });
+        }
+      });
+
       // 2. Fetch fresh data in background
       const {
         mostViewed,
@@ -177,6 +243,8 @@ export default function HomeScreen() {
         featuredManga: newFeatured,
         partialFailure,
       } = await fetchHomeMangaData();
+      setIsProviderDown(false);
+      dismissProviderSlowToast();
 
       // Only replace sections that actually returned data (partial recovery)
       const mergedMostViewed =
@@ -212,12 +280,25 @@ export default function HomeScreen() {
         offline: isOffline,
       });
 
-      // Only show error if we don't have any cached data to display
+      const providerDown = isProviderDownError(error);
+      setIsProviderDown(providerDown);
+      // Hand off to the unreachable banner (or generic error) — drop the sticky toast.
+      dismissProviderSlowToast();
+      setIsLoading(false);
+
+      // Prefer freshly-read cache over stale closure state so the banner
+      // (not a blank error screen) shows when saved home data exists.
+      const cachedData = getCachedHomeData();
       const hasNoData =
-        mostViewedManga.length === 0 && newReleases.length === 0;
+        (cachedData?.mostViewed.length ?? 0) === 0 &&
+        (cachedData?.newReleases.length ?? 0) === 0 &&
+        mostViewedManga.length === 0 &&
+        newReleases.length === 0;
       if (hasNoData) {
         setError(
-          'An error occurred while fetching manga data. Please try again.'
+          providerDown
+            ? PROVIDER_DOWN_MESSAGE
+            : 'An error occurred while fetching manga data. Please try again.'
         );
       }
 
@@ -234,6 +315,8 @@ export default function HomeScreen() {
     isOffline,
     scheduleHomeAutoRetry,
     resetHomeAutoRetry,
+    clearProviderSlowTimer,
+    dismissProviderSlowToast,
   ]);
 
   useEffect(() => {
@@ -243,8 +326,30 @@ export default function HomeScreen() {
   useEffect(() => {
     return () => {
       clearHomeAutoRetry();
+      dismissProviderSlowToast();
     };
-  }, [clearHomeAutoRetry]);
+  }, [clearHomeAutoRetry, dismissProviderSlowToast]);
+
+  const handleProviderRefresh = useCallback(() => {
+    resetHomeAutoRetry();
+    mangaFireVrfBridge.beginOriginRecheck();
+    setIsProviderDown(false);
+    setError(null);
+    void fetchMangaDataRef.current?.();
+  }, [resetHomeAutoRetry]);
+
+  // Fail-fast banner: VRF host reports 522 before home fetch finishes retries.
+  useEffect(() => {
+    return mangaFireVrfBridge.subscribeHostUi((state) => {
+      if (state.providerDown) {
+        setIsProviderDown(true);
+        dismissProviderSlowToast();
+        setIsLoading(false);
+      } else if (state.ready) {
+        setIsProviderDown(false);
+      }
+    });
+  }, [dismissProviderSlowToast]);
 
   const lastRecentReadFetchAtRef = useRef(0);
 
@@ -547,7 +652,10 @@ export default function HomeScreen() {
     scrollY,
   ]);
 
-  if (isLoading) {
+  const hasHomeData =
+    mostViewedManga.length > 0 || newReleases.length > 0;
+
+  if (isLoading && !isProviderDown) {
     return (
       <View
         style={[styles.container, { backgroundColor: themeColors.background }]}
@@ -638,7 +746,7 @@ export default function HomeScreen() {
         bounces={false}
         overScrollMode="never"
       >
-        {error ? (
+        {error || (isProviderDown && !hasHomeData) ? (
           <View
             style={[styles.errorContainer, { paddingTop: insets.top + 20 }]}
           >
@@ -650,20 +758,57 @@ export default function HomeScreen() {
             <Text
               style={[styles.errorText, { color: themeColors.notification }]}
             >
-              {error}
+              {error || PROVIDER_DOWN_MESSAGE}
             </Text>
             <TouchableOpacity
               style={[
                 styles.retryButton,
                 { backgroundColor: themeColors.primary },
               ]}
-              onPress={fetchMangaData}
+              onPress={handleProviderRefresh}
             >
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
+            {isProviderDown && (
+              <View
+                style={[
+                  styles.providerDownBanner,
+                  {
+                    marginTop: insets.top + 8,
+                    backgroundColor: themeColors.card,
+                    borderColor: themeColors.notification,
+                  },
+                ]}
+                accessibilityRole="alert"
+              >
+                <Ionicons
+                  name="cloud-offline-outline"
+                  size={20}
+                  color={themeColors.notification}
+                />
+                <Text
+                  style={[styles.providerDownText, { color: themeColors.text }]}
+                >
+                  {hasHomeData
+                    ? 'MangaFire is currently unreachable. Showing saved data.'
+                    : PROVIDER_DOWN_MESSAGE}
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.providerDownButton,
+                    { backgroundColor: themeColors.primary },
+                  ]}
+                  onPress={handleProviderRefresh}
+                  accessibilityRole="button"
+                  accessibilityLabel="Refresh MangaFire"
+                >
+                  <Text style={styles.retryButtonText}>Refresh</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <PageTransition transitionType="fade" duration={400}>
               {renderFeaturedManga()}
             </PageTransition>
@@ -996,6 +1141,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  providerDownBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  providerDownText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  providerDownButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   recentlyReadList: {
     paddingHorizontal: 16,
