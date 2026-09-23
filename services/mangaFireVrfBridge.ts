@@ -450,7 +450,7 @@ class MangaFireVrfBridge {
   private ready = false;
   private hostAttached = false;
   private webViewInject: ((script: string) => void) | null = null;
-  private webViewReload: (() => void) | null = null;
+  private webViewReload: ((options?: { force?: boolean }) => void) | null = null;
   private reloadTimer: ReturnType<typeof setTimeout> | null = null;
   private challengeSeen = false;
   private challengeDismissed = false;
