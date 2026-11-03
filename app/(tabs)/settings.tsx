@@ -57,6 +57,12 @@ import { logger } from '@/utils/logger';
 import { useAtomInstance, useAtomValue } from '@zedux/react';
 import { appUpdateAtom } from '@/atoms/appUpdateAtom';
 import { areUpdatesAvailable } from '@/services/updateService';
+import {
+  getDisabledSourceIds,
+  getSources,
+  setSourceEnabled,
+} from '@/services/sources';
+import { MANGA_API_URL } from '@/constants/Config';
 
 const AnimatedView = Reanimated.createAnimatedComponent(View);
 
@@ -195,6 +201,7 @@ export default function SettingsScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
   const insets = useSafeAreaInsets();
   const [enableDebugTab, setEnableDebugTab] = useState<boolean>(false);
+  const [disabledSourceIds, setDisabledSourceIds] = useState<string[]>([]);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [defaultLayout, setDefaultLayoutState] = useState<'grid' | 'list'>(
     'list'
@@ -229,6 +236,7 @@ export default function SettingsScreen() {
     loadEnableDebugTabSetting();
     loadDefaultLayoutSetting();
     checkLoginStatus();
+    void getDisabledSourceIds().then(setDisabledSourceIds);
 
     // Update selected color when accentColor changes
     if (accentColor) {
@@ -266,6 +274,22 @@ export default function SettingsScreen() {
       logger().error('Service', 'Error loading default layout setting', {
         error,
       });
+    }
+  };
+
+  const handleSourceToggle = async (sourceId: string, enabled: boolean) => {
+    setDisabledSourceIds((ids) =>
+      enabled ? ids.filter((id) => id !== sourceId) : [...ids, sourceId]
+    );
+    try {
+      await setSourceEnabled(sourceId, enabled);
+    } catch (error) {
+      logger().error('Service', 'Error saving source setting', {
+        sourceId,
+        error,
+      });
+      setDisabledSourceIds(await getDisabledSourceIds());
+      showToast({ message: 'Failed to update source', type: 'error' });
     }
   };
 
@@ -1165,6 +1189,49 @@ export default function SettingsScreen() {
         </Reanimated.View>
 
         <Reanimated.View
+          entering={FadeInDown.delay(250).springify()}
+          style={styles.section}
+        >
+          <Text style={styles.sectionTitle}>Sources</Text>
+          <Text style={[styles.settingHint, { marginTop: 0, marginBottom: 8 }]}>
+            Choose which sites appear in search. Turning one off keeps your
+            bookmarks and downloads from it.
+          </Text>
+          <View style={styles.option}>
+            <Ionicons name="globe-outline" size={24} color={colors.text} />
+            <View style={styles.sourceCopy}>
+              <Text style={styles.toggleTitle}>MangaFire</Text>
+              <Text style={styles.toggleHint}>
+                {MANGA_API_URL.replace(/^https?:\/\//, '')}
+              </Text>
+            </View>
+            <Text style={styles.toggleHint}>Always on</Text>
+          </View>
+          {getSources().map((source) => (
+            <View key={source.id} style={styles.option}>
+              <Ionicons name="library-outline" size={24} color={colors.text} />
+              <View style={styles.sourceCopy}>
+                <Text style={styles.toggleTitle}>{source.name}</Text>
+                <Text style={styles.toggleHint}>{source.website}</Text>
+              </View>
+              <Switch
+                value={!disabledSourceIds.includes(source.id)}
+                onValueChange={(enabled) =>
+                  void handleSourceToggle(source.id, enabled)
+                }
+                trackColor={{
+                  false: colors.border,
+                  true: (accentColor || colors.primary) + '88',
+                }}
+                thumbColor="#FFFFFF"
+                style={styles.toggleSwitch}
+                accessibilityLabel={`Show ${source.name} in search`}
+              />
+            </View>
+          ))}
+        </Reanimated.View>
+
+        <Reanimated.View
           entering={FadeInDown.delay(300).springify()}
           style={styles.section}
         >
@@ -1524,6 +1591,12 @@ const getStyles = (colors: typeof Colors.light) =>
     toggleSwitch: {
       flexShrink: 0,
       alignSelf: 'center',
+    },
+    sourceCopy: {
+      flex: 1,
+      minWidth: 0,
+      marginLeft: 15,
+      marginRight: 12,
     },
     toggleTitle: {
       fontSize: 15,

@@ -36,6 +36,7 @@ import {
 } from '@/services/mangaFireRequestHub';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import { mangaFireVrfBridge } from '@/services/mangaFireVrfBridge';
+import { resolveSourceManga, searchSources } from '@/services/sources';
 import type { Chapter } from '@/types/manga';
 import { ChapterImage, ImageDownloadStatus } from '@/types/download';
 import { isNotFoundError, summarizeApiError } from '@/utils/httpErrors';
@@ -140,10 +141,24 @@ export const searchManga = async (
   const log = logger();
   if (isDebugEnabled()) log.info('Service', 'searchManga:start', { keyword });
 
-  const result = await performanceMonitor.measureAsync(
-    `searchManga:${keyword}`,
-    () => searchTitles(keyword)
-  );
+  // searchSources never rejects, so MangaFire errors still surface below.
+  const sourceResults = searchSources(keyword);
+  let result: MangaItem[];
+  try {
+    result = await performanceMonitor.measureAsync(
+      `searchManga:${keyword}`,
+      () => searchTitles(keyword)
+    );
+  } catch (error) {
+    // A MangaFire outage must not hide hits from other sources.
+    const fallback = await sourceResults;
+    if (!fallback.length) {
+      throw error;
+    }
+    return fallback;
+  }
+
+  result = [...(await sourceResults), ...result];
 
   if (isDebugEnabled()) {
     log.info('Service', 'searchManga:done', { keyword, count: result.length });
@@ -346,6 +361,21 @@ export const fetchMangaDetails = async (
 
   const log = logger();
   const normalizedId = id.trim();
+
+  const external = resolveSourceManga(normalizedId);
+  if (external) {
+    // Sources return the full chapter list in one go — no pagination.
+    const details = await external.source.fetchDetails(external.key);
+    options?.onChapterPagination?.({
+      page: 1,
+      hasMore: false,
+      total: details.chapters.length,
+      chapterCount: details.chapters.length,
+    });
+    options?.onPartial?.(details);
+    return details;
+  }
+
   const detailsCacheKey = `details:${normalizedId}`;
   const isPartialChapterLoad =
     typeof options?.maxChapterPages === 'number' && options.maxChapterPages > 0;
@@ -594,6 +624,10 @@ export const checkMangaAvailability = async (
 
   const normalizedId = id.trim();
   const log = logger();
+
+  if (resolveSourceManga(normalizedId)) {
+    return 'exists';
+  }
 
   try {
     const exists = await titleExists(normalizedId);
@@ -1014,6 +1048,16 @@ export async function loadOnlineChapterImages(
   }
 
   const titleHid = mangaId.trim();
+
+  const external = resolveSourceManga(titleHid);
+  if (external) {
+    const pageUrls = await external.source.fetchChapterPages(
+      external.key,
+      normalized
+    );
+    return mapPageUrlsToChapterImages(pageUrls);
+  }
+
   const overrideId = getChapterApiIdOverride(titleHid, normalized);
   let chapterApiId =
     overrideId ||

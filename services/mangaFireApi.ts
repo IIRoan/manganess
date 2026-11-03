@@ -24,6 +24,7 @@ import {
 } from '@/services/mangaFireVrfBridge';
 import type { MangaItem } from '@/types/manga';
 import type { Chapter, MangaDetails } from '@/types/manga';
+import { resolveSourceManga } from '@/services/sources';
 import {
   dedupeChaptersPreferringOfficial,
   resolveReportedChapterTotal,
@@ -520,6 +521,12 @@ export async function fetchMappedTitleChaptersPage(
   lastPage?: number;
   total?: number;
 }> {
+  const external = resolveSourceManga(hid);
+  if (external) {
+    const { chapters } = await external.source.fetchDetails(external.key);
+    return { chapters, hasMore: false, page, total: chapters.length };
+  }
+
   const data = await fetchTitleChaptersPage(hid.trim(), page, language);
   const items = dedupeChaptersPreferringOfficial(data.items || []);
   const lastPage = data.meta?.lastPage;

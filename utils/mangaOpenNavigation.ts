@@ -3,6 +3,7 @@ import {
   mapApiTitleToMangaDetails,
 } from '@/services/mangaFireApi';
 import { startMangaOpen } from '@/services/mangaOpenTrace';
+import { resolveSourceManga } from '@/services/sources';
 import type { MangaDetails } from '@/types';
 import { hydrateMangaDisplayFromLocal } from '@/utils/mangaOptimisticLoad';
 
@@ -59,6 +60,11 @@ export async function loadMangaOpenHeader(
   const id = mangaId.trim();
   if (!id) {
     return null;
+  }
+
+  const external = resolveSourceManga(id);
+  if (external) {
+    return external.source.fetchDetails(external.key);
   }
 
   // This is opportunistic enrichment: route metadata already paints the page,

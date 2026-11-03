@@ -9,6 +9,7 @@ import {
 import { getLastReadManga, setLastReadManga } from '@/services/readChapterService';
 import { offlineCacheService } from '@/services/offlineCacheService';
 import { logger } from '@/utils/logger';
+import { isSourceMangaId } from '@/services/sources/types';
 import type { MangaItem } from '@/types/manga';
 
 const MIGRATION_ATTEMPT_KEY = 'manga_id_migration_attempts';
@@ -57,7 +58,7 @@ export const MIGRATION_MESSAGES = {
  */
 export function isLikelyLegacyMangaId(id: string): boolean {
   const trimmed = id.trim();
-  if (!trimmed) {
+  if (!trimmed || isSourceMangaId(trimmed)) {
     return false;
   }
 
@@ -165,7 +166,8 @@ export async function resolveStoredMangaId(
   hintTitle?: string
 ): Promise<StoredMangaIdResolution> {
   const normalizedId = storedId.trim();
-  if (!normalizedId) {
+  // Other sources' ids never live on MangaFire — keep them as-is.
+  if (!normalizedId || isSourceMangaId(normalizedId)) {
     return { action: 'local_only', id: normalizedId };
   }
 
