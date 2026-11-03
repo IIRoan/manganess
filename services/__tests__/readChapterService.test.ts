@@ -11,12 +11,28 @@ import {
   getLastReadManga,
 } from '../readChapterService';
 
-jest.mock('../bookmarkService', () => ({
-  getMangaData: jest.fn(),
-  setMangaData: jest.fn(),
-}));
+jest.mock('../bookmarkService', () => {
+  const getMangaData = jest.fn();
+  const setMangaData = jest.fn();
+  return {
+    getMangaData,
+    setMangaData,
+    // Same read-modify-write contract as the real (queued) implementation.
+    updateMangaData: jest.fn(async (id: string, updater: any) => {
+      const existing = await getMangaData(id);
+      const next = await updater(existing);
+      if (!next || next === existing) return existing;
+      await setMangaData(next);
+      return next;
+    }),
+  };
+});
 
-const { getMangaData, setMangaData } = require('../bookmarkService');
+const {
+  getMangaData,
+  setMangaData,
+  updateMangaData,
+} = require('../bookmarkService');
 
 describe('readChapterService', () => {
   beforeEach(async () => {
@@ -238,6 +254,28 @@ describe('readChapterService', () => {
   });
 
   describe('markChapterAsUnread edge cases', () => {
+    it('rapid unreads with a stale snapshot all stick (real write queue)', async () => {
+      const actual = jest.requireActual('../bookmarkService');
+      (updateMangaData as jest.Mock)
+        .mockImplementationOnce(actual.updateMangaData)
+        .mockImplementationOnce(actual.updateMangaData);
+      await AsyncStorage.setItem(
+        'manga_m1',
+        JSON.stringify({ id: 'm1', title: 'Manga', readChapters: ['1', '2', '3'] })
+      );
+
+      // Both taps captured the same list before either save finished.
+      const stale = ['1', '2', '3'];
+      await Promise.all([
+        markChapterAsUnread('m1', '3', stale),
+        markChapterAsUnread('m1', '2', stale),
+      ]);
+
+      const stored = JSON.parse((await AsyncStorage.getItem('manga_m1'))!);
+      expect(stored.readChapters).toEqual(['1']);
+      expect(stored.lastReadChapter).toBe('1');
+    });
+
     it('sets lastReadChapter to empty string when all chapters unread', async () => {
       const manga = { id: 'm1', title: 'Manga', readChapters: ['1'] };
       (getMangaData as jest.Mock).mockResolvedValue(manga);

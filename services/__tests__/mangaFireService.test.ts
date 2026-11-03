@@ -1694,8 +1694,8 @@ describe('mangaFireService', () => {
 
     it('retries on other errors', async () => {
       jest.useFakeTimers();
-      const networkError = new Error('Network error');
-      mockedAxios.get.mockRejectedValue(networkError);
+      // Not a provider-down error (those fail fast, see next test).
+      mockedAxios.get.mockRejectedValue(new Error('Unexpected API response'));
 
       const promise = searchManga('test').catch(() => { });
       await jest.runAllTimersAsync();
@@ -1704,6 +1704,13 @@ describe('mangaFireService', () => {
       // Should retry 3 times
       expect(mockedAxios.get).toHaveBeenCalledTimes(3);
       jest.useRealTimers();
+    });
+
+    it('fails fast without retrying when MangaFire is unreachable', async () => {
+      mockedAxios.get.mockRejectedValue(new Error('Network error'));
+
+      await expect(searchManga('test')).rejects.toThrow('Network error');
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
     });
   });
 

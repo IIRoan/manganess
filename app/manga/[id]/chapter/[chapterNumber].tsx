@@ -158,6 +158,38 @@ function computePageImageSize(
   }
 }
 
+/**
+ * Natural page sizes by image URI. FlatList unmounts off-screen rows; without
+ * this, a row remounting above the viewport (scrolling up) starts at the
+ * placeholder height and then resizes, shoving the visible content around.
+ * ponytail: unbounded, a few bytes per page; add an LRU if sessions get huge.
+ */
+const manhwaNaturalSizeCache = new Map<string, { width: number; height: number }>();
+
+/** Vertical strip sizing: width fit by default; height/both shrink tall panels. */
+function sizeManhwaPage(
+  naturalWidth: number,
+  naturalHeight: number,
+  fit: ReaderImageFit
+): { width: number; height: number } {
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  if (fit === 'height' || fit === 'both') {
+    const sized = computePageImageSize(
+      naturalWidth,
+      naturalHeight,
+      fit,
+      screenWidth,
+      screenHeight
+    );
+    return { width: sized.width, height: sized.height };
+  }
+  // Fit width / fill — continuous strip
+  return {
+    width: screenWidth,
+    height: screenWidth * (naturalHeight / naturalWidth),
+  };
+}
+
 // Component for manhwa images with proper aspect ratio (moved outside to prevent re-creation)
 const ManhwaImage = React.memo(
   ({
@@ -185,15 +217,22 @@ const ManhwaImage = React.memo(
     /** Sequential gate: false = wait for earlier pages, touch nothing. */
     shouldLoad?: boolean;
   }) => {
-    const [imageSize, setImageSize] = useState({
-      width: Dimensions.get('window').width,
-      height: DEFAULT_MANHWA_PAGE_HEIGHT,
+    const imageUri = image.localPath || image.originalUrl;
+    const [imageSize, setImageSize] = useState(() => {
+      const natural = imageUri
+        ? manhwaNaturalSizeCache.get(imageUri)
+        : undefined;
+      return natural
+        ? sizeManhwaPage(natural.width, natural.height, imageFit)
+        : {
+            width: Dimensions.get('window').width,
+            height: DEFAULT_MANHWA_PAGE_HEIGHT,
+          };
     });
     const [isImageLoaded, setIsImageLoaded] = useState(false);
     const [resolvedLocalUri, setResolvedLocalUri] = useState<string | null>(
       null
     );
-    const imageUri = image.localPath || image.originalUrl;
     const imageSource = buildMangaImageSource(imageUri);
     // Once the manual download fallback kicks in, measure the local file —
     // the remote URL is exactly the one that fails to load.
@@ -217,54 +256,31 @@ const ManhwaImage = React.memo(
     useEffect(() => {
       if (!shouldLoad) return;
       setIsImageLoaded(false);
-      if (measureUri) {
-        const { width: screenWidth, height: screenHeight } =
-          Dimensions.get('window');
-        getMangaImageSize(
-          measureUri,
-          (width, height) => {
-            // Vertical strip: width fit is the default; height/both shrink tall panels.
-            if (imageFit === 'height') {
-              const sized = computePageImageSize(
-                width,
-                height,
-                'height',
-                screenWidth,
-                screenHeight
-              );
-              setImageSize({ width: sized.width, height: sized.height });
-            } else if (imageFit === 'both') {
-              const sized = computePageImageSize(
-                width,
-                height,
-                'both',
-                screenWidth,
-                screenHeight
-              );
-              setImageSize({ width: sized.width, height: sized.height });
-            } else if (imageFit === 'fill') {
-              setImageSize({
-                width: screenWidth,
-                height: screenWidth * (height / width),
-              });
-            } else {
-              // Fit width — continuous strip
-              setImageSize({
-                width: screenWidth,
-                height: screenWidth * (height / width),
-              });
-            }
-          },
-          (error) => {
-            logger().warn('UI', 'Error getting image size', { error });
-            setImageSize({
-              width: Dimensions.get('window').width,
-              height: DEFAULT_MANHWA_PAGE_HEIGHT,
-            });
-          }
-        );
+      if (!measureUri) return;
+      const cached = imageUri
+        ? manhwaNaturalSizeCache.get(imageUri)
+        : undefined;
+      if (cached) {
+        setImageSize(sizeManhwaPage(cached.width, cached.height, imageFit));
+        return;
       }
-    }, [measureUri, imageFit, shouldLoad]);
+      getMangaImageSize(
+        measureUri,
+        (width, height) => {
+          if (imageUri) {
+            manhwaNaturalSizeCache.set(imageUri, { width, height });
+          }
+          setImageSize(sizeManhwaPage(width, height, imageFit));
+        },
+        (error) => {
+          logger().warn('UI', 'Error getting image size', { error });
+          setImageSize({
+            width: Dimensions.get('window').width,
+            height: DEFAULT_MANHWA_PAGE_HEIGHT,
+          });
+        }
+      );
+    }, [imageUri, measureUri, imageFit, shouldLoad]);
 
     if (!shouldLoad) {
       // Waiting for earlier pages: hold layout space, fire no requests.

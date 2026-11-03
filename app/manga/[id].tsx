@@ -1473,6 +1473,15 @@ export default function MangaDetailScreen() {
 
   const handleMarkAsUnread = useCallback(
     async (chapterNumber: string) => {
+      // Update instantly from the latest state so rapid taps never overwrite
+      // each other (setting the awaited result would briefly revert a later tap).
+      setReadChapters((prev) => prev.filter((ch) => ch !== chapterNumber));
+
+      if (currentlyOpenSwipeable) {
+        currentlyOpenSwipeable.close();
+        setCurrentlyOpenSwipeable(null);
+      }
+
       try {
         const result = await markChapterAsUnread(
           id as string,
@@ -1480,20 +1489,11 @@ export default function MangaDetailScreen() {
           readChapters
         );
 
-        // Update the read chapters state
-        setReadChapters(result.updatedChapters);
-
-        // Update the last read chapter display immediately
+        // Writes are queued per manga, so the last result to land is current.
         if (result.newLastReadChapter) {
           setLastReadChapter(`Chapter ${result.newLastReadChapter}`);
         } else {
           setLastReadChapter('Not started');
-        }
-
-        // Close any open swipeables
-        if (currentlyOpenSwipeable) {
-          currentlyOpenSwipeable.close();
-          setCurrentlyOpenSwipeable(null);
         }
 
         // Show success toast
