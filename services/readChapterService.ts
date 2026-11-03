@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getMangaData, setMangaData } from './bookmarkService';
+import { getMangaData, setMangaData, updateMangaData } from './bookmarkService';
 import { MangaData } from '@/types';
 import { isDebugEnabled } from '@/constants/env';
 import { logger } from '@/utils/logger';
@@ -134,45 +134,42 @@ export const markChapterAsUnread = async (
   newLastReadChapter: string | null;
 }> => {
   try {
-    const mangaData = await getMangaData(mangaId);
-    if (mangaData) {
-      const updatedReadChapters = currentReadChapters.filter(
+    // Everything runs inside the per-manga write queue and starts from stored
+    // state — not the caller's snapshot, which is stale when unreads are tapped
+    // in quick succession and would re-add the previously unread chapter.
+    const mangaData = await updateMangaData(mangaId, async (existing) => {
+      if (!existing) return null;
+      const readChapters = (existing.readChapters || []).filter(
         (chapter) => chapter !== chapterNumber
       );
+      const lastReadChapter =
+        readChapters.length > 0
+          ? Math.max(...readChapters.map((ch) => parseFloat(ch))).toString()
+          : '';
 
-      // Determine the new last read chapter
-      let newLastReadChapter: string | null = null;
-      if (updatedReadChapters.length > 0) {
-        newLastReadChapter = Math.max(
-          ...updatedReadChapters.map((ch) => parseFloat(ch))
-        ).toString();
-      }
-
-      // Update manga data with new read chapters and last read chapter
-      await setMangaData({
-        ...mangaData,
-        readChapters: updatedReadChapters,
-        lastReadChapter: newLastReadChapter || '',
-        lastUpdated: Date.now(),
-      });
-
-      // Update last read manga info if needed
       const lastReadManga = await getLastReadManga();
       if (
-        lastReadManga &&
-        lastReadManga.id === mangaId &&
+        lastReadManga?.id === mangaId &&
         lastReadManga.chapterNumber === chapterNumber
       ) {
-        if (newLastReadChapter) {
-          await setLastReadManga(mangaId, mangaData.title, newLastReadChapter);
-        } else if (updatedReadChapters.length === 0) {
-          await setLastReadManga(mangaId, mangaData.title, 'not_started');
-        }
+        await setLastReadManga(
+          mangaId,
+          existing.title,
+          lastReadChapter || 'not_started'
+        );
       }
 
       return {
-        updatedChapters: updatedReadChapters,
-        newLastReadChapter,
+        ...existing,
+        readChapters,
+        lastReadChapter,
+        lastUpdated: Date.now(),
+      };
+    });
+    if (mangaData) {
+      return {
+        updatedChapters: mangaData.readChapters || [],
+        newLastReadChapter: mangaData.lastReadChapter || null,
       };
     }
     return {
