@@ -54,6 +54,7 @@ import {
   resolveOldestChapter,
 } from '@/utils/chapterListPagination';
 import { filterOutExtraChapters } from '@/utils/chapterListDedupe';
+import { resolveAdjacentChapterNumber } from '@/utils/chapterNavigation';
 import { mergeMangaDetailsRefresh } from '@/utils/mangaDetailsMerge';
 import {
   attemptLegacyMangaMigration,
@@ -555,6 +556,18 @@ export default function MangaDetailScreen() {
 
   // Last chapter
   const [lastReadChapter, setLastReadChapter] = useState<string | null>(null);
+
+  const continueChapter = useMemo(() => {
+    if (!lastReadChapter || lastReadChapter === 'Not started') return null;
+    const last = lastReadChapter.replace('Chapter ', '').trim();
+    return (
+      resolveAdjacentChapterNumber({
+        direction: 'next',
+        chapterNumber: last,
+        chapters: visibleChapters,
+      }) ?? last
+    );
+  }, [lastReadChapter, visibleChapters]);
 
   // Offline state
   const { isOffline } = useOffline();
@@ -2161,9 +2174,9 @@ export default function MangaDetailScreen() {
       return;
     }
 
-    const chapterNumber = lastReadChapter.replace('Chapter ', '');
-    handleChapterPress(chapterNumber);
+    if (continueChapter) handleChapterPress(continueChapter);
   }, [
+    continueChapter,
     lastReadChapter,
     mangaDetails,
     handleChapterPress,
@@ -2558,7 +2571,11 @@ export default function MangaDetailScreen() {
                       stateKey={`description-${id}`}
                     />
                     <LastReadChapterBar
-                      lastReadChapter={lastReadChapter}
+                      lastReadChapter={
+                        continueChapter
+                          ? `Chapter ${continueChapter}`
+                          : lastReadChapter
+                      }
                       onPress={handleLastReadChapterPress}
                       colors={colors}
                       readChapters={readChapters}
@@ -2759,6 +2776,7 @@ export default function MangaDetailScreen() {
       mangaDetails,
       readChapters,
       lastReadChapter,
+      continueChapter,
       readingProgress,
       remainingReadingTime,
       totalChapterCount,

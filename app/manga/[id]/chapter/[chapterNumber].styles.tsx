@@ -248,6 +248,40 @@ export default function getStyles(colorScheme: ColorScheme) {
       fontWeight: '600',
     },
 
+    resumePill: {
+      position: 'absolute',
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      height: 40,
+      paddingLeft: 14,
+      paddingRight: 6,
+      borderRadius: 20,
+      backgroundColor: colorScheme === 'dark' ? '#1C1C1C' : colors.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      zIndex: 130,
+    },
+    resumePillText: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '500',
+      fontVariant: ['tabular-nums'],
+    },
+    resumePillDivider: {
+      width: StyleSheet.hairlineWidth,
+      height: 18,
+      backgroundColor: colors.border,
+    },
+    resumePillCancel: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
     // Failed pages banner (per-image load failures)
     failedPagesBanner: {
       position: 'absolute',
