@@ -33,6 +33,7 @@ import {
 } from '@/utils/mangaImageHeaders';
 
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle } from 'react-native-svg';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 
 import { getMangaData } from '@/services/bookmarkService';
@@ -62,6 +63,10 @@ import {
 import type { MangaDetails as MangaDetailsType } from '@/types';
 import { chapterStorageService } from '@/services/chapterStorageService';
 import { offlineCacheService } from '@/services/offlineCacheService';
+import {
+  getReaderPosition,
+  saveReaderPosition,
+} from '@/services/readerPositionService';
 import { ChapterImage } from '@/types/download';
 import { useTheme } from '@/hooks/useTheme';
 import { Colors, ColorScheme } from '@/constants/Colors';
@@ -104,6 +109,11 @@ import {
 import {
   hydrateMangaFromLocal,
 } from '@/utils/mangaOptimisticLoad';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const RESUME_RING_SIZE = 18;
+const RESUME_RING_RADIUS = 7;
+const RESUME_RING_CIRCUMFERENCE = 2 * Math.PI * RESUME_RING_RADIUS;
 
 // Minimum touch target size (in dp)
 const MIN_TOUCHABLE_SIZE = 48;
@@ -467,6 +477,8 @@ export default function ReadChapterScreen() {
   const [mangaDetails, setMangaDetails] = useState<MangaDetailsType | null>(
     null
   );
+  const mangaDetailsRef = useRef(mangaDetails);
+  mangaDetailsRef.current = mangaDetails;
   const [hideExtraChapters, setHideExtraChapters] = useState(false);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
@@ -512,6 +524,30 @@ export default function ReadChapterScreen() {
    * once page N is on screen, so a failed page never becomes an invisible gap.
    */
   const [allowedPage, setAllowedPage] = useState(1);
+  const sortedImages = useMemo(
+    () =>
+      downloadedImages
+        ? [...downloadedImages].sort((a, b) => a.pageNumber - b.pageNumber)
+        : [],
+    [downloadedImages]
+  );
+  const resumePageRef = useRef(0);
+  const resumePendingRef = useRef(false);
+  const resumePinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markedReadRef = useRef(false);
+  const [isSettlingResume, setIsSettlingResume] = useState(false);
+  const resumeSettlingRef = useRef(false);
+  const resumeOpacity = useRef(new Animated.Value(1)).current;
+  const resumeProgressAnim = useRef(new Animated.Value(0)).current;
+  const resumeTargetPageNumberRef = useRef(0);
+  const resumeTargetLoadedRef = useRef(false);
+  const resumeScrollFailedRef = useRef(false);
+  const resumeQuietTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const resumeDeadlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -774,7 +810,6 @@ export default function ReadChapterScreen() {
         return;
       }
       setReadingMode(mode);
-      setCurrentPage(0);
       try {
         await patchReaderProfile(activeReaderProfile, { readingMode: mode });
       } catch (error) {
@@ -1111,11 +1146,11 @@ export default function ReadChapterScreen() {
   // Detect content type based on image dimensions
   const detectContentType = useCallback((images: ChapterImage[]) => {
     // Title metadata already established this as a vertical-only format.
-    if (isVerticalOnlyContentType(mangaDetails?.type)) {
+    if (isVerticalOnlyContentType(mangaDetailsRef.current?.type)) {
       return Promise.resolve('manhwa' as const);
     }
     // Explicit manga titles keep page modes; tall pages are normal for manga.
-    if (normalizeContentTypeLabel(mangaDetails?.type) === 'manga') {
+    if (normalizeContentTypeLabel(mangaDetailsRef.current?.type) === 'manga') {
       return Promise.resolve('manga' as const);
     }
     if (!images || images.length === 0) return Promise.resolve('manga' as const);
@@ -1156,7 +1191,7 @@ export default function ReadChapterScreen() {
         );
       });
     });
-  }, [mangaDetails?.type]);
+  }, []);
 
   const prefetchImagesFrom = useCallback(
     (images: ChapterImage[], startIndex: number, count = 3) => {
@@ -1172,13 +1207,84 @@ export default function ReadChapterScreen() {
     []
   );
 
+  const markReadAtEnd = useCallback(() => {
+    if (markedReadRef.current) return;
+    markedReadRef.current = true;
+    void markChapterAsReadWithFallback();
+  }, [markChapterAsReadWithFallback]);
+
+  const rememberPage = useCallback(
+    (pageIndex: number) => {
+      if (pageIndex === sortedImages.length - 1) markReadAtEnd();
+      if (!id || pageIndex === resumePageRef.current) return;
+      resumePageRef.current = pageIndex;
+      void saveReaderPosition(
+        id,
+        normalizedChapterParam || String(chapterNumber),
+        pageIndex
+      );
+    },
+    [id, normalizedChapterParam, chapterNumber, sortedImages, markReadAtEnd]
+  );
+  const rememberPageRef = useRef(rememberPage);
+  rememberPageRef.current = rememberPage;
+
+  const clearResumeTimers = useCallback(() => {
+    for (const timer of [
+      resumePinTimerRef,
+      resumeQuietTimerRef,
+      resumeDeadlineTimerRef,
+    ]) {
+      if (timer.current) clearTimeout(timer.current);
+    }
+  }, []);
+
+  const revealResume = useCallback(() => {
+    clearResumeTimers();
+    if (!resumeSettlingRef.current) return;
+    resumeSettlingRef.current = false;
+    Animated.timing(resumeOpacity, {
+      toValue: 1,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      if (!resumeSettlingRef.current) setIsSettlingResume(false);
+    });
+  }, [clearResumeTimers, resumeOpacity]);
+
+  const pinManhwaToResumePage = useCallback(() => {
+    if (!resumePendingRef.current) return;
+    if (resumePinTimerRef.current) clearTimeout(resumePinTimerRef.current);
+    if (resumeQuietTimerRef.current) clearTimeout(resumeQuietTimerRef.current);
+    resumePinTimerRef.current = setTimeout(() => {
+      if (!resumePendingRef.current) return;
+      resumeScrollFailedRef.current = false;
+      manhwaListRef.current?.scrollToIndex({
+        index: resumePageRef.current,
+        animated: false,
+      });
+      if (
+        resumeSettlingRef.current &&
+        !resumeScrollFailedRef.current &&
+        resumeTargetLoadedRef.current
+      ) {
+        resumeQuietTimerRef.current = setTimeout(revealResume, 300);
+      }
+    }, 100);
+  }, [revealResume]);
+
   // Prefetch a few pages ahead of the first viewable item (paced, not bursted).
   // Never prefetch past the sequential gate — a blocked page must not be
   // bypassed, and hammering a failing URL just makes the CDN angrier.
   const handleManhwaViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      const firstIndex =
-        viewableItems.find((item) => item.index != null)?.index ?? 0;
+      const firstVisible = viewableItems.find(
+        (item) => item.index != null
+      )?.index;
+      if (firstVisible != null && !resumePendingRef.current) {
+        rememberPageRef.current(firstVisible);
+      }
+      const firstIndex = firstVisible ?? 0;
       const images = downloadedImagesRef.current;
       if (!images) return;
       const maxPage = gateBoundaryRef.current + 1;
@@ -1234,12 +1340,21 @@ export default function ReadChapterScreen() {
       }
       pageHeightsRef.current.set(pageIndex, height);
       recomputeManhwaScrollProgress();
+      pinManhwaToResumePage();
     },
-    [recomputeManhwaScrollProgress]
+    [recomputeManhwaScrollProgress, pinManhwaToResumePage]
   );
 
   const handlePageStatusChange = useCallback(
     (pageNumber: number, status: ReaderImageStatus) => {
+      if (
+        status !== 'loading' &&
+        resumeSettlingRef.current &&
+        pageNumber === resumeTargetPageNumberRef.current
+      ) {
+        resumeTargetLoadedRef.current = true;
+        pinManhwaToResumePage();
+      }
       const failed = failedPagesRef.current;
       if (status === 'failed') {
         if (!failed.has(pageNumber)) {
@@ -1275,7 +1390,7 @@ export default function ReadChapterScreen() {
         });
       }
     },
-    []
+    [pinManhwaToResumePage]
   );
 
   // Keep the sequential gate moving even when FlatList clips/unmounts a row
@@ -1413,6 +1528,13 @@ export default function ReadChapterScreen() {
     setIsOnlineChapter(false);
     setContentType(null);
     setCurrentPage(0);
+    resumePageRef.current = 0;
+    markedReadRef.current = false;
+    resumePendingRef.current = false;
+    clearResumeTimers();
+    resumeSettlingRef.current = false;
+    setIsSettlingResume(false);
+    resumeOpacity.setValue(1);
     setScrollProgress(0);
     lastReportedScrollProgressRef.current = 0;
     pageHeightsRef.current.clear();
@@ -1421,7 +1543,7 @@ export default function ReadChapterScreen() {
       viewportHeight: Dimensions.get('window').height,
     };
     manhwaPageCountRef.current = 0;
-  }, [id, chapterNumber]);
+  }, [id, chapterNumber, clearResumeTimers, resumeOpacity]);
 
   useEffect(() => {
     const loadToken = Symbol('chapter-load');
@@ -1429,6 +1551,7 @@ export default function ReadChapterScreen() {
     const isActive = () => activeToken === loadToken;
 
     const loadChapter = async () => {
+      const details = mangaDetailsRef.current;
       if (!id || !chapterNumber) {
         if (isActive()) {
           setLoadError({
@@ -1451,6 +1574,10 @@ export default function ReadChapterScreen() {
       try {
         const mangaId = id as string;
         const requestedChapter = chapterNumber as string;
+        const savedPagePromise = getReaderPosition(
+          mangaId,
+          normalizeChapterNumber(requestedChapter) || requestedChapter
+        );
 
         // Fast path: load this chapter's local pages directly.
         // Avoid scanning every downloaded chapter (that made opens multi-second).
@@ -1482,6 +1609,9 @@ export default function ReadChapterScreen() {
         if (!isActive()) return;
 
         if (images && images.length > 0) {
+          const savedPage = await savedPagePromise;
+          if (!isActive()) return;
+          resumePageRef.current = Math.min(savedPage, images.length - 1);
           setIsDownloaded(true);
           setIsOnlineChapter(false);
           setDownloadedImages(images);
@@ -1492,9 +1622,9 @@ export default function ReadChapterScreen() {
           setCurrentPage(0);
 
           // Prefer title metadata — never block the spinner on Image.getSize.
-          if (isVerticalOnlyContentType(mangaDetails?.type)) {
+          if (isVerticalOnlyContentType(details?.type)) {
             setContentType('manhwa');
-          } else if (normalizeContentTypeLabel(mangaDetails?.type) === 'manga') {
+          } else if (normalizeContentTypeLabel(details?.type) === 'manga') {
             setContentType('manga');
           } else {
             // Show pages immediately; refine type in the background if needed.
@@ -1513,8 +1643,8 @@ export default function ReadChapterScreen() {
           }
 
           // Title resolution is AsyncStorage-heavy — don't gate the reader on it.
-          if (mangaDetails?.title) {
-            setMangaTitle(mangaDetails.title);
+          if (details?.title) {
+            setMangaTitle(details.title);
           } else {
             setMangaTitle(`Chapter ${chapterNumber}`);
           }
@@ -1525,7 +1655,7 @@ export default function ReadChapterScreen() {
               const mangaData = await getMangaData(mangaId);
               if (!isActive()) return;
 
-              let resolvedTitle = mangaData?.title ?? mangaDetails?.title;
+              let resolvedTitle = mangaData?.title ?? details?.title;
               if (!resolvedTitle) {
                 const cachedDetails =
                   await offlineCacheService.getCachedMangaDetails(mangaId);
@@ -1549,10 +1679,12 @@ export default function ReadChapterScreen() {
           const onlineImages = await loadOnlineChapterImages(
             mangaId,
             requestedChapter,
-            mangaDetails?.chapters ?? cachedDetails?.chapters
+            details?.chapters ?? cachedDetails?.chapters
           );
 
+          const savedPage = await savedPagePromise;
           if (!isActive()) return;
+          resumePageRef.current = Math.min(savedPage, onlineImages.length - 1);
 
           setIsDownloaded(false);
           setIsOnlineChapter(true);
@@ -1574,7 +1706,7 @@ export default function ReadChapterScreen() {
             });
             if (isActive()) {
               setContentType(
-                isVerticalOnlyContentType(mangaDetails?.type)
+                isVerticalOnlyContentType(details?.type)
                   ? 'manhwa'
                   : 'manga'
               );
@@ -1585,7 +1717,7 @@ export default function ReadChapterScreen() {
           if (!isActive()) return;
 
           let resolvedTitle =
-            mangaData?.title ?? cachedDetails?.title ?? mangaDetails?.title;
+            mangaData?.title ?? cachedDetails?.title ?? details?.title;
           if (!resolvedTitle) {
             resolvedTitle = `Chapter ${chapterNumber}`;
           }
@@ -1640,7 +1772,6 @@ export default function ReadChapterScreen() {
     chapterNumber,
     isOffline,
     detectContentType,
-    mangaDetails?.chapters,
     prefetchImagesFrom,
     loadRetryToken,
   ]);
@@ -1817,10 +1948,6 @@ export default function ReadChapterScreen() {
   }, [id, chapterNumber, isOffline]);
 
   useEffect(() => {
-    markChapterAsReadWithFallback();
-  }, [markChapterAsReadWithFallback]);
-
-  useEffect(() => {
     fetchDetails();
   }, [fetchDetails]);
 
@@ -1837,30 +1964,43 @@ export default function ReadChapterScreen() {
     }
   }, [currentPage, isHorizontalLayout, downloadedImages]);
 
-  // Always reset reader position when a new chapter loads offline
-  useEffect(() => {
-    if (!downloadedImages?.length || !effectiveLayout) {
+  useLayoutEffect(() => {
+    if (!sortedImages.length || !effectiveLayout) {
       return;
     }
 
-    setCurrentPage(0);
+    const page = resumePageRef.current;
+    setCurrentPage(page);
     setScrollProgress(0);
     lastReportedScrollProgressRef.current = 0;
 
-    const scrollToTop = () => {
+    if (effectiveLayout === 'vertical' && page > 0) {
+      resumePendingRef.current = true;
+      clearResumeTimers();
+      resumeSettlingRef.current = true;
+      setIsSettlingResume(true);
+      resumeOpacity.setValue(0);
+      resumeProgressAnim.setValue(0);
+      resumeTargetLoadedRef.current = false;
+      resumeTargetPageNumberRef.current = sortedImages[page]?.pageNumber ?? 0;
+      resumeDeadlineTimerRef.current = setTimeout(revealResume, 10000);
+      pinManhwaToResumePage();
+      return;
+    }
+    resumePendingRef.current = false;
+    revealResume();
+
+    const scrollToPage = () => {
       if (effectiveLayout === 'vertical') {
         manhwaListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } else {
         try {
           mangaFlatListRef.current?.scrollToIndex({
-            index: horizontalScrollIndexForPage({
-              pageIndex: 0,
-              pageCount: downloadedImages.length,
-            }),
+            index: page,
             animated: false,
           });
         } catch (error) {
-          logger().warn('UI', 'Failed to reset manga reader position', {
+          logger().warn('UI', 'Failed to restore manga reader position', {
             error,
           });
           mangaFlatListRef.current?.scrollToOffset({
@@ -1871,14 +2011,49 @@ export default function ReadChapterScreen() {
       }
     };
 
-    const frameId = requestAnimationFrame(scrollToTop);
-    const timeoutId = setTimeout(scrollToTop, 200);
+    const frameId = requestAnimationFrame(scrollToPage);
+    const timeoutId = setTimeout(scrollToPage, 200);
 
     return () => {
       cancelAnimationFrame(frameId);
       clearTimeout(timeoutId);
     };
-  }, [downloadedImages, effectiveLayout, normalizedChapterParam]);
+  }, [
+    sortedImages,
+    effectiveLayout,
+    normalizedChapterParam,
+    readerImageFit,
+    pinManhwaToResumePage,
+    clearResumeTimers,
+    revealResume,
+    resumeOpacity,
+    resumeProgressAnim,
+  ]);
+
+  const resumeLoadProgress = useMemo(() => {
+    const firstPage = sortedImages[0]?.pageNumber;
+    if (!isSettlingResume || firstPage == null) return 0;
+    const span = resumeTargetPageNumberRef.current - firstPage + 1;
+    if (span <= 0) return 1;
+    return Math.min(1, Math.max(0, (allowedPage - firstPage) / span));
+  }, [isSettlingResume, sortedImages, allowedPage]);
+
+  useEffect(() => {
+    Animated.timing(resumeProgressAnim, {
+      toValue: resumeLoadProgress,
+      duration: 250,
+      useNativeDriver: false,
+    }).start();
+  }, [resumeLoadProgress, resumeProgressAnim]);
+
+  const startFromBeginning = useCallback(() => {
+    if (!resumeSettlingRef.current) return;
+    resumePendingRef.current = false;
+    rememberPage(0);
+    setCurrentPage(0);
+    manhwaListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    revealResume();
+  }, [rememberPage, revealResume]);
 
   // Reset title when manga changes to ensure proper update
   useEffect(() => {
@@ -1997,6 +2172,7 @@ export default function ReadChapterScreen() {
         const goPrevious = () => {
           if (currentPage > 0) {
             setCurrentPage(currentPage - 1);
+            rememberPage(currentPage - 1);
           }
         };
         const goNext = () => {
@@ -2005,6 +2181,7 @@ export default function ReadChapterScreen() {
             currentPage < downloadedImagesRef.current.length - 1
           ) {
             setCurrentPage(currentPage + 1);
+            rememberPage(currentPage + 1);
           }
         };
 
@@ -2043,6 +2220,7 @@ export default function ReadChapterScreen() {
       isInvertedLayout,
       effectiveLayout,
       currentPage,
+      rememberPage,
     ]
   );
 
@@ -2050,65 +2228,145 @@ export default function ReadChapterScreen() {
   // Windowed FlatList: only a viewport plus a small buffer mounts at once,
   // which keeps concurrent CDN image requests low (rate-limit prevention).
   const renderManhwaChapter = () => {
-    const sortedImages = downloadedImages!.sort(
-      (a, b) => a.pageNumber - b.pageNumber
-    );
     manhwaPageCountRef.current = sortedImages.length;
 
     return (
-      <FlatList
-        key={`${offlineChapterRenderKey}-vertical-${readerBackground}-${readerImageFit}`}
-        ref={manhwaListRef}
-        data={sortedImages}
-        renderItem={({ item, index }) => (
-          <ManhwaImage
-            image={item}
-            pageIndex={index}
-            onPress={handleDownloadedChapterTouch}
-            colorScheme={colorScheme}
-            isOnline={isOnlineChapter}
-            imageFit={readerImageFit}
-            onStatusChange={handlePageStatusChange}
-            onHeightChange={handleManhwaPageHeightChange}
-            retryToken={retryAllToken}
-            shouldLoad={item.pageNumber <= allowedPage}
+      <>
+        <Animated.View style={[styles.webView, { opacity: resumeOpacity }]}>
+          <FlatList
+            key={`${offlineChapterRenderKey}-vertical-${readerImageFit}`}
+            ref={manhwaListRef}
+            data={sortedImages}
+            renderItem={({ item, index }) => (
+              <ManhwaImage
+                image={item}
+                pageIndex={index}
+                onPress={handleDownloadedChapterTouch}
+                colorScheme={colorScheme}
+                isOnline={isOnlineChapter}
+                imageFit={readerImageFit}
+                onStatusChange={handlePageStatusChange}
+                onHeightChange={handleManhwaPageHeightChange}
+                retryToken={retryAllToken}
+                shouldLoad={item.pageNumber <= allowedPage}
+              />
+            )}
+            keyExtractor={(item) => `page-${item.pageNumber}`}
+            extraData={allowedPage}
+            style={[styles.webView, { backgroundColor: readerCanvasColor }]}
+            contentContainerStyle={[
+              styles.manhwaImagesContainer,
+              { backgroundColor: readerCanvasColor },
+            ]}
+            showsVerticalScrollIndicator={false}
+            decelerationRate="normal"
+            scrollEventThrottle={16}
+            initialNumToRender={3}
+            maxToRenderPerBatch={4}
+            windowSize={5}
+            removeClippedSubviews
+            onViewableItemsChanged={handleManhwaViewableItemsChanged}
+            viewabilityConfig={manhwaViewabilityConfig}
+            ListFooterComponent={<View style={styles.chapterEndSpacer} />}
+            onEndReached={() => {
+              if (!resumeSettlingRef.current) markReadAtEnd();
+            }}
+            onEndReachedThreshold={0.15}
+            onScrollBeginDrag={() => {
+              resumePendingRef.current = false;
+              revealResume();
+            }}
+            onScrollToIndexFailed={({ index, averageItemLength }) => {
+              resumeScrollFailedRef.current = true;
+              manhwaListRef.current?.scrollToOffset({
+                offset: index * averageItemLength,
+                animated: false,
+              });
+              pinManhwaToResumePage();
+            }}
+            onScroll={(event) => {
+              const { contentOffset, layoutMeasurement } = event.nativeEvent;
+              manhwaScrollMetricsRef.current = {
+                offsetY: contentOffset.y,
+                viewportHeight: layoutMeasurement.height,
+              };
+              recomputeManhwaScrollProgress();
+            }}
           />
+        </Animated.View>
+        {isSettlingResume && (
+          <Animated.View
+            style={[
+              styles.resumePill,
+              {
+                bottom: insets.bottom + 24,
+                opacity: resumeOpacity.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 0],
+                }),
+              },
+            ]}
+            accessibilityLiveRegion="polite"
+          >
+            <Svg
+              width={RESUME_RING_SIZE}
+              height={RESUME_RING_SIZE}
+              accessibilityRole="progressbar"
+              accessibilityValue={{
+                min: 0,
+                max: 100,
+                now: Math.round(resumeLoadProgress * 100),
+              }}
+            >
+              <Circle
+                cx={RESUME_RING_SIZE / 2}
+                cy={RESUME_RING_SIZE / 2}
+                r={RESUME_RING_RADIUS}
+                stroke={Colors[colorScheme].border}
+                strokeWidth={2}
+                fill="none"
+              />
+              <AnimatedCircle
+                cx={RESUME_RING_SIZE / 2}
+                cy={RESUME_RING_SIZE / 2}
+                r={RESUME_RING_RADIUS}
+                stroke={Colors[colorScheme].primary}
+                strokeWidth={2}
+                strokeLinecap="round"
+                fill="none"
+                strokeDasharray={RESUME_RING_CIRCUMFERENCE}
+                strokeDashoffset={resumeProgressAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [RESUME_RING_CIRCUMFERENCE, 0],
+                })}
+                transform={`rotate(-90 ${RESUME_RING_SIZE / 2} ${RESUME_RING_SIZE / 2})`}
+              />
+            </Svg>
+            <Text style={styles.resumePillText}>
+              Resuming page {resumePageRef.current + 1}
+            </Text>
+            <View style={styles.resumePillDivider} />
+            <TouchableOpacity
+              style={styles.resumePillCancel}
+              onPress={startFromBeginning}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel and start from page 1"
+            >
+              <Ionicons
+                name="close"
+                size={16}
+                color={Colors[colorScheme].secondaryText}
+              />
+            </TouchableOpacity>
+          </Animated.View>
         )}
-        keyExtractor={(item) => `page-${item.pageNumber}`}
-        extraData={allowedPage}
-        style={[styles.webView, { backgroundColor: readerCanvasColor }]}
-        contentContainerStyle={[
-          styles.manhwaImagesContainer,
-          { backgroundColor: readerCanvasColor },
-        ]}
-        showsVerticalScrollIndicator={false}
-        decelerationRate="normal"
-        scrollEventThrottle={16}
-        initialNumToRender={3}
-        maxToRenderPerBatch={4}
-        windowSize={5}
-        removeClippedSubviews
-        onViewableItemsChanged={handleManhwaViewableItemsChanged}
-        viewabilityConfig={manhwaViewabilityConfig}
-        ListFooterComponent={<View style={styles.chapterEndSpacer} />}
-        onScroll={(event) => {
-          const { contentOffset, layoutMeasurement } = event.nativeEvent;
-          manhwaScrollMetricsRef.current = {
-            offsetY: contentOffset.y,
-            viewportHeight: layoutMeasurement.height,
-          };
-          recomputeManhwaScrollProgress();
-        }}
-      />
+      </>
     );
   };
 
   // Manga-style page-by-page renderer
   const renderMangaChapter = () => {
-    const sortedImages = downloadedImages!.sort(
-      (a, b) => a.pageNumber - b.pageNumber
-    );
-
     const renderPage = ({ item }: { item: ChapterImage; index: number }) => (
       <TouchableWithoutFeedback onPress={handleDownloadedChapterTouch}>
         <View
@@ -2132,7 +2390,7 @@ export default function ReadChapterScreen() {
 
     return (
       <FlatList
-        key={`${offlineChapterRenderKey}-${effectiveLayout ?? 'ltr'}-${readerBackground}-${readerImageFit}`}
+        key={`${offlineChapterRenderKey}-${effectiveLayout ?? 'ltr'}-${readerImageFit}`}
         ref={mangaFlatListRef}
         data={sortedImages}
         renderItem={renderPage}
@@ -2141,18 +2399,19 @@ export default function ReadChapterScreen() {
         horizontal
         inverted={isInvertedLayout}
         pagingEnabled
+        initialScrollIndex={resumePageRef.current}
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
         onMomentumScrollEnd={(event) => {
           const pageWidth = Dimensions.get('window').width;
           const offset = event.nativeEvent.contentOffset.x;
-          setCurrentPage(
-            horizontalPageIndexFromOffset({
-              offsetX: offset,
-              pageWidth,
-              pageCount: sortedImages.length,
-            })
-          );
+          const page = horizontalPageIndexFromOffset({
+            offsetX: offset,
+            pageWidth,
+            pageCount: sortedImages.length,
+          });
+          setCurrentPage(page);
+          rememberPage(page);
         }}
         getItemLayout={(_, index) => ({
           length: Dimensions.get('window').width,
